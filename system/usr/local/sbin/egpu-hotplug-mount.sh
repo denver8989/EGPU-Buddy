@@ -111,7 +111,9 @@ clear_dpc(){   # clear latched DPC status (write-1) + disable trigger on every U
 rm -f /var/lib/nvegpu/flood-lockout 2>/dev/null   # stale state from the version that had a lockout
 if dmesg 2>/dev/null | grep -qi 'data fabric sync flood'; then
   mkdir -p /var/lib/nvegpu 2>/dev/null
-  date '+%F %T' >> /var/lib/nvegpu/flood-history 2>/dev/null
+  mkdir -p /var/lib/nvegpu /run/nvegpu 2>/dev/null
+  # once per boot: the kernel's report stays in dmesg all boot, and every attach/resume added another entry (20 for 2 resets)
+  [ -e /run/nvegpu/flood-recorded ] || { date '+%F %T' >> /var/lib/nvegpu/flood-history 2>/dev/null; touch /run/nvegpu/flood-recorded; }
   log "note: the platform reset itself while the eGPU was connected on a previous boot (recorded; attach continues)"
 fi
 

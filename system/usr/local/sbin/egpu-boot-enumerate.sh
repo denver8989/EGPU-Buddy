@@ -24,7 +24,9 @@ log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync 
 # until the user ran egpu-rearm, which read as "the eGPU just stopped working". Unplugging the
 # eGPU is the simple escape from a reset loop. The reset is still recorded in flood-history.
 if [ ! -e /run/egpu-rearmed ] && dmesg 2>/dev/null | grep -qi 'data fabric sync flood'; then
-  mkdir -p /var/lib/nvegpu 2>/dev/null; date '+%F %T' >> /var/lib/nvegpu/flood-history 2>/dev/null
+  mkdir -p /var/lib/nvegpu /run/nvegpu 2>/dev/null
+  # once per boot: the kernel's report stays in dmesg all boot, and every attach/resume added another entry (20 for 2 resets)
+  [ -e /run/nvegpu/flood-recorded ] || { date '+%F %T' >> /var/lib/nvegpu/flood-history 2>/dev/null; touch /run/nvegpu/flood-recorded; }
   # THIS BOOT ONLY. The old flood lockout was persistent and needed a command to clear, which cost
   # more than it prevented and was removed. But a card that floods the fabric on bring-up takes the
   # machine down again the moment we touch it, and the result is a boot loop the user can only

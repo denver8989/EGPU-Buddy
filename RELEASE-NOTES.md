@@ -1,3 +1,8 @@
+0.7.85 — reset counter.
+
+**Fixed**
+- The "device was reset by its hardware" count went up on every attach and wake instead of once per reset.
+
 0.7.84 — waking from sleep with two screens.
 
 **Fixed**
