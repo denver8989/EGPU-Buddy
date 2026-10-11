@@ -582,9 +582,10 @@ fi
 # even though it is still on the bus (the detach helper removes it once this session is up on the panel).
 detach_mode=0; { [ -e "${XDG_RUNTIME_DIR:-/run/user/1000}/egpu-detach-mode" ] || [ -e /run/nvegpu/gm-detach-pending ]; } && detach_mode=1
 rm -f "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/xgpu-active"
-xgpu_target=""; [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && xgpu_target=$(handheld_passthrough_target)
+# (|| true: under set -e a failed lookup in the last command of this list would end the session script)
+xgpu_target=""; [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && { xgpu_target=$(handheld_passthrough_target) || xgpu_target=""; }
 # the built-in screen only while no monitor is on the eGPU (that monitor is the better screen); a chosen USB-C screen always
-[ -n "$outputs" ] && [ "${xgpu_target%% *}" = "$PANEL" ] && xgpu_target=""
+if [ -n "$outputs" ] && [ "${xgpu_target%% *}" = "$PANEL" ]; then xgpu_target=""; fi
 if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && { [ -n "$outputs" ] || [ -n "$xgpu_target" ]; } && bar1_note && [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ]; then
   clear_session_env
   [ -n "$xgpu_target" ] && EGPU_GAMESCOPE_HDR=0   # the passthrough carries 8-bit SDR frames
@@ -688,7 +689,7 @@ if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && { [ -
     unset NV_EGPU_GAMESCOPE_OUTPUT_WIDTH NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT NV_EGPU_GAMESCOPE_NESTED_WIDTH NV_EGPU_GAMESCOPE_NESTED_HEIGHT NV_EGPU_GAMESCOPE_NESTED_REFRESH STEAM_DISPLAY_REFRESH_LIMITS
     mkdir -p "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy"; : > "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/xgpu-active"
     # the built-in screen is the picture now: make sure an earlier eGPU session did not leave it dark
-    [ "$xgpu_conn" = "$PANEL" ] && sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1
+    [ "$xgpu_conn" = "$PANEL" ] && { sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1 || true; }
     log "handheld passthrough: Game Mode on $xgpu_conn ($xgpu_card, $xgpu_mode) rendered on the eGPU, transfer $xgpu_transfer"
   else
     unset GAMESCOPE_PREFER_DRM GAMESCOPE_XGPU_PANEL GAMESCOPE_XGPU_MODE GAMESCOPE_XGPU_LIB NV_EGPU_GAMESCOPE_XGPU_DRIVERS
