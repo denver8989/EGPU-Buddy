@@ -65,7 +65,7 @@ const maybeOfferScreen = async () => {
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.85";
+const PLUGIN_VERSION = "0.7.86";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -135,6 +135,7 @@ const maybeShowTrial = async () => {
 function Content() {
   const visible = useQuickAccessVisible();
   const [tab, setTab] = useState<"main" | "details" | "setup">("main");
+  const [logOpen, setLogOpen] = useState<"" | "setup" | "trial">("");   // logs stay folded away unless asked for
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
@@ -414,7 +415,8 @@ function Content() {
             </ButtonItem>
           </PanelSectionRow>
           {egpuMounted && su?.installed_version && <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.7 }}>Safe Detach the eGPU first: the system files cannot be removed while its driver is running.</div></PanelSectionRow>}
-          {su?.log && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{su.log}</div></PanelSectionRow>}
+          {su?.log && <PanelSectionRow><ButtonItem layout="below" onClick={() => setLogOpen(logOpen === "setup" ? "" : "setup")}>{logOpen === "setup" ? "Hide install log" : "Show install log"}</ButtonItem></PanelSectionRow>}
+          {su?.log && logOpen === "setup" && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{su.log}</div></PanelSectionRow>}
         </PanelSection>
       )}
       {tab === "setup" && tr?.available && (
@@ -434,7 +436,8 @@ function Content() {
               onClick={() => showModal(<ConfirmModal strTitle={`Return to ${tr.tested}`} strDescription={`The eGPU is safely detached, the tested driver ${tr.tested} is put back (offline, a few minutes) and the eGPU is attached again.`}
                 strOKButtonText="Return" onOK={() => run(revertTrial)} />)}>Return to the tested driver {tr.tested}</ButtonItem></PanelSectionRow>
           )}
-          {tr.log && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{tr.log}</div></PanelSectionRow>}
+          {tr.log && <PanelSectionRow><ButtonItem layout="below" onClick={() => setLogOpen(logOpen === "trial" ? "" : "trial")}>{logOpen === "trial" ? "Hide driver log" : "Show driver log"}</ButtonItem></PanelSectionRow>}
+          {tr.log && logOpen === "trial" && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{tr.log}</div></PanelSectionRow>}
         </PanelSection>
       )}
       {tab === "setup" && (
