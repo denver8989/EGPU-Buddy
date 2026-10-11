@@ -17,6 +17,15 @@ say where it came from.
   [antheas/gamescope@fa6f7f2](https://github.com/antheas/gamescope/commit/fa6f7f2503c2e773acf818ad688ddd1db73df3a0).
 - **Matthewmachin962** and the other testers in that thread who confirmed the fix at 5120×1440.
 
+## Performance boost (M3): eGPU games on the handheld's screen
+
+- **Themaister (Hans-Kristian Arntzen) — [PyroWave](https://github.com/Themaister/pyrowave)** (MIT), with its
+  [Granite](https://github.com/Themaister/Granite) Vulkan backend (MIT). The GPU wavelet codec that packs each frame
+  on the eGPU and unpacks it on the handheld's GPU. Built unmodified, pinned at `502a3b5`; `packaging/xpw` only wraps it.
+- **relil** — `--prefer-drm` for gamescope
+  ([relil/gamescope-eGPU](https://github.com/relil/gamescope-eGPU), upstream PR #2220): choosing the screen's GPU
+  separately from the rendering GPU. Vendored unchanged as `packaging/gamescope-gbm/0002-prefer-drm-relil.patch`.
+
 ## The hot-unplug-safe driver
 
 - **NickNill** — maintainer of the AUR `nvidia-open-egpu` recipe whose PKGBUILD and base patches (110–140) this

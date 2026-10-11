@@ -91,6 +91,7 @@ This builds on other people's work. Full details, with links and licenses: [CRED
 - **matt-schwartz:** found the root cause of the NVIDIA Game Mode corruption.
 - **NightHammer1000** and **antheas:** the gamescope fix this project builds.
 - **NickNill, bdandy, roger-pmta:** the hot-unplug-safe NVIDIA driver patches.
+- **Themaister ([PyroWave](https://github.com/Themaister/pyrowave)), relil:** the Performance boost (M3).
 - **Ilya Zlobintsev ([LACT](https://github.com/ilya-zlobintsev/LACT)):** the base of the GPU controls.
 - **damianbienias32**, the **open-gpu-kernel-modules #979** contributors, **nikomiiller** and **Alex Forencich:** the
   USB4 link stability fixes.

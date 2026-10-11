@@ -1,0 +1,14 @@
+#version 450
+// PyroWave planes (full-range BT.709 YCbCr, chroma midpoint 0.5) -> RGBA8 scanout buffer
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0, r8) uniform readonly image2D Y;
+layout(binding = 1, r8) uniform readonly image2D Cb;
+layout(binding = 2, r8) uniform readonly image2D Cr;
+layout(binding = 3, rgba8) uniform writeonly image2D Out;
+void main() {
+  ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+  if (any(greaterThanEqual(p, imageSize(Out)))) return;
+  float y = imageLoad(Y, p).r, cb = imageLoad(Cb, p).r - 0.5, cr = imageLoad(Cr, p).r - 0.5;
+  vec3 rgb = vec3(y + 1.5748 * cr, y - 0.187324 * cb - 0.468124 * cr, y + 1.8556 * cb);
+  imageStore(Out, p, vec4(clamp(rgb, 0.0, 1.0), 1.0));
+}

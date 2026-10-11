@@ -141,4 +141,15 @@ case "${VK_DRIVER_FILES:-}${VK_ICD_FILENAMES:-}" in *nvidia*)
       [ -n "$_v" ] && [ -n "$_d" ] && prefix+=(--prefer-vk-device "${_v#0x}:${_d#0x}"); fi
   fi ;;
 esac
+# Handheld passthrough (opt-in; set by nv-egpu-gamescope-session): gamescope renders on the eGPU but also drives the
+# handheld's own GPU (its screen and the libxpw hand-off), so THIS process needs both Vulkan drivers. Games keep the
+# eGPU only: Steam is a separate service with the session's environment. Name the eGPU as the renderer explicitly.
+if [ -n "${NV_EGPU_GAMESCOPE_XGPU_DRIVERS:-}" ]; then
+  export VK_DRIVER_FILES="$NV_EGPU_GAMESCOPE_XGPU_DRIVERS" VK_ICD_FILENAMES="$NV_EGPU_GAMESCOPE_XGPU_DRIVERS"
+  if [[ " ${prefix[*]} $* " != *" --prefer-vk-device "* ]]; then
+    read -r _bdf _ < <(/usr/local/sbin/egpu-detect 2>/dev/null) || _bdf=""
+    if [ -n "$_bdf" ]; then _v=$(cat "/sys/bus/pci/devices/$_bdf/vendor" 2>/dev/null); _d=$(cat "/sys/bus/pci/devices/$_bdf/device" 2>/dev/null)
+      [ -n "$_v" ] && [ -n "$_d" ] && prefix+=(--prefer-vk-device "${_v#0x}:${_d#0x}"); fi
+  fi
+fi
 exec "$gamescope_bin" "${prefix_hdr[@]}" "${prefix[@]}" "$@"

@@ -251,6 +251,13 @@ if want gamescope; then
       NEED_GAMESCOPE_BUILD=1
     fi
   fi
+  # handheld passthrough (opt-in option): the display-GPU side, PyroWave + libxpw. Installed when a shipped build runs
+  # here (every library resolves); without it the option says it is not available. Never built on the device.
+  for X in "$ROOT"/prebuilt/xpw*; do
+    [ -r "$X/libxpw.so" ] && ! ldd "$X/libxpw.so" 2>/dev/null | grep -q 'not found' || continue
+    XD="$USER_HOME/.local/lib/nv-egpu-buddy/xpw"; umkdir "$XD"; cp -a "$X"/lib*.so* "$XD/"; uown "$XD"
+    say "== installed the handheld passthrough libraries ($(basename "$X"))"; break
+  done
 fi
 
 # ---- desktop app ----------------------------------------------------------------------------------

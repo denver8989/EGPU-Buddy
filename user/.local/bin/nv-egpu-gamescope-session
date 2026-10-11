@@ -40,6 +40,21 @@ EGPU_PCI=${EGPU_PCI_BDF:-$(detect_nvidia_gpu_bdf)}
 if [ -z "$EGPU_PCI" ] && nvidia_at_bdf "$FALLBACK_GPU"; then EGPU_PCI=$FALLBACK_GPU; fi
 IGPU_PCI=${IGPU_PCI:-0000:c2:00.0}
 PANEL=${EGPU_PANEL_CONNECTOR:-eDP-1}
+# Opt-in (plugin: Settings > Performance boost (M3)): the eGPU renders, a screen driven by the handheld's own GPU shows
+# it (the built-in screen, or a USB-C display such as XR glasses). Off unless this file says so; only with an eGPU.
+HANDHELD_CFG=/var/lib/nvegpu/handheld-screen.json
+XGPU_LIB="$HOME/.local/lib/nv-egpu-buddy/xpw/libxpw.so"
+# prints "<connector> <card> <WxH> <transfer>" when the option is on and its screen is connected to the handheld's GPU
+handheld_passthrough_target() {
+  [ -r "$HANDHELD_CFG" ] && [ -r "$XGPU_LIB" ] || return 1
+  local en conn tr card mode
+  read -r en conn tr < <(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(int(bool(d.get("enabled"))), d.get("connector") or "-", d.get("transfer") or "pyrowave")' "$HANDHELD_CFG" 2>/dev/null) || return 1
+  [ "$en" = 1 ] && [ "$conn" != - ] || return 1
+  card=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"$PANEL" 2>/dev/null | head -1)"); card=${card%%-*}
+  [ -n "$card" ] && [ "$(cat "/sys/class/drm/$card-$conn/status" 2>/dev/null)" = connected ] || return 1
+  mode=$(head -1 "/sys/class/drm/$card-$conn/modes" 2>/dev/null); [ -n "$mode" ] || return 1
+  printf '%s %s %s %s\n' "$conn" "$card" "$mode" "$tr"
+}
 STOCK_GAMESCOPE_SESSION=${STOCK_GAMESCOPE_SESSION:-/usr/lib/steamos/gamescope-session}
 PROFILE_HELPER=${EGPU_DISPLAY_PROFILE_HELPER:-/home/deck/.local/bin/egpu-display-profile.sh}
 SHIM_DIR=${NV_EGPU_GAMESCOPE_SHIM_DIR:-/home/deck/.local/lib/nv-egpu-buddy/gamescope-shim}
@@ -253,7 +268,7 @@ egpu_native_ready() {
   refresh_egpu_state
   [ -n "$egpu_card" ] &&
     [ -n "$igpu_card" ] &&
-    [ -n "$outputs" ] &&
+    { [ -n "$outputs" ] || handheld_passthrough_target >/dev/null; } &&
     [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ]
 }
 
@@ -566,8 +581,13 @@ fi
 # NV-EGPU-Buddy safe detach (Game Mode): while the marker exists the relaunched session must NOT take the eGPU
 # even though it is still on the bus (the detach helper removes it once this session is up on the panel).
 detach_mode=0; { [ -e "${XDG_RUNTIME_DIR:-/run/user/1000}/egpu-detach-mode" ] || [ -e /run/nvegpu/gm-detach-pending ]; } && detach_mode=1
-if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && [ -n "$outputs" ] && bar1_note && [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ]; then
+rm -f "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/xgpu-active"
+xgpu_target=""; [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && xgpu_target=$(handheld_passthrough_target)
+# the built-in screen only while no monitor is on the eGPU (that monitor is the better screen); a chosen USB-C screen always
+[ -n "$outputs" ] && [ "${xgpu_target%% *}" = "$PANEL" ] && xgpu_target=""
+if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && { [ -n "$outputs" ] || [ -n "$xgpu_target" ]; } && bar1_note && [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ]; then
   clear_session_env
+  [ -n "$xgpu_target" ] && EGPU_GAMESCOPE_HDR=0   # the passthrough carries 8-bit SDR frames
   export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
   export OUTPUT_CONNECTOR
   OUTPUT_CONNECTOR=$(connector_order)
@@ -654,6 +674,24 @@ if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && [ -n 
   fi
   if [ "${NV_EGPU_GAMESCOPE_STEAM_SCALE_CLAMP:-1}" != "0" ] && [ -x "$STEAM_SCALE_CLAMP" ]; then
     "$STEAM_SCALE_CLAMP" >/tmp/nv-egpu-gamescope-steam-scale-clamp.log 2>&1 &
+  fi
+  if [ -n "$xgpu_target" ]; then
+    read -r xgpu_conn xgpu_card xgpu_mode xgpu_transfer <<<"$xgpu_target"
+    xgpu_transfer=pyrowave   # M2 raw copy dropped (no gain in real sessions, first-launch freezes)
+    export GAMESCOPE_PREFER_DRM="/dev/dri/$xgpu_card"               # the handheld's GPU drives the screen
+    export GAMESCOPE_XGPU_PANEL="${xgpu_mode}@0,$xgpu_conn"         # native size, highest refresh it offers
+    export GAMESCOPE_XGPU_MODE="$xgpu_transfer" GAMESCOPE_XGPU_LIB="$XGPU_LIB"
+    export gamescope_drm_gbm_scanout=1
+    export NV_EGPU_GAMESCOPE_XGPU_DRIVERS=/usr/share/vulkan/icd.d/nvidia_icd.json:/usr/share/vulkan/icd.d/radeon_icd.json
+    export NV_EGPU_GAMESCOPE_HDR=0
+    export OUTPUT_CONNECTOR="$xgpu_conn"
+    unset NV_EGPU_GAMESCOPE_OUTPUT_WIDTH NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT NV_EGPU_GAMESCOPE_NESTED_WIDTH NV_EGPU_GAMESCOPE_NESTED_HEIGHT NV_EGPU_GAMESCOPE_NESTED_REFRESH STEAM_DISPLAY_REFRESH_LIMITS
+    mkdir -p "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy"; : > "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/xgpu-active"
+    # the built-in screen is the picture now: make sure an earlier eGPU session did not leave it dark
+    [ "$xgpu_conn" = "$PANEL" ] && sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1
+    log "handheld passthrough: Game Mode on $xgpu_conn ($xgpu_card, $xgpu_mode) rendered on the eGPU, transfer $xgpu_transfer"
+  else
+    unset GAMESCOPE_PREFER_DRM GAMESCOPE_XGPU_PANEL GAMESCOPE_XGPU_MODE GAMESCOPE_XGPU_LIB NV_EGPU_GAMESCOPE_XGPU_DRIVERS
   fi
 elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # EXPERIMENTAL (untested hardware): non-NVIDIA eGPU (AMD/Intel, Mesa). No GBM-scanout build, format filter or

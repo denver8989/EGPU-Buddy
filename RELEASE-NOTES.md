@@ -1,3 +1,8 @@
+0.7.86 — Performance boost (M3): eGPU games on the handheld's screen.
+
+**New**
+- Setup > Performance boost (M3), optional, off by default: with no monitor on the eGPU, games run on the eGPU and play on the handheld's own screen. Each frame is packed small with PyroWave on the eGPU and unpacked by the handheld, instead of sending the full picture back over the cable. About 20% more FPS (Cyberpunk 2077 with DLSS + frame generation: 175 vs 143). Switch it on before plugging in the eGPU; a monitor on the eGPU is still used when one is connected. Works on CachyOS and SteamOS.
+
 0.7.85 — reset counter.
 
 **Fixed**

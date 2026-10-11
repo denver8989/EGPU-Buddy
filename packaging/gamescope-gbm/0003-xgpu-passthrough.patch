@@ -1,0 +1,543 @@
+diff -ruN -x '*.orig' -x '*.rej' a/src/Backends/DRMBackend.cpp b/src/Backends/DRMBackend.cpp
+--- a/src/Backends/DRMBackend.cpp	2026-10-12 06:08:16.786375767 +0900
++++ b/src/Backends/DRMBackend.cpp	2026-10-12 05:51:21.263181691 +0900
+@@ -1041,6 +1041,16 @@
+ 		if (vrefresh != 0 && vrefresh != mode->vrefresh)
+ 			continue;
+ 
++		// XGPU: no refresh asked for (GAMESCOPE_XGPU_PANEL=WxH@0,...) -> the highest one this screen offers at that size
++		if ( vrefresh == 0 && hdisplay != 0 && getenv( "GAMESCOPE_XGPU_MODE" ) )
++		{
++			const drmModeModeInfo *best = mode;
++			for ( int j = i + 1; j < connector->count_modes; j++ )
++				if ( connector->modes[j].hdisplay == mode->hdisplay && connector->modes[j].vdisplay == mode->vdisplay && connector->modes[j].vrefresh > best->vrefresh )
++					best = &connector->modes[j];
++			return best;
++		}
++
+ 		return mode;
+ 	}
+ 
+@@ -1472,7 +1482,21 @@
+ 	// (gbm_bo_destroy) stays valid even after wlsession_close_kms() has
+ 	// closed drm->fd; textures holding GBM buffers can outlive the backend
+ 	// on shutdown. The deleter closes the dup'd fd after the device.
+-	if ( int nGbmFd = dup( drm->fd ); nGbmFd >= 0 )
++	// XGPU: GBM on its own render-node file, not a dup of the KMS fd. libdrm-amdgpu deduplicates devices per process,
++	// so the display GPU's Vulkan decoder (M3) ends up on GBM's fd; on the KMS fd it shares GEM handles with the
++	// backend's FB import/close churn and the kernel rejects its submissions (-EINVAL).
++	int nGbmFd = -1;
++	if ( getenv( "GAMESCOPE_XGPU_MODE" ) )
++	{
++		if ( char *pszRender = drmGetRenderDeviceNameFromFd( drm->fd ) )
++		{
++			nGbmFd = open( pszRender, O_RDWR | O_CLOEXEC );
++			free( pszRender );
++		}
++	}
++	if ( nGbmFd < 0 )
++		nGbmFd = dup( drm->fd );
++	if ( nGbmFd >= 0 )
+ 	{
+ 		if ( struct gbm_device *pGbmDevice = gbm_create_device( nGbmFd ) )
+ 		{
+@@ -1570,6 +1594,9 @@
+ 	// a bunch of horrible banding when going to G2.2 curve.
+ 	// It ensures that we can dither that.
+ 	g_nDRMFormat = pick_plane_format(&drm->primary_formats, DRM_FORMAT_XRGB2101010, DRM_FORMAT_ARGB2101010);
++	// XGPU: scan out in the byte layout of an 8-bit RGBA game frame so it can be copied as-is
++	if ( getenv( "GAMESCOPE_XGPU_MODE" ) && pick_plane_format(&drm->primary_formats, DRM_FORMAT_XBGR8888, DRM_FORMAT_ABGR8888) != DRM_FORMAT_INVALID )
++		g_nDRMFormat = pick_plane_format(&drm->primary_formats, DRM_FORMAT_XBGR8888, DRM_FORMAT_ABGR8888);
+ 	if ( g_nDRMFormat == DRM_FORMAT_INVALID ) {
+ 		g_nDRMFormat = pick_plane_format(&drm->primary_formats, DRM_FORMAT_XBGR2101010, DRM_FORMAT_ABGR2101010);
+ 		if ( g_nDRMFormat == DRM_FORMAT_INVALID ) {
+diff -ruN -x '*.orig' -x '*.rej' a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp	2026-10-12 06:08:16.786426851 +0900
++++ b/src/main.cpp	2026-10-12 05:51:21.265177871 +0900
+@@ -922,6 +922,18 @@
+ 	// Allow overriding the selected backend (even the backend
+ 	// requested on the command line) in a startup script.
+ 	auto backendOverride = parse_backend_name( gamescope::cv_backend.Get().c_str() );
++
++	// XGPU: the output on the display GPU, whatever the session's own -W/-H/-r/-O say (they describe the eGPU screen)
++	if ( const char *pszPanel = getenv( "GAMESCOPE_XGPU_PANEL" ) )
++	{
++		int w = 0, h = 0, r = 0; static char szConn[32];
++		if ( sscanf( pszPanel, "%dx%d@%d,%31s", &w, &h, &r, szConn ) == 4 )
++		{
++			g_nOutputWidth = w; g_nOutputHeight = h; g_nNestedWidth = w; g_nNestedHeight = h;
++			g_nNestedRefresh = gamescope::ConvertHztomHz( r ); g_sOutputName = szConn;
++			fprintf( stderr, "XGPU: output %dx%d@%d on %s\n", w, h, r, szConn );
++		}
++	}
+ 	if ( backendOverride != gamescope::GamescopeBackend::Auto )
+ 	{
+ 		eCurrentBackend = backendOverride;
+diff -ruN -x '*.orig' -x '*.rej' a/src/rendervulkan.cpp b/src/rendervulkan.cpp
+--- a/src/rendervulkan.cpp	2026-09-11 14:32:51.441260404 +0900
++++ b/src/rendervulkan.cpp	2026-10-12 05:51:21.261664000 +0900
+@@ -427,6 +427,12 @@
+ 	return true;
+ }
+ 
++// XGPU passthrough (see GAMESCOPE_XGPU_MODE): the render GPU (eGPU) is not the display GPU.
++static const char *xgpu_mode() { const char *m = getenv( "GAMESCOPE_XGPU_MODE" ); return m && *m ? m : nullptr; }
++static const bool g_bXgpu = xgpu_mode() != nullptr;
++static const bool g_bXgpuPyroWave = g_bXgpu && !strcmp( xgpu_mode(), "pyrowave" );
++static gamescope::Rc<CVulkanTexture> s_xgpuShadow[3];
++
+ bool CVulkanDevice::createDevice()
+ {
+ 	uint32_t supportedExtensionCount;
+@@ -534,7 +540,7 @@
+ 		.globalPriority = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT
+ 	};
+ 
+-	VkDeviceQueueCreateInfo queueCreateInfos[2] = 
++	VkDeviceQueueCreateInfo queueCreateInfos[3] = 
+ 	{
+ 		{
+ 			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+@@ -552,6 +558,24 @@
+ 		},
+ 	};
+ 
++	uint32_t nQueueInfos = m_queueFamily == m_generalQueueFamily ? 1u : 2u;
++	if ( g_bXgpu )
++	{
++		uint32_t nFam = 0;
++		vk.GetPhysicalDeviceQueueFamilyProperties( physDev(), &nFam, nullptr );
++		std::vector<VkQueueFamilyProperties> fams( nFam );
++		vk.GetPhysicalDeviceQueueFamilyProperties( physDev(), &nFam, fams.data() );
++		for ( uint32_t i = 0; i < nFam; i++ )
++			if ( ( fams[i].queueFlags & VK_QUEUE_TRANSFER_BIT ) && !( fams[i].queueFlags & ( VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT ) ) )
++			{
++				m_xgpuFamily = i;
++				queueCreateInfos[nQueueInfos++] = { .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, .queueFamilyIndex = i, .queueCount = 1, .pQueuePriorities = &queuePriorities };
++				break;
++			}
++		if ( m_xgpuFamily == ~0u )
++			vk_log.errorf( "XGPU: no copy-engine queue on this GPU; passthrough unavailable" );
++	}
++
+ 	std::vector< const char * > enabledExtensions;
+ 
+ 	if ( GetBackend()->UsesVulkanSwapchain() )
+@@ -575,6 +599,11 @@
+ 	enabledExtensions.push_back( VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME );
+ 
+ 	enabledExtensions.push_back( VK_EXT_ROBUSTNESS_2_EXTENSION_NAME );
++	// XGPU raw copy (M2): the frame goes to page-aligned RAM that both GPUs import
++	if ( g_bXgpu )
++		for ( const auto &ext : m_supportedExts )
++			if ( !strcmp( ext.extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME ) )
++				enabledExtensions.push_back( VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME );
+ #if 0
+ 	enabledExtensions.push_back( VK_KHR_MAINTENANCE_5_EXTENSION_NAME );
+ #endif
+@@ -644,7 +673,7 @@
+ 	VkDeviceCreateInfo deviceCreateInfo = {
+ 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+ 		.pNext = &features2,
+-		.queueCreateInfoCount = m_queueFamily == m_generalQueueFamily ? 1u : 2u,
++		.queueCreateInfoCount = nQueueInfos,
+ 		.pQueueCreateInfos = queueCreateInfos,
+ 		.enabledExtensionCount = (uint32_t)enabledExtensions.size(),
+ 		.ppEnabledExtensionNames = enabledExtensions.data(),
+@@ -702,6 +731,21 @@
+ 	else
+ 		vk.GetDeviceQueue(device(), m_generalQueueFamily, 0, &m_generalQueue);
+ 
++	if ( m_xgpuFamily != ~0u )
++	{
++		vk.GetDeviceQueue( device(), m_xgpuFamily, 0, &m_xgpuQueue );
++		VkCommandPoolCreateInfo pci = { .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = m_xgpuFamily };
++		VkCommandBufferAllocateInfo cai = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1 };
++		VkFenceCreateInfo fci = { .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
++		if ( vk.CreateCommandPool( device(), &pci, nullptr, &m_xgpuPool ) != VK_SUCCESS ||
++		     ( cai.commandPool = m_xgpuPool, vk.AllocateCommandBuffers( device(), &cai, &m_xgpuCmd ) ) != VK_SUCCESS ||
++		     vk.CreateFence( device(), &fci, nullptr, &m_xgpuFence ) != VK_SUCCESS )
++		{
++			vk_log.errorf( "XGPU: copy-engine queue setup failed; passthrough unavailable" );
++			m_xgpuFamily = ~0u;
++		}
++	}
++
+ 	return true;
+ }
+ 
+@@ -1511,6 +1555,89 @@
+ 		resetCmdBuffers(sequence);
+ }
+ 
++bool CVulkanDevice::xgpuCopy( CVulkanTexture *pSrc, VkImage dstImage, VkBuffer dstBuffer, uint32_t uW, uint32_t uH, uint64_t ulWaitSeq, bool bSrcIsClient, uint32_t uDstOwner, VkImageLayout eDstLayout )
++{
++	VkCommandBuffer cmd = m_xgpuCmd;
++	// The copy engine is shared with the game. While a game loads (first start) it can hold the engine long enough
++	// that a frame's copy is not done in time; blocking here then stalls the compositor, the game waits for its
++	// frames to be shown, and the copy never gets the engine: a deadlock (Cyberpunk's engine watchdog fired after
++	// 120 s). So a copy gets a deadline; past it this frame is skipped (the screen keeps the previous picture), the
++	// copy finishes in the background and nothing new is queued until it has.
++	// the source of a copy that outlived its wait: kept alive (and so not handed back to the game) until the copy is done
++	static gamescope::Rc<CVulkanTexture> s_pPendingSrc;
++	if ( m_bXgpuPending )
++	{
++		if ( vk.GetFenceStatus( device(), m_xgpuFence ) != VK_SUCCESS )
++			return false;
++		m_bXgpuPending = false;
++		s_pPendingSrc = nullptr;
++	}
++	vk.ResetFences( device(), 1, &m_xgpuFence );
++	vk.ResetCommandBuffer( cmd, 0 );
++	VkCommandBufferBeginInfo bi = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT };
++	vk.BeginCommandBuffer( cmd, &bi );
++	VkImageSubresourceRange range = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1 };
++	// take the destination from its owner; the whole image is rewritten, so old contents are discarded
++	VkImageMemoryBarrier acquire[2] = {
++		{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
++		  .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
++		  .srcQueueFamilyIndex = uDstOwner, .dstQueueFamilyIndex = m_xgpuFamily, .image = dstImage, .subresourceRange = range },
++		// direct frames: the source is the game's own buffer (a foreign dmabuf) -> borrow it, contents kept
++		{ .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
++		  .oldLayout = VK_IMAGE_LAYOUT_GENERAL, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
++		  .srcQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT, .dstQueueFamilyIndex = m_xgpuFamily, .image = pSrc->vkImage(), .subresourceRange = range },
++	};
++	// a buffer destination (RAM) needs no ownership transfer: only the image barriers that apply are recorded
++	VkImageMemoryBarrier *pAcq = dstBuffer ? &acquire[1] : acquire;
++	uint32_t nAcq = ( dstBuffer ? 0 : 1 ) + ( bSrcIsClient ? 1 : 0 );
++	if ( nAcq )
++		vk.CmdPipelineBarrier( cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, nAcq, pAcq );
++	if ( dstBuffer )
++	{
++		VkBufferImageCopy region = { .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }, .imageExtent = { uW, uH, 1 } };
++		vk.CmdCopyImageToBuffer( cmd, pSrc->vkImage(), VK_IMAGE_LAYOUT_GENERAL, dstBuffer, 1, &region );
++	}
++	else
++	{
++		VkImageCopy region = { .srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 }, .dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
++			.extent = { uW, uH, 1 } };
++		vk.CmdCopyImage( cmd, pSrc->vkImage(), VK_IMAGE_LAYOUT_GENERAL, dstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region );
++	}
++	VkImageMemoryBarrier release[2] = { acquire[0], acquire[1] };
++	release[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; release[0].dstAccessMask = 0;
++	release[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; release[0].newLayout = eDstLayout;
++	release[0].srcQueueFamilyIndex = m_xgpuFamily; release[0].dstQueueFamilyIndex = uDstOwner;
++	release[1].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT; release[1].dstAccessMask = 0;
++	release[1].srcQueueFamilyIndex = m_xgpuFamily; release[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_FOREIGN_EXT;
++	if ( nAcq )
++		vk.CmdPipelineBarrier( cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, nAcq, dstBuffer ? &release[1] : release );
++	vk.EndCommandBuffer( cmd );
++
++	// Never park a job that WAITS on the copy engine: it shares the engine with the game, and a copy-engine job sitting
++	// on a semaphore can hold the game's own uploads behind it while the composite it waits for depends on the game
++	// -> a cross-process deadlock (games hung at first launch, when they upload the most). The CPU waits for the
++	// composite instead (with a deadline) and the copy is only submitted once it can run straight away.
++	VkSemaphoreWaitInfo wi = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1, .pSemaphores = &m_scratchTimelineSemaphore, .pValues = &ulWaitSeq };
++	if ( vk.WaitSemaphores( device(), &wi, 50'000'000ull ) != VK_SUCCESS )
++	{
++		return false;   // recorded but never submitted; reset at the next use
++	}
++	VkSubmitInfo si = { .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd };
++	if ( vk.QueueSubmit( m_xgpuQueue, 1, &si, m_xgpuFence ) != VK_SUCCESS )
++		return false;
++	// the DRM backend CPU-waits on the frame right after anyway; 50 ms = several frames, far above a normal copy (~2.5 ms)
++	VkResult res = vk.WaitForFences( device(), 1, &m_xgpuFence, VK_TRUE, 50'000'000ull );
++	if ( res == VK_TIMEOUT )
++	{
++		static uint32_t s_uStalls = 0;
++		if ( s_uStalls++ % 100 == 0 )
++			vk_log.infof( "XGPU: copy engine busy (game loading?): keeping the previous frame (%u times so far)", s_uStalls );
++		m_bXgpuPending = true;
++		s_pPendingSrc = gamescope::Rc<CVulkanTexture>( pSrc );
++	}
++	return res == VK_SUCCESS;
++}
++
+ void CVulkanDevice::waitIdle(bool reset)
+ {
+ 	wait(m_submissionSeqNo, reset);
+@@ -2168,6 +2295,14 @@
+ 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+ 	};
+ 
++	uint32_t xgpuFamilies[2] = { g_device.queueFamily(), g_device.xgpuFamily() };
++	if ( flags.bXgpuConcurrent )
++	{
++		imageInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
++		imageInfo.queueFamilyIndexCount = 2;
++		imageInfo.pQueueFamilyIndices = xgpuFamilies;
++	}
++
+ 	assert( imageInfo.format != VK_FORMAT_UNDEFINED );
+ 
+ 	std::array<VkFormat, 2> formats = {
+@@ -3023,7 +3158,9 @@
+ 			}
+ 
+ 			// The deferred backend exposes all sample-able formats as supported modifiers.
+-			if ( !g_bAllowDeferredBackend )
++			// XGPU always composites or copies, so client buffers never need to be scannable by the (other) display GPU;
++			// restricting them to its modifiers would force eGPU clients into LINEAR system memory.
++			if ( !g_bAllowDeferredBackend && !g_bXgpu )
+ 			{
+ 				if ( GetBackend()->UsesModifiers() && !gamescope::Algorithm::Contains( GetBackend()->GetSupportedModifiers( drmFormat ), modifier ) )
+ 					continue;
+@@ -3565,6 +3702,28 @@
+ 		}
+ 	}
+ 
++	if ( g_bXgpu && g_device.xgpuFamily() != ~0u )
++	{
++		// the frame is composited in VRAM; the copy engine (or PyroWave) then moves it to the display GPU
++		CVulkanTexture::createFlags shadowFlags;
++		shadowFlags.bStorage = true;
++		shadowFlags.bSampled = true;
++		shadowFlags.bTransferSrc = true;
++		shadowFlags.bXgpuConcurrent = true;
++		for ( size_t i = 0; i < 3; i++ )
++		{
++			s_xgpuShadow[i] = new CVulkanTexture();
++			if ( !s_xgpuShadow[i]->BInit( g_nOutputWidth, g_nOutputHeight, 1u, pOutput->uOutputFormat, shadowFlags ) )
++			{
++				vk_log.errorf( "XGPU: composite image allocation failed; passthrough unavailable" );
++				for ( auto &p : s_xgpuShadow ) p = nullptr;
++				break;
++			}
++		}
++		if ( s_xgpuShadow[0] )
++			vk_log.infof( "XGPU passthrough active (%s): %ux%u", xgpu_mode(), g_nOutputWidth, g_nOutputHeight );
++	}
++
+ 	return true;
+ }
+ 
+@@ -3589,7 +3748,13 @@
+ 
+ 	if ( GetBackend()->SupportsExternalScanoutBuffers() && g_device.supportsModifiers() )
+ 	{
+-		if ( vulkan_make_output_images_external( pOutput, outputImageflags ) )
++		// XGPU: the display GPU's scanout buffers are only ever a copy destination (NVIDIA cannot import 10-bit
++		// LINEAR buffers for storage/sampling at all)
++		CVulkanTexture::createFlags xgpuFlags;
++		xgpuFlags.bFlippable = true;
++		xgpuFlags.bOutputImage = true;
++		xgpuFlags.bTransferDst = true;
++		if ( vulkan_make_output_images_external( pOutput, g_bXgpu && g_device.xgpuFamily() != ~0u ? xgpuFlags : outputImageflags ) )
+ 		{
+ 			// Oh no.
+ 			pOutput->temporaryHackyBlankImage = vulkan_create_debug_blank_texture();
+@@ -4336,6 +4501,141 @@
+ 	else
+ 		compositeImage = partial ? g_output.outputImagesPartialOverlay[ g_output.nOutImage ] : g_output.outputImages[ g_output.nOutImage ];
+ 
++	gamescope::Rc<CVulkanTexture> xgpuScanout;
++	if ( !pOutputOverride && !partial && s_xgpuShadow[ g_output.nOutImage ] )
++	{
++		xgpuScanout = compositeImage;
++		compositeImage = s_xgpuShadow[ g_output.nOutImage ];
++	}
++
++	// Hand-off to the display GPU through libxpw: neither GPU ever touches memory owned by the other.
++	//   M3 (pyrowave): copy-engine copy into a plain eGPU image shared with libxpw's encoder device (OPAQUE_FD; importing
++	//                  the game's own tiled dmabufs into a second device faulted the GPU: Xid 13) -> PyroWave
++	//   M2 (copy):     copy-engine copy into page-aligned RAM that the display GPU imports and copies into its scanout
++	//                  buffer (the eGPU writing the display GPU's buffers directly hung games at start in real sessions)
++	typedef int (*xpw_init_t)( int, int, size_t );
++	typedef int (*xpw_init_raw_t)( int, int );
++	typedef int (*xpw_scanout_t)( int, int, uint32_t, uint32_t, uint64_t );
++	typedef int (*xpw_frame_t)( int, int );
++	typedef int (*xpw_frame_host_t)( void *, size_t, int );
++	static xpw_frame_t s_xpwFrame = nullptr; static xpw_frame_host_t s_xpwFrameHost = nullptr;
++	static VkImage s_xpwImage = VK_NULL_HANDLE; static int s_xpwFd = -1;
++	static VkBuffer s_xpwBuffer = VK_NULL_HANDLE; static void *s_pXpwRam = nullptr; static size_t s_nXpwRam = 0;
++	static bool s_bXpwTried = false;
++	if ( xgpuScanout && !s_bXpwTried )
++	{
++		s_bXpwTried = true;
++		const char *pszLib = getenv( "GAMESCOPE_XGPU_LIB" );
++		void *lib = pszLib ? dlopen( pszLib, RTLD_NOW | RTLD_LOCAL ) : nullptr;
++		auto setsc = lib ? (xpw_scanout_t) dlsym( lib, "xpw_set_scanout" ) : nullptr;
++		bool bOk = setsc != nullptr;
++		if ( bOk && g_bXgpuPyroWave )
++		{
++			auto init = (xpw_init_t) dlsym( lib, "xpw_init" );
++			const char *pszBytes = getenv( "GAMESCOPE_XGPU_PYROWAVE_BYTES" );
++			bOk = init && init( xgpuScanout->width(), xgpuScanout->height(), pszBytes ? atoi( pszBytes ) : 500000 ) == 0;
++		}
++		else if ( bOk )
++		{
++			auto init = (xpw_init_raw_t) dlsym( lib, "xpw_init_raw" );
++			bOk = init && init( xgpuScanout->width(), xgpuScanout->height() ) == 0;
++		}
++		for ( int i = 0; bOk && i < 3; i++ )
++		{
++			const auto &d = g_output.outputImages[i]->dmabuf();
++			bOk = setsc( i, d.fd[0], d.stride[0], d.offset[0], d.modifier ) == 0;
++		}
++		if ( bOk && g_bXgpuPyroWave )
++		{
++			VkExternalMemoryImageCreateInfo em = { .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO, .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT };
++			VkImageCreateInfo ci = { .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .pNext = &em, .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R8G8B8A8_UNORM,
++				.extent = { xgpuScanout->width(), xgpuScanout->height(), 1 }, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
++				.tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, .sharingMode = VK_SHARING_MODE_EXCLUSIVE };
++			VkMemoryRequirements mr; VkDeviceMemory mem;
++			bOk = g_device.vk.CreateImage( g_device.device(), &ci, nullptr, &s_xpwImage ) == VK_SUCCESS;
++			if ( bOk )
++			{
++				g_device.vk.GetImageMemoryRequirements( g_device.device(), s_xpwImage, &mr );
++				VkMemoryDedicatedAllocateInfo ded = { .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO, .image = s_xpwImage };
++				VkExportMemoryAllocateInfo ex = { .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO, .pNext = &ded, .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT };
++				VkMemoryAllocateInfo ma = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .pNext = &ex, .allocationSize = mr.size,
++					.memoryTypeIndex = (uint32_t)g_device.findMemoryType( VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mr.memoryTypeBits ) };
++				VkMemoryGetFdInfoKHR gi = { .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR, .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT };
++				bOk = g_device.vk.AllocateMemory( g_device.device(), &ma, nullptr, &mem ) == VK_SUCCESS &&
++				      g_device.vk.BindImageMemory( g_device.device(), s_xpwImage, mem, 0 ) == VK_SUCCESS &&
++				      ( gi.memory = mem, g_device.vk.GetMemoryFdKHR( g_device.device(), &gi, &s_xpwFd ) == VK_SUCCESS );
++			}
++			if ( bOk ) s_xpwFrame = (xpw_frame_t) dlsym( lib, "xpw_frame_opaque" );
++		}
++		else if ( bOk )
++		{
++			auto getHostProps = (PFN_vkGetMemoryHostPointerPropertiesEXT) g_device.vk.GetDeviceProcAddr( g_device.device(), "vkGetMemoryHostPointerPropertiesEXT" );
++			s_nXpwRam = ( (size_t)xgpuScanout->width() * xgpuScanout->height() * 4 + 65535 ) & ~(size_t)65535;
++			s_pXpwRam = aligned_alloc( 65536, s_nXpwRam );
++			VkMemoryHostPointerPropertiesEXT hp = { .sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT };
++			bOk = getHostProps && s_pXpwRam &&
++			      getHostProps( g_device.device(), VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, s_pXpwRam, &hp ) == VK_SUCCESS;
++			if ( bOk )
++			{
++				VkExternalMemoryBufferCreateInfo eb = { .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO, .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT };
++				VkBufferCreateInfo bci = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .pNext = &eb, .size = s_nXpwRam, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT };
++				VkImportMemoryHostPointerInfoEXT imp = { .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT, .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, .pHostPointer = s_pXpwRam };
++				VkMemoryAllocateInfo ma = { .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .pNext = &imp, .allocationSize = s_nXpwRam,
++					.memoryTypeIndex = (uint32_t)g_device.findMemoryType( 0, hp.memoryTypeBits ) };
++				VkDeviceMemory mem;
++				bOk = g_device.vk.CreateBuffer( g_device.device(), &bci, nullptr, &s_xpwBuffer ) == VK_SUCCESS &&
++				      g_device.vk.AllocateMemory( g_device.device(), &ma, nullptr, &mem ) == VK_SUCCESS &&
++				      g_device.vk.BindBufferMemory( g_device.device(), s_xpwBuffer, mem, 0 ) == VK_SUCCESS;
++			}
++			if ( bOk ) s_xpwFrameHost = (xpw_frame_host_t) dlsym( lib, "xpw_frame_host" );
++		}
++		if ( s_xpwFrame || s_xpwFrameHost )
++			vk_log.infof( "XGPU hand-off ready (%s)", xgpu_mode() );
++		else
++			vk_log.errorf( "XGPU hand-off unavailable (%s): copying straight into the display GPU's buffers", lib ? "setup failed" : ( pszLib ? dlerror() : "GAMESCOPE_XGPU_LIB not set" ) );
++	}
++	auto xgpuSend = [&]( CVulkanTexture *pSrc, uint64_t seq, bool bClient ) -> void
++	{
++		// a copy that misses its deadline skips this frame (previous picture stays); it never falls through to another path
++		const uint32_t w = xgpuScanout->width(), h = xgpuScanout->height();
++		if ( s_xpwFrame )
++		{
++			if ( g_device.xgpuCopy( pSrc, s_xpwImage, VK_NULL_HANDLE, w, h, seq, bClient, VK_QUEUE_FAMILY_EXTERNAL, VK_IMAGE_LAYOUT_GENERAL ) )
++				s_xpwFrame( s_xpwFd, g_output.nOutImage );
++		}
++		else if ( s_xpwFrameHost )
++		{
++			if ( g_device.xgpuCopy( pSrc, VK_NULL_HANDLE, s_xpwBuffer, w, h, seq, bClient, 0, VK_IMAGE_LAYOUT_GENERAL ) )
++				s_xpwFrameHost( s_pXpwRam, s_nXpwRam, g_output.nOutImage );
++		}
++		else
++			g_device.xgpuCopy( pSrc, xgpuScanout->vkImage(), VK_NULL_HANDLE, w, h, seq, bClient, VK_QUEUE_FAMILY_FOREIGN_EXT, GetBackend()->GetPresentLayout() );
++	};
++
++	// direct frames: one fullscreen, unscaled, opaque game layer in the scanout byte layout -> no composite at all.
++	// gamescope always adds a fully transparent "hacky blank" overlay layer in session mode; it draws nothing.
++	if ( xgpuScanout )
++	{
++		const auto &l = frameInfo->layers[0];
++		const uint32_t fmt = l.tex ? l.tex->drmFormat() : 0;
++		const bool bOnlyBlankAbove = frameInfo->layerCount == 1 ||
++			( frameInfo->layerCount == 2 && frameInfo->layers[1].tex && frameInfo->layers[1].tex.get() == g_output.temporaryHackyBlankImage.get() );
++		const bool bDirect = bOnlyBlankAbove && l.tex && !l.tex->isYcbcr() &&
++			l.tex->width() == xgpuScanout->width() && l.tex->height() == xgpuScanout->height() &&
++			close_enough( l.scale.x, 1.0f ) && close_enough( l.scale.y, 1.0f ) && close_enough( l.offset.x, 0.0f ) && close_enough( l.offset.y, 0.0f ) &&
++			close_enough( l.opacity, 1.0f ) && !frameInfo->useFSRLayer0 && !frameInfo->useNISLayer0 && !frameInfo->blurLayer0 &&
++			( fmt == DRM_FORMAT_XBGR8888 || fmt == DRM_FORMAT_ABGR8888 ) && pPipewireTexture == nullptr;
++		if ( bDirect )
++		{
++			auto pEmpty = pInCommandBuffer ? std::move( pInCommandBuffer ) : g_device.commandBuffer();
++			uint64_t seq = g_device.submit( std::move( pEmpty ) );
++			xgpuSend( l.tex.get(), seq, true );
++			if ( !GetBackend()->UsesVulkanSwapchain() && increment )
++				g_output.nOutImage = ( g_output.nOutImage + 1 ) % 3;
++			return seq;
++		}
++	}
++
+ 	auto cmdBuffer = pInCommandBuffer ? std::move( pInCommandBuffer ) : g_device.commandBuffer();
+ 
+ 	for (uint32_t i = 0; i < EOTF_Count; i++)
+@@ -4519,6 +4819,10 @@
+ 
+ 	uint64_t sequence = g_device.submit(std::move(cmdBuffer));
+ 
++	// composited frames take the same hand-off
++	if ( xgpuScanout )
++		xgpuSend( compositeImage.get(), sequence, false );
++
+ 	if ( !GetBackend()->UsesVulkanSwapchain() && pOutputOverride == nullptr && increment )
+ 	{
+ 		g_output.nOutImage = ( g_output.nOutImage + 1 ) % 3;
+diff -ruN -x '*.orig' -x '*.rej' a/src/rendervulkan.hpp b/src/rendervulkan.hpp
+--- a/src/rendervulkan.hpp	2026-09-11 14:32:51.441260404 +0900
++++ b/src/rendervulkan.hpp	2026-10-12 05:51:21.260283026 +0900
+@@ -142,6 +142,7 @@
+ 			bExportable = false;
+ 			bOutputImage = false;
+ 			bColorAttachment = false;
++			bXgpuConcurrent = false;
+ 			imageType = VK_IMAGE_TYPE_2D;
+ 		}
+ 
+@@ -155,6 +156,7 @@
+ 		bool bExportable : 1;
+ 		bool bOutputImage : 1;
+ 		bool bColorAttachment : 1;
++		bool bXgpuConcurrent : 1; // shared by the composite queue and the copy-engine queue (XGPU)
+ 		VkImageType imageType;
+ 	};
+ 
+@@ -699,6 +701,8 @@
+ 	VK_FUNC(CmdClearColorImage) \
+ 	VK_FUNC(CmdCopyBufferToImage) \
+ 	VK_FUNC(CmdCopyImage) \
++	VK_FUNC(CmdCopyImageToBuffer) \
++	VK_FUNC(GetFenceStatus) \
+ 	VK_FUNC(CmdDispatch) \
+ 	VK_FUNC(CmdDraw) \
+ 	VK_FUNC(CmdEndRendering) \
+@@ -793,6 +797,15 @@
+ 	uint64_t submitInternal( CVulkanCmdBuffer* cmdBuf );
+ 	void wait(uint64_t sequence, bool reset = true);
+ 	void waitIdle(bool reset = true);
++	// XGPU: copy a finished frame on the copy-engine queue into an image owned by another GPU or device (blocks until done)
++	bool xgpuCopy( CVulkanTexture *pSrc, VkImage dstImage, VkBuffer dstBuffer, uint32_t uW, uint32_t uH, uint64_t ulWaitSeq, bool bSrcIsClient, uint32_t uDstOwner, VkImageLayout eDstLayout );
++	inline uint32_t xgpuFamily() { return m_xgpuFamily; }
++	VkQueue m_xgpuQueue = nullptr;
++	uint32_t m_xgpuFamily = ~0u;
++	VkCommandPool m_xgpuPool = VK_NULL_HANDLE;
++	VkCommandBuffer m_xgpuCmd = VK_NULL_HANDLE;
++	VkFence m_xgpuFence = VK_NULL_HANDLE;
++	bool m_bXgpuPending = false;   // a copy that outlived its wait is still in flight (its command buffer is busy)
+ 	void garbageCollect();
+ 	inline VkDescriptorSet descriptorSet()
+ 	{
+diff -ruN -x '*.orig' -x '*.rej' a/src/steamcompmgr.cpp b/src/steamcompmgr.cpp
+--- a/src/steamcompmgr.cpp	2026-09-11 14:32:51.442260413 +0900
++++ b/src/steamcompmgr.cpp	2026-10-12 05:51:21.263958981 +0900
+@@ -1424,6 +1424,14 @@
+ 	if ( wlr_buffer_get_dmabuf( buf, &dmabuf ) )
+ 	{
+ 		pBackendFb = GetBackend()->ImportDmabufToBackend( &dmabuf );
++		// XGPU: the display GPU cannot scan out the eGPU's buffers, so the import fails for nearly every game frame.
++		// Without a framebuffer object the client's release point is dropped (= signalled) at commit time and the
++		// game reuses the buffer while gamescope still reads it; with the copy engine borrowing it that deadlocked
++		// games at first launch (game and copy each waiting on the other). A placeholder ties the release to the
++		// texture's use, as on the nested backends. Never scanned out: XGPU always composites (GBM scanout).
++		static const bool s_bXgpu = getenv( "GAMESCOPE_XGPU_MODE" ) != nullptr;
++		if ( !pBackendFb && s_bXgpu )
++			pBackendFb = new gamescope::CBaseBackendFb();
+ 	}
+ 
+ 	gamescope::OwningRc<CVulkanTexture> pOwnedTexture = vulkan_create_texture_from_wlr_buffer( buf, std::move( pBackendFb ) );

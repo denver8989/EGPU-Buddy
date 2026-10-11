@@ -201,6 +201,8 @@ def _nvidia_query(bdf):
 
 
 GAME_SCREEN = "/var/lib/nvegpu/game-screen"   # connector Game Mode goes to first (nv-egpu-gamescope-session)
+HANDHELD_CFG = "/var/lib/nvegpu/handheld-screen.json"   # opt-in passthrough: eGPU renders, a handheld-driven screen shows it
+XPW_LIB = f"{USER_HOME}/.local/lib/nv-egpu-buddy/xpw/libxpw.so"   # its display-GPU side (installed when it runs here)
 SCREEN_NET = "/var/lib/nvegpu/screen-net.json"   # TV control tricks: paired network TVs (egpu-screen)
 _seen_screens = None
 
@@ -303,6 +305,27 @@ def _displays(bdf):
     except OSError:
         pass
     return outs
+
+
+def _handheld_screens():
+    """Connected screens driven by the handheld's own GPU: the built-in panel and USB-C displays (e.g. XR glasses)."""
+    cards = {os.path.basename(c).split("-")[0] for c in glob.glob("/sys/class/drm/card[0-9]*-eDP-*")}
+    out = []
+    for card in cards:
+        for c in sorted(glob.glob(f"/sys/class/drm/{card}-*")):
+            conn = os.path.basename(c).split("-", 1)[1]
+            if conn.startswith("Writeback") or _read(c + "/status") != "connected":
+                continue
+            model, detail = _screen_info(os.path.basename(c))
+            out.append({"name": conn, "builtin": conn.startswith("eDP"), "model": "Built-in screen" if conn.startswith("eDP") else (model or conn), "detail": detail})
+    return out
+
+
+def _handheld_cfg():
+    try:
+        return json.load(open(HANDHELD_CFG))
+    except (OSError, ValueError):
+        return {}
 
 
 def _dock_present():
@@ -917,19 +940,23 @@ class Plugin:
         return {"ok": msg.startswith("paired"), "message": msg}
 
     async def get_screen_offer(self):
-        """A screen newly connected to the eGPU while Game Mode is on another one -> offer to move."""
+        """A screen newly connected to the eGPU while Game Mode is on another one -> offer to move. With the passthrough
+        libraries installed, a USB-C screen on the handheld (e.g. XR glasses) is offered too, but only with an eGPU."""
         global _seen_screens
         bdf = _gpu_bdf()
         if not bdf or not _gamescope_running():
             _seen_screens = None; return {}
         now = {d["name"]: d for d in _displays(bdf)}
+        if os.path.exists(XPW_LIB):
+            now.update({d["name"]: {**d, "handheld": True} for d in _handheld_screens() if not d["builtin"]})
         new = [c for c in now if _seen_screens is not None and c not in _seen_screens]
         _seen_screens = set(now)
         cur = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]
         for c in new:
             # a TV that is on another input is not being looked at: don't offer it
             if c != cur and _sh(["/usr/local/sbin/egpu-screen", "state", c], 15)[1] != "other-input":
-                return {"connector": c, "name": now[c]["model"] or c, "detail": now[c]["detail"], "game": _game_running()}
+                return {"connector": c, "name": now[c]["model"] or c, "detail": now[c]["detail"], "game": _game_running(),
+                        "handheld": bool(now[c].get("handheld"))}
         return {}
 
     async def set_game_screen(self, connector: str):
@@ -943,6 +970,39 @@ class Plugin:
         # connection carries them; a screen that answers neither is simply left as it is)
         _spawn_root_job("switch", ["/bin/bash", "-c", f'{SWITCH}; /usr/local/sbin/egpu-screen wake --input {connector}'])
         return {"ok": True, "message": f"Moving Game Mode to {connector}: the screen goes dark for a few seconds."}
+
+    # Settings > Performance boost (M3), opt-in, off by default: with no monitor on the eGPU, Game Mode renders on the
+    # eGPU and the handheld's own screen (or a USB-C screen such as XR glasses) shows it; frames cross compressed with
+    # PyroWave. Can be switched on before the eGPU is plugged in; it only acts while an eGPU is attached.
+    # (M2 raw copy was dropped: no gain in real sessions.)
+    async def get_handheld_screen(self):
+        d = _handheld_cfg(); egpu = bool(_gpu_bdf())
+        return {"available": os.path.exists(XPW_LIB), "egpu": egpu, "enabled": bool(d.get("enabled")),
+                "connector": d.get("connector") or "eDP-1", "transfer": "pyrowave",
+                "active": _gamescope_env("GAMESCOPE_XGPU_MODE") != "",
+                "screens": _handheld_screens() if egpu else []}
+
+    async def set_handheld_screen(self, enabled: bool, connector: str = "", transfer: str = "pyrowave"):
+        if transfer != "pyrowave" or (connector and not re.fullmatch(r"[A-Za-z]+(-[A-Za-z0-9]+)+", connector)):
+            return {"ok": False, "message": "Unknown screen or transfer."}
+        if enabled and not os.path.exists(XPW_LIB):
+            return {"ok": False, "message": "Not available on this system: its libraries are not installed."}
+        d = _handheld_cfg()
+        new = {"enabled": bool(enabled), "connector": connector or d.get("connector") or "eDP-1", "transfer": transfer}
+        if new == d:
+            return {"ok": True, "message": "No change."}
+        bdf = _gpu_bdf()
+        # it changes the running session only when an eGPU is attached and it applies: the built-in screen is used only
+        # while no monitor is on the eGPU; a chosen USB-C screen always
+        restart = bool(bdf) and _gamescope_running() and (not new["connector"].startswith("eDP") or not _displays(bdf))
+        if restart and _game_running():
+            return {"ok": False, "message": "Close the running game first: this restarts Game Mode."}
+        os.makedirs(os.path.dirname(HANDHELD_CFG), exist_ok=True)
+        json.dump(new, open(HANDHELD_CFG, "w")); os.chmod(HANDHELD_CFG, 0o644)
+        if restart:
+            _spawn_root_job("switch", [SWITCH])
+            return {"ok": True, "message": "Game Mode restarts (dark for a few seconds)."}
+        return {"ok": True, "message": "Saved. It turns on by itself when an eGPU without a monitor is plugged in." if enabled else "Saved."}
 
     async def attach(self, force: bool = False):
         decky.logger.info(f"attach pressed (force={force})")

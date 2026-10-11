@@ -53,6 +53,8 @@ class Guard:
                     if f == fd: os.close(f); del self.fds[p]
     def tick(self):
         if os.path.exists(f"{RUN}/nv-egpu-buddy/detach-handoff-active"): self.off_since = None; return
+        # handheld passthrough: Game Mode is on a screen of the handheld's own GPU, so dark eGPU screens are expected
+        if os.path.exists(f"{RUN}/nv-egpu-buddy/xgpu-active"): self.off_since = None; return
         cons = nvidia_connectors()
         if not cons: self.off_since = None; return
         now = time.monotonic()
