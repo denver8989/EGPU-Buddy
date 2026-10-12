@@ -1,7 +1,13 @@
+0.7.87 — Performance boost marked experimental.
+
+**Fixed**
+- Performance boost no longer claims an FPS gain: tested against standard Game Mode it is not faster at normal frame rates. It is now marked experimental and stays off by default.
+
 0.7.86 — Performance boost (M3): eGPU games on the handheld's screen.
 
 **New**
-- Setup > Performance boost (M3), optional, off by default: with no monitor on the eGPU, games run on the eGPU and play on the handheld's own screen. Each frame is packed small with PyroWave on the eGPU and unpacked by the handheld, instead of sending the full picture back over the cable. About 20% more FPS (Cyberpunk 2077 with DLSS + frame generation: 175 vs 143). Switch it on before plugging in the eGPU; a monitor on the eGPU is still used when one is connected. Works on CachyOS and SteamOS.
+- Setup > Performance boost (M3), experimental, off by default: with no monitor on the eGPU, games run on the eGPU and play on the handheld's own screen, each frame packed small with PyroWave. Switch it on before plugging in the eGPU; a monitor on the eGPU is still used when one is connected. CachyOS and SteamOS.
+- Correction: an earlier version of these notes claimed about 20% more FPS. That was measured against a test build, not standard Game Mode. Against standard Game Mode it is not faster at normal frame rates (about 5% slower in Cyberpunk 2077 at native 1920x1200).
 
 0.7.85 — reset counter.
 

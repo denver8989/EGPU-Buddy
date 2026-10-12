@@ -448,11 +448,11 @@ function Content() {
         </PanelSection>
       )}
       {tab === "setup" && hh && (
-        <PanelSection title="Performance boost (M3)">
+        <PanelSection title="Performance boost (M3, experimental)">
           {!hh.available ? (
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Not available on this system yet.</div></PanelSectionRow>
           ) : (<>
-            <PanelSectionRow><ToggleField label="Performance boost (M3)" description="For an eGPU without a monitor: games run on the eGPU and play on the handheld's screen. Each frame is packed small with PyroWave on the eGPU and unpacked by the handheld, instead of sending the full picture back over the cable. About 20% more FPS. Off by default; switch it on before plugging in. A monitor on the eGPU is still used when one is connected." checked={hh.enabled} disabled={busy}
+            <PanelSectionRow><ToggleField label="Performance boost (M3)" description="Experimental, off by default. For an eGPU without a monitor: games run on the eGPU and play on the handheld's screen, each frame packed small with PyroWave. Not faster than standard Game Mode at normal frame rates (about 5% slower in tests); still being worked on. Switch it on before plugging in. A monitor on the eGPU is still used when one is connected." checked={hh.enabled} disabled={busy}
               onChange={(v) => run(() => setHandheld(v, hh.connector, hh.transfer))} /></PanelSectionRow>
             {hh.enabled && (<>
               {hh.screens.length > 1 && <PanelSectionRow><DropdownItem label="Screen" disabled={busy} selectedOption={hh.connector}
