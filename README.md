@@ -2,6 +2,10 @@
   <img src="docs/assets/banner.png" alt="SteamOS EGPU Buddy — connect, switch, optimise, play" width="100%">
 </p>
 
+<p align="center">
+  <a href="https://discord.gg/r3dhqAqnW"><img src="https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord"></a>
+</p>
+
 # SteamOS EGPU Buddy
 
 Use an eGPU with a Linux gaming handheld in **Game Mode**, the way it works on Windows: plug it in and Game Mode
