@@ -86,6 +86,2307 @@ function FaPlug (props) {
   return GenIcon({"attr":{"viewBox":"0 0 384 512"},"child":[{"tag":"path","attr":{"d":"M320,32a32,32,0,0,0-64,0v96h64Zm48,128H16A16,16,0,0,0,0,176v32a16,16,0,0,0,16,16H32v32A160.07,160.07,0,0,0,160,412.8V512h64V412.8A160.07,160.07,0,0,0,352,256V224h16a16,16,0,0,0,16-16V176A16,16,0,0,0,368,160ZM128,32a32,32,0,0,0-64,0v96h64Z"},"child":[]}]})(props);
 }
 
+function getDefaultExportFromCjs (x) {
+	return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;
+}
+
+var qrcode$1 = {exports: {}};
+
+(function (module, exports) {
+	//---------------------------------------------------------------------
+	//
+	// QR Code Generator for JavaScript
+	//
+	// Copyright (c) 2009 Kazuhiko Arase
+	//
+	// URL: http://www.d-project.com/
+	//
+	// Licensed under the MIT license:
+	//  http://www.opensource.org/licenses/mit-license.php
+	//
+	// The word 'QR Code' is registered trademark of
+	// DENSO WAVE INCORPORATED
+	//  http://www.denso-wave.com/qrcode/faqpatent-e.html
+	//
+	//---------------------------------------------------------------------
+
+	var qrcode = function() {
+
+	  //---------------------------------------------------------------------
+	  // qrcode
+	  //---------------------------------------------------------------------
+
+	  /**
+	   * qrcode
+	   * @param typeNumber 1 to 40
+	   * @param errorCorrectionLevel 'L','M','Q','H'
+	   */
+	  var qrcode = function(typeNumber, errorCorrectionLevel) {
+
+	    var PAD0 = 0xEC;
+	    var PAD1 = 0x11;
+
+	    var _typeNumber = typeNumber;
+	    var _errorCorrectionLevel = QRErrorCorrectionLevel[errorCorrectionLevel];
+	    var _modules = null;
+	    var _moduleCount = 0;
+	    var _dataCache = null;
+	    var _dataList = [];
+
+	    var _this = {};
+
+	    var makeImpl = function(test, maskPattern) {
+
+	      _moduleCount = _typeNumber * 4 + 17;
+	      _modules = function(moduleCount) {
+	        var modules = new Array(moduleCount);
+	        for (var row = 0; row < moduleCount; row += 1) {
+	          modules[row] = new Array(moduleCount);
+	          for (var col = 0; col < moduleCount; col += 1) {
+	            modules[row][col] = null;
+	          }
+	        }
+	        return modules;
+	      }(_moduleCount);
+
+	      setupPositionProbePattern(0, 0);
+	      setupPositionProbePattern(_moduleCount - 7, 0);
+	      setupPositionProbePattern(0, _moduleCount - 7);
+	      setupPositionAdjustPattern();
+	      setupTimingPattern();
+	      setupTypeInfo(test, maskPattern);
+
+	      if (_typeNumber >= 7) {
+	        setupTypeNumber(test);
+	      }
+
+	      if (_dataCache == null) {
+	        _dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
+	      }
+
+	      mapData(_dataCache, maskPattern);
+	    };
+
+	    var setupPositionProbePattern = function(row, col) {
+
+	      for (var r = -1; r <= 7; r += 1) {
+
+	        if (row + r <= -1 || _moduleCount <= row + r) continue;
+
+	        for (var c = -1; c <= 7; c += 1) {
+
+	          if (col + c <= -1 || _moduleCount <= col + c) continue;
+
+	          if ( (0 <= r && r <= 6 && (c == 0 || c == 6) )
+	              || (0 <= c && c <= 6 && (r == 0 || r == 6) )
+	              || (2 <= r && r <= 4 && 2 <= c && c <= 4) ) {
+	            _modules[row + r][col + c] = true;
+	          } else {
+	            _modules[row + r][col + c] = false;
+	          }
+	        }
+	      }
+	    };
+
+	    var getBestMaskPattern = function() {
+
+	      var minLostPoint = 0;
+	      var pattern = 0;
+
+	      for (var i = 0; i < 8; i += 1) {
+
+	        makeImpl(true, i);
+
+	        var lostPoint = QRUtil.getLostPoint(_this);
+
+	        if (i == 0 || minLostPoint > lostPoint) {
+	          minLostPoint = lostPoint;
+	          pattern = i;
+	        }
+	      }
+
+	      return pattern;
+	    };
+
+	    var setupTimingPattern = function() {
+
+	      for (var r = 8; r < _moduleCount - 8; r += 1) {
+	        if (_modules[r][6] != null) {
+	          continue;
+	        }
+	        _modules[r][6] = (r % 2 == 0);
+	      }
+
+	      for (var c = 8; c < _moduleCount - 8; c += 1) {
+	        if (_modules[6][c] != null) {
+	          continue;
+	        }
+	        _modules[6][c] = (c % 2 == 0);
+	      }
+	    };
+
+	    var setupPositionAdjustPattern = function() {
+
+	      var pos = QRUtil.getPatternPosition(_typeNumber);
+
+	      for (var i = 0; i < pos.length; i += 1) {
+
+	        for (var j = 0; j < pos.length; j += 1) {
+
+	          var row = pos[i];
+	          var col = pos[j];
+
+	          if (_modules[row][col] != null) {
+	            continue;
+	          }
+
+	          for (var r = -2; r <= 2; r += 1) {
+
+	            for (var c = -2; c <= 2; c += 1) {
+
+	              if (r == -2 || r == 2 || c == -2 || c == 2
+	                  || (r == 0 && c == 0) ) {
+	                _modules[row + r][col + c] = true;
+	              } else {
+	                _modules[row + r][col + c] = false;
+	              }
+	            }
+	          }
+	        }
+	      }
+	    };
+
+	    var setupTypeNumber = function(test) {
+
+	      var bits = QRUtil.getBCHTypeNumber(_typeNumber);
+
+	      for (var i = 0; i < 18; i += 1) {
+	        var mod = (!test && ( (bits >> i) & 1) == 1);
+	        _modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod;
+	      }
+
+	      for (var i = 0; i < 18; i += 1) {
+	        var mod = (!test && ( (bits >> i) & 1) == 1);
+	        _modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
+	      }
+	    };
+
+	    var setupTypeInfo = function(test, maskPattern) {
+
+	      var data = (_errorCorrectionLevel << 3) | maskPattern;
+	      var bits = QRUtil.getBCHTypeInfo(data);
+
+	      // vertical
+	      for (var i = 0; i < 15; i += 1) {
+
+	        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+	        if (i < 6) {
+	          _modules[i][8] = mod;
+	        } else if (i < 8) {
+	          _modules[i + 1][8] = mod;
+	        } else {
+	          _modules[_moduleCount - 15 + i][8] = mod;
+	        }
+	      }
+
+	      // horizontal
+	      for (var i = 0; i < 15; i += 1) {
+
+	        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+	        if (i < 8) {
+	          _modules[8][_moduleCount - i - 1] = mod;
+	        } else if (i < 9) {
+	          _modules[8][15 - i - 1 + 1] = mod;
+	        } else {
+	          _modules[8][15 - i - 1] = mod;
+	        }
+	      }
+
+	      // fixed module
+	      _modules[_moduleCount - 8][8] = (!test);
+	    };
+
+	    var mapData = function(data, maskPattern) {
+
+	      var inc = -1;
+	      var row = _moduleCount - 1;
+	      var bitIndex = 7;
+	      var byteIndex = 0;
+	      var maskFunc = QRUtil.getMaskFunction(maskPattern);
+
+	      for (var col = _moduleCount - 1; col > 0; col -= 2) {
+
+	        if (col == 6) col -= 1;
+
+	        while (true) {
+
+	          for (var c = 0; c < 2; c += 1) {
+
+	            if (_modules[row][col - c] == null) {
+
+	              var dark = false;
+
+	              if (byteIndex < data.length) {
+	                dark = ( ( (data[byteIndex] >>> bitIndex) & 1) == 1);
+	              }
+
+	              var mask = maskFunc(row, col - c);
+
+	              if (mask) {
+	                dark = !dark;
+	              }
+
+	              _modules[row][col - c] = dark;
+	              bitIndex -= 1;
+
+	              if (bitIndex == -1) {
+	                byteIndex += 1;
+	                bitIndex = 7;
+	              }
+	            }
+	          }
+
+	          row += inc;
+
+	          if (row < 0 || _moduleCount <= row) {
+	            row -= inc;
+	            inc = -inc;
+	            break;
+	          }
+	        }
+	      }
+	    };
+
+	    var createBytes = function(buffer, rsBlocks) {
+
+	      var offset = 0;
+
+	      var maxDcCount = 0;
+	      var maxEcCount = 0;
+
+	      var dcdata = new Array(rsBlocks.length);
+	      var ecdata = new Array(rsBlocks.length);
+
+	      for (var r = 0; r < rsBlocks.length; r += 1) {
+
+	        var dcCount = rsBlocks[r].dataCount;
+	        var ecCount = rsBlocks[r].totalCount - dcCount;
+
+	        maxDcCount = Math.max(maxDcCount, dcCount);
+	        maxEcCount = Math.max(maxEcCount, ecCount);
+
+	        dcdata[r] = new Array(dcCount);
+
+	        for (var i = 0; i < dcdata[r].length; i += 1) {
+	          dcdata[r][i] = 0xff & buffer.getBuffer()[i + offset];
+	        }
+	        offset += dcCount;
+
+	        var rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+	        var rawPoly = qrPolynomial(dcdata[r], rsPoly.getLength() - 1);
+
+	        var modPoly = rawPoly.mod(rsPoly);
+	        ecdata[r] = new Array(rsPoly.getLength() - 1);
+	        for (var i = 0; i < ecdata[r].length; i += 1) {
+	          var modIndex = i + modPoly.getLength() - ecdata[r].length;
+	          ecdata[r][i] = (modIndex >= 0)? modPoly.getAt(modIndex) : 0;
+	        }
+	      }
+
+	      var totalCodeCount = 0;
+	      for (var i = 0; i < rsBlocks.length; i += 1) {
+	        totalCodeCount += rsBlocks[i].totalCount;
+	      }
+
+	      var data = new Array(totalCodeCount);
+	      var index = 0;
+
+	      for (var i = 0; i < maxDcCount; i += 1) {
+	        for (var r = 0; r < rsBlocks.length; r += 1) {
+	          if (i < dcdata[r].length) {
+	            data[index] = dcdata[r][i];
+	            index += 1;
+	          }
+	        }
+	      }
+
+	      for (var i = 0; i < maxEcCount; i += 1) {
+	        for (var r = 0; r < rsBlocks.length; r += 1) {
+	          if (i < ecdata[r].length) {
+	            data[index] = ecdata[r][i];
+	            index += 1;
+	          }
+	        }
+	      }
+
+	      return data;
+	    };
+
+	    var createData = function(typeNumber, errorCorrectionLevel, dataList) {
+
+	      var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectionLevel);
+
+	      var buffer = qrBitBuffer();
+
+	      for (var i = 0; i < dataList.length; i += 1) {
+	        var data = dataList[i];
+	        buffer.put(data.getMode(), 4);
+	        buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+	        data.write(buffer);
+	      }
+
+	      // calc num max data.
+	      var totalDataCount = 0;
+	      for (var i = 0; i < rsBlocks.length; i += 1) {
+	        totalDataCount += rsBlocks[i].dataCount;
+	      }
+
+	      if (buffer.getLengthInBits() > totalDataCount * 8) {
+	        throw 'code length overflow. ('
+	          + buffer.getLengthInBits()
+	          + '>'
+	          + totalDataCount * 8
+	          + ')';
+	      }
+
+	      // end code
+	      if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+	        buffer.put(0, 4);
+	      }
+
+	      // padding
+	      while (buffer.getLengthInBits() % 8 != 0) {
+	        buffer.putBit(false);
+	      }
+
+	      // padding
+	      while (true) {
+
+	        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+	          break;
+	        }
+	        buffer.put(PAD0, 8);
+
+	        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+	          break;
+	        }
+	        buffer.put(PAD1, 8);
+	      }
+
+	      return createBytes(buffer, rsBlocks);
+	    };
+
+	    _this.addData = function(data, mode) {
+
+	      mode = mode || 'Byte';
+
+	      var newData = null;
+
+	      switch(mode) {
+	      case 'Numeric' :
+	        newData = qrNumber(data);
+	        break;
+	      case 'Alphanumeric' :
+	        newData = qrAlphaNum(data);
+	        break;
+	      case 'Byte' :
+	        newData = qr8BitByte(data);
+	        break;
+	      case 'Kanji' :
+	        newData = qrKanji(data);
+	        break;
+	      default :
+	        throw 'mode:' + mode;
+	      }
+
+	      _dataList.push(newData);
+	      _dataCache = null;
+	    };
+
+	    _this.isDark = function(row, col) {
+	      if (row < 0 || _moduleCount <= row || col < 0 || _moduleCount <= col) {
+	        throw row + ',' + col;
+	      }
+	      return _modules[row][col];
+	    };
+
+	    _this.getModuleCount = function() {
+	      return _moduleCount;
+	    };
+
+	    _this.make = function() {
+	      if (_typeNumber < 1) {
+	        var typeNumber = 1;
+
+	        for (; typeNumber < 40; typeNumber++) {
+	          var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, _errorCorrectionLevel);
+	          var buffer = qrBitBuffer();
+
+	          for (var i = 0; i < _dataList.length; i++) {
+	            var data = _dataList[i];
+	            buffer.put(data.getMode(), 4);
+	            buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+	            data.write(buffer);
+	          }
+
+	          var totalDataCount = 0;
+	          for (var i = 0; i < rsBlocks.length; i++) {
+	            totalDataCount += rsBlocks[i].dataCount;
+	          }
+
+	          if (buffer.getLengthInBits() <= totalDataCount * 8) {
+	            break;
+	          }
+	        }
+
+	        _typeNumber = typeNumber;
+	      }
+
+	      makeImpl(false, getBestMaskPattern() );
+	    };
+
+	    _this.createTableTag = function(cellSize, margin) {
+
+	      cellSize = cellSize || 2;
+	      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+	      var qrHtml = '';
+
+	      qrHtml += '<table style="';
+	      qrHtml += ' border-width: 0px; border-style: none;';
+	      qrHtml += ' border-collapse: collapse;';
+	      qrHtml += ' padding: 0px; margin: ' + margin + 'px;';
+	      qrHtml += '">';
+	      qrHtml += '<tbody>';
+
+	      for (var r = 0; r < _this.getModuleCount(); r += 1) {
+
+	        qrHtml += '<tr>';
+
+	        for (var c = 0; c < _this.getModuleCount(); c += 1) {
+	          qrHtml += '<td style="';
+	          qrHtml += ' border-width: 0px; border-style: none;';
+	          qrHtml += ' border-collapse: collapse;';
+	          qrHtml += ' padding: 0px; margin: 0px;';
+	          qrHtml += ' width: ' + cellSize + 'px;';
+	          qrHtml += ' height: ' + cellSize + 'px;';
+	          qrHtml += ' background-color: ';
+	          qrHtml += _this.isDark(r, c)? '#000000' : '#ffffff';
+	          qrHtml += ';';
+	          qrHtml += '"/>';
+	        }
+
+	        qrHtml += '</tr>';
+	      }
+
+	      qrHtml += '</tbody>';
+	      qrHtml += '</table>';
+
+	      return qrHtml;
+	    };
+
+	    _this.createSvgTag = function(cellSize, margin, alt, title) {
+
+	      var opts = {};
+	      if (typeof arguments[0] == 'object') {
+	        // Called by options.
+	        opts = arguments[0];
+	        // overwrite cellSize and margin.
+	        cellSize = opts.cellSize;
+	        margin = opts.margin;
+	        alt = opts.alt;
+	        title = opts.title;
+	      }
+
+	      cellSize = cellSize || 2;
+	      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+	      // Compose alt property surrogate
+	      alt = (typeof alt === 'string') ? {text: alt} : alt || {};
+	      alt.text = alt.text || null;
+	      alt.id = (alt.text) ? alt.id || 'qrcode-description' : null;
+
+	      // Compose title property surrogate
+	      title = (typeof title === 'string') ? {text: title} : title || {};
+	      title.text = title.text || null;
+	      title.id = (title.text) ? title.id || 'qrcode-title' : null;
+
+	      var size = _this.getModuleCount() * cellSize + margin * 2;
+	      var c, mc, r, mr, qrSvg='', rect;
+
+	      rect = 'l' + cellSize + ',0 0,' + cellSize +
+	        ' -' + cellSize + ',0 0,-' + cellSize + 'z ';
+
+	      qrSvg += '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"';
+	      qrSvg += !opts.scalable ? ' width="' + size + 'px" height="' + size + 'px"' : '';
+	      qrSvg += ' viewBox="0 0 ' + size + ' ' + size + '" ';
+	      qrSvg += ' preserveAspectRatio="xMinYMin meet"';
+	      qrSvg += (title.text || alt.text) ? ' role="img" aria-labelledby="' +
+	          escapeXml([title.id, alt.id].join(' ').trim() ) + '"' : '';
+	      qrSvg += '>';
+	      qrSvg += (title.text) ? '<title id="' + escapeXml(title.id) + '">' +
+	          escapeXml(title.text) + '</title>' : '';
+	      qrSvg += (alt.text) ? '<description id="' + escapeXml(alt.id) + '">' +
+	          escapeXml(alt.text) + '</description>' : '';
+	      qrSvg += '<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>';
+	      qrSvg += '<path d="';
+
+	      for (r = 0; r < _this.getModuleCount(); r += 1) {
+	        mr = r * cellSize + margin;
+	        for (c = 0; c < _this.getModuleCount(); c += 1) {
+	          if (_this.isDark(r, c) ) {
+	            mc = c*cellSize+margin;
+	            qrSvg += 'M' + mc + ',' + mr + rect;
+	          }
+	        }
+	      }
+
+	      qrSvg += '" stroke="transparent" fill="black"/>';
+	      qrSvg += '</svg>';
+
+	      return qrSvg;
+	    };
+
+	    _this.createDataURL = function(cellSize, margin) {
+
+	      cellSize = cellSize || 2;
+	      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+	      var size = _this.getModuleCount() * cellSize + margin * 2;
+	      var min = margin;
+	      var max = size - margin;
+
+	      return createDataURL(size, size, function(x, y) {
+	        if (min <= x && x < max && min <= y && y < max) {
+	          var c = Math.floor( (x - min) / cellSize);
+	          var r = Math.floor( (y - min) / cellSize);
+	          return _this.isDark(r, c)? 0 : 1;
+	        } else {
+	          return 1;
+	        }
+	      } );
+	    };
+
+	    _this.createImgTag = function(cellSize, margin, alt) {
+
+	      cellSize = cellSize || 2;
+	      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+	      var size = _this.getModuleCount() * cellSize + margin * 2;
+
+	      var img = '';
+	      img += '<img';
+	      img += '\u0020src="';
+	      img += _this.createDataURL(cellSize, margin);
+	      img += '"';
+	      img += '\u0020width="';
+	      img += size;
+	      img += '"';
+	      img += '\u0020height="';
+	      img += size;
+	      img += '"';
+	      if (alt) {
+	        img += '\u0020alt="';
+	        img += escapeXml(alt);
+	        img += '"';
+	      }
+	      img += '/>';
+
+	      return img;
+	    };
+
+	    var escapeXml = function(s) {
+	      var escaped = '';
+	      for (var i = 0; i < s.length; i += 1) {
+	        var c = s.charAt(i);
+	        switch(c) {
+	        case '<': escaped += '&lt;'; break;
+	        case '>': escaped += '&gt;'; break;
+	        case '&': escaped += '&amp;'; break;
+	        case '"': escaped += '&quot;'; break;
+	        default : escaped += c; break;
+	        }
+	      }
+	      return escaped;
+	    };
+
+	    var _createHalfASCII = function(margin) {
+	      var cellSize = 1;
+	      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+	      var size = _this.getModuleCount() * cellSize + margin * 2;
+	      var min = margin;
+	      var max = size - margin;
+
+	      var y, x, r1, r2, p;
+
+	      var blocks = {
+	        '██': '█',
+	        '█ ': '▀',
+	        ' █': '▄',
+	        '  ': ' '
+	      };
+
+	      var blocksLastLineNoMargin = {
+	        '██': '▀',
+	        '█ ': '▀',
+	        ' █': ' ',
+	        '  ': ' '
+	      };
+
+	      var ascii = '';
+	      for (y = 0; y < size; y += 2) {
+	        r1 = Math.floor((y - min) / cellSize);
+	        r2 = Math.floor((y + 1 - min) / cellSize);
+	        for (x = 0; x < size; x += 1) {
+	          p = '█';
+
+	          if (min <= x && x < max && min <= y && y < max && _this.isDark(r1, Math.floor((x - min) / cellSize))) {
+	            p = ' ';
+	          }
+
+	          if (min <= x && x < max && min <= y+1 && y+1 < max && _this.isDark(r2, Math.floor((x - min) / cellSize))) {
+	            p += ' ';
+	          }
+	          else {
+	            p += '█';
+	          }
+
+	          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+	          ascii += (margin < 1 && y+1 >= max) ? blocksLastLineNoMargin[p] : blocks[p];
+	        }
+
+	        ascii += '\n';
+	      }
+
+	      if (size % 2 && margin > 0) {
+	        return ascii.substring(0, ascii.length - size - 1) + Array(size+1).join('▀');
+	      }
+
+	      return ascii.substring(0, ascii.length-1);
+	    };
+
+	    _this.createASCII = function(cellSize, margin) {
+	      cellSize = cellSize || 1;
+
+	      if (cellSize < 2) {
+	        return _createHalfASCII(margin);
+	      }
+
+	      cellSize -= 1;
+	      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+	      var size = _this.getModuleCount() * cellSize + margin * 2;
+	      var min = margin;
+	      var max = size - margin;
+
+	      var y, x, r, p;
+
+	      var white = Array(cellSize+1).join('██');
+	      var black = Array(cellSize+1).join('  ');
+
+	      var ascii = '';
+	      var line = '';
+	      for (y = 0; y < size; y += 1) {
+	        r = Math.floor( (y - min) / cellSize);
+	        line = '';
+	        for (x = 0; x < size; x += 1) {
+	          p = 1;
+
+	          if (min <= x && x < max && min <= y && y < max && _this.isDark(r, Math.floor((x - min) / cellSize))) {
+	            p = 0;
+	          }
+
+	          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+	          line += p ? white : black;
+	        }
+
+	        for (r = 0; r < cellSize; r += 1) {
+	          ascii += line + '\n';
+	        }
+	      }
+
+	      return ascii.substring(0, ascii.length-1);
+	    };
+
+	    _this.renderTo2dContext = function(context, cellSize) {
+	      cellSize = cellSize || 2;
+	      var length = _this.getModuleCount();
+	      for (var row = 0; row < length; row++) {
+	        for (var col = 0; col < length; col++) {
+	          context.fillStyle = _this.isDark(row, col) ? 'black' : 'white';
+	          context.fillRect(row * cellSize, col * cellSize, cellSize, cellSize);
+	        }
+	      }
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // qrcode.stringToBytes
+	  //---------------------------------------------------------------------
+
+	  qrcode.stringToBytesFuncs = {
+	    'default' : function(s) {
+	      var bytes = [];
+	      for (var i = 0; i < s.length; i += 1) {
+	        var c = s.charCodeAt(i);
+	        bytes.push(c & 0xff);
+	      }
+	      return bytes;
+	    }
+	  };
+
+	  qrcode.stringToBytes = qrcode.stringToBytesFuncs['default'];
+
+	  //---------------------------------------------------------------------
+	  // qrcode.createStringToBytes
+	  //---------------------------------------------------------------------
+
+	  /**
+	   * @param unicodeData base64 string of byte array.
+	   * [16bit Unicode],[16bit Bytes], ...
+	   * @param numChars
+	   */
+	  qrcode.createStringToBytes = function(unicodeData, numChars) {
+
+	    // create conversion map.
+
+	    var unicodeMap = function() {
+
+	      var bin = base64DecodeInputStream(unicodeData);
+	      var read = function() {
+	        var b = bin.read();
+	        if (b == -1) throw 'eof';
+	        return b;
+	      };
+
+	      var count = 0;
+	      var unicodeMap = {};
+	      while (true) {
+	        var b0 = bin.read();
+	        if (b0 == -1) break;
+	        var b1 = read();
+	        var b2 = read();
+	        var b3 = read();
+	        var k = String.fromCharCode( (b0 << 8) | b1);
+	        var v = (b2 << 8) | b3;
+	        unicodeMap[k] = v;
+	        count += 1;
+	      }
+	      if (count != numChars) {
+	        throw count + ' != ' + numChars;
+	      }
+
+	      return unicodeMap;
+	    }();
+
+	    var unknownChar = '?'.charCodeAt(0);
+
+	    return function(s) {
+	      var bytes = [];
+	      for (var i = 0; i < s.length; i += 1) {
+	        var c = s.charCodeAt(i);
+	        if (c < 128) {
+	          bytes.push(c);
+	        } else {
+	          var b = unicodeMap[s.charAt(i)];
+	          if (typeof b == 'number') {
+	            if ( (b & 0xff) == b) {
+	              // 1byte
+	              bytes.push(b);
+	            } else {
+	              // 2bytes
+	              bytes.push(b >>> 8);
+	              bytes.push(b & 0xff);
+	            }
+	          } else {
+	            bytes.push(unknownChar);
+	          }
+	        }
+	      }
+	      return bytes;
+	    };
+	  };
+
+	  //---------------------------------------------------------------------
+	  // QRMode
+	  //---------------------------------------------------------------------
+
+	  var QRMode = {
+	    MODE_NUMBER :    1 << 0,
+	    MODE_ALPHA_NUM : 1 << 1,
+	    MODE_8BIT_BYTE : 1 << 2,
+	    MODE_KANJI :     1 << 3
+	  };
+
+	  //---------------------------------------------------------------------
+	  // QRErrorCorrectionLevel
+	  //---------------------------------------------------------------------
+
+	  var QRErrorCorrectionLevel = {
+	    L : 1,
+	    M : 0,
+	    Q : 3,
+	    H : 2
+	  };
+
+	  //---------------------------------------------------------------------
+	  // QRMaskPattern
+	  //---------------------------------------------------------------------
+
+	  var QRMaskPattern = {
+	    PATTERN000 : 0,
+	    PATTERN001 : 1,
+	    PATTERN010 : 2,
+	    PATTERN011 : 3,
+	    PATTERN100 : 4,
+	    PATTERN101 : 5,
+	    PATTERN110 : 6,
+	    PATTERN111 : 7
+	  };
+
+	  //---------------------------------------------------------------------
+	  // QRUtil
+	  //---------------------------------------------------------------------
+
+	  var QRUtil = function() {
+
+	    var PATTERN_POSITION_TABLE = [
+	      [],
+	      [6, 18],
+	      [6, 22],
+	      [6, 26],
+	      [6, 30],
+	      [6, 34],
+	      [6, 22, 38],
+	      [6, 24, 42],
+	      [6, 26, 46],
+	      [6, 28, 50],
+	      [6, 30, 54],
+	      [6, 32, 58],
+	      [6, 34, 62],
+	      [6, 26, 46, 66],
+	      [6, 26, 48, 70],
+	      [6, 26, 50, 74],
+	      [6, 30, 54, 78],
+	      [6, 30, 56, 82],
+	      [6, 30, 58, 86],
+	      [6, 34, 62, 90],
+	      [6, 28, 50, 72, 94],
+	      [6, 26, 50, 74, 98],
+	      [6, 30, 54, 78, 102],
+	      [6, 28, 54, 80, 106],
+	      [6, 32, 58, 84, 110],
+	      [6, 30, 58, 86, 114],
+	      [6, 34, 62, 90, 118],
+	      [6, 26, 50, 74, 98, 122],
+	      [6, 30, 54, 78, 102, 126],
+	      [6, 26, 52, 78, 104, 130],
+	      [6, 30, 56, 82, 108, 134],
+	      [6, 34, 60, 86, 112, 138],
+	      [6, 30, 58, 86, 114, 142],
+	      [6, 34, 62, 90, 118, 146],
+	      [6, 30, 54, 78, 102, 126, 150],
+	      [6, 24, 50, 76, 102, 128, 154],
+	      [6, 28, 54, 80, 106, 132, 158],
+	      [6, 32, 58, 84, 110, 136, 162],
+	      [6, 26, 54, 82, 110, 138, 166],
+	      [6, 30, 58, 86, 114, 142, 170]
+	    ];
+	    var G15 = (1 << 10) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 2) | (1 << 1) | (1 << 0);
+	    var G18 = (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 8) | (1 << 5) | (1 << 2) | (1 << 0);
+	    var G15_MASK = (1 << 14) | (1 << 12) | (1 << 10) | (1 << 4) | (1 << 1);
+
+	    var _this = {};
+
+	    var getBCHDigit = function(data) {
+	      var digit = 0;
+	      while (data != 0) {
+	        digit += 1;
+	        data >>>= 1;
+	      }
+	      return digit;
+	    };
+
+	    _this.getBCHTypeInfo = function(data) {
+	      var d = data << 10;
+	      while (getBCHDigit(d) - getBCHDigit(G15) >= 0) {
+	        d ^= (G15 << (getBCHDigit(d) - getBCHDigit(G15) ) );
+	      }
+	      return ( (data << 10) | d) ^ G15_MASK;
+	    };
+
+	    _this.getBCHTypeNumber = function(data) {
+	      var d = data << 12;
+	      while (getBCHDigit(d) - getBCHDigit(G18) >= 0) {
+	        d ^= (G18 << (getBCHDigit(d) - getBCHDigit(G18) ) );
+	      }
+	      return (data << 12) | d;
+	    };
+
+	    _this.getPatternPosition = function(typeNumber) {
+	      return PATTERN_POSITION_TABLE[typeNumber - 1];
+	    };
+
+	    _this.getMaskFunction = function(maskPattern) {
+
+	      switch (maskPattern) {
+
+	      case QRMaskPattern.PATTERN000 :
+	        return function(i, j) { return (i + j) % 2 == 0; };
+	      case QRMaskPattern.PATTERN001 :
+	        return function(i, j) { return i % 2 == 0; };
+	      case QRMaskPattern.PATTERN010 :
+	        return function(i, j) { return j % 3 == 0; };
+	      case QRMaskPattern.PATTERN011 :
+	        return function(i, j) { return (i + j) % 3 == 0; };
+	      case QRMaskPattern.PATTERN100 :
+	        return function(i, j) { return (Math.floor(i / 2) + Math.floor(j / 3) ) % 2 == 0; };
+	      case QRMaskPattern.PATTERN101 :
+	        return function(i, j) { return (i * j) % 2 + (i * j) % 3 == 0; };
+	      case QRMaskPattern.PATTERN110 :
+	        return function(i, j) { return ( (i * j) % 2 + (i * j) % 3) % 2 == 0; };
+	      case QRMaskPattern.PATTERN111 :
+	        return function(i, j) { return ( (i * j) % 3 + (i + j) % 2) % 2 == 0; };
+
+	      default :
+	        throw 'bad maskPattern:' + maskPattern;
+	      }
+	    };
+
+	    _this.getErrorCorrectPolynomial = function(errorCorrectLength) {
+	      var a = qrPolynomial([1], 0);
+	      for (var i = 0; i < errorCorrectLength; i += 1) {
+	        a = a.multiply(qrPolynomial([1, QRMath.gexp(i)], 0) );
+	      }
+	      return a;
+	    };
+
+	    _this.getLengthInBits = function(mode, type) {
+
+	      if (1 <= type && type < 10) {
+
+	        // 1 - 9
+
+	        switch(mode) {
+	        case QRMode.MODE_NUMBER    : return 10;
+	        case QRMode.MODE_ALPHA_NUM : return 9;
+	        case QRMode.MODE_8BIT_BYTE : return 8;
+	        case QRMode.MODE_KANJI     : return 8;
+	        default :
+	          throw 'mode:' + mode;
+	        }
+
+	      } else if (type < 27) {
+
+	        // 10 - 26
+
+	        switch(mode) {
+	        case QRMode.MODE_NUMBER    : return 12;
+	        case QRMode.MODE_ALPHA_NUM : return 11;
+	        case QRMode.MODE_8BIT_BYTE : return 16;
+	        case QRMode.MODE_KANJI     : return 10;
+	        default :
+	          throw 'mode:' + mode;
+	        }
+
+	      } else if (type < 41) {
+
+	        // 27 - 40
+
+	        switch(mode) {
+	        case QRMode.MODE_NUMBER    : return 14;
+	        case QRMode.MODE_ALPHA_NUM : return 13;
+	        case QRMode.MODE_8BIT_BYTE : return 16;
+	        case QRMode.MODE_KANJI     : return 12;
+	        default :
+	          throw 'mode:' + mode;
+	        }
+
+	      } else {
+	        throw 'type:' + type;
+	      }
+	    };
+
+	    _this.getLostPoint = function(qrcode) {
+
+	      var moduleCount = qrcode.getModuleCount();
+
+	      var lostPoint = 0;
+
+	      // LEVEL1
+
+	      for (var row = 0; row < moduleCount; row += 1) {
+	        for (var col = 0; col < moduleCount; col += 1) {
+
+	          var sameCount = 0;
+	          var dark = qrcode.isDark(row, col);
+
+	          for (var r = -1; r <= 1; r += 1) {
+
+	            if (row + r < 0 || moduleCount <= row + r) {
+	              continue;
+	            }
+
+	            for (var c = -1; c <= 1; c += 1) {
+
+	              if (col + c < 0 || moduleCount <= col + c) {
+	                continue;
+	              }
+
+	              if (r == 0 && c == 0) {
+	                continue;
+	              }
+
+	              if (dark == qrcode.isDark(row + r, col + c) ) {
+	                sameCount += 1;
+	              }
+	            }
+	          }
+
+	          if (sameCount > 5) {
+	            lostPoint += (3 + sameCount - 5);
+	          }
+	        }
+	      }
+	      // LEVEL2
+
+	      for (var row = 0; row < moduleCount - 1; row += 1) {
+	        for (var col = 0; col < moduleCount - 1; col += 1) {
+	          var count = 0;
+	          if (qrcode.isDark(row, col) ) count += 1;
+	          if (qrcode.isDark(row + 1, col) ) count += 1;
+	          if (qrcode.isDark(row, col + 1) ) count += 1;
+	          if (qrcode.isDark(row + 1, col + 1) ) count += 1;
+	          if (count == 0 || count == 4) {
+	            lostPoint += 3;
+	          }
+	        }
+	      }
+
+	      // LEVEL3
+
+	      for (var row = 0; row < moduleCount; row += 1) {
+	        for (var col = 0; col < moduleCount - 6; col += 1) {
+	          if (qrcode.isDark(row, col)
+	              && !qrcode.isDark(row, col + 1)
+	              &&  qrcode.isDark(row, col + 2)
+	              &&  qrcode.isDark(row, col + 3)
+	              &&  qrcode.isDark(row, col + 4)
+	              && !qrcode.isDark(row, col + 5)
+	              &&  qrcode.isDark(row, col + 6) ) {
+	            lostPoint += 40;
+	          }
+	        }
+	      }
+
+	      for (var col = 0; col < moduleCount; col += 1) {
+	        for (var row = 0; row < moduleCount - 6; row += 1) {
+	          if (qrcode.isDark(row, col)
+	              && !qrcode.isDark(row + 1, col)
+	              &&  qrcode.isDark(row + 2, col)
+	              &&  qrcode.isDark(row + 3, col)
+	              &&  qrcode.isDark(row + 4, col)
+	              && !qrcode.isDark(row + 5, col)
+	              &&  qrcode.isDark(row + 6, col) ) {
+	            lostPoint += 40;
+	          }
+	        }
+	      }
+
+	      // LEVEL4
+
+	      var darkCount = 0;
+
+	      for (var col = 0; col < moduleCount; col += 1) {
+	        for (var row = 0; row < moduleCount; row += 1) {
+	          if (qrcode.isDark(row, col) ) {
+	            darkCount += 1;
+	          }
+	        }
+	      }
+
+	      var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+	      lostPoint += ratio * 10;
+
+	      return lostPoint;
+	    };
+
+	    return _this;
+	  }();
+
+	  //---------------------------------------------------------------------
+	  // QRMath
+	  //---------------------------------------------------------------------
+
+	  var QRMath = function() {
+
+	    var EXP_TABLE = new Array(256);
+	    var LOG_TABLE = new Array(256);
+
+	    // initialize tables
+	    for (var i = 0; i < 8; i += 1) {
+	      EXP_TABLE[i] = 1 << i;
+	    }
+	    for (var i = 8; i < 256; i += 1) {
+	      EXP_TABLE[i] = EXP_TABLE[i - 4]
+	        ^ EXP_TABLE[i - 5]
+	        ^ EXP_TABLE[i - 6]
+	        ^ EXP_TABLE[i - 8];
+	    }
+	    for (var i = 0; i < 255; i += 1) {
+	      LOG_TABLE[EXP_TABLE[i] ] = i;
+	    }
+
+	    var _this = {};
+
+	    _this.glog = function(n) {
+
+	      if (n < 1) {
+	        throw 'glog(' + n + ')';
+	      }
+
+	      return LOG_TABLE[n];
+	    };
+
+	    _this.gexp = function(n) {
+
+	      while (n < 0) {
+	        n += 255;
+	      }
+
+	      while (n >= 256) {
+	        n -= 255;
+	      }
+
+	      return EXP_TABLE[n];
+	    };
+
+	    return _this;
+	  }();
+
+	  //---------------------------------------------------------------------
+	  // qrPolynomial
+	  //---------------------------------------------------------------------
+
+	  function qrPolynomial(num, shift) {
+
+	    if (typeof num.length == 'undefined') {
+	      throw num.length + '/' + shift;
+	    }
+
+	    var _num = function() {
+	      var offset = 0;
+	      while (offset < num.length && num[offset] == 0) {
+	        offset += 1;
+	      }
+	      var _num = new Array(num.length - offset + shift);
+	      for (var i = 0; i < num.length - offset; i += 1) {
+	        _num[i] = num[i + offset];
+	      }
+	      return _num;
+	    }();
+
+	    var _this = {};
+
+	    _this.getAt = function(index) {
+	      return _num[index];
+	    };
+
+	    _this.getLength = function() {
+	      return _num.length;
+	    };
+
+	    _this.multiply = function(e) {
+
+	      var num = new Array(_this.getLength() + e.getLength() - 1);
+
+	      for (var i = 0; i < _this.getLength(); i += 1) {
+	        for (var j = 0; j < e.getLength(); j += 1) {
+	          num[i + j] ^= QRMath.gexp(QRMath.glog(_this.getAt(i) ) + QRMath.glog(e.getAt(j) ) );
+	        }
+	      }
+
+	      return qrPolynomial(num, 0);
+	    };
+
+	    _this.mod = function(e) {
+
+	      if (_this.getLength() - e.getLength() < 0) {
+	        return _this;
+	      }
+
+	      var ratio = QRMath.glog(_this.getAt(0) ) - QRMath.glog(e.getAt(0) );
+
+	      var num = new Array(_this.getLength() );
+	      for (var i = 0; i < _this.getLength(); i += 1) {
+	        num[i] = _this.getAt(i);
+	      }
+
+	      for (var i = 0; i < e.getLength(); i += 1) {
+	        num[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i) ) + ratio);
+	      }
+
+	      // recursive call
+	      return qrPolynomial(num, 0).mod(e);
+	    };
+
+	    return _this;
+	  }
+	  //---------------------------------------------------------------------
+	  // QRRSBlock
+	  //---------------------------------------------------------------------
+
+	  var QRRSBlock = function() {
+
+	    var RS_BLOCK_TABLE = [
+
+	      // L
+	      // M
+	      // Q
+	      // H
+
+	      // 1
+	      [1, 26, 19],
+	      [1, 26, 16],
+	      [1, 26, 13],
+	      [1, 26, 9],
+
+	      // 2
+	      [1, 44, 34],
+	      [1, 44, 28],
+	      [1, 44, 22],
+	      [1, 44, 16],
+
+	      // 3
+	      [1, 70, 55],
+	      [1, 70, 44],
+	      [2, 35, 17],
+	      [2, 35, 13],
+
+	      // 4
+	      [1, 100, 80],
+	      [2, 50, 32],
+	      [2, 50, 24],
+	      [4, 25, 9],
+
+	      // 5
+	      [1, 134, 108],
+	      [2, 67, 43],
+	      [2, 33, 15, 2, 34, 16],
+	      [2, 33, 11, 2, 34, 12],
+
+	      // 6
+	      [2, 86, 68],
+	      [4, 43, 27],
+	      [4, 43, 19],
+	      [4, 43, 15],
+
+	      // 7
+	      [2, 98, 78],
+	      [4, 49, 31],
+	      [2, 32, 14, 4, 33, 15],
+	      [4, 39, 13, 1, 40, 14],
+
+	      // 8
+	      [2, 121, 97],
+	      [2, 60, 38, 2, 61, 39],
+	      [4, 40, 18, 2, 41, 19],
+	      [4, 40, 14, 2, 41, 15],
+
+	      // 9
+	      [2, 146, 116],
+	      [3, 58, 36, 2, 59, 37],
+	      [4, 36, 16, 4, 37, 17],
+	      [4, 36, 12, 4, 37, 13],
+
+	      // 10
+	      [2, 86, 68, 2, 87, 69],
+	      [4, 69, 43, 1, 70, 44],
+	      [6, 43, 19, 2, 44, 20],
+	      [6, 43, 15, 2, 44, 16],
+
+	      // 11
+	      [4, 101, 81],
+	      [1, 80, 50, 4, 81, 51],
+	      [4, 50, 22, 4, 51, 23],
+	      [3, 36, 12, 8, 37, 13],
+
+	      // 12
+	      [2, 116, 92, 2, 117, 93],
+	      [6, 58, 36, 2, 59, 37],
+	      [4, 46, 20, 6, 47, 21],
+	      [7, 42, 14, 4, 43, 15],
+
+	      // 13
+	      [4, 133, 107],
+	      [8, 59, 37, 1, 60, 38],
+	      [8, 44, 20, 4, 45, 21],
+	      [12, 33, 11, 4, 34, 12],
+
+	      // 14
+	      [3, 145, 115, 1, 146, 116],
+	      [4, 64, 40, 5, 65, 41],
+	      [11, 36, 16, 5, 37, 17],
+	      [11, 36, 12, 5, 37, 13],
+
+	      // 15
+	      [5, 109, 87, 1, 110, 88],
+	      [5, 65, 41, 5, 66, 42],
+	      [5, 54, 24, 7, 55, 25],
+	      [11, 36, 12, 7, 37, 13],
+
+	      // 16
+	      [5, 122, 98, 1, 123, 99],
+	      [7, 73, 45, 3, 74, 46],
+	      [15, 43, 19, 2, 44, 20],
+	      [3, 45, 15, 13, 46, 16],
+
+	      // 17
+	      [1, 135, 107, 5, 136, 108],
+	      [10, 74, 46, 1, 75, 47],
+	      [1, 50, 22, 15, 51, 23],
+	      [2, 42, 14, 17, 43, 15],
+
+	      // 18
+	      [5, 150, 120, 1, 151, 121],
+	      [9, 69, 43, 4, 70, 44],
+	      [17, 50, 22, 1, 51, 23],
+	      [2, 42, 14, 19, 43, 15],
+
+	      // 19
+	      [3, 141, 113, 4, 142, 114],
+	      [3, 70, 44, 11, 71, 45],
+	      [17, 47, 21, 4, 48, 22],
+	      [9, 39, 13, 16, 40, 14],
+
+	      // 20
+	      [3, 135, 107, 5, 136, 108],
+	      [3, 67, 41, 13, 68, 42],
+	      [15, 54, 24, 5, 55, 25],
+	      [15, 43, 15, 10, 44, 16],
+
+	      // 21
+	      [4, 144, 116, 4, 145, 117],
+	      [17, 68, 42],
+	      [17, 50, 22, 6, 51, 23],
+	      [19, 46, 16, 6, 47, 17],
+
+	      // 22
+	      [2, 139, 111, 7, 140, 112],
+	      [17, 74, 46],
+	      [7, 54, 24, 16, 55, 25],
+	      [34, 37, 13],
+
+	      // 23
+	      [4, 151, 121, 5, 152, 122],
+	      [4, 75, 47, 14, 76, 48],
+	      [11, 54, 24, 14, 55, 25],
+	      [16, 45, 15, 14, 46, 16],
+
+	      // 24
+	      [6, 147, 117, 4, 148, 118],
+	      [6, 73, 45, 14, 74, 46],
+	      [11, 54, 24, 16, 55, 25],
+	      [30, 46, 16, 2, 47, 17],
+
+	      // 25
+	      [8, 132, 106, 4, 133, 107],
+	      [8, 75, 47, 13, 76, 48],
+	      [7, 54, 24, 22, 55, 25],
+	      [22, 45, 15, 13, 46, 16],
+
+	      // 26
+	      [10, 142, 114, 2, 143, 115],
+	      [19, 74, 46, 4, 75, 47],
+	      [28, 50, 22, 6, 51, 23],
+	      [33, 46, 16, 4, 47, 17],
+
+	      // 27
+	      [8, 152, 122, 4, 153, 123],
+	      [22, 73, 45, 3, 74, 46],
+	      [8, 53, 23, 26, 54, 24],
+	      [12, 45, 15, 28, 46, 16],
+
+	      // 28
+	      [3, 147, 117, 10, 148, 118],
+	      [3, 73, 45, 23, 74, 46],
+	      [4, 54, 24, 31, 55, 25],
+	      [11, 45, 15, 31, 46, 16],
+
+	      // 29
+	      [7, 146, 116, 7, 147, 117],
+	      [21, 73, 45, 7, 74, 46],
+	      [1, 53, 23, 37, 54, 24],
+	      [19, 45, 15, 26, 46, 16],
+
+	      // 30
+	      [5, 145, 115, 10, 146, 116],
+	      [19, 75, 47, 10, 76, 48],
+	      [15, 54, 24, 25, 55, 25],
+	      [23, 45, 15, 25, 46, 16],
+
+	      // 31
+	      [13, 145, 115, 3, 146, 116],
+	      [2, 74, 46, 29, 75, 47],
+	      [42, 54, 24, 1, 55, 25],
+	      [23, 45, 15, 28, 46, 16],
+
+	      // 32
+	      [17, 145, 115],
+	      [10, 74, 46, 23, 75, 47],
+	      [10, 54, 24, 35, 55, 25],
+	      [19, 45, 15, 35, 46, 16],
+
+	      // 33
+	      [17, 145, 115, 1, 146, 116],
+	      [14, 74, 46, 21, 75, 47],
+	      [29, 54, 24, 19, 55, 25],
+	      [11, 45, 15, 46, 46, 16],
+
+	      // 34
+	      [13, 145, 115, 6, 146, 116],
+	      [14, 74, 46, 23, 75, 47],
+	      [44, 54, 24, 7, 55, 25],
+	      [59, 46, 16, 1, 47, 17],
+
+	      // 35
+	      [12, 151, 121, 7, 152, 122],
+	      [12, 75, 47, 26, 76, 48],
+	      [39, 54, 24, 14, 55, 25],
+	      [22, 45, 15, 41, 46, 16],
+
+	      // 36
+	      [6, 151, 121, 14, 152, 122],
+	      [6, 75, 47, 34, 76, 48],
+	      [46, 54, 24, 10, 55, 25],
+	      [2, 45, 15, 64, 46, 16],
+
+	      // 37
+	      [17, 152, 122, 4, 153, 123],
+	      [29, 74, 46, 14, 75, 47],
+	      [49, 54, 24, 10, 55, 25],
+	      [24, 45, 15, 46, 46, 16],
+
+	      // 38
+	      [4, 152, 122, 18, 153, 123],
+	      [13, 74, 46, 32, 75, 47],
+	      [48, 54, 24, 14, 55, 25],
+	      [42, 45, 15, 32, 46, 16],
+
+	      // 39
+	      [20, 147, 117, 4, 148, 118],
+	      [40, 75, 47, 7, 76, 48],
+	      [43, 54, 24, 22, 55, 25],
+	      [10, 45, 15, 67, 46, 16],
+
+	      // 40
+	      [19, 148, 118, 6, 149, 119],
+	      [18, 75, 47, 31, 76, 48],
+	      [34, 54, 24, 34, 55, 25],
+	      [20, 45, 15, 61, 46, 16]
+	    ];
+
+	    var qrRSBlock = function(totalCount, dataCount) {
+	      var _this = {};
+	      _this.totalCount = totalCount;
+	      _this.dataCount = dataCount;
+	      return _this;
+	    };
+
+	    var _this = {};
+
+	    var getRsBlockTable = function(typeNumber, errorCorrectionLevel) {
+
+	      switch(errorCorrectionLevel) {
+	      case QRErrorCorrectionLevel.L :
+	        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+	      case QRErrorCorrectionLevel.M :
+	        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+	      case QRErrorCorrectionLevel.Q :
+	        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+	      case QRErrorCorrectionLevel.H :
+	        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+	      default :
+	        return undefined;
+	      }
+	    };
+
+	    _this.getRSBlocks = function(typeNumber, errorCorrectionLevel) {
+
+	      var rsBlock = getRsBlockTable(typeNumber, errorCorrectionLevel);
+
+	      if (typeof rsBlock == 'undefined') {
+	        throw 'bad rs block @ typeNumber:' + typeNumber +
+	            '/errorCorrectionLevel:' + errorCorrectionLevel;
+	      }
+
+	      var length = rsBlock.length / 3;
+
+	      var list = [];
+
+	      for (var i = 0; i < length; i += 1) {
+
+	        var count = rsBlock[i * 3 + 0];
+	        var totalCount = rsBlock[i * 3 + 1];
+	        var dataCount = rsBlock[i * 3 + 2];
+
+	        for (var j = 0; j < count; j += 1) {
+	          list.push(qrRSBlock(totalCount, dataCount) );
+	        }
+	      }
+
+	      return list;
+	    };
+
+	    return _this;
+	  }();
+
+	  //---------------------------------------------------------------------
+	  // qrBitBuffer
+	  //---------------------------------------------------------------------
+
+	  var qrBitBuffer = function() {
+
+	    var _buffer = [];
+	    var _length = 0;
+
+	    var _this = {};
+
+	    _this.getBuffer = function() {
+	      return _buffer;
+	    };
+
+	    _this.getAt = function(index) {
+	      var bufIndex = Math.floor(index / 8);
+	      return ( (_buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+	    };
+
+	    _this.put = function(num, length) {
+	      for (var i = 0; i < length; i += 1) {
+	        _this.putBit( ( (num >>> (length - i - 1) ) & 1) == 1);
+	      }
+	    };
+
+	    _this.getLengthInBits = function() {
+	      return _length;
+	    };
+
+	    _this.putBit = function(bit) {
+
+	      var bufIndex = Math.floor(_length / 8);
+	      if (_buffer.length <= bufIndex) {
+	        _buffer.push(0);
+	      }
+
+	      if (bit) {
+	        _buffer[bufIndex] |= (0x80 >>> (_length % 8) );
+	      }
+
+	      _length += 1;
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // qrNumber
+	  //---------------------------------------------------------------------
+
+	  var qrNumber = function(data) {
+
+	    var _mode = QRMode.MODE_NUMBER;
+	    var _data = data;
+
+	    var _this = {};
+
+	    _this.getMode = function() {
+	      return _mode;
+	    };
+
+	    _this.getLength = function(buffer) {
+	      return _data.length;
+	    };
+
+	    _this.write = function(buffer) {
+
+	      var data = _data;
+
+	      var i = 0;
+
+	      while (i + 2 < data.length) {
+	        buffer.put(strToNum(data.substring(i, i + 3) ), 10);
+	        i += 3;
+	      }
+
+	      if (i < data.length) {
+	        if (data.length - i == 1) {
+	          buffer.put(strToNum(data.substring(i, i + 1) ), 4);
+	        } else if (data.length - i == 2) {
+	          buffer.put(strToNum(data.substring(i, i + 2) ), 7);
+	        }
+	      }
+	    };
+
+	    var strToNum = function(s) {
+	      var num = 0;
+	      for (var i = 0; i < s.length; i += 1) {
+	        num = num * 10 + chatToNum(s.charAt(i) );
+	      }
+	      return num;
+	    };
+
+	    var chatToNum = function(c) {
+	      if ('0' <= c && c <= '9') {
+	        return c.charCodeAt(0) - '0'.charCodeAt(0);
+	      }
+	      throw 'illegal char :' + c;
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // qrAlphaNum
+	  //---------------------------------------------------------------------
+
+	  var qrAlphaNum = function(data) {
+
+	    var _mode = QRMode.MODE_ALPHA_NUM;
+	    var _data = data;
+
+	    var _this = {};
+
+	    _this.getMode = function() {
+	      return _mode;
+	    };
+
+	    _this.getLength = function(buffer) {
+	      return _data.length;
+	    };
+
+	    _this.write = function(buffer) {
+
+	      var s = _data;
+
+	      var i = 0;
+
+	      while (i + 1 < s.length) {
+	        buffer.put(
+	          getCode(s.charAt(i) ) * 45 +
+	          getCode(s.charAt(i + 1) ), 11);
+	        i += 2;
+	      }
+
+	      if (i < s.length) {
+	        buffer.put(getCode(s.charAt(i) ), 6);
+	      }
+	    };
+
+	    var getCode = function(c) {
+
+	      if ('0' <= c && c <= '9') {
+	        return c.charCodeAt(0) - '0'.charCodeAt(0);
+	      } else if ('A' <= c && c <= 'Z') {
+	        return c.charCodeAt(0) - 'A'.charCodeAt(0) + 10;
+	      } else {
+	        switch (c) {
+	        case ' ' : return 36;
+	        case '$' : return 37;
+	        case '%' : return 38;
+	        case '*' : return 39;
+	        case '+' : return 40;
+	        case '-' : return 41;
+	        case '.' : return 42;
+	        case '/' : return 43;
+	        case ':' : return 44;
+	        default :
+	          throw 'illegal char :' + c;
+	        }
+	      }
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // qr8BitByte
+	  //---------------------------------------------------------------------
+
+	  var qr8BitByte = function(data) {
+
+	    var _mode = QRMode.MODE_8BIT_BYTE;
+	    var _bytes = qrcode.stringToBytes(data);
+
+	    var _this = {};
+
+	    _this.getMode = function() {
+	      return _mode;
+	    };
+
+	    _this.getLength = function(buffer) {
+	      return _bytes.length;
+	    };
+
+	    _this.write = function(buffer) {
+	      for (var i = 0; i < _bytes.length; i += 1) {
+	        buffer.put(_bytes[i], 8);
+	      }
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // qrKanji
+	  //---------------------------------------------------------------------
+
+	  var qrKanji = function(data) {
+
+	    var _mode = QRMode.MODE_KANJI;
+
+	    var stringToBytes = qrcode.stringToBytesFuncs['SJIS'];
+	    if (!stringToBytes) {
+	      throw 'sjis not supported.';
+	    }
+	    !function(c, code) {
+	      // self test for sjis support.
+	      var test = stringToBytes(c);
+	      if (test.length != 2 || ( (test[0] << 8) | test[1]) != code) {
+	        throw 'sjis not supported.';
+	      }
+	    }('\u53cb', 0x9746);
+
+	    var _bytes = stringToBytes(data);
+
+	    var _this = {};
+
+	    _this.getMode = function() {
+	      return _mode;
+	    };
+
+	    _this.getLength = function(buffer) {
+	      return ~~(_bytes.length / 2);
+	    };
+
+	    _this.write = function(buffer) {
+
+	      var data = _bytes;
+
+	      var i = 0;
+
+	      while (i + 1 < data.length) {
+
+	        var c = ( (0xff & data[i]) << 8) | (0xff & data[i + 1]);
+
+	        if (0x8140 <= c && c <= 0x9FFC) {
+	          c -= 0x8140;
+	        } else if (0xE040 <= c && c <= 0xEBBF) {
+	          c -= 0xC140;
+	        } else {
+	          throw 'illegal char at ' + (i + 1) + '/' + c;
+	        }
+
+	        c = ( (c >>> 8) & 0xff) * 0xC0 + (c & 0xff);
+
+	        buffer.put(c, 13);
+
+	        i += 2;
+	      }
+
+	      if (i < data.length) {
+	        throw 'illegal char at ' + (i + 1);
+	      }
+	    };
+
+	    return _this;
+	  };
+
+	  //=====================================================================
+	  // GIF Support etc.
+	  //
+
+	  //---------------------------------------------------------------------
+	  // byteArrayOutputStream
+	  //---------------------------------------------------------------------
+
+	  var byteArrayOutputStream = function() {
+
+	    var _bytes = [];
+
+	    var _this = {};
+
+	    _this.writeByte = function(b) {
+	      _bytes.push(b & 0xff);
+	    };
+
+	    _this.writeShort = function(i) {
+	      _this.writeByte(i);
+	      _this.writeByte(i >>> 8);
+	    };
+
+	    _this.writeBytes = function(b, off, len) {
+	      off = off || 0;
+	      len = len || b.length;
+	      for (var i = 0; i < len; i += 1) {
+	        _this.writeByte(b[i + off]);
+	      }
+	    };
+
+	    _this.writeString = function(s) {
+	      for (var i = 0; i < s.length; i += 1) {
+	        _this.writeByte(s.charCodeAt(i) );
+	      }
+	    };
+
+	    _this.toByteArray = function() {
+	      return _bytes;
+	    };
+
+	    _this.toString = function() {
+	      var s = '';
+	      s += '[';
+	      for (var i = 0; i < _bytes.length; i += 1) {
+	        if (i > 0) {
+	          s += ',';
+	        }
+	        s += _bytes[i];
+	      }
+	      s += ']';
+	      return s;
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // base64EncodeOutputStream
+	  //---------------------------------------------------------------------
+
+	  var base64EncodeOutputStream = function() {
+
+	    var _buffer = 0;
+	    var _buflen = 0;
+	    var _length = 0;
+	    var _base64 = '';
+
+	    var _this = {};
+
+	    var writeEncoded = function(b) {
+	      _base64 += String.fromCharCode(encode(b & 0x3f) );
+	    };
+
+	    var encode = function(n) {
+	      if (n < 0) ; else if (n < 26) {
+	        return 0x41 + n;
+	      } else if (n < 52) {
+	        return 0x61 + (n - 26);
+	      } else if (n < 62) {
+	        return 0x30 + (n - 52);
+	      } else if (n == 62) {
+	        return 0x2b;
+	      } else if (n == 63) {
+	        return 0x2f;
+	      }
+	      throw 'n:' + n;
+	    };
+
+	    _this.writeByte = function(n) {
+
+	      _buffer = (_buffer << 8) | (n & 0xff);
+	      _buflen += 8;
+	      _length += 1;
+
+	      while (_buflen >= 6) {
+	        writeEncoded(_buffer >>> (_buflen - 6) );
+	        _buflen -= 6;
+	      }
+	    };
+
+	    _this.flush = function() {
+
+	      if (_buflen > 0) {
+	        writeEncoded(_buffer << (6 - _buflen) );
+	        _buffer = 0;
+	        _buflen = 0;
+	      }
+
+	      if (_length % 3 != 0) {
+	        // padding
+	        var padlen = 3 - _length % 3;
+	        for (var i = 0; i < padlen; i += 1) {
+	          _base64 += '=';
+	        }
+	      }
+	    };
+
+	    _this.toString = function() {
+	      return _base64;
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // base64DecodeInputStream
+	  //---------------------------------------------------------------------
+
+	  var base64DecodeInputStream = function(str) {
+
+	    var _str = str;
+	    var _pos = 0;
+	    var _buffer = 0;
+	    var _buflen = 0;
+
+	    var _this = {};
+
+	    _this.read = function() {
+
+	      while (_buflen < 8) {
+
+	        if (_pos >= _str.length) {
+	          if (_buflen == 0) {
+	            return -1;
+	          }
+	          throw 'unexpected end of file./' + _buflen;
+	        }
+
+	        var c = _str.charAt(_pos);
+	        _pos += 1;
+
+	        if (c == '=') {
+	          _buflen = 0;
+	          return -1;
+	        } else if (c.match(/^\s$/) ) {
+	          // ignore if whitespace.
+	          continue;
+	        }
+
+	        _buffer = (_buffer << 6) | decode(c.charCodeAt(0) );
+	        _buflen += 6;
+	      }
+
+	      var n = (_buffer >>> (_buflen - 8) ) & 0xff;
+	      _buflen -= 8;
+	      return n;
+	    };
+
+	    var decode = function(c) {
+	      if (0x41 <= c && c <= 0x5a) {
+	        return c - 0x41;
+	      } else if (0x61 <= c && c <= 0x7a) {
+	        return c - 0x61 + 26;
+	      } else if (0x30 <= c && c <= 0x39) {
+	        return c - 0x30 + 52;
+	      } else if (c == 0x2b) {
+	        return 62;
+	      } else if (c == 0x2f) {
+	        return 63;
+	      } else {
+	        throw 'c:' + c;
+	      }
+	    };
+
+	    return _this;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // gifImage (B/W)
+	  //---------------------------------------------------------------------
+
+	  var gifImage = function(width, height) {
+
+	    var _width = width;
+	    var _height = height;
+	    var _data = new Array(width * height);
+
+	    var _this = {};
+
+	    _this.setPixel = function(x, y, pixel) {
+	      _data[y * _width + x] = pixel;
+	    };
+
+	    _this.write = function(out) {
+
+	      //---------------------------------
+	      // GIF Signature
+
+	      out.writeString('GIF87a');
+
+	      //---------------------------------
+	      // Screen Descriptor
+
+	      out.writeShort(_width);
+	      out.writeShort(_height);
+
+	      out.writeByte(0x80); // 2bit
+	      out.writeByte(0);
+	      out.writeByte(0);
+
+	      //---------------------------------
+	      // Global Color Map
+
+	      // black
+	      out.writeByte(0x00);
+	      out.writeByte(0x00);
+	      out.writeByte(0x00);
+
+	      // white
+	      out.writeByte(0xff);
+	      out.writeByte(0xff);
+	      out.writeByte(0xff);
+
+	      //---------------------------------
+	      // Image Descriptor
+
+	      out.writeString(',');
+	      out.writeShort(0);
+	      out.writeShort(0);
+	      out.writeShort(_width);
+	      out.writeShort(_height);
+	      out.writeByte(0);
+
+	      //---------------------------------
+	      // Local Color Map
+
+	      //---------------------------------
+	      // Raster Data
+
+	      var lzwMinCodeSize = 2;
+	      var raster = getLZWRaster(lzwMinCodeSize);
+
+	      out.writeByte(lzwMinCodeSize);
+
+	      var offset = 0;
+
+	      while (raster.length - offset > 255) {
+	        out.writeByte(255);
+	        out.writeBytes(raster, offset, 255);
+	        offset += 255;
+	      }
+
+	      out.writeByte(raster.length - offset);
+	      out.writeBytes(raster, offset, raster.length - offset);
+	      out.writeByte(0x00);
+
+	      //---------------------------------
+	      // GIF Terminator
+	      out.writeString(';');
+	    };
+
+	    var bitOutputStream = function(out) {
+
+	      var _out = out;
+	      var _bitLength = 0;
+	      var _bitBuffer = 0;
+
+	      var _this = {};
+
+	      _this.write = function(data, length) {
+
+	        if ( (data >>> length) != 0) {
+	          throw 'length over';
+	        }
+
+	        while (_bitLength + length >= 8) {
+	          _out.writeByte(0xff & ( (data << _bitLength) | _bitBuffer) );
+	          length -= (8 - _bitLength);
+	          data >>>= (8 - _bitLength);
+	          _bitBuffer = 0;
+	          _bitLength = 0;
+	        }
+
+	        _bitBuffer = (data << _bitLength) | _bitBuffer;
+	        _bitLength = _bitLength + length;
+	      };
+
+	      _this.flush = function() {
+	        if (_bitLength > 0) {
+	          _out.writeByte(_bitBuffer);
+	        }
+	      };
+
+	      return _this;
+	    };
+
+	    var getLZWRaster = function(lzwMinCodeSize) {
+
+	      var clearCode = 1 << lzwMinCodeSize;
+	      var endCode = (1 << lzwMinCodeSize) + 1;
+	      var bitLength = lzwMinCodeSize + 1;
+
+	      // Setup LZWTable
+	      var table = lzwTable();
+
+	      for (var i = 0; i < clearCode; i += 1) {
+	        table.add(String.fromCharCode(i) );
+	      }
+	      table.add(String.fromCharCode(clearCode) );
+	      table.add(String.fromCharCode(endCode) );
+
+	      var byteOut = byteArrayOutputStream();
+	      var bitOut = bitOutputStream(byteOut);
+
+	      // clear code
+	      bitOut.write(clearCode, bitLength);
+
+	      var dataIndex = 0;
+
+	      var s = String.fromCharCode(_data[dataIndex]);
+	      dataIndex += 1;
+
+	      while (dataIndex < _data.length) {
+
+	        var c = String.fromCharCode(_data[dataIndex]);
+	        dataIndex += 1;
+
+	        if (table.contains(s + c) ) {
+
+	          s = s + c;
+
+	        } else {
+
+	          bitOut.write(table.indexOf(s), bitLength);
+
+	          if (table.size() < 0xfff) {
+
+	            if (table.size() == (1 << bitLength) ) {
+	              bitLength += 1;
+	            }
+
+	            table.add(s + c);
+	          }
+
+	          s = c;
+	        }
+	      }
+
+	      bitOut.write(table.indexOf(s), bitLength);
+
+	      // end code
+	      bitOut.write(endCode, bitLength);
+
+	      bitOut.flush();
+
+	      return byteOut.toByteArray();
+	    };
+
+	    var lzwTable = function() {
+
+	      var _map = {};
+	      var _size = 0;
+
+	      var _this = {};
+
+	      _this.add = function(key) {
+	        if (_this.contains(key) ) {
+	          throw 'dup key:' + key;
+	        }
+	        _map[key] = _size;
+	        _size += 1;
+	      };
+
+	      _this.size = function() {
+	        return _size;
+	      };
+
+	      _this.indexOf = function(key) {
+	        return _map[key];
+	      };
+
+	      _this.contains = function(key) {
+	        return typeof _map[key] != 'undefined';
+	      };
+
+	      return _this;
+	    };
+
+	    return _this;
+	  };
+
+	  var createDataURL = function(width, height, getPixel) {
+	    var gif = gifImage(width, height);
+	    for (var y = 0; y < height; y += 1) {
+	      for (var x = 0; x < width; x += 1) {
+	        gif.setPixel(x, y, getPixel(x, y) );
+	      }
+	    }
+
+	    var b = byteArrayOutputStream();
+	    gif.write(b);
+
+	    var base64 = base64EncodeOutputStream();
+	    var bytes = b.toByteArray();
+	    for (var i = 0; i < bytes.length; i += 1) {
+	      base64.writeByte(bytes[i]);
+	    }
+	    base64.flush();
+
+	    return 'data:image/gif;base64,' + base64;
+	  };
+
+	  //---------------------------------------------------------------------
+	  // returns qrcode function.
+
+	  return qrcode;
+	}();
+
+	// multibyte support
+	!function() {
+
+	  qrcode.stringToBytesFuncs['UTF-8'] = function(s) {
+	    // http://stackoverflow.com/questions/18729405/how-to-convert-utf8-string-to-byte-array
+	    function toUTF8Array(str) {
+	      var utf8 = [];
+	      for (var i=0; i < str.length; i++) {
+	        var charcode = str.charCodeAt(i);
+	        if (charcode < 0x80) utf8.push(charcode);
+	        else if (charcode < 0x800) {
+	          utf8.push(0xc0 | (charcode >> 6),
+	              0x80 | (charcode & 0x3f));
+	        }
+	        else if (charcode < 0xd800 || charcode >= 0xe000) {
+	          utf8.push(0xe0 | (charcode >> 12),
+	              0x80 | ((charcode>>6) & 0x3f),
+	              0x80 | (charcode & 0x3f));
+	        }
+	        // surrogate pair
+	        else {
+	          i++;
+	          // UTF-16 encodes 0x10000-0x10FFFF by
+	          // subtracting 0x10000 and splitting the
+	          // 20 bits of 0x0-0xFFFFF into two halves
+	          charcode = 0x10000 + (((charcode & 0x3ff)<<10)
+	            | (str.charCodeAt(i) & 0x3ff));
+	          utf8.push(0xf0 | (charcode >>18),
+	              0x80 | ((charcode>>12) & 0x3f),
+	              0x80 | ((charcode>>6) & 0x3f),
+	              0x80 | (charcode & 0x3f));
+	        }
+	      }
+	      return utf8;
+	    }
+	    return toUTF8Array(s);
+	  };
+
+	}();
+
+	(function (factory) {
+	  {
+	      module.exports = factory();
+	  }
+	}(function () {
+	    return qrcode;
+	})); 
+} (qrcode$1));
+
+var qrcodeExports = qrcode$1.exports;
+var qrcode = /*@__PURE__*/getDefaultExportFromCjs(qrcodeExports);
+
 const getStatus = callable("get_status");
 const attach = callable("attach");
 const safeDetach = callable("safe_detach");
@@ -129,6 +2430,12 @@ const wakeScreens = callable("wake_screens");
 const getScreenOffer = callable("get_screen_offer");
 const setGameScreen = callable("set_game_screen");
 const getTvControl = callable("get_tv_control");
+const getAddons = callable("get_addons");
+const setAddon = callable("set_addon");
+const getUsb4 = callable("get_usb4");
+const makeReport = callable("make_report");
+// a QR code as an SVG (scanned with a phone, it opens the GitHub issue form with the report summary filled in)
+const qrSvg = (text) => { const q = qrcode(0, "L"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); };
 const setTvControl = callable("set_tv_control");
 const pairTv = callable("pair_tv");
 const getGameRes = callable("get_game_res");
@@ -352,7 +2659,7 @@ const screenTargets = (s, tvWakes) => [
 ];
 const screenState = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
-const PLUGIN_VERSION = "0.7.105";
+const PLUGIN_VERSION = "0.7.106";
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
 const Progress = ({ pct, title, step, started, expect }) => (SP_JSX.jsxs("div", { style: { width: "100%", boxSizing: "border-box", padding: "4px 0" }, children: [SP_JSX.jsxs("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }, children: [SP_JSX.jsx("span", { children: title }), SP_JSX.jsxs("span", { children: [Math.round(pct), "%"] })] }), SP_JSX.jsx("div", { style: { width: "100%", height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.15)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { width: `${Math.max(0, Math.min(100, pct))}%`, height: "100%", background: "#1a9fff", transition: "width .4s" } }) }), SP_JSX.jsx("div", { style: { fontSize: "12px", marginTop: "4px", whiteSpace: "normal" }, children: step }), SP_JSX.jsxs("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: [started ? `${mmss(Date.now() / 1000 - started)} elapsed` : "", expect ? ` · usually ${expect}` : ""] }), SP_JSX.jsx("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: "You can close this menu: it continues, and a notification appears when it is done." })] }));
@@ -427,6 +2734,9 @@ function Content() {
     const [su, setSu] = SP_REACT.useState(null);
     const [up, setUp] = SP_REACT.useState(null);
     const [tv, setTv] = SP_REACT.useState(null);
+    const [ad, setAd] = SP_REACT.useState(null);
+    const [usb4, setUsb4] = SP_REACT.useState({});
+    const [report, setReport] = SP_REACT.useState(null);
     const [gr, setGr] = SP_REACT.useState(null);
     const [tr, setTr] = SP_REACT.useState(null);
     const staleChecked = SP_REACT.useRef(false);
@@ -444,6 +2754,9 @@ function Content() {
             const u = await getUpdate();
             setUp(u);
             setTv(await getTvControl());
+            const a = await getAddons();
+            setAd(a);
+            setUsb4(a.usb4 ? await getUsb4() : {});
             setGr(await getGameRes());
             setTr(await getTrial());
             // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
@@ -509,7 +2822,13 @@ function Content() {
     return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setTab(tab === "main" ? "details" : tab === "details" ? "setup" : "main"), children: tab === "main" ? "Show details" : tab === "details" ? "Show setup & updates" : "Back to main" }) }), tab !== "setup" && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setTab("setup"), children: "Setup & updates" }) }))] }), tab === "main" && (SP_JSX.jsxs(DFL.PanelSection, { title: "eGPU", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { className: DFL.staticClasses.Text, children: s ? stateLine(s) : "Loading…" }) }), su?.unsupported && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#ff6b6b" }, children: su.unsupported }) }), needsInstall && su && !su.busy && su.rc !== 0 && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: su.installed_version && !su.helpers_present ? "System files are missing (OS update)." : behind ? `Plugin ${su.payload_version} is in; its system files finish installing by themselves (after any running game is closed), or press Update system integration.` : driverMissing ? "The NVIDIA driver is not installed. Keep the eGPU unplugged." : su.installed_version ? "Setup is incomplete." : "Not installed yet." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => installClick(), children: behind && su.helpers_present ? "Update system integration" : su.installed_version ? "Repair system integration" : "Install system integration" }) })] })), updateReady && !su?.busy && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8 }, children: ["Version ", up.available, " is available."] }) }), updateReady && !su?.busy && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", disabled: busy || gameUp, onClick: () => up?.needs_detach ? confirmInstall(`Update to ${up.available}`, () => updateInPlace(up.available), () => updateDetached(up.available)) : run(() => updateInPlace(up.available)), children: ["Update to ", up.available] }) }), up?.state && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: up.state.includes("failed") ? "#ff6b6b" : undefined, opacity: up.state.includes("failed") ? 1 : 0.8 }, children: up.state }) }), su?.busy && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(Progress, { pct: su.progress, title: (su.step.startsWith("update") || up?.state.startsWith("installing")) ? "Updating" : "Installing", step: su.step, started: su.started, expect: su.expect }) }), su && !su.busy && su.rc === 0 && (SP_JSX.jsx(SP_JSX.Fragment, { children: su.needs_reboot ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: su.egpu_on_bus
                                             ? "Installed. One reboot activates the kernel parameters \u2014 the eGPU can stay plugged in."
                                             : "Installed. One reboot activates the kernel parameters. DO NOT CONNECT THE eGPU UNTIL AFTER THAT REBOOT \u2014 the protections that stop a cable event resetting the machine are kernel parameters, and they are not active yet." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => run(rebootSystem), children: "Reboot the system" }) })] })) : (SP_JSX.jsx(SP_JSX.Fragment, { children: su.gm_restart ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Installed. A few changed files are only read when Game Mode starts: they apply at the next start, or restart it now." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || gameUp, onClick: () => run(restartGamemode), children: "Restart Game Mode now" }) })] })) : SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Installed. Nothing else to do." }) }) })) })), su && !su.busy && su.cmdline_pending && su.rc !== 0 && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Reboot to activate the kernel parameters (eGPU unplugged)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || gameUp, onClick: () => run(rebootSystem), children: "Reboot the system" }) })] })), su && !su.busy && su.rc !== null && su.rc !== 0 && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#ff6b6b" }, children: su.rc === 21 ? "Nothing was changed: the eGPU driver is in use. Safe Detach, unplug the eGPU, then try again." : su.rc === 20 ? "Everything is installed except the NVIDIA driver, which could not be built. Keep the eGPU unplugged, check the internet connection and press Repair. Details: Show setup & updates." : `Install failed (rc ${su.rc}). Log: /tmp/egpu-buddy-setup.log` }) }), !!s?.resets?.count && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8 }, children: ["This device was reset by its hardware ", s.resets.count === 1 ? "once" : `${s.resets.count} times`, " while the eGPU was connected (last: ", s.resets.last, "). Always use Safe Detach before unplugging."] }) }), s && !s.game_mode && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "In Desktop mode use the EGPU Buddy desktop app." }) }), gameUp && s?.game_mode && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#f0b429" }, children: "A game is running. Exit it first to switch screens, attach or detach the eGPU: each of these restarts Game Mode." }) }), s?.attach_pending && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px" }, children: "eGPU plugged in. Close the game, then press Attach." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !s?.game_mode || gameUp || (s?.present && (s?.on_egpu || s?.egpu_handheld)), onClick: () => DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: "Attach the eGPU", strDescription: "Game Mode restarts on the eGPU display: the screen goes dark for a few seconds. When it is back, reopen this menu to see the result.", strOKButtonText: "Attach", onOK: () => run(() => attach(false)) })), children: "Attach eGPU" }) }), s?.game_mode && (s.on_egpu || s.egpu_handheld) && screenTargets(s, tvWakes).filter((t) => t.name !== s.output).map((t) => (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || gameUp, onClick: () => DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `Show Game Mode on ${t.label}`, strDescription: `${t.detail}\n\nGame Mode restarts on that screen (the current one goes dark for a few seconds). Switch back the same way.`, strOKButtonText: "Switch", onOK: () => run(() => setGameScreen(t.name)) })), children: SP_JSX.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [SP_JSX.jsx("span", { style: { flex: "0 0 auto" }, children: t.photo ? SP_JSX.jsx("img", { src: t.photo, style: { width: "96px", height: "auto", display: "block" } }) : SP_JSX.jsx("span", { dangerouslySetInnerHTML: { __html: t.icon } }) }), SP_JSX.jsxs("div", { style: { textAlign: "left" }, children: ["Show Game Mode on ", t.label, t.xr && SP_JSX.jsx("span", { style: { fontSize: "10px", background: "#1a9fff", borderRadius: "2px", padding: "0 4px", marginLeft: "6px" }, children: "XR" }), SP_JSX.jsx("div", { style: { fontSize: "11px", opacity: 0.7 }, children: t.detail })] })] }) }) }, t.name))), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !s?.game_mode || !s?.present || gameUp, onClick: () => DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: "Safe Detach", strDescription: "Game Mode moves to the handheld screen and the eGPU is removed from the bus: the screen goes dark for a few seconds and the monitor loses signal. Do not unplug yet. When the handheld screen is back, reopen this menu: it says when it is safe to unplug the cable.", strOKButtonText: "Detach", bDestructiveWarning: true, onOK: () => run(safeDetach) })), children: "Safe Detach" }) }), s?.gm_status?.state && s.gm_status.state !== "ATTACHED" && s.gm_status.state !== "IDLE" && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "13px", fontWeight: 600, color: s.gm_status.state === "SAFE_COMPLETE" || s.gm_status.state === "DETACHED" ? "#4caf50" : s.gm_status.state.includes("DO_NOT") || s.gm_status.state === "FAILED" ? "#ff6b6b" : "#f0b429" }, children: s.gm_status.state === "SAFE_COMPLETE" || s.gm_status.state === "DETACHED" ? "Safe to unplug the cable." : s.gm_status.message }) }), tr?.message && (tr.running || tr.state === "reverted" || tr.state === "failed") && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", color: tr.state === "failed" ? "#ff6b6b" : "#f0b429" }, children: ["Beta driver: ", tr.message] }) }), msg && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px" }, children: msg }) }), su?.step && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.85 }, children: su.step }) }), su?.busy === false && su?.rc === 0 && !su?.installed_version &&
-                        SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#4caf50" }, children: "Uninstalled. The machine is back to how it was." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: () => run(() => checkUpdate(false)), children: "Check for updates" }) }), su?.installed_version && (SP_JSX.jsx(SP_JSX.Fragment, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: askUninstall, children: "Uninstall" }) }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "11px", opacity: 0.7 }, children: ["EGPU Buddy ", PLUGIN_VERSION, su && !su.installed_version ? " · not installed" : "", " \u00B7 ", up ? (up.available ? `update ${up.available} available` : up.checked ? "up to date" : "update check pending") : "…", up?.auto_update ? " · auto-update on" : " · auto-update off"] }) })] })), tab === "details" && !s && (SP_JSX.jsx(DFL.PanelSection, { title: "eGPU details", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "No eGPU connected. Setup, updates and uninstall are still available above." }) }) })), tab === "details" && s && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSection, { title: "eGPU details", children: !s.present ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { className: DFL.staticClasses.Text, children: "eGPU not connected." }) }), SP_JSX.jsx(Row, { k: "Session", v: s.game_mode ? "Game Mode on handheld" : "Desktop" })] })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(Row, { k: "GPU", v: gpuName(tel["name"]) || (s.present ? s.bdf : "absent") }), SP_JSX.jsx(Row, { k: "Driver", v: s.driver_loaded ? `nvidia ${tel["driver_version"] ?? ""}` : "not loaded" }), SP_JSX.jsx(Row, { k: "PCIe", v: s.present ? `${s.link.speed} x${s.link.width}` : "" }), SP_JSX.jsx(Row, { k: "Session", v: s.game_mode ? (s.on_egpu ? `Game Mode on ${screenName(s)}` : "Game Mode on panel") : "Desktop" }), (scr?.length ? scr : s.displays.map((d) => ({ connector: d.name, name: d.model, state: d.enabled ? "" : "off" }))).map((x) => (SP_JSX.jsx(Row, { k: x.name || x.connector, v: [screenState[x.state], x.connector.startsWith("HDMI") ? "HDMI" : x.connector.startsWith("DP") ? "DisplayPort" : x.connector].filter(Boolean).join(" · ") }, x.connector))), scr?.some((x) => x.ddc) && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => { }); return r; }), children: "Wake screens" }) }), SP_JSX.jsx(Row, { k: "Audio", v: audioName(s.audio_sink, s.bdf) }), SP_JSX.jsx(Row, { k: "Temp", v: tel["temperature.gpu"] ? `${tel["temperature.gpu"]} °C` : "" }), SP_JSX.jsx(Row, { k: "Power", v: tel["power.draw"] ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : "" }), SP_JSX.jsx(Row, { k: "Core / mem", v: tel["clocks.gr"] ? `${tel["clocks.gr"]} / ${tel["clocks.mem"]} MHz` : "" }), SP_JSX.jsx(Row, { k: "VRAM", v: tel["memory.used"] ? `${tel["memory.used"]} / ${tel["memory.total"]} MiB` : "" }), SP_JSX.jsx(Row, { k: "Load", v: tel["utilization.gpu"] ? `${tel["utilization.gpu"]} %` : "" }), SP_JSX.jsx(Row, { k: "Fan", v: tel["fan.speed"] && tel["fan.speed"] !== "[N/A]" ? `${tel["fan.speed"]} %` : "" })] })) }), !s.present ? null : controlsOk ? (SP_JSX.jsxs(DFL.PanelSection, { title: "Power controls", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: "Power limit (W)", value: plNow, min: plMin, max: plMax, step: 5, showValue: true, onChange: setPl }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || pl === null, onClick: () => run(() => setPowerLimit(plNow)), children: "Apply power limit" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: "Core clock offset (MHz)", value: off, min: -300, max: 300, step: 15, showValue: true, onChange: setOff }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => run(() => setCoreOffset(off)), children: "Apply offset" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => { setOff(0); setPl(null); run(resetClocks); }, children: "Reset clocks" }) }), msg && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px" }, children: msg }) })] })) : (SP_JSX.jsx(DFL.PanelSection, { title: "Power controls", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Available when Game Mode runs on the eGPU. On the handheld GPU, Game Mode's own performance menu applies." }) }) }))] })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "System integration", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px" }, children: su ? (su.installed_version ? (behind ? "Installed — press Install to finish updating" : "Installed") : "Not installed") : "…" }) }), su?.untested && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8 }, children: ["Hardware: ", su.untested.split("\n").join("; "), ". ", su.accepted_untested ? "Risk notice accepted." : "Risk notice not accepted yet."] }) }), su?.cmdline_missing && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8 }, children: ["Kernel parameters not active: ", su.cmdline_missing] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Reinstalls everything the first run installs. Safe to run again." }) }), su?.busy && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(Progress, { pct: su.progress, title: "Installing", step: su.step, started: su.started, expect: su.expect }) }), su && !su.busy && su.rc !== null && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: su.rc === 0 ? "#4caf50" : "#ff6b6b" }, children: su.rc === 0 ? "Finished." : `Failed (rc ${su.rc}).` }) }), !su?.installed_version && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.9 }, children: [SP_JSX.jsx("b", { children: "Which eGPU will you connect?" }), " Pick one now - it only decides whether the NVIDIA driver is built. The eGPU does not need to be plugged in, and you can run the other install later if you change cards."] }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: () => { if (confirmSetup === "install") {
+                        SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#4caf50" }, children: "Uninstalled. The machine is back to how it was." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: () => run(() => checkUpdate(false)), children: "Check for updates" }) }), su?.installed_version && (SP_JSX.jsx(SP_JSX.Fragment, { children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: askUninstall, children: "Uninstall" }) }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "11px", opacity: 0.7 }, children: ["EGPU Buddy ", PLUGIN_VERSION, su && !su.installed_version ? " · not installed" : "", " \u00B7 ", up ? (up.available ? `update ${up.available} available` : up.checked ? "up to date" : "update check pending") : "…", up?.auto_update ? " · auto-update on" : " · auto-update off"] }) })] })), tab === "details" && !s && (SP_JSX.jsx(DFL.PanelSection, { title: "eGPU details", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "No eGPU connected. Setup, updates and uninstall are still available above." }) }) })), tab === "details" && s && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSection, { title: "eGPU details", children: !s.present ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { className: DFL.staticClasses.Text, children: "eGPU not connected." }) }), SP_JSX.jsx(Row, { k: "Session", v: s.game_mode ? "Game Mode on handheld" : "Desktop" })] })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(Row, { k: "GPU", v: gpuName(tel["name"]) || (s.present ? s.bdf : "absent") }), SP_JSX.jsx(Row, { k: "Driver", v: s.driver_loaded ? `nvidia ${tel["driver_version"] ?? ""}` : "not loaded" }), SP_JSX.jsx(Row, { k: "PCIe", v: s.present ? `${s.link.speed} x${s.link.width}` : "" }), ad?.usb4 && usb4.total !== undefined && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", padding: "6px 8px", borderRadius: "4px",
+                                            background: usb4.slow ? "#3a2a14" : "#1a3a57", border: `1px solid ${usb4.slow ? "#e3a33b" : "#1a9fff"}`, fontSize: "12px" }, children: [SP_JSX.jsx("span", { style: { fontWeight: 600 }, children: "USB4 link" }), SP_JSX.jsxs("span", { style: { textAlign: "right" }, children: [SP_JSX.jsxs("b", { children: [usb4.total, " Gb/s"] }), SP_JSX.jsx("br", {}), SP_JSX.jsx("span", { style: { opacity: 0.85 }, children: usb4.slow ? (usb4.lanes < 2 ? "1 lane: check the cable or port" : "slow link: check the cable or port") : `${usb4.name} · ${usb4.lanes} × ${usb4.per_lane} Gb/s` })] })] }) })), SP_JSX.jsx(Row, { k: "Session", v: s.game_mode ? (s.on_egpu ? `Game Mode on ${screenName(s)}` : "Game Mode on panel") : "Desktop" }), (scr?.length ? scr : s.displays.map((d) => ({ connector: d.name, name: d.model, state: d.enabled ? "" : "off" }))).map((x) => (SP_JSX.jsx(Row, { k: x.name || x.connector, v: [screenState[x.state], x.connector.startsWith("HDMI") ? "HDMI" : x.connector.startsWith("DP") ? "DisplayPort" : x.connector].filter(Boolean).join(" · ") }, x.connector))), scr?.some((x) => x.ddc) && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => { }); return r; }), children: "Wake screens" }) }), SP_JSX.jsx(Row, { k: "Audio", v: audioName(s.audio_sink, s.bdf) }), SP_JSX.jsx(Row, { k: "Temp", v: tel["temperature.gpu"] ? `${tel["temperature.gpu"]} °C` : "" }), SP_JSX.jsx(Row, { k: "Power", v: tel["power.draw"] ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : "" }), SP_JSX.jsx(Row, { k: "Core / mem", v: tel["clocks.gr"] ? `${tel["clocks.gr"]} / ${tel["clocks.mem"]} MHz` : "" }), SP_JSX.jsx(Row, { k: "VRAM", v: tel["memory.used"] ? `${tel["memory.used"]} / ${tel["memory.total"]} MiB` : "" }), SP_JSX.jsx(Row, { k: "Load", v: tel["utilization.gpu"] ? `${tel["utilization.gpu"]} %` : "" }), SP_JSX.jsx(Row, { k: "Fan", v: tel["fan.speed"] && tel["fan.speed"] !== "[N/A]" ? `${tel["fan.speed"]} %` : "" })] })) }), ad?.report && (SP_JSX.jsxs(DFL.PanelSection, { title: "Support report", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: async () => { setReport(null); try {
+                                        setReport(await makeReport());
+                                    }
+                                    catch {
+                                        setMsg("Could not make the report.");
+                                    } }, children: "Make support report" }) }), report && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px" }, children: ["Scan with your phone to open a new GitHub issue with the report summary filled in. The full report is saved as ", SP_JSX.jsx("b", { children: report.file }), ": attach it to the issue."] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { width: "240px", margin: "0 auto", background: "#fff", borderRadius: "4px" }, dangerouslySetInnerHTML: { __html: qrSvg(report.url) } }) }), SP_JSX.jsx(Row, { k: "Code", v: report.code })] })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "11px", opacity: 0.75 }, children: "Inside: versions (OS, kernel, driver, plugin), GPU and link, screens, and this boot's eGPU log lines. No serial numbers, Wi-Fi names, IP addresses or user names." }) })] })), !s.present ? null : controlsOk ? (SP_JSX.jsxs(DFL.PanelSection, { title: "Power controls", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: "Power limit (W)", value: plNow, min: plMin, max: plMax, step: 5, showValue: true, onChange: setPl }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || pl === null, onClick: () => run(() => setPowerLimit(plNow)), children: "Apply power limit" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: "Core clock offset (MHz)", value: off, min: -300, max: 300, step: 15, showValue: true, onChange: setOff }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => run(() => setCoreOffset(off)), children: "Apply offset" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => { setOff(0); setPl(null); run(resetClocks); }, children: "Reset clocks" }) }), msg && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px" }, children: msg }) })] })) : (SP_JSX.jsx(DFL.PanelSection, { title: "Power controls", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Available when Game Mode runs on the eGPU. On the handheld GPU, Game Mode's own performance menu applies." }) }) }))] })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "System integration", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px" }, children: su ? (su.installed_version ? (behind ? "Installed — press Install to finish updating" : "Installed") : "Not installed") : "…" }) }), su?.untested && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8 }, children: ["Hardware: ", su.untested.split("\n").join("; "), ". ", su.accepted_untested ? "Risk notice accepted." : "Risk notice not accepted yet."] }) }), su?.cmdline_missing && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8 }, children: ["Kernel parameters not active: ", su.cmdline_missing] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Reinstalls everything the first run installs. Safe to run again." }) }), su?.busy && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(Progress, { pct: su.progress, title: "Installing", step: su.step, started: su.started, expect: su.expect }) }), su && !su.busy && su.rc !== null && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: su.rc === 0 ? "#4caf50" : "#ff6b6b" }, children: su.rc === 0 ? "Finished." : `Failed (rc ${su.rc}).` }) }), !su?.installed_version && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.9 }, children: [SP_JSX.jsx("b", { children: "Which eGPU will you connect?" }), " Pick one now - it only decides whether the NVIDIA driver is built. The eGPU does not need to be plugged in, and you can run the other install later if you change cards."] }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: () => { if (confirmSetup === "install") {
                                 setConfirmSetup("");
                                 run(() => installSystem(false));
                             }
@@ -524,7 +2843,7 @@ function Content() {
                                 setConfirmSetup("amd"); }, children: confirmSetup === "amd"
                                 ? "Press again to confirm"
                                 : (su?.installed_version ? "Switch to the AMD / Intel install (no NVIDIA driver)" : "AMD / Intel eGPU - install (no driver build)") }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "11px", opacity: 0.7 }, children: "Skips the NVIDIA driver build and the NVIDIA-only gamescope fix. Keeps hot-plug, safe detach, cable-pull recovery, audio follow and the flood protections. Beta: not yet tested on real AMD or Intel hardware." }) }), su?.installed_version && su.installed_vendor === "amd" && su.egpu_on_bus === "nvidia" && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#ffb300" }, children: "An NVIDIA eGPU is connected, but this machine was set up with the AMD install, which skips the NVIDIA driver. Run the NVIDIA install above to add it." }) })), su?.installed_version && su.installed_vendor !== "amd" && (su.egpu_on_bus === "amd" || su.egpu_on_bus === "intel") && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: "#ffb300" }, children: "A non-NVIDIA eGPU is connected. The NVIDIA driver this install built is not used by it - the AMD / Intel install above suits this machine better." }) })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy || !su?.installed_version, onClick: askUninstall, children: "Uninstall system integration" }) }), su?.log && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setLogOpen(logOpen === "setup" ? "" : "setup"), children: logOpen === "setup" ? "Hide install log" : "Show install log" }) }), su?.log && logOpen === "setup" && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }, children: su.log }) })] })), tab === "setup" && tr?.available && (SP_JSX.jsxs(DFL.PanelSection, { title: "Beta driver (advanced)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.85 }, children: ["Tested driver: ", tr.tested, ". Beta: ", tr.beta, ", with the same eGPU patches ported to it. Running now: ", tr.installed || "not installed", "."] }) }), tr.message && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", color: tr.state === "failed" ? "#ff6b6b" : tr.state === "kept" ? "#4caf50" : "#f0b429" }, children: tr.message }) }), tr.state !== "kept" && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", disabled: busy || tr.running || !!su?.busy || gameUp || !s?.game_mode, onClick: () => DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `Try beta driver ${tr.beta}`, strDescription: `For testers. The eGPU is safely detached, the beta NVIDIA driver ${tr.beta} is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the tested driver ${tr.tested} is put back and attached again by itself. If the machine resets or hangs during the test, the tested driver is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`, strOKButtonText: "Try the beta driver", bDestructiveWarning: true, onOK: () => run(startTrial) })), children: ["Try beta driver ", tr.beta] }) })), (tr.state === "kept" || (tr.installed && tr.installed !== tr.tested)) && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs(DFL.ButtonItem, { layout: "below", disabled: busy || tr.running || gameUp || !s?.game_mode, onClick: () => DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `Return to ${tr.tested}`, strDescription: `The eGPU is safely detached, the tested driver ${tr.tested} is put back (offline, a few minutes) and the eGPU is attached again.`, strOKButtonText: "Return", onOK: () => run(revertTrial) })), children: ["Return to the tested driver ", tr.tested] }) })), tr.log && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setLogOpen(logOpen === "trial" ? "" : "trial"), children: logOpen === "trial" ? "Hide driver log" : "Show driver log" }) }), tr.log && logOpen === "trial" && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }, children: tr.log }) })] })), tab === "setup" && s?.present && s.game_mode && (SP_JSX.jsxs(DFL.PanelSection, { title: "Game screen", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Play games on", disabled: busy || gameUp, selectedOption: s.output && s.output !== "*" ? s.output : "eDP-1", rgOptions: screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label })), onChange: (o) => { if (o.data !== s.output)
-                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && gr && (SP_JSX.jsx(DFL.PanelSection, { title: "Games", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Best resolution and refresh rate on every screen", description: "On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are.", checked: gr.enabled, onChange: (v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; }) }) }) })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Automatic updates", description: "Off (default): a new release is only announced here and you decide when to install it. On: it installs by itself when no game is running.", checked: !!up?.auto_update, onChange: (v) => run(() => setAutoUpdate(v)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: () => run(() => checkUpdate(false)), children: "Check for updates now" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: up ? (up.available ? `Available: ${up.available}` : (up.checked ? "Up to date." : "Not checked yet.")) + (up.last_error ? ` ${up.last_error}` : "") : "…" }) })] })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "Extras (testing)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "TV control tricks", description: "Off by default. Choosing the TV for Game Mode turns it on and switches it to the eGPU's HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.", checked: !!tv?.enabled, onChange: (v) => run(() => setTvControl(v)) }) }), tv?.enabled && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }, children: tv.paired.length ? "Pair again" : "Find and pair TV" }) })] }))] }))] }));
+                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && gr && (SP_JSX.jsx(DFL.PanelSection, { title: "Games", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Best resolution and refresh rate on every screen", description: "On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are.", checked: gr.enabled, onChange: (v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; }) }) }) })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Automatic updates", description: "Off (default): a new release is only announced here and you decide when to install it. On: it installs by itself when no game is running.", checked: !!up?.auto_update, onChange: (v) => run(() => setAutoUpdate(v)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: () => run(() => checkUpdate(false)), children: "Check for updates now" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: up ? (up.available ? `Available: ${up.available}` : (up.checked ? "Up to date." : "Not checked yet.")) + (up.last_error ? ` ${up.last_error}` : "") : "…" }) })] })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "Extras (testing)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "All off by default." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "USB4 link speed", description: "Adds a USB4 row to the Details tab and warns about a slow cable or port.", checked: !!ad?.usb4, onChange: (v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "TV control tricks", description: "Off by default. Choosing the TV for Game Mode turns it on and switches it to the eGPU's HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.", checked: !!tv?.enabled, onChange: (v) => run(() => setTvControl(v)) }) }), tv?.enabled && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }, children: tv.paired.length ? "Pair again" : "Find and pair TV" }) })] })), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Support report button", description: "Adds \"Make support report\" to the Details tab, for GitHub issues.", checked: !!ad?.report, onChange: (v) => run(async () => { const r = await setAddon("report", v); await refresh(); return r; }) }) })] }))] }));
 }
 var index = definePlugin(() => {
     // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
