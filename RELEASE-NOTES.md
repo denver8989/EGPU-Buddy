@@ -1,3 +1,9 @@
+0.7.100 — updates without reloading Steam.
+
+**Fixed**
+- Updating EGPU Buddy no longer reloads Steam's whole interface (it looked like a Game Mode restart): the plugin is swapped in place through Decky's own installer, like its plugin store does, and its system files follow by themselves.
+- Game resolutions also follow a screen that changes size, e.g. XR glasses switched in or out of ultrawide (before, only a switch to another screen did).
+
 0.7.99 — best resolution and refresh rate on every screen.
 
 **New**

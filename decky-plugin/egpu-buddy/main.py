@@ -896,6 +896,24 @@ class Plugin:
         threading.Thread(target=_resume_detached_update, daemon=True).start()
         return {"ok": True, "message": "Detaching the eGPU, then updating. The eGPU is attached again when it is done."}
 
+    async def plugin_update_info(self, version: str):
+        """The plugin half of an update through Decky's own installer, like its plugin store: the plugin is swapped in
+        place. Restarting Decky instead (the old way, still the fallback) reloads Steam's whole interface, which looked
+        like a Game Mode restart on every update. The system files follow in the new plugin (_continue_update)."""
+        if not re.fullmatch(r"[0-9.]+", version or "") or _vt(version) <= _vt(PAYLOAD_VERSION) or _operation_in_progress():
+            return {}
+        name = f"EGPU-Buddy-Decky-{version}.zip"; base = f"https://github.com/{REPO}/releases/download/v{version}/"
+        try:
+            sums = _get(base + "SHA256SUMS").decode()
+        except Exception:  # noqa: BLE001
+            return {}
+        want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(name)), "")
+        if not want:
+            return {}
+        d = _settings(); d["continue_update"] = version; _save_settings(d)
+        _update["state"] = f"updating the plugin to {version}"; _slog(f"updating the plugin to {version} in place (Decky installer)", 50)
+        return {"url": base + name, "hash": want}
+
     async def check_update(self, install: bool = False):
         threading.Thread(target=_check_update, args=(bool(install), True), daemon=True).start(); return {"ok": True, "message": "checking"}
 
@@ -1024,12 +1042,13 @@ class Plugin:
         """Game Mode moved to another screen: games this option changed follow at once (the new screen's size, or back to
         Steam's Default), instead of keeping the old screen's resolution until their next start."""
         global _game_res_out
-        out = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]
+        # the screen AND its size: XR glasses switched in or out of ultrawide stay the same screen
+        res = _game_screen_res(); out = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] + "|" + res
         if out == _game_res_out: return {}
         first = _game_res_out is None; _game_res_out = out
         d = _settings(); apps = d.get("game_res_apps", {})
         if first or not apps or not d.get("game_res_native", True): return {}
-        target = _game_screen_res() or "Default"
+        target = res or "Default"
         changes = {k: target for k, v in apps.items() if v != target}
         for k in changes:
             if target == "Default": apps.pop(k)

@@ -30,6 +30,23 @@ const getUpdate = callable<[], Upd>("get_update_status");
 const setAutoUpdate = callable<[boolean], Result>("set_auto_update");
 const checkUpdate = callable<[boolean], Result>("check_update");
 const updateDetached = callable<[string], Result>("update_detached");
+const pluginUpdateInfo = callable<[string], { url?: string; hash?: string }>("plugin_update_info");
+// Update through Decky's own installer, as its plugin store does: the plugin is swapped in place and Steam keeps running.
+// (Restarting Decky, the old way and still the fallback, reloads Steam's whole interface.) The user already confirmed
+// in EGPU Buddy, so Decky's own "update?" prompt is answered for this one install.
+async function updateInPlace(version: string): Promise<Result> {
+  const dl = (window as any).DeckyPluginLoader, be = (window as any).DeckyBackend;
+  const info = await pluginUpdateInfo(version);
+  if (!info.url || !dl?.addPluginInstallPrompt || !be?.call) return checkUpdate(true);
+  const orig = dl.addPluginInstallPrompt;
+  dl.addPluginInstallPrompt = function (artifact: string, ver: string, requestId: string, hash: string, type: number) {
+    if (artifact === "EGPU Buddy" && ver === version) { dl.addPluginInstallPrompt = orig; be.call("utilities/confirm_plugin_install", requestId); }
+    else orig.call(dl, artifact, ver, requestId, hash, type);
+  };
+  try { await be.call("utilities/install_plugin", info.url, "EGPU Buddy", version, info.hash, 2); }
+  catch { dl.addPluginInstallPrompt = orig; return checkUpdate(true); }
+  return { ok: true, message: `Updating to ${version}: the plugin reloads in place, then its system files install (no restart).` };
+}
 const popNotice = callable<[], string>("pop_notice");
 type Trial = { available: boolean; beta: string; tested: string; installed: string; state: string; message: string; running: boolean; log: string; started: number; progress: number; step: string; acked: boolean };
 const getTrial = callable<[], Trial>("get_driver_trial");
@@ -275,7 +292,7 @@ function Content() {
             </>
           )}
           {updateReady && !su?.busy && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Version {up!.available} is available.</div></PanelSectionRow>}
-          {updateReady && !su?.busy && <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp} onClick={() => confirmInstall(`Update to ${up!.available}`, () => checkUpdate(true), () => updateDetached(up!.available))}>Update to {up!.available}</ButtonItem></PanelSectionRow>}
+          {updateReady && !su?.busy && <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp} onClick={() => confirmInstall(`Update to ${up!.available}`, () => updateInPlace(up!.available), () => updateDetached(up!.available))}>Update to {up!.available}</ButtonItem></PanelSectionRow>}
           {up?.state && <PanelSectionRow><div style={{ fontSize: "12px", color: up.state.includes("failed") ? "#ff6b6b" : undefined, opacity: up.state.includes("failed") ? 1 : 0.8 }}>{up.state}</div></PanelSectionRow>}
           {su?.busy && <PanelSectionRow><Progress pct={su.progress} title={(su.step.startsWith("update") || up?.state.startsWith("installing")) ? "Updating" : "Installing"} step={su.step} started={su.started} expect={su.expect} /></PanelSectionRow>}
           {su && !su.busy && su.rc === 0 && (
