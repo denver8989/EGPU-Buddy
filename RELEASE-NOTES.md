@@ -1,3 +1,9 @@
+0.7.90 — clearer screen list, one-step uninstall.
+
+**Fixed**
+- A TV that is switched off is no longer offered under "Show Game Mode on…", unless TV control can turn it on (then it says so).
+- Uninstall is always available: it asks for confirmation and safely detaches the eGPU first when needed, instead of being greyed out.
+
 0.7.89 — handheld screen stays off.
 
 **Fixed**

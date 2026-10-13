@@ -307,6 +307,26 @@ def _displays(bdf):
     return outs
 
 
+_screen_states = {}; _screen_states_t = 0.0; _screen_lock = threading.Lock()
+
+
+def _screen_state(name):
+    """in-use / other-input / off / standby / unknown for an eGPU screen. egpu-screen asks the screen itself (DDC/CI, CEC
+    or the network, slow when a TV is off), so this is refreshed in the background at most every 20 s."""
+    global _screen_states_t
+    if time.time() - _screen_states_t > 20 and _screen_lock.acquire(blocking=False):
+        _screen_states_t = time.time()
+        def refresh():
+            global _screen_states
+            try:
+                out = _sh(["/usr/local/sbin/egpu-screen", "list"], 30)[1]
+                _screen_states = {j["connector"]: j["state"] for j in (json.loads(l) for l in out.splitlines() if l.startswith("{"))}
+            finally:
+                _screen_lock.release()
+        threading.Thread(target=refresh, daemon=True).start()
+    return _screen_states.get(name, "")
+
+
 def _handheld_screens():
     """Connected screens driven by the handheld's own GPU: the built-in panel and USB-C displays (e.g. XR glasses)."""
     cards = {os.path.basename(c).split("-")[0] for c in glob.glob("/sys/class/drm/card[0-9]*-eDP-*")}
@@ -870,7 +890,23 @@ class Plugin:
         d = _settings(); d["accepted_untested"] = True; _save_settings(d); return {"ok": True, "message": "accepted"}
 
     async def uninstall_system(self):
-        return _start_setup("uninstall")
+        if not (_gpu_bdf() and os.path.exists("/sys/module/nvidia_drm")):
+            return _start_setup("uninstall")
+        # the driver's files cannot be removed while it runs: Safe Detach first, then uninstall
+        if not _gamescope_running():
+            return {"ok": False, "message": "Safely eject the eGPU first (desktop icon), then uninstall."}
+        if _game_running():
+            return {"ok": False, "message": "Close the running game first: uninstalling detaches the eGPU, which restarts Game Mode."}
+        def detach_then_uninstall():
+            _setup.update(step="Detaching the eGPU before uninstalling…")
+            _spawn_root_job("detach", [DETACH])
+            for _ in range(90):
+                time.sleep(2)
+                if not os.path.exists("/sys/module/nvidia_drm"):
+                    _start_setup("uninstall"); return
+            _setup.update(step="The eGPU did not detach, so nothing was uninstalled. Use Safe Detach, then Uninstall.")
+        threading.Thread(target=detach_then_uninstall, daemon=True).start()
+        return {"ok": True, "message": "Detaching the eGPU first (Game Mode moves to the handheld screen), then uninstalling."}
 
     async def get_status(self):
         _settle_detach_status(); _heal_audio()
@@ -892,7 +928,7 @@ class Plugin:
                 [c for c in ("".join(ch for ch in _read(FLOOD_HISTORY) if ch == "\n" or " " <= ch <= "~")).splitlines() if c.strip()]),
             "link": {"speed": _read(f"/sys/bus/pci/devices/{bdf}/current_link_speed") if bdf else "",
                      "width": _read(f"/sys/bus/pci/devices/{bdf}/current_link_width") if bdf else ""},
-            "displays": _displays(bdf) if bdf else [],
+            "displays": [{**d, "state": _screen_state(d["name"])} for d in _displays(bdf)] if bdf else [],
             "audio_sink": _audio_sink(),
             "telemetry": _nvidia_query(bdf) if (bdf and driver) else {},
             "ts": time.time(),

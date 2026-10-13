@@ -7,7 +7,7 @@ type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
   attach_pending: boolean; on_egpu: boolean; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
-  link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string }[]; audio_sink: string;
+  link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
 };
 type Result = { ok: boolean; message: string; rc?: number };
@@ -136,7 +136,7 @@ function Content() {
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
   const [tr, setTr] = useState<Trial | null>(null);
   const staleChecked = useRef(false);
-  const [confirmSetup, setConfirmSetup] = useState<"" | "install" | "uninstall" | "amd">("");
+  const [confirmSetup, setConfirmSetup] = useState<"" | "install" | "amd">("");
   const [s, setS] = useState<Status | null>(null);
   const [scr, setScr] = useState<Screen[] | null>(null);
   const [msg, setMsg] = useState("");
@@ -162,6 +162,10 @@ function Content() {
   // "mounted" for uninstall purposes: the driver is loaded, so /usr cannot be written and the
   // extension cannot be unmerged. Detaching is what clears it.
   const egpuMounted = !!(s?.driver_loaded);
+  const tvWakes = !!tv?.enabled && !!tv?.paired.length;   // TV control can switch a TV that is off on
+  const askUninstall = () => showModal(<ConfirmModal strTitle="Uninstall EGPU Buddy?" bDestructiveWarning strOKButtonText="Uninstall"
+    strDescription={(egpuMounted ? "The eGPU is safely detached first: Game Mode moves to the handheld screen for a few seconds. " : "") + "Then the system integration is removed and the machine goes back to how it was."}
+    onOK={() => run(uninstallSystem)} />);
   const WHAT = "Installs the hot-plug scripts, the Game Mode session, the GBM gamescope, the boot policy, the desktop app, the patched hot-unplug driver with the NVIDIA userspace pinned to it, and the kernel parameters. Backups are kept.";
   const confirmInstall = (title: string, go: () => Promise<Result>, detachGo?: () => Promise<Result>) => {
     const needAccept = !!(su?.untested && !su.accepted_untested);
@@ -246,10 +250,10 @@ function Content() {
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || gameUp || (s?.present && s?.on_egpu)} onClick={() => showModal(<ConfirmModal strTitle="Attach the eGPU" strDescription="Game Mode restarts on the eGPU display: the screen goes dark for a few seconds. When it is back, reopen this menu to see the result." strOKButtonText="Attach" onOK={() => run(() => attach(false))} />)}>Attach eGPU</ButtonItem>
           </PanelSectionRow>
-          {s?.game_mode && s.on_egpu && s.displays.filter((d) => d.name !== s.output).map((d) => (
+          {s?.game_mode && s.on_egpu && s.displays.filter((d) => d.name !== s.output && (d.state !== "off" || tvWakes)).map((d) => (
             <PanelSectionRow key={d.name}><ButtonItem layout="below" disabled={busy || gameUp}
               onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${d.model || d.name}`} strDescription={`${d.detail}\n\nGame Mode restarts on that screen: this one goes dark. Switch back the same way.`}
-                strOKButtonText="Switch" onOK={() => run(() => setGameScreen(d.name))} />)}>Show Game Mode on {d.model || d.name}<div style={{ fontSize: "11px", opacity: 0.7 }}>{d.detail}</div></ButtonItem></PanelSectionRow>
+                strOKButtonText="Switch" onOK={() => run(() => setGameScreen(d.name))} />)}>Show Game Mode on {d.model || d.name}<div style={{ fontSize: "11px", opacity: 0.7 }}>{d.state === "off" ? "Off: choosing it turns it on" : d.detail}</div></ButtonItem></PanelSectionRow>
           ))}
           {gameUp && s?.game_mode && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>A game is running. Close it before attaching or detaching (both restart Game Mode).</div></PanelSectionRow>}
           <PanelSectionRow>
@@ -268,12 +272,8 @@ function Content() {
           {su?.installed_version && (
             <>
               <PanelSectionRow>
-                <ButtonItem layout="below" disabled={busy || !!su?.busy || egpuMounted}
-                  onClick={() => { if (confirmSetup === "uninstall") { setConfirmSetup(""); run(uninstallSystem); } else setConfirmSetup("uninstall"); }}>
-                  {confirmSetup === "uninstall" ? "Press again to confirm uninstall" : "Uninstall"}
-                </ButtonItem>
+                <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={askUninstall}>Uninstall</ButtonItem>
               </PanelSectionRow>
-              {egpuMounted && <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.7 }}>Safe Detach the eGPU first: the system files cannot be removed while its driver is running.</div></PanelSectionRow>}
             </>
           )}
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.7 }}>EGPU Buddy {PLUGIN_VERSION}{su && !su.installed_version ? " · not installed" : ""} · {up ? (up.available ? `update ${up.available} available` : up.checked ? "up to date" : "update check pending") : "…"}{up?.auto_update ? " · auto-update on" : " · auto-update off"}</div></PanelSectionRow>
@@ -404,11 +404,8 @@ function Content() {
             </PanelSectionRow>
           )}
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy || !!su?.busy || !su?.installed_version || egpuMounted} onClick={() => { if (confirmSetup === "uninstall") { setConfirmSetup(""); run(uninstallSystem); } else setConfirmSetup("uninstall"); }}>
-              {confirmSetup === "uninstall" ? "Press again to confirm uninstall" : "Uninstall system integration"}
-            </ButtonItem>
+            <ButtonItem layout="below" disabled={busy || !!su?.busy || !su?.installed_version} onClick={askUninstall}>Uninstall system integration</ButtonItem>
           </PanelSectionRow>
-          {egpuMounted && su?.installed_version && <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.7 }}>Safe Detach the eGPU first: the system files cannot be removed while its driver is running.</div></PanelSectionRow>}
           {su?.log && <PanelSectionRow><ButtonItem layout="below" onClick={() => setLogOpen(logOpen === "setup" ? "" : "setup")}>{logOpen === "setup" ? "Hide install log" : "Show install log"}</ButtonItem></PanelSectionRow>}
           {su?.log && logOpen === "setup" && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{su.log}</div></PanelSectionRow>}
         </PanelSection>
