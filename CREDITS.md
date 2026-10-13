@@ -113,12 +113,4 @@ If your work is used here and is not credited, open an issue and it will be fixe
   [NVIDIA developer forum thread 295314](https://forums.developer.nvidia.com/t/display-modes-above-2560x1440p-120hz-with-hdr-enabled-cause-flickering-corruption-within-gamescope-session/295314).
 - **Valve**: the "after" Game Mode screenshot, from [steamdeck.com](https://www.steamdeck.com/en/software).
 
-## Pictures in the Decky plugin
-
-- The front-view XR glasses picture on the plugin's main page: a VITURE Beast product image, supplied by the project
-  author.
-- The glasses pictures in the "glasses connected" pop-up are the makers' own product pictures (VITURE, XREAL,
-  ROG × XREAL, RayNeo, Rokid), loaded from each maker's online shop when the pop-up opens. They are not shipped with
-  the plugin. Product names and pictures belong to their owners.
-
 If you own one of these images and want it credited differently or removed, open an issue.
