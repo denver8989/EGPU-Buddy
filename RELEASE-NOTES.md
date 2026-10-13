@@ -1,3 +1,8 @@
+0.7.95 — handheld sound.
+
+**Fixed**
+- Playing on the handheld screen with the eGPU: no sound when the handheld's sound chip had been left in "Pro Audio" mode. It is now put back on its speaker/headphone profile.
+
 0.7.94 — no more stuck updates.
 
 **Fixed**

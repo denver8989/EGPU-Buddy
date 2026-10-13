@@ -104,13 +104,29 @@ case "${1:-follow}" in
     rm -f "$PREV_FILE" 2>/dev/null || true
     ;;
   local)   # Game Mode on the handheld screen with the eGPU attached: sound on the handheld's own output (speakers, jack)
+    # A handheld sound card left on "Pro Audio" (or off) plays into the raw device with the speaker amplifier off: put it
+    # on its best available normal profile first (HiFi with Speaker / Headphones, as the system would pick).
+    pactl -f json list cards 2>/dev/null | BDFS="$(egpu_audio_bdfs 2>/dev/null)" python3 -c '
+import json, os, subprocess, sys
+skip = {b.strip().replace(":", "_") for b in os.environ["BDFS"].split() if b.strip()}
+for c in json.load(sys.stdin):
+    name = c.get("name") or ""; path = ((c.get("properties") or {}).get("device.bus_path") or "").replace(":", "_")
+    if any(w in path or w in name.replace(":", "_") for w in skip) or c.get("active_profile") not in ("pro-audio", "off"):
+        continue
+    profs = [(v.get("priority", 0), k) for k, v in (c.get("profiles") or {}).items()
+             if k not in ("off", "pro-audio") and str(v.get("available", "")).lower() in ("yes", "true", "unknown")]
+    if profs:
+        subprocess.run(["pactl", "set-card-profile", name, max(profs)[1]], check=False)
+' 2>/dev/null; sleep 1
     sink=$(pactl -f json list sinks 2>/dev/null | BDFS="$(egpu_audio_bdfs 2>/dev/null)" python3 -c '
 import json, os, sys
 skip = {b.strip().replace(":", "_") for b in os.environ["BDFS"].split() if b.strip()}
+best = []
 for s in json.load(sys.stdin):
     path = ((s.get("properties") or {}).get("device.bus_path") or "").replace(":", "_"); name = s.get("name") or ""
     if not any(w in path or w in name.replace(":", "_") for w in skip):
-        print(name); break
+        best.append((".pro-output" in name, name))
+print(min(best)[1] if best else "")
 ' 2>/dev/null)
     [ -n "${sink:-}" ] || { echo "no handheld audio output found; leaving sound as it is"; exit 0; }
     [ "$(pactl get-default-sink 2>/dev/null)" = "$sink" ] && { echo "sound is already on the handheld"; exit 0; }
