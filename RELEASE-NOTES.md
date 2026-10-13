@@ -1,3 +1,8 @@
+0.7.89 — handheld screen stays off.
+
+**Fixed**
+- With Game Mode on an eGPU monitor, the handheld's screen could light up showing a text console (after waking from sleep, once Steam restored the brightness). It is now switched fully off.
+
 0.7.88 — TV stays off after sleep; Performance boost removed.
 
 **Fixed**
