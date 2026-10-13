@@ -205,7 +205,7 @@ const maybeOfferScreen = async () => {
     if (!o.connector)
         return;
     // XR glasses: their picture and what passthrough means; any other screen: the plain question as before
-    const big = () => SP_JSX.jsx("div", { style: { display: "flex", justifyContent: "center", margin: "4px 0 14px" }, children: SP_JSX.jsx(Pic, { ...glassesPhoto(o.brand, o.name), src: glassesPhoto(o.brand, o.name).url, width: 300 }) });
+    const big = () => SP_JSX.jsx("div", { style: { display: "flex", justifyContent: "center", margin: "4px 0 14px" }, children: SP_JSX.jsx(Pic, { ...glassesPhoto(o.brand, o.name), width: 300 }) });
     const ask = o.game ? `Close the running game first, then use "Show Game Mode on ${o.name}" in EGPU Buddy.`
         : `Game Mode restarts on it (the screen goes dark for a few seconds). You can switch back from EGPU Buddy.`;
     DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `${o.name} connected`, strDescription: o.xr ? SP_JSX.jsxs("div", { children: [big(), SP_JSX.jsxs("div", { children: [SP_JSX.jsx("b", { children: "XR glasses passthrough." }), " Play your eGPU games in the glasses: the eGPU keeps rendering, the handheld sends the picture to the glasses (", modeText(o.detail ?? ""), ") and the sound moves to the glasses' speakers. No HDMI-to-USB-C adapter on the eGPU needed."] }), SP_JSX.jsx("div", { style: { opacity: 0.7, marginTop: "10px" }, children: ask })] })
@@ -224,26 +224,115 @@ const ICONS = {
 const XR_FRONT = "data:image/webp;base64,UklGRqAZAABXRUJQVlA4WAoAAAAQAAAA7wAAbAAAQUxQSA4LAAARsMD+nyK31ax1d7YcMiQuOBwH/CBioeiFOYVwHCyHCnmWHZDKTMEHjoqhol1uAw9DZW4YrbqRUajz+fTfGcne/c9//rMqt4oIiJIk1W3mUIGxpdwu6GnnB8TvkoXjhELhSCTcFCHHcv42snYSQpGkpKTExEg4FEpwgupruEXaFVl9Rk6fuWh5/t0PbPzHUzv2vFJU9OqrL7+0Y/vmBzasvm725KHZHdsmOwElISm9U/bgibOXrt7w4MaC5/YUvfX2W2++WfTy7h3Pbt/04F15q5bOnDC0T1ZmeouwXUIt2nb60/AZ1+U9/HThgQ+PXSitaYjFQZHChVi06tuTn+x96oEV1wzumBLiK+YkZ/adsvyhZ9/96FRJVbQRpCKGhFh9den5Yx/tf7ng/tsXTxv2x47pyYzaw60zs4fPuCF/y4sHPjnzXU3MReS41ADPelJ6LY9Vnji4I29qdithOxI7jbpp897jpVGvbildw5BS+k1vqP7u1Ef7dm/Mz5k4MKsd3XAnuW3WoClLN2x9+eDxkuoGkEbeGktuSjda/J+NSwemOtZmdOb49a+fqgEDe00991sej1Zc/Hz/jsdyc8b17pCSmIDQalDO+oK3Pzlf2QD+QbQkT/dRqDjy8LgMGz1Zi575uo5tjKXkcRzqS08dfaMgb2qGh+w3KuLS3F5bE6zmk0cnZjhC8E0wp8PsHWfjSjEOrWS0oHm2/7t/EylF+BBafEuS9dV9eO/w1lytVsM3HYuZ9VidadB8eFP7m5rDqrQzM3iru2WvL7mC48DYZ/mbZTZ6JPNMqxgtxOyYG/iQKnb0jl4hwzPeiE1nwc5hmTlVqJ8nxHIIPs0zGM49dU1Hckekx5LCMtm8/wSf2HIh1skAAWYN1XBiz5rxPVIiDn4WSOkxeW3h+Ti9B6C5HzyaAhHxXCHuV0FZ12OI4cBL5dZdOFq0/eENt91w3ZLrlv/13q0vH7lYL5v3H0N8qwaCdUI8wEkgZrr0XX012ebNwVy1l+BM/A2OeIhIEJSRzZE2BHgKQDBYL5r5vgvwBmsBgxd3CPGgEQDsMweM9UpyLc0KN2YpNq92pzRL2cIMMDyAyOagpSR5OoPwZnSpEHkEgKkGuh0mxRfMgJegNGqvFuI2UwfZK9OcaU2m9QNTVY4W4npi8vzb8f8BhqTZcYOFLOknxIwGunEAAdgsyRt23GBxvKsQw6s5Zw+fNZoSnI26rn3UwVQhss5KLj95h8NvjAewZi4+UVEtVtniCBF5VgFhN+B2nZInOuuB4eAvffqMxDQRhE+p0hGiKXp/pKShRLb9BreAzxAzfTqAHyAs1bneG+Fe/7zQaPYM1AZgijcl0BPoDSoFlXtnhP13v91nb/24jrto5xHmBuo8nhiDpeAGmcaTe1YO0j29S5tXTCxgCuot5oSvUAEyriGYDkOAujxOe6SzJm5nR8eHWo8LNPmg8Y9RG5KkMZTs1GHi4/cup3gvMBHdelx/Nh7ZoLGTlieajzFoNgYQzzt51G+sXlReEYwL6gJioVYxUBxEMDYPHy4XvAqwHDlDVg8XxFjNqQEIB0WfHf7UAfzJeZRYRJebpY2pTzOoDKnge6lTS5pN4MMlAOjXqdIlOwZABG3xsj2BSvqHiiaZlAV4DcLcwPJCQLIADbL2+H9eerZg27aCnYWHLsYlAdAnAbQ2cBJfTP8C/ylFSt8riuKoxhI9aIagofHVyR1ahRMcx0kIJaZk33YOKUDDpdCsiBd5qY8gx3WNYOe2BMfvKlrwI4zckaKTOq2cvu8i+WM52Hp9MIVOn0tWLmY1s5rmA55KsX6Mw7sUXQ5ganS43GwSdFIOKkZz8fVMcdH6KcL11dVRum8ULXpJPJ5D4wJhEH9nATDnKOp1p0c9bv0MoafD19J0QY+NFFgal3qbcL1h1ri56PYwX3Vg+flTUF9cQSD0lEJkaLL0qcFaHkj3LQzvmDCwnGPv8SnDM0DU62Y9RXOBQ9Ga06ibJZ689aCZsT8sVZuFCSmHTF7i0nUAjuuB6kR8kaCQXawwXAwXUwOuDpeVxhxhFJtMcRF8lpA250LzKxqyOJtEi/16/HKwZGwiS3qbMa+B56wHgOLT6hXs7/AnqTFKvZlM0/qQDq1/uI2YBDQ3wwLqv63N6HlBAsNBWgP48K2ns8zVIDcIGtc2YGNIBdOAGKAbCiMeM/2l5NvKEBfR5tWvQzfuzWlphr1+Mn1svegWvak+DX5lOEY+xWYKw7iTAqLFv743Dw2uS/cGfX2qM3Vs9ypMG6ZCO7g+afpJbnyMkxd7mDK5nqvPI8O7HvWQRclFvRqhan0YudLBMtXgT16bEs9W9yab0uGE5AD8aNwhjKsWmSeozGzQC/OBDKvrWkPeKRCMHiaBCa6LOUESjDqir+omkMkuliTw6YoLR/DIpoNpNY5VptkD4qpWPpaG3iv/EH95Jf3g/C5yKUsoqAvghfme7MtMc/qXSq8o800TAcCLLru7DLTeFEM1uS4iwZ81+PVZgHAf6OhpeUAx3WmDq8eXAWoI3o7uaGfyg9zHq5Gm11YNBi0wJ54jGOJOCVyPCnFcHAAC6tjMVkZak8a/iH7JgEjQACTAFHmxJwej2L531wCoGZpZ5le8zlht5peKYh+SPx3z14WJHKQd1Txs4J9jROS3fzaX+7CiikCMB/Bq4vXjZsESD0vy0cJsAX0SGlRByJxBpVI7UNi6/nTYkcV/5GF0lY0Hhah8dPEjq/4izInsUjoIuwugAoEH9WKEh1b7lKWnwZ4pgBTcLfViEsvwVkpi0c4lD8BE43zBFCuB0VxiEoB44UXWTOD5z67dhIq2/7DWxztx0eOcZFuXLt4HUifzyB1R5poVlz/kY4KL0D8VF8A052TZcJN/XNTIxSrv5ywV8MstHyrYYtglybDfcKI2hkzAG30vIOOrw1Kn2p0kAlNx6z3WXQiukgc4rmujAqyvarRgjEHfyQBRf53gI7WIOL7eHv762QgnCY8T4FaJuSK3J5mhK33OKDKIcmBbigcK1uh0VIHWN2t9H3ShHBhNMllUiw8wIBisS/e+MdcRvDG2VPLW9DFRZ0Zqp5EwLOFHAZ9NXIMMFFRha8GMs6I2EJ9RJdMJe43xZ57VYDKVTPUezRbsEc6v9xWbf0Zdmk/x1HiFDP8GNC0gYDYS6pM+wkJE1pQr26jzVwsb0WE3aAfYs2XOg5d0/91fWAln2hfK9FNgKFceHiXsROrGqKLoZETVbbtC2IqeW8uVBFuo6r93tCY36fpTFn8VreDwzERhL0IjdpVJK5qliu6fHBEWI3tLqZ2GUo0frbhc2I2koQ98HvX+Ao+zR5a/NS/NstzQ0M1ngLtDKSh+JedyEYDImPzwodK4UiyypWpSW/q/OwclB0Ctk3VD4fkYRS1Q1craYy/f2DNRBCVS+i1+9N1jpVHX+3NLSZSqFNR/+8H2mwakBEZtUs+5T+w7Uw0asYAV6VUbry0+siN3bIewCFgkX9F78vKHdu395FRJdX1DHJB/yoNYtLr0wucHdj543eieKU7g1HYaOn/9U+99cqaksj4GHqXeH7jGG2rLi48ffmVb/oJRPVJCIrARatGu4x+Hjpsx94bb1uTm5q/Lu2PFdXOnDu+TldEiwFpFKLld5+xBE65dsnpN/oa77r5zXd6aVUuuGT2gZ2ZKWPxIDc3lqCN+3g4nIMn/0OI4zg/wUfgHten8SDkT/8AOkuM4P8CnHucHZU90rB5Xfoy9tKPJ+bG1ced7CwM7fvBqJ4D8PBMCVlA4IGwOAAAwQgCdASrwAG0APjEWiUOiISETWGYEIAMEsYbdjEAZAY4AWYBo6Tupfk72H/R/3D9fcgsbPtw/ofd38IvWT+iPYI/Xfpr+Zn9qv2597P8QPeH/fvUA/oH+A61X9r/Yf/YD02v3A+GX+0f9H9wvaVwenS3xB873zaYVza5vEFlwX3n9C6aD4Q1vSgB4q+kL6v9hf9dOtJ6KP7Om/n4BpekDGLXdaQ2OpvozdvxS1Ud7Hq25EN8ud/t4RZfAidmNUzEiVGmP2vRWUYoGdjYt6WFssR1NLvxYxcC4SB09TlSWHGc2+I8/stzLBX12H+O+MTpn7rhdtBJtGWOm09IRruRjS0fCx1JITaiVvfKT9GsVuXR2shcuT1DFpNvRmeklWrWQkgof9pMJmcwJfIWcgRaAGLVgv9zt50zkvO7bKnhOJayL071ry1g7mJFho2emIxjrme/1IFx9GwBl0/oZ0p81WNEgrfEbVoU7QRT1k7a3zxQkz9vAGnEWY/9yzbyD5XHS+pucPFnH0b5VbEvmTIFJfucaV5TRoVEJCkSLwq19VdanFhmsFUoa/3gG5gsBQ2Zu2OBI0lhi2nr0x6nU/Yn/5sOr8PKQzmGMkiaGuZyQ0HVaTmT4yaoDuvXAl5J8L4/7NN79I1IGEY9p/N4dud8zten1KsphkTdOMRvnrTMylUzp0MqOqLWmQh4VnyZFnb2HCErhLKvmgdqAAP7q0f33/+/13/9pd+s8rQ+VSSn1MZ+xittFEhtBp5MfID0XfVyy8+//P3I8y+Ka/1EHzuj6uxOd7Y9Aw+nHnzxNJ6UFu5lep6TpAZv/s9qnyssCA5babAFQMQB5rVNgkFMvSo7AklFt1aEhGxPL4IO9tf5vyrV1go+57daxzum5YaquywL5qGcIOGlh7GztVfAgnU/6PdPwyPbpQd2onQgp22T1LPqyb0QMTwnFRW96kbK4E+v2xqlNO9eE1ACK/0jc92LcYnVqLQSHaeNtHRa8gUY9HdgVm4c8+aafL0z1ufxl7ojNupWlKh6v+/iLl4c+I4uiJkpRTrNizmH9CHFjI7gqmUHKCA7fiXmbC1hC7CdW7Xkabtp+/W0i47KIMPmS1lppjJdaMYhszBpZ53bx9x9LmCm+6/OspyDpl3Lm4Ft0ytxnzGSAiBgOcEd1axQZdT+2jLXMewuF8u/O+m6FY4F9Djmv9CaIa80XazF1nxCWN3Uxe8bBho4e5ee9zhLJhmXZf8VU35jv52LzcKsIs0BS+zO/Bjz6ABo5u88m4qBLusdXrC4GeBrG0VPRGnaYdMRJXP1TV8G81CNYEa1daeh9ly9/j/0uX/Bjii4uR6pxgPnI4ep4+6dTaw+hKtar/wJoUo2pvwCizIRu0pt7SL0Lfy8IQRhJOdxTuzhge3Pvd7gr4mVUboVrMdp+qaaBja0XsdFpYV8M5mMhObPP6k9o2j1s8HU6hxvfk5hEBVGim3ONm6AKeTbk7QIt9ExHzTkCY8VW5s5KbfzEnDqG0zoD2B05sdwgdQj5L6iwPHXNDhgBxpDQLfcPQbgHyBd8FtJyWG6Bo7vvxEsFnBnE0u1rlqyzAfWcPH4cbcxc3Oy9k1/xYBNqwXQ6qW7XMFIe7V+n7KPxH8WqGoZ1uc3h8nVimiiVoBWmttl04df8qVH23hk8kc7mqvORcjuXl0dM3858NdSdomARhN/84LVniXpulZgwCca+dV3TW3/bXv0TYirE78y7vOeyy7SymNbPS4UZNxyjk83rb2iDyiEQREvtmTQQzlyT9rDeyJMEHMUMJmfFbpwvugwo/vN+EqtNe9S0ACpeyab91QY+eCk7Lo5Pd5Qq31HE7QXbqcrzEUzNxZt+soxvTFCyGYRvWCamfcfKiL4Qykxf3meeCAJSvklyalxdnLklFkl3U6jq+QEJQ+MGtFCoQxQ65c+Tk14rjxDn42nM0eucJhgnJs4vRRM4P7PPXb/mgf1AR+ehNXDTR8zcEDzfzarXBTz/5TSETv3QK3WhuyltTdxnnOMi6TRuMsLA6+dj3bgVGSkGx9p9odKZX7iAFuQ8n1rShE0O9zWkqmDL/ZSeWE8sHotjcob4KRpWJE1iJjqhs77kXmWOrLk09YB6lMIzq1BlEmYLZFFZff2iVYbz/JEp5JBZ4qQIPXQ32PT7LUebSTxqD5tj998P/k+CMM84Oa6PixG9RYbS0Y1DjLtTmQOx7CsxVIZrkzmOyPYHKf9AywNQsHiBPZDGTQWetGxvji9lv8AeRcs8/58RzUxPOrO1ZXDLzfrK0byhxsIQMVirPD/wGclavDif8L6UM+eIJBKa0GUbBTz/F3m8VXJz1XP75RSEL/GL5EXB4UXy2RfPfzdM7PF/t/01vJX4G0d7Q38NDrZ6aMn5Y2IP2JrS5rdHPSjp2eh8yda8Xf9TicKJysio1Ye6dpKhemctTz0paEBpKsUXGO95kr/M26ru1YF9V8Hq05Yz+5LxIveerXe/bphyVbkrAo7oimR7u6VunERjI9Vz85Gq2qrUrG4k8I2Ng24atNLqYkCk8oRn2lWCabwCtf/CCLxhD2tOniIEEBFx9oD9DgcPyXydCbI52C+IlsULrsDMajz8aRNUJRlmVluLMuVcy8SmGKRRsbvzrprL/W4m73wvMWveDCirM284cV9gaFG0v1+Xy7i0pZl5w5BX+Ff6CwJNKhmujz178u/y7jejl6uNc3U0wKWHkTT8+zDqZpZdwOD7v36g23YwXMgUcvBQYJJXtNRQkxvvptt7uQdwnzH2cuXs4KzqJuYx7xaWOYRq8MbEtmTW1qJ++YCPp2x0YIADTfYdfOIWFNBXYgF7Yv7Ktc2/DXc+ll4LqlBqqLijMrLZ7Cp7tx6OKra/UUJsJbBtAjWcs4F//wONvsUDQN/n/+AVjJJnledf+PU8nw1136sH45KAVML6rWoVjXSVdwZFRg6HkWm88bFRLRubox00vfgz26ylrso9LXkqyYCGe7kQrzNMa6RaKP/9AdEnTlEurs5NMgNWebs4SZad/7tat2Q8kX91DTNTuK9/e4TPiOUK6sbZUOqbdRhJZmZtoz/mSp3L2bYGJC7d+xVnbpyLTnn428iM/dRNGw7pFfCXJuxoqtizgivjJC1gMz8Xtg9Z4vKu0+SUlF4ZTF4yg5ZOvWlY4MXBFUyjUoSsYAxeozyE578VEqhb9bTdQfXr6zXzw2kJc43n0pNSIx+0z8lTMuqowm8v757syrc4h/aE6+d1x9vAwrhJEmOd22a6x/j+QoPLUE8TcaseMk454qGooai0qRULvKh0YgWvt90uj/dhIuTq0Vk1RWiIiNyPTMSdeFgf7MTvfv4sbpeHn6snS+PmU2DFDPstr7OZYhStuWX2ynnE6dZeUqjhRRZiilASsYd7q52BnWHwdIotpY53SHFQOXkUc/TAL/i48+SPqRi1vFtqNU5R4bv+AowhOvtNY/du4P5s7AyL++b+B/mMx503+CTTjQMeEQTFRCOdjO+6O4Nz+pJuFxf+M/6RUC0Mt65BKgFLOJrsNFLZKoRnV8+pzZbD7eeR1KtqImtAKkEIvlavKIoJeDyf8s3rdHNomY8MCllJyA7F5gWa+AahXpZ0JVfUG/BwI86di87IzK3xGCZQEfeuhb4YZWytj9R8jygY4R2oNQNFYVXLbVJ5UKRTmeEvNyeekOmY2+w644B8BsDZsWizDdFLtCyTL5Sivv91hvPNlRWV4vgjmW1bb80TgGIPewuSYJVm5wagreBWztblCN44gf/W31U81VnSzB7jZlw2Gd5c6ESEQUdTLdSVC9hKpuit0AbJEemu6yE/IPdHy+FxZUG1fYUX2PsMhVydateJl+5hjsbKz0EWZBLF9bFwXJ2uCGQfO9R0pvkskACCA9orQH4druNdqaVmzkjxzU2jbv34enMQ2QXDGm6cBFtGCnJ82jTC2tMsFekc5cJz79GmyGCmYcs+fTjDd9MZlyJrmlW0Qjtac4RG5dE+D1Q3VxEt6DsCBvwYIoozXJ/hNtERvmHOl7HsAyXaESzYnxMnDg8/PtOTuenUpUxA7MDyHXBqXivP+YcIvtNLNDI80JB3qPbLwxIL2ox8Sr+4uLBOxU6xGuzxwhTpWjkyDFoABfyr8vim2ouqamV+UNnVSz1vv9256DVj249XesOL1gbumTqwiZljMrsy3D4ORjx5OnFE9hlG/3/OoXAEBUmFQWizB8BnBzdT//6c87aRCTxLQozsyhYKGBpmjEsnxRXiSVR8e85LcAdwiuane4x3UvQ8iZTMqYOibTqg+D7xHVu2fnLuGZq3etVT/j7X5g0gkE6lprsia+ZUaeaaGdK/48Fd4Wm8db+N1Srt2IYayk0rGSqNaOospvi36Dz+agKyANa5NMoJrK4ikADv0XtqART7kEer5WMcaQS/P8MaeoJ1M3A7wr/M6YhywbUlP8tlUlifH28KSoTA0qZBJszVLkyZ1b2G4l4eOdBR6M5tgmKMxrU5szU4JvLTwlCiPaMx7dPttUoA9K8gG7xZ7exkp6P5xhsGBmdrLiMHAI73KGEOEhovAoEuPEx1cP+ZZuhi2dlbd0G+Q/LJM9vK6nz92I2LfZngUtUItRDYee0sqUg4iBWxPeUDnfkFr26BulTF5gbD8zSbgoKg5AmcDBi8fWk3EvjgDucylLBl4F0B3HSabZfh3eZPih8v7boxP0Wj0IHgEykRGVCbP4XLz3VNC0GHRACZaUqnq1S6kZIlJt3OOAhe3z8n9AXJa684gyANmoySpckNBLNRmvR2zoArTN85WEvVHlzhsQ7GghOGXM4lnMjR+WYAZz789v+kUghSvmAUragW5vP/rLCfz3rUynhQjw/d/eqP2LNtWMc/4bXjw/Om/DJ/ct5u5iBNitt/r5d27a/MgfxiaAAAAAAAAAAAAAAAAA==";
 const glassesIcon = (_brand) => ICONS.display; // glasses without a picture: a plain screen
 // The glasses' own product picture for the plug-in pop-up, from the maker's shop, loaded when shown (not shipped in the
-// plugin); glasses without one, or offline, show XR_FRONT. card: shown on a light card (white or dark picture background).
+// plugin); glasses without one, or offline, show XR_FRONT. white: the picture has a white background, cut out below.
 const SHOP = "https://cdn.shopify.com/s/files/1/";
 const XR_PHOTOS = [
     [/viture.*luma/i, "0762/8760/7065/files/nav-glasses-luma-series.png"],
     [/viture.*pro/i, "0762/8760/7065/files/nav-glasses-viture-pro-2.png"],
     [/viture/i, "0762/8760/7065/files/nav-glasses-the-beast.png"],
     [/rog/i, "0832/4671/1067/files/XREAL_ROG___2400x2400_09.jpg", true],
-    [/xreal|nreal/i, "0832/4671/1067/files/R-6V-N-Gina-04.png", true],
-    [/rayneo|tcl|nxtwear/i, "0688/8642/9983/files/PP1-air_4_pro_e44fd4cd-68af-4ebc-8314-2a86c80eec11.png", true, true], // crop: the shop logo above
+    [/xreal|nreal/i, "0832/4671/1067/files/R-6V-N-Gina-04.png"],
+    [/rayneo|tcl|nxtwear/i, "0688/8642/9983/files/PP1-air_4_pro_e44fd4cd-68af-4ebc-8314-2a86c80eec11.png", false, true], // crop: the shop logo above
     [/rokid/i, "0628/5636/4211/files/001_3d8988bd-fbc0-4eb7-be8b-e63bf17b612f.jpg", true],
 ];
 const glassesPhoto = (brand, model) => {
     const m = XR_PHOTOS.find(([re]) => re.test(`${brand ?? ""} ${model ?? ""}`));
-    return m ? { url: `${SHOP}${m[1]}?width=600`, card: !!m[2], crop: !!m[3] } : { url: XR_FRONT, card: false, crop: false };
+    return m ? { url: `${SHOP}${m[1]}?width=600`, white: !!m[2], crop: !!m[3] } : { url: XR_FRONT, white: false, crop: false };
 };
-const Pic = ({ src, card, crop, width }) => {
-    const [bad, setBad] = SP_REACT.useState(false);
-    return SP_JSX.jsx("img", { src: bad ? XR_FRONT : src, onError: () => setBad(true), style: { width: `${width}px`, height: "auto", display: "block",
-            ...(card && !bad ? { background: "#f2f3f5", borderRadius: "12px", padding: "10px", boxSizing: "border-box", aspectRatio: "16 / 10", objectFit: "contain" } : {}),
-            ...(crop && !bad ? { objectFit: "cover", objectPosition: "50% 85%" } : {}) } });
+// White around the glasses -> transparent: flood fill from the picture's edges over near-white, so a white-background
+// picture sits on the dark pop-up like the others (white inside the glasses, e.g. reflections, is not reached).
+const cutWhite = (url) => new Promise((ok, fail) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onerror = fail;
+    img.onload = () => {
+        const c = document.createElement("canvas"), W = c.width = img.naturalWidth, H = c.height = img.naturalHeight;
+        const g = c.getContext("2d");
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, W, H), p = d.data, seen = new Uint8Array(W * H), st = [];
+        const lo = (k) => Math.min(p[k * 4], p[k * 4 + 1], p[k * 4 + 2]);
+        const bg = (k) => lo(k) > 205 && Math.max(p[k * 4], p[k * 4 + 1], p[k * 4 + 2]) - lo(k) < 20;
+        // edge pixels are part white: fade them and take the white back out of their colour, so no light halo is left
+        const clear = (k) => {
+            const a = Math.max(0, Math.min(255, (247 - lo(k)) * 8));
+            p[k * 4 + 3] = a;
+            if (a > 0 && a < 255)
+                for (let i = 0; i < 3; i++)
+                    p[k * 4 + i] = Math.max(0, Math.round((p[k * 4 + i] - 255 * (1 - a / 255)) / (a / 255)));
+        };
+        for (let x = 0; x < W; x++)
+            st.push(x, (H - 1) * W + x);
+        for (let y = 0; y < H; y++)
+            st.push(y * W, y * W + W - 1);
+        while (st.length) {
+            const k = st.pop();
+            if (seen[k] || !bg(k))
+                continue;
+            seen[k] = 1;
+            clear(k);
+            const x = k % W;
+            if (x > 0)
+                st.push(k - 1);
+            if (x < W - 1)
+                st.push(k + 1);
+            if (k >= W)
+                st.push(k - W);
+            if (k < W * (H - 1))
+                st.push(k + W);
+        }
+        // background showing through gaps in the frame (between the arms, above the lenses): enclosed pure-white areas
+        // too, when bigger than a highlight
+        const pure = (k) => lo(k) > 240 && Math.max(p[k * 4], p[k * 4 + 1], p[k * 4 + 2]) - lo(k) < 12;
+        for (let k0 = 0; k0 < W * H; k0++) {
+            if (seen[k0] || !pure(k0))
+                continue;
+            const area = [], q = [k0];
+            seen[k0] = 2;
+            while (q.length) {
+                const k = q.pop();
+                area.push(k);
+                const x = k % W;
+                for (const n of [x > 0 ? k - 1 : -1, x < W - 1 ? k + 1 : -1, k - W, k + W])
+                    if (n >= 0 && n < W * H && !seen[n] && bg(n)) {
+                        seen[n] = 2;
+                        q.push(n);
+                    }
+            }
+            if (area.length > W * H / 2000)
+                for (const k of area)
+                    clear(k);
+        }
+        // the outermost 2 px of the glasses are still a light grey blend with the white: fade those by how light they are
+        for (let pass = 0; pass < 2; pass++) {
+            const rim = [];
+            for (let k = W; k < W * (H - 1); k++) {
+                const x = k % W;
+                if (x === 0 || x === W - 1 || p[k * 4 + 3] < 255 || lo(k) < 120)
+                    continue;
+                if (p[(k - 1) * 4 + 3] < 128 || p[(k + 1) * 4 + 3] < 128 || p[(k - W) * 4 + 3] < 128 || p[(k + W) * 4 + 3] < 128)
+                    rim.push(k);
+            }
+            for (const k of rim) {
+                const a = Math.max(0, Math.min(255, Math.round((250 - lo(k)) * 2)));
+                p[k * 4 + 3] = a;
+                if (a > 0 && a < 255)
+                    for (let i = 0; i < 3; i++)
+                        p[k * 4 + i] = Math.max(0, Math.round((p[k * 4 + i] - 255 * (1 - a / 255)) / (a / 255)));
+            }
+        }
+        g.putImageData(d, 0, 0);
+        ok(c.toDataURL("image/png"));
+    };
+    img.src = url;
+});
+const Pic = ({ url, white, crop, width }) => {
+    const [src, setSrc] = SP_REACT.useState(white ? "" : url);
+    SP_REACT.useEffect(() => { if (white)
+        cutWhite(url).then(setSrc, () => setSrc(XR_FRONT)); }, [url, white]);
+    const own = src !== XR_FRONT;
+    return SP_JSX.jsx("img", { src: src || undefined, onError: () => setSrc(XR_FRONT), style: { width: `${width}px`, height: "auto", display: "block", minHeight: src ? undefined : "180px",
+            ...(own && crop ? { aspectRatio: "4 / 3", objectFit: "cover", objectPosition: "50% 85%" } : {}),
+            ...(own && url !== XR_FRONT ? { filter: "drop-shadow(0 0 14px rgba(150,180,255,0.22))" } : {}) } }); // a soft glow keeps dark glasses visible on the dark pop-up
 };
 // "3840x1200 @ 60 Hz" -> "Ultrawide 32:9 · 3840x1200 @ 60 Hz" when the screen is that wide (glasses switched to ultrawide)
 const modeText = (detail) => {
@@ -263,7 +352,7 @@ const screenTargets = (s, tvWakes) => [
 ];
 const screenState = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
-const PLUGIN_VERSION = "0.7.104";
+const PLUGIN_VERSION = "0.7.105";
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
 const Progress = ({ pct, title, step, started, expect }) => (SP_JSX.jsxs("div", { style: { width: "100%", boxSizing: "border-box", padding: "4px 0" }, children: [SP_JSX.jsxs("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }, children: [SP_JSX.jsx("span", { children: title }), SP_JSX.jsxs("span", { children: [Math.round(pct), "%"] })] }), SP_JSX.jsx("div", { style: { width: "100%", height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.15)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { width: `${Math.max(0, Math.min(100, pct))}%`, height: "100%", background: "#1a9fff", transition: "width .4s" } }) }), SP_JSX.jsx("div", { style: { fontSize: "12px", marginTop: "4px", whiteSpace: "normal" }, children: step }), SP_JSX.jsxs("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: [started ? `${mmss(Date.now() / 1000 - started)} elapsed` : "", expect ? ` · usually ${expect}` : ""] }), SP_JSX.jsx("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: "You can close this menu: it continues, and a notification appears when it is done." })] }));
