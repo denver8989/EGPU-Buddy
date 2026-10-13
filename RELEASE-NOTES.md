@@ -1,3 +1,8 @@
+0.7.101 — one confirmation for updates.
+
+**Fixed**
+- Update asks once (Decky's own "Update" prompt) instead of twice.
+
 0.7.100 — updates without reloading Steam.
 
 **Fixed**
