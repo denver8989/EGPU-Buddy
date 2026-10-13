@@ -1,3 +1,9 @@
+0.7.97 — XR glasses passthrough polish.
+
+**New**
+- Setup > Games: "Games use the screen's full resolution" (on, can be switched off). Steam starts games at 1920x1080 on external screens; on a bigger one (XR glasses in ultrawide 3840x1200, 1440p, 4K) the game's Steam resolution is set to the screen's own, and put back when you switch to another screen. Resolutions you set yourself are left alone.
+- XR glasses get their own icon and an XR tag; ultrawide mode shows as "Ultrawide 32:9". Other USB-C screens show as an external display.
+
 0.7.96 — XR glasses on the handheld's USB-C.
 
 **New**

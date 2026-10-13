@@ -5,7 +5,7 @@ import { FaPlug } from "react-icons/fa";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
-  attach_pending: boolean; on_egpu: boolean; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean }[]; output: string;
+  attach_pending: boolean; on_egpu: boolean; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
@@ -44,6 +44,10 @@ const setGameScreen = callable<[string], Result>("set_game_screen");
 const getTvControl = callable<[], { enabled: boolean; paired: string[] }>("get_tv_control");
 const setTvControl = callable<[boolean], Result>("set_tv_control");
 const pairTv = callable<[], Result>("pair_tv");
+const getGameRes = callable<[], { enabled: boolean }>("get_game_res");
+const setGameRes = callable<[boolean], Result>("set_game_res");
+const gameResFor = callable<[number, string], { set?: string }>("game_res_for");
+const gameResSync = callable<[], Record<string, string>>("game_res_sync");
 // a screen plugged into the eGPU while Game Mode runs on another one: offer to move (one screen at a time)
 const maybeOfferScreen = async () => {
   const o = await getScreenOffer();
@@ -57,13 +61,27 @@ const maybeOfferScreen = async () => {
       const r = await setGameScreen(o.connector!);
       toaster.toast({ title: "EGPU Buddy", body: r.message }); }} />);
 };
+// Original line-art icons (no third-party images), drawn after each brand family's lens shape.
+const lens = (l: string, r: string, brow = "") => `<svg viewBox="0 0 120 48" width="96" height="38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M4 14 L14 12"/><path d="M116 14 L106 12"/>${brow}<path d="${l}" fill="currentColor" fill-opacity=".18"/><path d="${r}" fill="currentColor" fill-opacity=".18"/><path d="M53 16 Q60 11 67 16"/></svg>`;
+const ICONS: Record<string, string> = {
+  viture: lens("M14 12 H53 V30 Q53 38 44 38 H23 Q14 38 14 29 Z", "M67 12 H106 V29 Q106 38 97 38 H76 Q67 38 67 30 Z", `<path d="M14 12 H106" stroke-width="3.2"/>`),
+  wayfarer: lens("M12 11 H54 L50 34 Q48 38 43 38 H22 Q16 38 15 33 Z", "M66 11 H108 L105 33 Q104 38 98 38 H77 Q72 38 70 34 Z"),
+  round: lens("M14 22 Q14 11 33 11 Q53 11 53 22 Q53 38 33 38 Q14 38 14 22 Z", "M67 22 Q67 11 87 11 Q106 11 106 22 Q106 38 87 38 Q67 38 67 22 Z"),
+  display: `<svg viewBox="0 0 120 48" width="96" height="38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="28" y="4" width="64" height="34" rx="3"/><path d="M52 44 H68 M60 38 V44"/></svg>`,
+  handheld: `<svg viewBox="0 0 120 48" width="96" height="38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="16" y="6" width="88" height="36" rx="9"/><rect x="34" y="11" width="52" height="26" rx="2"/><circle cx="25" cy="18" r="3"/><circle cx="95" cy="30" r="3"/></svg>`,
+};
+const glassesIcon = (brand?: string) => brand === "viture" ? ICONS.viture : /xreal|nreal/.test(brand ?? "") ? ICONS.wayfarer : ICONS.round;
+// "3840x1200 @ 60 Hz" -> "Ultrawide 32:9 · 3840x1200 @ 60 Hz" when the screen is that wide (glasses switched to ultrawide)
+const modeText = (detail: string) => { const m = detail.match(/(\d+)x(\d+) @ \d+ Hz/); if (!m) return "";
+  return (Number(m[1]) / Number(m[2]) >= 3 ? "Ultrawide 32:9 · " : "") + m[0]; };
 // every screen Game Mode can go to while the eGPU is attached: the handheld itself, screens on its USB-C (XR glasses),
 // and the eGPU's monitors/TVs (an off TV only when TV control can switch it on)
 const screenTargets = (s: Status, tvWakes: boolean) => [
-  { name: "eDP-1", label: "the handheld screen", detail: "Games still run on the eGPU" },
-  ...(s.handheld_displays ?? []).map((d) => ({ name: d.name, label: d.model || d.name,
-    detail: `${d.xr ? "XR glasses" : "Screen"} on the handheld's USB-C · ${d.detail.split(" · ").find((x) => x.includes("Hz")) ?? ""} · games still run on the eGPU` })),
-  ...s.displays.filter((d) => d.state !== "off" || tvWakes).map((d) => ({ name: d.name, label: d.model || d.name, detail: d.state === "off" ? "Off: choosing it turns it on" : d.detail })),
+  { name: "eDP-1", label: "the handheld screen", detail: "Games still run on the eGPU", icon: ICONS.handheld, xr: false },
+  ...(s.handheld_displays ?? []).map((d) => ({ name: d.name, label: d.model || d.name, xr: !!d.xr, icon: d.xr ? glassesIcon(d.brand) : ICONS.display,
+    detail: `${d.xr ? "XR glasses passthrough" : "External display on the handheld's USB-C"} · ${modeText(d.detail)} · games run on the eGPU` })),
+  ...s.displays.filter((d) => d.state !== "off" || tvWakes).map((d) => ({ name: d.name, label: d.model || d.name, xr: false, icon: ICONS.display,
+    detail: d.state === "off" ? "Off: choosing it turns it on" : d.detail })),
 ];
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
@@ -142,6 +160,7 @@ function Content() {
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
+  const [gr, setGr] = useState<{ enabled: boolean } | null>(null);
   const [tr, setTr] = useState<Trial | null>(null);
   const staleChecked = useRef(false);
   const [confirmSetup, setConfirmSetup] = useState<"" | "install" | "amd">("");
@@ -152,7 +171,7 @@ function Content() {
   const [pl, setPl] = useState<number | null>(null);
   const [off, setOff] = useState(0);
 
-  const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setTr(await getTrial());
+  const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setGr(await getGameRes()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -265,7 +284,10 @@ function Content() {
           {s?.game_mode && (s.on_egpu || s.egpu_handheld) && screenTargets(s, tvWakes).filter((t) => t.name !== s.output).map((t) => (
             <PanelSectionRow key={t.name}><ButtonItem layout="below" disabled={busy || gameUp}
               onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${t.label}`} strDescription={`${t.detail}\n\nGame Mode restarts on that screen (the current one goes dark for a few seconds). Switch back the same way.`}
-                strOKButtonText="Switch" onOK={() => run(() => setGameScreen(t.name))} />)}>Show Game Mode on {t.label}<div style={{ fontSize: "11px", opacity: 0.7 }}>{t.detail}</div></ButtonItem></PanelSectionRow>
+                strOKButtonText="Switch" onOK={() => run(() => setGameScreen(t.name))} />)}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}><span style={{ flex: "0 0 auto" }} dangerouslySetInnerHTML={{ __html: t.icon }} />
+                  <div style={{ textAlign: "left" }}>Show Game Mode on {t.label}{t.xr && <span style={{ fontSize: "10px", background: "#1a9fff", borderRadius: "2px", padding: "0 4px", marginLeft: "6px" }}>XR</span>}
+                    <div style={{ fontSize: "11px", opacity: 0.7 }}>{t.detail}</div></div></div></ButtonItem></PanelSectionRow>
           ))}
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || !s?.present || gameUp} onClick={() => showModal(<ConfirmModal strTitle="Safe Detach" strDescription="Game Mode moves to the handheld screen and the eGPU is removed from the bus: the screen goes dark for a few seconds and the monitor loses signal. Do not unplug yet. When the handheld screen is back, reopen this menu: it says when it is safe to unplug the cable." strOKButtonText="Detach" bDestructiveWarning onOK={() => run(safeDetach)} />)}>Safe Detach</ButtonItem>
@@ -449,6 +471,12 @@ function Content() {
             rgOptions={screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label }))}
             onChange={(o) => { if (o.data !== s.output) run(() => setGameScreen(o.data)); }} /></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)."}</div></PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed.</div></PanelSectionRow>
+        </PanelSection>
+      )}
+      {tab === "setup" && gr && (
+        <PanelSection title="Games">
+          <PanelSectionRow><ToggleField label="Games use the screen's full resolution" description="On by default. Steam starts games at 1920x1080 on external screens, so a bigger one (XR glasses in ultrawide, 1440p, 4K) shows black bars. When a game starts, its Steam game resolution is set to the screen's own. Games you set yourself are left alone; switching this off leaves Steam as it is." checked={gr.enabled} onChange={(v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
       {tab === "setup" && (
@@ -475,12 +503,22 @@ export default definePlugin(() => {
   // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
   const notices = setInterval(async () => { try { const t = await popNotice(); if (t) toaster.toast({ title: "EGPU Buddy", body: t, duration: 15000 }); } catch { /* backend not up yet */ }
     try { await maybeShowTrial(); } catch { /* backend not up yet */ }
-    try { await maybeOfferScreen(); } catch { /* backend not up yet */ } }, 5000);
+    try { await maybeOfferScreen(); } catch { /* backend not up yet */ }
+    try { const ch = await gameResSync(); for (const [id, res] of Object.entries(ch)) (window as any).SteamClient?.Apps?.SetAppResolutionOverride(Number(id), res); } catch { /* backend not up yet */ } }, 5000);
+  // a game starting: match its Steam game resolution to the screen Game Mode is on (Setup option, on by default)
+  const sc = (window as any).SteamClient, details = () => (window as any).appDetailsStore;
+  const launches = sc?.Apps?.RegisterForGameActionStart?.(async (_id: number, appid: string, action: string) => {
+    if (!/launch/i.test(String(action))) return;
+    try {
+      const id = Number(appid), r = await gameResFor(id, details()?.GetAppDetails(id)?.strResolutionOverride ?? "");
+      if (r.set) sc.Apps.SetAppResolutionOverride(id, r.set);
+    } catch { /* backend not up yet */ }
+  });
   return {
   name: "EGPU Buddy",
   title: <div className={staticClasses.Title}>EGPU Buddy</div>,
   content: <Content />,
   icon: <FaPlug />,
-  onDismount() { clearInterval(notices); },
+  onDismount() { clearInterval(notices); launches?.unregister?.(); },
 };
 });

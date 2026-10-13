@@ -332,6 +332,24 @@ XR_BRANDS = ("viture", "xreal", "nreal", "rayneo", "rokid", "legion glasses", "n
              "lenovo glasses", "tcl glasses")
 
 
+_game_res_out = None   # the Game Mode screen game_res_sync saw last
+
+
+def _game_screen_res():
+    """'3840x1200' when the screen Game Mode is on (not the built-in one) is bigger than Steam's 1920x1080, else ''."""
+    out = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]
+    if not out or out == "*" or out.startswith("eDP"):
+        return ""
+    handheld = _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") == "1"
+    for c in glob.glob(f"/sys/class/drm/card[0-9]*-{out}"):
+        if _read(c + "/status") == "connected" and bool(glob.glob(c.split("-")[0] + "-eDP-*")) == handheld:   # the handheld's GPU or the eGPU
+            try: e = open(c + "/edid", "rb").read()
+            except OSError: e = b""
+            n = _native_mode(e) if len(e) >= 128 else None
+            return f"{n[0]}x{n[1]}" if n and (n[0] > 1920 or n[1] > 1080) else ""
+    return ""
+
+
 def _handheld_screens():
     """Connected screens driven by the handheld's own GPU: the built-in panel and USB-C displays (e.g. XR glasses)."""
     cards = {os.path.basename(c).split("-")[0] for c in glob.glob("/sys/class/drm/card[0-9]*-eDP-*")}
@@ -342,9 +360,9 @@ def _handheld_screens():
             if conn.startswith("Writeback") or _read(c + "/status") != "connected":
                 continue
             model, detail = _screen_info(os.path.basename(c))
-            xr = any(b in (model or "").lower() for b in XR_BRANDS)
+            brand = next((b for b in XR_BRANDS if b in (model or "").lower()), ""); xr = bool(brand)
             out.append({"name": conn, "builtin": conn.startswith("eDP"), "model": "Built-in screen" if conn.startswith("eDP") else (model or conn),
-                        "detail": detail, "xr": xr})
+                        "detail": detail, "xr": xr, "brand": brand})
     return out
 
 
@@ -998,6 +1016,50 @@ class Plugin:
 
     # Extras > TV control tricks (off by default): a TV paired over the network is woken and switched to our HDMI
     # when Game Mode moves to it, and left out of the desktop while it shows something else (egpu-screen does both)
+    # Setup > "Games use the screen's full resolution" (on by default): Steam starts games on a 1920x1080 screen on external
+    # displays, so a bigger screen (XR glasses in ultrawide 3840x1200, 1440p, 4K) showed the game with black bars. When a
+    # game starts, its Steam game resolution is set to the screen's native size; the plugin remembers which games it changed
+    # and puts them back to Default on a screen that does not need it. A resolution the user picked is never touched.
+    async def game_res_sync(self):
+        """Game Mode moved to another screen: games this option changed follow at once (the new screen's size, or back to
+        Steam's Default), instead of keeping the old screen's resolution until their next start."""
+        global _game_res_out
+        out = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]
+        if out == _game_res_out: return {}
+        first = _game_res_out is None; _game_res_out = out
+        d = _settings(); apps = d.get("game_res_apps", {})
+        if first or not apps or not d.get("game_res_native", True): return {}
+        target = _game_screen_res() or "Default"
+        changes = {k: target for k, v in apps.items() if v != target}
+        for k in changes:
+            if target == "Default": apps.pop(k)
+            else: apps[k] = target
+        if changes: _save_settings(d)
+        return changes
+
+    async def get_game_res(self):
+        return {"enabled": _settings().get("game_res_native", True)}
+
+    async def set_game_res(self, enabled: bool):
+        d = _settings(); d["game_res_native"] = bool(enabled); _save_settings(d)
+        return {"ok": True, "message": "Games use the screen's full resolution." if enabled else "Off: Steam's game resolution is left as it is."}
+
+    async def game_res_for(self, appid: int, current: str = ""):
+        d = _settings()
+        if not d.get("game_res_native", True):
+            return {}
+        apps = d.setdefault("game_res_apps", {}); key = str(int(appid))
+        if current not in ("", "Default", apps.get(key)):
+            if apps.pop(key, None): _save_settings(d)   # the user chose a resolution for this game: theirs from now on
+            return {}
+        res = _game_screen_res()
+        if res:
+            if apps.get(key) == res and current == res: return {}
+            apps[key] = res; _save_settings(d); return {"set": res}
+        if key in apps:
+            apps.pop(key); _save_settings(d); return {"set": "Default"}
+        return {}
+
     async def get_tv_control(self):
         try:
             d = json.load(open(SCREEN_NET))
