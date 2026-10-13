@@ -44,7 +44,32 @@ const setGameScreen = callable<[string], Result>("set_game_screen");
 const getTvControl = callable<[], { enabled: boolean; paired: string[] }>("get_tv_control");
 const setTvControl = callable<[boolean], Result>("set_tv_control");
 const pairTv = callable<[], Result>("pair_tv");
-const getGameRes = callable<[], { enabled: boolean }>("get_game_res");
+const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
+// Steam's own screen mode for the screen Game Mode is on: its highest resolution, then the highest refresh rate there.
+// Without a chosen mode Steam renders big external screens at 1920x1080 (XR glasses in ultrawide stayed 16:9). Steam's
+// DisplayManager speaks protobuf; only the few fields needed are read and written (layout from Steam's own client code).
+const pbFields = (buf: Uint8Array) => { let i = 0; const out: [number, any][] = [];
+  const vi = () => { let r = 0, s = 0, b; do { b = buf[i++]; r += (b & 0x7f) * 2 ** s; s += 7; } while (b & 0x80 && i < buf.length); return r; };
+  while (i < buf.length) { const t = vi(), f = Math.floor(t / 8), w = t & 7;
+    if (w === 0) out.push([f, vi()]); else if (w === 2) { const l = vi(); out.push([f, buf.subarray(i, i + l)]); i += l; }
+    else if (w === 5) i += 4; else if (w === 1) i += 8; else break; }
+  return out; };
+const pbGet = (fs: [number, any][], n: number) => fs.filter(([f]) => f === n).map(([, v]) => v);
+async function applyBestScreenModes() {
+  const dm = (window as any).SteamClient?.System?.DisplayManager; if (!dm?.GetState || !dm?.SetMode) return;
+  const cfg = await getGameRes(); if (!cfg.enabled || cfg.skip_mode) return;
+  const r = await dm.GetState(); if (!r?.reply) return;
+  for (const raw of pbGet(pbFields(new Uint8Array(r.reply)), 1)) {
+    const f = pbFields(raw), modes = pbGet(f, 11).map((m: Uint8Array) => { const g = pbFields(m);
+      return { id: pbGet(g, 1)[0] ?? 0, area: (pbGet(g, 2)[0] ?? 0) * (pbGet(g, 3)[0] ?? 0), hz: pbGet(g, 4)[0] ?? 0 }; });
+    if (pbGet(f, 6)[0] || !pbGet(f, 5)[0] || !modes.length) continue;   // the built-in screen is Steam's own business
+    const best = modes.sort((a, b) => b.area - a.area || b.hz - a.hz)[0];
+    if (pbGet(f, 7)[0] && pbGet(f, 10)[0] === best.id) continue;          // already on it
+    const bytes: number[] = []; const wv = (v: number) => { while (v > 127) { bytes.push((v & 127) | 128); v = Math.floor(v / 128); } bytes.push(v); };
+    wv(8); wv(pbGet(f, 1)[0] ?? 0); wv(16); wv(best.id); wv(24); wv(pbGet(f, 19)[0] ?? 0);
+    await dm.SetMode(btoa(String.fromCharCode(...bytes)));
+  }
+}
 const setGameRes = callable<[boolean], Result>("set_game_res");
 const gameResFor = callable<[number, string], { set?: string }>("game_res_for");
 const gameResSync = callable<[], Record<string, string>>("game_res_sync");
@@ -483,7 +508,7 @@ function Content() {
       )}
       {tab === "setup" && gr && (
         <PanelSection title="Games">
-          <PanelSectionRow><ToggleField label="Games use the screen's full resolution" description="On by default. Steam starts games at 1920x1080 on external screens, so a bigger one (XR glasses in ultrawide, 1440p, 4K) shows black bars. When a game starts, its Steam game resolution is set to the screen's own. Games you set yourself are left alone; switching this off leaves Steam as it is." checked={gr.enabled} onChange={(v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; })} /></PanelSectionRow>
+          <PanelSectionRow><ToggleField label="Best resolution and refresh rate on every screen" description="On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are." checked={gr.enabled} onChange={(v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
       {tab === "setup" && (
@@ -514,6 +539,10 @@ export default definePlugin(() => {
     try { const ch = await gameResSync(); for (const [id, res] of Object.entries(ch)) (window as any).SteamClient?.Apps?.SetAppResolutionOverride(Number(id), res); } catch { /* backend not up yet */ } }, 5000);
   // a game starting: match its Steam game resolution to the screen Game Mode is on (Setup option, on by default)
   const sc = (window as any).SteamClient, details = () => (window as any).appDetailsStore;
+  // a screen or mode change (another screen, XR glasses switched to ultrawide): its best mode, after Steam settles
+  let modeTimer: any = null;
+  const modes = sc?.System?.DisplayManager?.RegisterForStateChanges?.(() => { clearTimeout(modeTimer); modeTimer = setTimeout(() => applyBestScreenModes().catch(() => {}), 2000); });
+  setTimeout(() => applyBestScreenModes().catch(() => {}), 3000);
   const launches = sc?.Apps?.RegisterForGameActionStart?.(async (_id: number, appid: string, action: string) => {
     if (!/launch/i.test(String(action))) return;
     try {
@@ -526,6 +555,6 @@ export default definePlugin(() => {
   title: <div className={staticClasses.Title}>EGPU Buddy</div>,
   content: <Content />,
   icon: <FaPlug />,
-  onDismount() { clearInterval(notices); launches?.unregister?.(); },
+  onDismount() { clearInterval(notices); launches?.unregister?.(); modes?.unregister?.(); clearTimeout(modeTimer); },
 };
 });

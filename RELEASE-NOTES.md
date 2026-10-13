@@ -1,3 +1,8 @@
+0.7.99 — best resolution and refresh rate on every screen.
+
+**New**
+- Setup > Games, "Best resolution and refresh rate on every screen" (on, can be switched off): Game Mode uses each external screen's highest resolution and refresh rate, instead of Steam's 1920x1080 for big screens. XR glasses switched to ultrawide go to 3840x1200 by themselves and back to 1920x1200 at 120 Hz when switched back; games start at the screen's size.
+
 0.7.98 — glasses pop-up.
 
 **New**

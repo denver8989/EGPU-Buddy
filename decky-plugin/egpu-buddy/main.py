@@ -1038,11 +1038,13 @@ class Plugin:
         return changes
 
     async def get_game_res(self):
-        return {"enabled": _settings().get("game_res_native", True)}
+        # skip: the eGPU ultrawide session draws Steam on its own nested canvas (corruption workaround): Steam's screen mode
+        # is left to it there
+        return {"enabled": _settings().get("game_res_native", True), "skip_mode": bool(_gamescope_env("NV_EGPU_GAMESCOPE_NESTED_WIDTH"))}
 
     async def set_game_res(self, enabled: bool):
         d = _settings(); d["game_res_native"] = bool(enabled); _save_settings(d)
-        return {"ok": True, "message": "Games use the screen's full resolution." if enabled else "Off: Steam's game resolution is left as it is."}
+        return {"ok": True, "message": "Every screen gets its best resolution and refresh rate." if enabled else "Off: Steam's screen and game resolution are left as they are."}
 
     async def game_res_for(self, appid: int, current: str = ""):
         d = _settings()
