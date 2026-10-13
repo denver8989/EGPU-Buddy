@@ -1,3 +1,8 @@
+0.7.91 — game-running notice.
+
+**Fixed**
+- While a game runs, a notice at the top explains that switching screens, attaching or detaching needs the game closed first (those buttons are greyed out until then).
+
 0.7.90 — clearer screen list, one-step uninstall.
 
 **Fixed**
