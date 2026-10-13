@@ -44,7 +44,12 @@ chmod +x "dist/$NAME.run"
 (cd dist && sha256sum "$NAME.run" "$NAME.tar.gz" "EGPU-Buddy-Decky-$VER.zip" > SHA256SUMS)
 ls -la dist | grep -E 'run|tar|SHA'
 if [ "${1:-}" = --publish ]; then
+  # the release tag must point at code that is on GitHub's master: 0.7.88-0.7.108 were published from a side branch
+  # while "git push origin master" pushed the stale master, so GitHub's code and tags stayed at 0.7.87
+  git fetch -q origin master
+  [ "$(git rev-parse --abbrev-ref HEAD)" = master ] || { echo "publish from master (now on $(git rev-parse --abbrev-ref HEAD))"; exit 1; }
+  [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ] || { echo "push master to GitHub first"; exit 1; }
   # a release page carries ITS OWN changes, not the whole history (RELEASE-NOTES.md stays cumulative in the repository)
   python3 release-notes-for.py "$VER" RELEASE-NOTES.md > "dist/NOTES-$VER.md"
-  gh release create "v$VER" "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" dist/SHA256SUMS get-egpu-buddy.sh --title "SteamOS EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
+  gh release create "v$VER" "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" dist/SHA256SUMS get-egpu-buddy.sh --target "$(git rev-parse HEAD)" --title "SteamOS EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
 fi
