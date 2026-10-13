@@ -90,8 +90,8 @@ const maybeOfferScreen = async () => {
   const o = await getScreenOffer();
   if (!o.connector) return;
   // XR glasses: their picture and what passthrough means; any other screen: the plain question as before
-  const big = (svg: string) => <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 14px" }}
-    dangerouslySetInnerHTML={{ __html: svg.replace('width="96" height="38"', 'width="300" height="120"') }} />;
+  const big = (svg: string) => <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 14px" }}>
+    <Pic svg={svg} photo={glassesPhoto(o.brand, o.name)} width={300} /></div>;
   const ask = o.game ? `Close the running game first, then use "Show Game Mode on ${o.name}" in EGPU Buddy.`
     : `Game Mode restarts on it (the screen goes dark for a few seconds). You can switch back from EGPU Buddy.`;
   showModal(<ConfirmModal strTitle={`${o.name} connected`}
@@ -114,6 +114,16 @@ const ICONS: Record<string, string> = {
   display: `<svg viewBox="0 0 120 48" width="96" height="38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="28" y="4" width="64" height="34" rx="3"/><path d="M52 44 H68 M60 38 V44"/></svg>`,
   handheld: `<svg viewBox="0 0 120 48" width="96" height="38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="16" y="6" width="88" height="36" rx="9"/><rect x="34" y="11" width="52" height="26" rx="2"/><circle cx="25" cy="18" r="3"/><circle cx="95" cy="30" r="3"/></svg>`,
 };
+// The maker's own product picture, loaded from its shop when shown (not shipped in the plugin); the line art stays as the
+// offline fallback. ponytail: VITURE only (the glasses this was tested with), add other makers' pictures when wanted.
+const VITURE_PHOTOS: [RegExp, string][] = [[/luma/i, "luma-series"], [/pro/i, "viture-pro-2"], [/./, "the-beast"]];
+const glassesPhoto = (brand?: string, model?: string) => brand !== "viture" ? "" :
+  `https://cdn.shopify.com/s/files/1/0762/8760/7065/files/nav-glasses-${VITURE_PHOTOS.find(([re]) => re.test(model ?? ""))![1]}.png?width=600`;
+const Pic = ({ svg, photo, width }: { svg: string; photo?: string; width: number }) => {
+  const [bad, setBad] = useState(false);
+  return photo && !bad ? <img src={photo} onError={() => setBad(true)} style={{ width: `${width}px`, height: "auto", display: "block" }} />
+    : <span style={{ display: "inline-block", width: `${width}px` }} dangerouslySetInnerHTML={{ __html: svg.replace(/width="96" height="38"/, `width="${width}" height="${Math.round(width * 38 / 96)}"`) }} />;
+};
 const glassesIcon = (brand?: string) => brand === "viture" ? ICONS.viture : /xreal|nreal/.test(brand ?? "") ? ICONS.wayfarer : ICONS.round;
 // "3840x1200 @ 60 Hz" -> "Ultrawide 32:9 · 3840x1200 @ 60 Hz" when the screen is that wide (glasses switched to ultrawide)
 const modeText = (detail: string) => { const m = detail.match(/(\d+)x(\d+) @ \d+ Hz/); if (!m) return "";
@@ -122,7 +132,7 @@ const modeText = (detail: string) => { const m = detail.match(/(\d+)x(\d+) @ \d+
 // and the eGPU's monitors/TVs (an off TV only when TV control can switch it on)
 const screenTargets = (s: Status, tvWakes: boolean) => [
   { name: "eDP-1", label: "the handheld screen", detail: "Games still run on the eGPU", icon: ICONS.handheld, xr: false },
-  ...(s.handheld_displays ?? []).map((d) => ({ name: d.name, label: d.model || d.name, xr: !!d.xr, icon: d.xr ? glassesIcon(d.brand) : ICONS.display,
+  ...(s.handheld_displays ?? []).map((d) => ({ name: d.name, label: d.model || d.name, xr: !!d.xr, icon: d.xr ? glassesIcon(d.brand) : ICONS.display, photo: d.xr ? glassesPhoto(d.brand, d.model) : "",
     detail: `${d.xr ? "XR glasses passthrough" : "External display on the handheld's USB-C"} · ${modeText(d.detail)} · games run on the eGPU` })),
   ...s.displays.filter((d) => d.state !== "off" || tvWakes).map((d) => ({ name: d.name, label: d.model || d.name, xr: false, icon: ICONS.display,
     detail: d.state === "off" ? "Off: choosing it turns it on" : d.detail })),
@@ -329,7 +339,7 @@ function Content() {
             <PanelSectionRow key={t.name}><ButtonItem layout="below" disabled={busy || gameUp}
               onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${t.label}`} strDescription={`${t.detail}\n\nGame Mode restarts on that screen (the current one goes dark for a few seconds). Switch back the same way.`}
                 strOKButtonText="Switch" onOK={() => run(() => setGameScreen(t.name))} />)}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}><span style={{ flex: "0 0 auto" }} dangerouslySetInnerHTML={{ __html: t.icon }} />
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}><span style={{ flex: "0 0 auto" }}><Pic svg={t.icon} photo={(t as any).photo} width={96} /></span>
                   <div style={{ textAlign: "left" }}>Show Game Mode on {t.label}{t.xr && <span style={{ fontSize: "10px", background: "#1a9fff", borderRadius: "2px", padding: "0 4px", marginLeft: "6px" }}>XR</span>}
                     <div style={{ fontSize: "11px", opacity: 0.7 }}>{t.detail}</div></div></div></ButtonItem></PanelSectionRow>
           ))}

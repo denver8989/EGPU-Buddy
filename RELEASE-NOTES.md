@@ -1,3 +1,9 @@
+0.7.103 — XR glasses pop-up fixes.
+
+**Fixed**
+- The "glasses connected" pop-up shows only when the glasses are plugged in, not again and again while Game Mode is on another screen.
+- VITURE glasses are shown with VITURE's own product picture.
+
 0.7.102 — handheld sound fix.
 
 **Fixed**

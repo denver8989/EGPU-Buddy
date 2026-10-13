@@ -204,7 +204,7 @@ GAME_SCREEN = "/var/lib/nvegpu/game-screen"   # connector Game Mode goes to firs
 HANDHELD_CFG = "/var/lib/nvegpu/handheld-screen.json"   # opt-in passthrough: eGPU renders, a handheld-driven screen shows it
 XPW_LIB = f"{USER_HOME}/.local/lib/nv-egpu-buddy/xpw/libxpw.so"   # its display-GPU side (installed when it runs here)
 SCREEN_NET = "/var/lib/nvegpu/screen-net.json"   # TV control tricks: paired network TVs (egpu-screen)
-_seen_screens = None
+_seen_screens = None   # connector -> last time it was seen connected (None until the first check)
 
 
 def _edid_name(path):
@@ -1114,13 +1114,15 @@ class Plugin:
     async def get_screen_offer(self):
         """A screen newly connected to the eGPU while Game Mode is on another one -> offer to move."""
         global _seen_screens
-        bdf = _gpu_bdf()
-        if not bdf or not _gamescope_running():
-            _seen_screens = None; return {}
-        now = {d["name"]: d for d in _displays(bdf)}
+        bdf = _gpu_bdf(); t = time.time()
+        now = {d["name"]: d for d in _displays(bdf)} if bdf else {}
         now.update({d["name"]: {**d, "handheld": True} for d in _handheld_screens() if not d["builtin"]})   # XR glasses etc.
-        new = [c for c in now if _seen_screens is not None and c not in _seen_screens]
-        _seen_screens = set(now)
+        # first connection only: a screen that blinks out while Game Mode restarts on another one (glasses lose their
+        # picture and drop off for a moment) was seen a few seconds ago and is not offered again
+        new = [c for c in now if _seen_screens is not None and t - _seen_screens.get(c, 0) > 60]
+        _seen_screens = {**(_seen_screens or {}), **{c: t for c in now}}
+        if not bdf or not _gamescope_running():
+            return {}
         cur = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]
         for c in new:
             # a TV that is on another input is not being looked at: don't offer it
