@@ -39,7 +39,7 @@ const ackTrial = callable<[], Result>("ack_driver_trial");
 type Screen = { connector: string; name: string; state: string; ddc: boolean };
 const getScreens = callable<[], Screen[]>("get_screens");
 const wakeScreens = callable<[], Result>("wake_screens");
-const getScreenOffer = callable<[], { connector?: string; name?: string; detail?: string; game?: boolean }>("get_screen_offer");
+const getScreenOffer = callable<[], { connector?: string; name?: string; detail?: string; game?: boolean; handheld?: boolean; xr?: boolean; brand?: string }>("get_screen_offer");
 const setGameScreen = callable<[string], Result>("set_game_screen");
 const getTvControl = callable<[], { enabled: boolean; paired: string[] }>("get_tv_control");
 const setTvControl = callable<[boolean], Result>("set_tv_control");
@@ -52,10 +52,17 @@ const gameResSync = callable<[], Record<string, string>>("game_res_sync");
 const maybeOfferScreen = async () => {
   const o = await getScreenOffer();
   if (!o.connector) return;
+  // XR glasses: their picture and what passthrough means; any other screen: the plain question as before
+  const big = (svg: string) => <div style={{ display: "flex", justifyContent: "center", margin: "4px 0 14px" }}
+    dangerouslySetInnerHTML={{ __html: svg.replace('width="96" height="38"', 'width="300" height="120"') }} />;
+  const ask = o.game ? `Close the running game first, then use "Show Game Mode on ${o.name}" in EGPU Buddy.`
+    : `Game Mode restarts on it (the screen goes dark for a few seconds). You can switch back from EGPU Buddy.`;
   showModal(<ConfirmModal strTitle={`${o.name} connected`}
-    strDescription={o.game ? `Close the running game first, then use "Show Game Mode on ${o.name}" in EGPU Buddy.`
-      : `${o.detail}\n\nShow Game Mode on ${o.name}? Game Mode restarts on it (the screen goes dark for a few seconds). You can switch back from EGPU Buddy.`}
-    strOKButtonText={o.game ? "OK" : "Switch"} strCancelButtonText="Stay here"
+    strDescription={o.xr ? <div>{big(glassesIcon(o.brand))}
+        <div><b>XR glasses passthrough.</b> Play your eGPU games in the glasses: the eGPU keeps rendering, the handheld sends the picture to the glasses ({modeText(o.detail ?? "")}) and the sound moves to the glasses' speakers. No HDMI-to-USB-C adapter on the eGPU needed.</div>
+        <div style={{ opacity: 0.7, marginTop: "10px" }}>{ask}</div></div>
+      : o.game ? ask : `${o.detail}\n\nShow Game Mode on ${o.name}? ${ask}`}
+    strOKButtonText={o.game ? "OK" : o.xr ? "Show in the glasses" : "Switch"} strCancelButtonText="Stay here"
     onOK={async () => {
       if (o.game) return;
       const r = await setGameScreen(o.connector!);

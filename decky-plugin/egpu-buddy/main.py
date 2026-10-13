@@ -1104,7 +1104,8 @@ class Plugin:
         for c in new:
             # a TV that is on another input is not being looked at: don't offer it
             if c != cur and _sh(["/usr/local/sbin/egpu-screen", "state", c], 15)[1] != "other-input":
-                return {"connector": c, "name": now[c]["model"] or c, "detail": now[c]["detail"], "game": _game_running()}
+                return {"connector": c, "name": now[c]["model"] or c, "detail": now[c]["detail"], "game": _game_running(),
+                        "handheld": bool(now[c].get("handheld")), "xr": bool(now[c].get("xr")), "brand": now[c].get("brand", "")}
         return {}
 
     async def set_game_screen(self, connector: str):

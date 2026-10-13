@@ -1,3 +1,8 @@
+0.7.98 — glasses pop-up.
+
+**New**
+- Plugging in XR glasses (with the eGPU attached) brings up a pop-up with a picture of the glasses and what passthrough does: "Show in the glasses" or "Stay here".
+
 0.7.97 — XR glasses passthrough polish.
 
 **New**
