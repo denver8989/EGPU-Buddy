@@ -1,3 +1,8 @@
+0.7.105 — cleaner glasses pictures.
+
+**Fixed**
+- Glasses pictures in the pop-up no longer sit on white boxes: the white background is cut out cleanly.
+
 0.7.104 — XR glasses pictures.
 
 **New**
