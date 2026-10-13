@@ -81,7 +81,9 @@ say where it came from.
   gamescope/Wayland, nothing taken from it.
 - [WowOne987/eGPUBridge](https://github.com/WowOne987/eGPUBridge) — a Decky plugin for eGPU display switching (AMD
   RX 9070 on a Legion Go S, with NVIDIA driver loading). Independent work from the same period; it replaces the whole
-  gamescope session script, this project wraps the distro's. Checked side by side: no shared code.
+  gamescope session script, this project wraps the distro's. Checked side by side: no shared code. Three of the later
+  optional add-ons under Extras (testing) follow ideas seen there: the USB4 link row, TV control (Wake-on-LAN / ADB),
+  and the support report. Each was written separately for this project.
 - [djanice1980/eGPU-Blackwell-Stability](https://github.com/djanice1980/eGPU-Blackwell-Stability) — Blackwell eGPU on a
   Strix Halo host (Flow Z13) with apnex's driver patches; it uses the card for render offload only and does not drive a
   display from it, which is why it never meets the display-path problems solved here.
@@ -93,7 +95,14 @@ say where it came from.
 - **jp7677 and the dxvk-nvapi contributors** — NVAPI on Linux, without which DLSS on the eGPU would not exist.
 - **Bazzite** — their documentation of Game Mode quirks on NVIDIA.
 - **CachyOS** — the Deckify handheld edition this was built on.
-- **Decky Loader** and its plugin template.
+- **Decky Loader** and its plugin template. Plugin updates go through Decky Loader's own installer
+  (`utilities/install_plugin`, the call its plugin store makes, read from Decky Loader's frontend source), so Steam
+  keeps running during an update.
+- **Valve's Steam client** — the display-mode messages (`SystemDisplayManager` state and `SetMode`) that pick each
+  screen's best resolution and refresh rate were read from the Steam client's own interface code; their field
+  numbers are not documented by Valve.
+- **Kazuhiko Arase** — [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT), which draws the
+  support report's QR code.
 - **NVIDIA** — nvidia-open, and the engineers who acknowledged the scan-out bug and escalated it.
 
 If your work is used here and is not credited, open an issue and it will be fixed.
@@ -103,5 +112,13 @@ If your work is used here and is not credited, open an issue and it will be fixe
 - **bernhard.berger**: the "before" photo of the corrupted Game Mode interface, from
   [NVIDIA developer forum thread 295314](https://forums.developer.nvidia.com/t/display-modes-above-2560x1440p-120hz-with-hdr-enabled-cause-flickering-corruption-within-gamescope-session/295314).
 - **Valve**: the "after" Game Mode screenshot, from [steamdeck.com](https://www.steamdeck.com/en/software).
+
+## Pictures in the Decky plugin
+
+- The front-view XR glasses picture on the plugin's main page: a VITURE Beast product image, supplied by the project
+  author.
+- The glasses pictures in the "glasses connected" pop-up are the makers' own product pictures (VITURE, XREAL,
+  ROG × XREAL, RayNeo, Rokid), loaded from each maker's online shop when the pop-up opens. They are not shipped with
+  the plugin. Product names and pictures belong to their owners.
 
 If you own one of these images and want it credited differently or removed, open an issue.

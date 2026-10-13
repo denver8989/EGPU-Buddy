@@ -1,3 +1,9 @@
+0.7.106 — two new add-ons.
+
+**New** (Setup > Extras, off by default)
+- USB4 link speed: a USB4 row on the Details tab, with a warning when the cable or port runs slow.
+- Support report button: makes a report for GitHub issues, with a QR code that opens a new issue on your phone; the full report is saved in the Desktop folder. No serial numbers, Wi-Fi names, IP addresses or user names.
+
 0.7.105 — cleaner glasses pictures.
 
 **Fixed**

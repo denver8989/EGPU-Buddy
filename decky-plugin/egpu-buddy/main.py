@@ -877,6 +877,62 @@ def _check_update(install=False, manual=False):
         threading.Thread(target=_update_worker, args=(target,), daemon=True).start()
 
 
+# ---- Extras (testing), each off by default: USB4 link speed, support report ---------------------------------------
+def _addon(name):
+    return bool(_settings().get("addons", {}).get(name))
+
+
+def _usb4():
+    """The eGPU's USB4 / Thunderbolt link as the kernel reports it: total speed, lanes, speed per lane."""
+    for dev in sorted(glob.glob("/sys/bus/thunderbolt/devices/*-*")):
+        if re.search(r"-0$|:", os.path.basename(dev)) or not _read(f"{dev}/device_name"):
+            continue   # the host router and its ports are not the dock
+        per = float((re.findall(r"[\d.]+", _read(f"{dev}/rx_speed")) or ["0"])[0]); lanes = int(_read(f"{dev}/rx_lanes") or "0")
+        return {"name": _read(f"{dev}/device_name"), "per_lane": per, "lanes": lanes, "total": per * lanes,
+                "slow": lanes < 2 or per < 20}
+    return {}
+
+
+def _redact(text):
+    """No serial numbers, Wi-Fi names, IP / MAC addresses or user / host names in a report that goes public."""
+    host = _read("/etc/hostname") or os.uname().nodename
+    text = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "x.x.x.x", text)
+    text = re.sub(r"\b(?:[0-9a-fA-F]{1,4}:){3,7}[0-9a-fA-F]{1,4}\b", "x:x:x:x", text)
+    text = re.sub(r"\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b", "xx:xx:xx:xx:xx:xx", text)
+    text = re.sub(r"(?i)(serial(?:\s*number)?|sn|uuid|ssid)(\s*[:=]\s*)\S+", r"\1\2[removed]", text)
+    for word in {USER, host} - {""}:
+        text = re.sub(rf"\b{re.escape(word)}\b", "[user]" if word == USER else "[host]", text)
+    return text
+
+
+def _support_report():
+    bdf = _gpu_bdf(); osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', _read("/etc/os-release"), re.M))
+    lines = ["EGPU Buddy support report", "",
+             "## Versions",
+             f"plugin {PAYLOAD_VERSION} · system {_read('/etc/nv-egpu-buddy/version') or '?'}",
+             f"OS {osr.get('PRETTY_NAME', '?')} · kernel {os.uname().release}",
+             f"NVIDIA driver {_sh(['modinfo', '-F', 'version', 'nvidia'], 5)[1] or 'not installed'}",
+             f"device {_read('/sys/class/dmi/id/sys_vendor')} {_read('/sys/class/dmi/id/product_version')}",
+             "", "## GPU and link"]
+    if bdf:
+        lines += [_sh(["lspci", "-nn", "-s", bdf], 5)[1],
+                  f"PCIe {_read(f'/sys/bus/pci/devices/{bdf}/current_link_speed')} x{_read(f'/sys/bus/pci/devices/{bdf}/current_link_width')}"]
+    else:
+        lines.append("no eGPU attached")
+    u = _usb4()
+    if u:
+        lines.append(f"USB4 {u['name']}: {u['lanes']} x {u['per_lane']:g} Gb/s")
+    lines += ["", "## Screens", f"Game Mode output: {_gamescope_env('OUTPUT_CONNECTOR') or '(not running)'}",
+              f"chosen game screen: {_read(GAME_SCREEN) or 'automatic'}"]
+    for c in sorted(glob.glob("/sys/class/drm/card*-*")):
+        if _read(f"{c}/status") == "connected":
+            model, detail = _screen_info(os.path.basename(c)); lines.append(f"{os.path.basename(c)}: {model or '?'} {detail}")
+    log = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
+               "egpu|nv-egpu|nvidia|NVRM|thunderbolt|pcieport|gamescope.*(drm|vulkan)"], 20)[1].splitlines()
+    lines += ["", "## eGPU log lines from this boot (last 150)"] + log[-150:]
+    return _redact("\n".join(lines))
+
+
 class Plugin:
     async def get_update_status(self):
         d = _settings()
@@ -1081,6 +1137,36 @@ class Plugin:
         if key in apps:
             apps.pop(key); _save_settings(d); return {"set": "Default"}
         return {}
+
+    # Extras (testing): USB4 link speed, support report; each off by default
+    async def get_addons(self):
+        a = _settings().get("addons", {})
+        return {"usb4": bool(a.get("usb4")), "report": bool(a.get("report"))}
+
+    async def set_addon(self, name: str, enabled: bool):
+        if name not in ("usb4", "report"):
+            return {"ok": False, "message": "Unknown option."}
+        d = _settings(); d.setdefault("addons", {})[name] = bool(enabled); _save_settings(d)
+        return {"ok": True, "message": ""}
+
+    async def get_usb4(self):
+        return _usb4() if _addon("usb4") else {}
+
+    async def make_report(self):
+        text = _support_report()
+        code = "".join(__import__("random").choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
+        desk = os.path.join(USER_HOME, "Desktop"); os.makedirs(desk, exist_ok=True)
+        path = os.path.join(desk, f"egpu-buddy-report-{code}.txt")
+        open(path, "w").write(text + "\n"); subprocess.run(["chown", USER, path, desk], env=_clean_env())
+        # the issue link travels in a QR code, which holds ~3000 characters: the summary without the log, cut to fit
+        from urllib.parse import quote
+        summary = text.split("\n## eGPU log lines")[0].replace("EGPU Buddy support report\n\n", "")
+        tail = f"\nFull report: please attach egpu-buddy-report-{code}.txt from the Desktop folder.\n\n**What went wrong:**\n"
+        while len(quote(summary + tail)) > 650:
+            summary = summary.rsplit("\n", 1)[0]
+        summary = re.sub(r"(\n+## [^\n]*)+\s*$", "", summary)   # no heading left without its lines
+        url = f"https://github.com/{REPO}/issues/new?title={quote(f'Support report {code}')}&body={quote(summary + tail)}"
+        return {"code": code, "file": f"Desktop/egpu-buddy-report-{code}.txt", "url": url}
 
     async def get_tv_control(self):
         try:

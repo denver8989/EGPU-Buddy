@@ -2,6 +2,7 @@ import { ButtonItem, ConfirmModal, DropdownItem, Field, PanelSection, PanelSecti
 import { callable, definePlugin, toaster, useQuickAccessVisible } from "@decky/api";
 import { useEffect, useState, useRef } from "react";
 import { FaPlug } from "react-icons/fa";
+import qrcode from "qrcode-generator";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
@@ -54,6 +55,13 @@ const wakeScreens = callable<[], Result>("wake_screens");
 const getScreenOffer = callable<[], { connector?: string; name?: string; detail?: string; game?: boolean; handheld?: boolean; xr?: boolean; brand?: string }>("get_screen_offer");
 const setGameScreen = callable<[string], Result>("set_game_screen");
 const getTvControl = callable<[], { enabled: boolean; paired: string[] }>("get_tv_control");
+type Addons = { usb4: boolean; report: boolean };
+const getAddons = callable<[], Addons>("get_addons");
+const setAddon = callable<[string, boolean], Result>("set_addon");
+const getUsb4 = callable<[], { name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>("get_usb4");
+const makeReport = callable<[], { code: string; file: string; url: string }>("make_report");
+// a QR code as an SVG (scanned with a phone, it opens the GitHub issue form with the report summary filled in)
+const qrSvg = (text: string) => { const q = qrcode(0, "L"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); };
 const setTvControl = callable<[boolean], Result>("set_tv_control");
 const pairTv = callable<[], Result>("pair_tv");
 const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
@@ -276,6 +284,9 @@ function Content() {
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
+  const [ad, setAd] = useState<Addons | null>(null);
+  const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
+  const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
   const [gr, setGr] = useState<{ enabled: boolean } | null>(null);
   const [tr, setTr] = useState<Trial | null>(null);
   const staleChecked = useRef(false);
@@ -287,7 +298,7 @@ function Content() {
   const [pl, setPl] = useState<number | null>(null);
   const [off, setOff] = useState(0);
 
-  const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setGr(await getGameRes()); setTr(await getTrial());
+  const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -446,6 +457,14 @@ function Content() {
               <Row k="GPU" v={gpuName(tel["name"]) || (s.present ? s.bdf : "absent")} />
               <Row k="Driver" v={s.driver_loaded ? `nvidia ${tel["driver_version"] ?? ""}` : "not loaded"} />
               <Row k="PCIe" v={s.present ? `${s.link.speed} x${s.link.width}` : ""} />
+              {ad?.usb4 && usb4.total !== undefined && (
+                <PanelSectionRow><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", padding: "6px 8px", borderRadius: "4px",
+                  background: usb4.slow ? "#3a2a14" : "#1a3a57", border: `1px solid ${usb4.slow ? "#e3a33b" : "#1a9fff"}`, fontSize: "12px" }}>
+                  <span style={{ fontWeight: 600 }}>USB4 link</span>
+                  <span style={{ textAlign: "right" }}><b>{usb4.total} Gb/s</b><br />
+                    <span style={{ opacity: 0.85 }}>{usb4.slow ? (usb4.lanes! < 2 ? "1 lane: check the cable or port" : "slow link: check the cable or port") : `${usb4.name} · ${usb4.lanes} × ${usb4.per_lane} Gb/s`}</span></span>
+                </div></PanelSectionRow>
+              )}
               <Row k="Session" v={s.game_mode ? (s.on_egpu ? `Game Mode on ${screenName(s)}` : "Game Mode on panel") : "Desktop"} />
               {/* one row per screen: a joined list got cut off on the panel */}
               {(scr?.length ? scr : s.displays.map((d) => ({ connector: d.name, name: d.model, state: d.enabled ? "" : "off" }))).map((x) => (
@@ -463,6 +482,17 @@ function Content() {
             </>
             )}
           </PanelSection>
+          {ad?.report && (
+            <PanelSection title="Support report">
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={async () => { setReport(null); try { setReport(await makeReport()); } catch { setMsg("Could not make the report."); } }}>Make support report</ButtonItem></PanelSectionRow>
+              {report && (<>
+                <PanelSectionRow><div style={{ fontSize: "12px" }}>Scan with your phone to open a new GitHub issue with the report summary filled in. The full report is saved as <b>{report.file}</b>: attach it to the issue.</div></PanelSectionRow>
+                <PanelSectionRow><div style={{ width: "240px", margin: "0 auto", background: "#fff", borderRadius: "4px" }} dangerouslySetInnerHTML={{ __html: qrSvg(report.url) }} /></PanelSectionRow>
+                <Row k="Code" v={report.code} />
+              </>)}
+              <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>Inside: versions (OS, kernel, driver, plugin), GPU and link, screens, and this boot's eGPU log lines. No serial numbers, Wi-Fi names, IP addresses or user names.</div></PanelSectionRow>
+            </PanelSection>
+          )}
           {!s.present ? null : controlsOk ? (
             <PanelSection title="Power controls">
               <PanelSectionRow>
@@ -604,11 +634,14 @@ function Content() {
       )}
       {tab === "setup" && (
         <PanelSection title="Extras (testing)">
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>All off by default.</div></PanelSectionRow>
+          <PanelSectionRow><ToggleField label="USB4 link speed" description="Adds a USB4 row to the Details tab and warns about a slow cable or port." checked={!!ad?.usb4} onChange={(v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; })} /></PanelSectionRow>
           <PanelSectionRow><ToggleField label="TV control tricks" description="Off by default. Choosing the TV for Game Mode turns it on and switches it to the eGPU's HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now." checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
           {tv?.enabled && (<>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }}>{tv.paired.length ? "Pair again" : "Find and pair TV"}</ButtonItem></PanelSectionRow>
           </>)}
+          <PanelSectionRow><ToggleField label="Support report button" description="Adds &quot;Make support report&quot; to the Details tab, for GitHub issues." checked={!!ad?.report} onChange={(v) => run(async () => { const r = await setAddon("report", v); await refresh(); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
     </>
