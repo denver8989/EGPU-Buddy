@@ -65,7 +65,9 @@ const qrSvg = (text: string) => { const q = qrcode(0, "L"); q.addData(text); q.m
 const setTvControl = callable<[boolean], Result>("set_tv_control");
 const pairTv = callable<[], Result>("pair_tv");
 const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
-// Steam's own screen mode for the screen Game Mode is on: its highest resolution, then the highest refresh rate there.
+// Steam's own screen mode for the screen Game Mode is on: its native mode at the highest refresh rate. Native = the mode
+// that moves the most pixels per second: a monitor also lists bigger modes it only downscales (a 5120x1440 ultrawide
+// offers 3840x2160 at 60 Hz), so "most pixels" picked a mode the panel cannot show natively.
 // Without a chosen mode Steam renders big external screens at 1920x1080 (XR glasses in ultrawide stayed 16:9). Steam's
 // DisplayManager speaks protobuf; only the few fields needed are read and written (layout from Steam's own client code).
 const pbFields = (buf: Uint8Array) => { let i = 0; const out: [number, any][] = [];
@@ -75,16 +77,23 @@ const pbFields = (buf: Uint8Array) => { let i = 0; const out: [number, any][] = 
     else if (w === 5) i += 4; else if (w === 1) i += 8; else break; }
   return out; };
 const pbGet = (fs: [number, any][], n: number) => fs.filter(([f]) => f === n).map(([, v]) => v);
+const modeTried = new Set<string>();   // one attempt per screen and mode: Game Mode may run a requested mode as another one
 async function applyBestScreenModes() {
   const dm = (window as any).SteamClient?.System?.DisplayManager; if (!dm?.GetState || !dm?.SetMode) return;
   const cfg = await getGameRes(); if (!cfg.enabled || cfg.skip_mode) return;
   const r = await dm.GetState(); if (!r?.reply) return;
   for (const raw of pbGet(pbFields(new Uint8Array(r.reply)), 1)) {
     const f = pbFields(raw), modes = pbGet(f, 11).map((m: Uint8Array) => { const g = pbFields(m);
-      return { id: pbGet(g, 1)[0] ?? 0, area: (pbGet(g, 2)[0] ?? 0) * (pbGet(g, 3)[0] ?? 0), hz: pbGet(g, 4)[0] ?? 0 }; });
+      const w = pbGet(g, 2)[0] ?? 0, h = pbGet(g, 3)[0] ?? 0, hz = pbGet(g, 4)[0] ?? 0;
+      return { id: pbGet(g, 1)[0] ?? 0, key: `${w}x${h}@${hz}`, area: w * h, rate: w * h * hz, hz }; });
     if (pbGet(f, 6)[0] || !pbGet(f, 5)[0] || !modes.length) continue;   // the built-in screen is Steam's own business
-    const best = modes.sort((a, b) => b.area - a.area || b.hz - a.hz)[0];
+    const best = modes.sort((a, b) => b.rate - a.rate || b.area - a.area)[0];
     if (pbGet(f, 7)[0] && pbGet(f, 10)[0] === best.id) continue;          // already on it
+    // a mode set changes the display state, which calls this again: never ask twice (it looped when Game Mode ran the
+    // requested mode as a slightly different one)
+    const tried = `${new TextDecoder().decode(pbGet(f, 3)[0] ?? new Uint8Array())}|${best.key}`;
+    if (modeTried.has(tried)) continue;
+    modeTried.add(tried);
     const bytes: number[] = []; const wv = (v: number) => { while (v > 127) { bytes.push((v & 127) | 128); v = Math.floor(v / 128); } bytes.push(v); };
     wv(8); wv(pbGet(f, 1)[0] ?? 0); wv(16); wv(best.id); wv(24); wv(pbGet(f, 19)[0] ?? 0);
     await dm.SetMode(btoa(String.fromCharCode(...bytes)));

@@ -1,3 +1,9 @@
+0.7.109 — ultrawide resolution fix.
+
+**Fixed**
+- Game Mode uses each screen's real resolution: a 5120x1440 ultrawide ran at 3840x1440, because monitors also list bigger modes they only downscale.
+- The screen no longer flickers from the resolution being set again and again.
+
 0.7.108 — tidier screens list and details.
 
 **Fixed**
