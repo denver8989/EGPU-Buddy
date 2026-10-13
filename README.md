@@ -38,11 +38,13 @@ are supported in beta.
 ## Screenshots
 
 <p align="center">
-  <img src="docs/assets/plugin-main.png" alt="EGPU Buddy main page: attached, switch Game Mode to the TV, Safe Detach" width="300">
-  &nbsp;&nbsp;
-  <img src="docs/assets/plugin-details.png" alt="EGPU Buddy details: GPU, driver, PCIe link, screens, telemetry and power controls" width="300">
+  <img src="docs/assets/plugin-main.png" alt="EGPU Buddy main page: Game Mode on the handheld screen with games on the eGPU, switch to XR glasses, the TV or a monitor, Safe Detach" width="260" valign="top">
+  &nbsp;
+  <img src="docs/assets/plugin-details.png" alt="EGPU Buddy details: GPU, driver, PCIe and USB4 link, screens, telemetry, support report" width="260" valign="top">
+  &nbsp;
+  <img src="docs/assets/plugin-setup.png" alt="EGPU Buddy setup: system integration, beta driver, game screen, games, updates, extras" width="260" valign="top">
 </p>
-<p align="center"><em>Main page (switch screens, Safe Detach) and details (GPU, screens, telemetry, power controls).</em></p>
+<p align="center"><em>Main page (switch between the handheld, XR glasses, TV and monitor; Safe Detach), details (GPU, link, screens, telemetry) and setup (game screen, best resolution, updates, extras).</em></p>
 
 <p align="center">
   <img src="docs/assets/nvidia-before-after.png" alt="Before: Steam Game Mode interface corrupted on an NVIDIA GPU. After: clean Game Mode." width="100%">

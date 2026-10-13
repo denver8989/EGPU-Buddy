@@ -1,3 +1,10 @@
+0.7.108 — tidier screens list and details.
+
+**Fixed**
+- Screen buttons show the picture above the name, so the text is no longer squeezed into a narrow column.
+- Details: "Back to main" instead of a second Setup button; the session reads "Handheld + eGPU"; the USB4 row no longer wraps.
+- New screenshots on GitHub.
+
 0.7.107 — wake and glasses fixes.
 
 **Fixed**

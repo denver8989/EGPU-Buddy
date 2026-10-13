@@ -351,7 +351,7 @@ function Content() {
     <>
       <PanelSection>
         <PanelSectionRow>
-          <ButtonItem layout="below" onClick={() => setTab(tab === "main" ? "details" : tab === "details" ? "setup" : "main")}>{tab === "main" ? "Show details" : tab === "details" ? "Show setup & updates" : "Back to main"}</ButtonItem>
+          <ButtonItem layout="below" onClick={() => setTab(tab === "main" ? "details" : "main")}>{tab === "main" ? "Show details" : "Back to main"}</ButtonItem>
         </PanelSectionRow>
         {tab !== "setup" && (
           <PanelSectionRow>
@@ -412,8 +412,9 @@ function Content() {
             <PanelSectionRow key={t.name}><ButtonItem layout="below" disabled={busy || gameUp}
               onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${t.label}`} strDescription={`${t.detail}\n\nGame Mode restarts on that screen (the current one goes dark for a few seconds). Switch back the same way.`}
                 strOKButtonText="Switch" onOK={() => run(() => setGameScreen(t.name))} />)}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}><span style={{ flex: "0 0 auto" }}>{(t as any).photo ? <img src={(t as any).photo} style={{ width: "96px", height: "auto", display: "block" }} /> : <span dangerouslySetInnerHTML={{ __html: t.icon }} />}</span>
-                  <div style={{ textAlign: "left" }}>Show Game Mode on {t.label}{t.xr && <span style={{ fontSize: "10px", background: "#1a9fff", borderRadius: "2px", padding: "0 4px", marginLeft: "6px" }}>XR</span>}
+                {/* picture above the text: beside it, the text was squeezed into a narrow column */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}><span style={{ flex: "0 0 auto" }}>{(t as any).photo ? <img src={(t as any).photo} style={{ width: "96px", height: "auto", display: "block" }} /> : <span dangerouslySetInnerHTML={{ __html: t.icon }} />}</span>
+                  <div style={{ textAlign: "center" }}>Show Game Mode on {t.label}{t.xr && <span style={{ fontSize: "10px", background: "#1a9fff", borderRadius: "2px", padding: "0 4px", marginLeft: "6px" }}>XR</span>}
                     <div style={{ fontSize: "11px", opacity: 0.7 }}>{t.detail}</div></div></div></ButtonItem></PanelSectionRow>
           ))}
           <PanelSectionRow>
@@ -458,14 +459,13 @@ function Content() {
               <Row k="Driver" v={s.driver_loaded ? `nvidia ${tel["driver_version"] ?? ""}` : "not loaded"} />
               <Row k="PCIe" v={s.present ? `${s.link.speed} x${s.link.width}` : ""} />
               {ad?.usb4 && usb4.total !== undefined && (
-                <PanelSectionRow><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", padding: "6px 8px", borderRadius: "4px",
-                  background: usb4.slow ? "#3a2a14" : "#1a3a57", border: `1px solid ${usb4.slow ? "#e3a33b" : "#1a9fff"}`, fontSize: "12px" }}>
-                  <span style={{ fontWeight: 600 }}>USB4 link</span>
-                  <span style={{ textAlign: "right" }}><b>{usb4.total} Gb/s</b><br />
-                    <span style={{ opacity: 0.85 }}>{usb4.slow ? (usb4.lanes! < 2 ? "1 lane: check the cable or port" : "slow link: check the cable or port") : `${usb4.name} · ${usb4.lanes} × ${usb4.per_lane} Gb/s`}</span></span>
+                <PanelSectionRow><div style={{ padding: "6px 8px", borderRadius: "4px", fontSize: "12px",
+                  background: usb4.slow ? "#3a2a14" : "#1a3a57", border: `1px solid ${usb4.slow ? "#e3a33b" : "#1a9fff"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontWeight: 600 }}>USB4 link</span><b>{usb4.total} Gb/s · {usb4.lanes} × {usb4.per_lane}</b></div>
+                  <div style={{ opacity: 0.85, marginTop: "2px" }}>{usb4.slow ? (usb4.lanes! < 2 ? "1 lane: check the cable or port" : "slow link: check the cable or port") : usb4.name}</div>
                 </div></PanelSectionRow>
               )}
-              <Row k="Session" v={s.game_mode ? (s.on_egpu ? `Game Mode on ${screenName(s)}` : "Game Mode on panel") : "Desktop"} />
+              <Row k="Session" v={s.game_mode ? (s.on_egpu ? `Game Mode on ${screenName(s)}` : s.egpu_handheld ? `${s.output.startsWith("eDP") ? "Handheld" : screenName(s)} + eGPU` : "Game Mode on panel") : "Desktop"} />
               {/* one row per screen: a joined list got cut off on the panel */}
               {(scr?.length ? scr : s.displays.map((d) => ({ connector: d.name, name: d.model, state: d.enabled ? "" : "off" }))).map((x) => (
                 <Row key={x.connector} k={x.name || x.connector}
