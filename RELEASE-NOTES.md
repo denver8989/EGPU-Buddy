@@ -1,3 +1,8 @@
+0.7.96 — XR glasses on the handheld's USB-C.
+
+**New**
+- With the eGPU attached, XR glasses (VITURE, XREAL/Nreal, RayNeo, Rokid, Lenovo Legion Glasses, TCL NxtWear, INMO) or any screen on the handheld's USB-C are offered under "Show Game Mode on…" and in Setup > Game screen. Games run on the eGPU, the glasses get their native mode (e.g. 1920x1200 on the VITURE Beast), sound moves to the glasses' speakers and the handheld screen goes dark.
+
 0.7.95 — handheld sound.
 
 **Fixed**

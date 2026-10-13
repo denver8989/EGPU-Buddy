@@ -57,7 +57,15 @@ handheld_passthrough_target() {
 }
 # The handheld's own screen picked in the plugin ("Show Game Mode on the handheld screen"): Game Mode stays on the
 # handheld GPU and games render on the eGPU (see the handheld route below).
-handheld_chosen() { [ "$(cat /var/lib/nvegpu/game-screen 2>/dev/null)" = "$PANEL" ]; }
+# The handheld's own screen, or a screen on its USB-C port (XR glasses, a portable monitor), picked in the plugin: prints it.
+handheld_screen() {
+  local p c; p=$(cat /var/lib/nvegpu/game-screen 2>/dev/null); [ -n "$p" ] || return 1
+  [ "$p" = "$PANEL" ] && { echo "$p"; return 0; }
+  c=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"$PANEL" 2>/dev/null | head -1)"); c=${c%%-*}
+  [ -n "$c" ] && [ "$(cat "/sys/class/drm/$c-$p/status" 2>/dev/null)" = connected ] && { echo "$p"; return 0; }
+  return 1
+}
+handheld_chosen() { handheld_screen >/dev/null; }
 STOCK_GAMESCOPE_SESSION=${STOCK_GAMESCOPE_SESSION:-/usr/lib/steamos/gamescope-session}
 PROFILE_HELPER=${EGPU_DISPLAY_PROFILE_HELPER:-/home/deck/.local/bin/egpu-display-profile.sh}
 SHIM_DIR=${NV_EGPU_GAMESCOPE_SHIM_DIR:-/home/deck/.local/lib/nv-egpu-buddy/gamescope-shim}
@@ -597,14 +605,15 @@ if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && [ -z 
   clear_egpu_env
   clear_session_env
   export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
-  export OUTPUT_CONNECTOR="$PANEL"
+  hh=$(handheld_screen || echo "$PANEL")
+  export OUTPUT_CONNECTOR="$hh"; [ "$hh" = "$PANEL" ] || OUTPUT_CONNECTOR="$hh,$PANEL"   # back to the built-in screen if it goes
   # games render through Vulkan (Proton, native) -> the eGPU. Steam's own interface (OpenGL/EGL) stays on the handheld
   # GPU like the compositor: drawn on the eGPU it reached gamescope unsynchronised (black, flickering on cursor moves).
   export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
   export PROTON_ENABLE_NVAPI=1
   export NV_EGPU_GAMESCOPE_HANDHELD_GPU=1   # the shim keeps gamescope itself on the handheld GPU
   sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1 || true
-  log "handheld screen: Game Mode on $PANEL, games rendered on the eGPU ($( handheld_chosen && echo chosen in the plugin || echo no monitor on the eGPU ))"
+  log "handheld screen: Game Mode on $hh, games rendered on the eGPU ($( handheld_chosen && echo chosen in the plugin || echo no monitor on the eGPU ))"
 elif [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && { [ -n "$outputs" ] || [ -n "$xgpu_target" ]; } && bar1_note && [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ]; then
   clear_session_env
   [ -n "$xgpu_target" ] && EGPU_GAMESCOPE_HDR=0   # the passthrough carries 8-bit SDR frames
@@ -782,7 +791,10 @@ if [ -e /run/nvegpu/diag ]; then export PROTON_LOG=1 VK_LOADER_DEBUG=error,warn 
   sleep 8
   # handheld screen with the eGPU attached: the sound comes back to the handheld too (it was left on the eGPU's HDMI)
   if [ "${NV_EGPU_GAMESCOPE_HANDHELD_GPU:-0}" = 1 ]; then
-    [ -x "$HOME/.local/bin/egpu-audio.sh" ] && log "audio: $("$HOME/.local/bin/egpu-audio.sh" local 2>&1 | tr '\n' ' ')"
+    # on the handheld's USB-C screen (XR glasses): the built-in screen goes dark, as it does for an eGPU monitor
+    case "${OUTPUT_CONNECTOR%%,*}" in eDP-*) ;; *) sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-off >/dev/null 2>&1 &&
+      log "handheld panel off (Game Mode is on ${OUTPUT_CONNECTOR%%,*})" ;; esac
+    [ -x "$HOME/.local/bin/egpu-audio.sh" ] && log "audio: $("$HOME/.local/bin/egpu-audio.sh" local "${OUTPUT_CONNECTOR%%,*}" 2>&1 | tr '\n' ' ')"
     exit 0
   fi
   case "${OUTPUT_CONNECTOR:-}" in ""|"*"|eDP-1|eDP-1,*|"*",*) exit 0 ;; esac

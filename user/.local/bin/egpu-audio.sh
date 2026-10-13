@@ -118,15 +118,17 @@ for c in json.load(sys.stdin):
     if profs:
         subprocess.run(["pactl", "set-card-profile", name, max(profs)[1]], check=False)
 ' 2>/dev/null; sleep 1
-    sink=$(pactl -f json list sinks 2>/dev/null | BDFS="$(egpu_audio_bdfs 2>/dev/null)" python3 -c '
+    sink=$(pactl -f json list sinks 2>/dev/null | SCREEN="${2:-eDP-1}" BDFS="$(egpu_audio_bdfs 2>/dev/null)" python3 -c '
 import json, os, sys
 skip = {b.strip().replace(":", "_") for b in os.environ["BDFS"].split() if b.strip()}
 best = []
+usb_first = os.environ.get("SCREEN", "eDP").split("-")[0] != "eDP"   # a USB-C screen (XR glasses) with its own speakers
 for s in json.load(sys.stdin):
     path = ((s.get("properties") or {}).get("device.bus_path") or "").replace(":", "_"); name = s.get("name") or ""
     if not any(w in path or w in name.replace(":", "_") for w in skip):
-        best.append((".pro-output" in name, name))
-print(min(best)[1] if best else "")
+        bus = (s.get("properties") or {}).get("device.bus") or ""
+        best.append((usb_first and bus != "usb", ".pro-output" in name, name))
+print(min(best)[2] if best else "")
 ' 2>/dev/null)
     [ -n "${sink:-}" ] || { echo "no handheld audio output found; leaving sound as it is"; exit 0; }
     [ "$(pactl get-default-sink 2>/dev/null)" = "$sink" ] && { echo "sound is already on the handheld"; exit 0; }

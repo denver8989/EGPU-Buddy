@@ -327,6 +327,11 @@ def _screen_state(name):
     return _screen_states.get(name, "")
 
 
+# XR glasses identify themselves by the display name in their EDID. Brands only (models change every year).
+XR_BRANDS = ("viture", "xreal", "nreal", "rayneo", "rokid", "legion glasses", "nxtwear", "inmo", "rog xreal", "dream glass",
+             "lenovo glasses", "tcl glasses")
+
+
 def _handheld_screens():
     """Connected screens driven by the handheld's own GPU: the built-in panel and USB-C displays (e.g. XR glasses)."""
     cards = {os.path.basename(c).split("-")[0] for c in glob.glob("/sys/class/drm/card[0-9]*-eDP-*")}
@@ -337,7 +342,9 @@ def _handheld_screens():
             if conn.startswith("Writeback") or _read(c + "/status") != "connected":
                 continue
             model, detail = _screen_info(os.path.basename(c))
-            out.append({"name": conn, "builtin": conn.startswith("eDP"), "model": "Built-in screen" if conn.startswith("eDP") else (model or conn), "detail": detail})
+            xr = any(b in (model or "").lower() for b in XR_BRANDS)
+            out.append({"name": conn, "builtin": conn.startswith("eDP"), "model": "Built-in screen" if conn.startswith("eDP") else (model or conn),
+                        "detail": detail, "xr": xr})
     return out
 
 
@@ -960,9 +967,11 @@ class Plugin:
             "present": bool(bdf), "bdf": bdf, "driver_loaded": driver,
             "game_mode": game_mode, "game_running": _game_running() if game_mode else False,
             "attach_pending": os.path.exists(GM_PENDING), "dock_present": _dock_present(),
-            "on_egpu": bool(bdf) and game_mode and output not in ("", "*", "eDP-1"),
-            # Game Mode on the handheld screen with the games on the eGPU (picked in the plugin, or no eGPU monitor)
-            "egpu_handheld": bool(bdf) and game_mode and _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") == "1",
+            # Game Mode on the handheld screen (or a USB-C screen on it) with the games on the eGPU
+            "egpu_handheld": (hh := bool(bdf) and game_mode and _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") == "1"),
+            "on_egpu": bool(bdf) and game_mode and output not in ("", "*", "eDP-1") and not hh,
+            # USB-C screens on the handheld itself (XR glasses, portable monitors): offered only while an eGPU is attached
+            "handheld_displays": [d for d in _handheld_screens() if not d["builtin"]] if bdf else [],
             "output": output,
             "gm_status": _json(GM_STATUS), "desktop_status": _json(DESKTOP_STATUS),
             # Strip NULs and control characters: a hardware reset can leave this file NUL-padded
@@ -1026,6 +1035,7 @@ class Plugin:
         if not bdf or not _gamescope_running():
             _seen_screens = None; return {}
         now = {d["name"]: d for d in _displays(bdf)}
+        now.update({d["name"]: {**d, "handheld": True} for d in _handheld_screens() if not d["builtin"]})   # XR glasses etc.
         new = [c for c in now if _seen_screens is not None and c not in _seen_screens]
         _seen_screens = set(now)
         cur = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]

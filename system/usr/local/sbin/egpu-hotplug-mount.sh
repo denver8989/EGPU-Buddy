@@ -701,7 +701,12 @@ set_autologin_plasma(){ /usr/local/sbin/egpu-dm-session pin plasma >/dev/null 2>
 # makes the driver query the monitor over DisplayPort AUX / DDC), and say in the UI what is being waited for.
 # The handheld screen picked in the plugin for Game Mode: games render on the eGPU and play on the handheld's own screen,
 # so there is no monitor to wait for. Desktop mode is never affected.
-handheld_chosen() { [ "$(cat /var/lib/nvegpu/game-screen 2>/dev/null)" = eDP-1 ] && pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1; }
+handheld_chosen() {   # the built-in screen, or a connected screen on the handheld's own USB-C (XR glasses)
+  local p c; p=$(cat /var/lib/nvegpu/game-screen 2>/dev/null); pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 || return 1
+  case "$p" in eDP-*) return 0 ;; "") return 1 ;; esac
+  c=$(basename "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)"); c=${c%%-*}
+  [ -n "$c" ] && [ "$(cat "/sys/class/drm/$c-$p/status" 2>/dev/null)" = connected ]
+}
 boost=0; [ "$egpu_has_output" != 1 ] && handheld_chosen && { boost=1; log "handheld screen chosen: Game Mode stays on the handheld screen, games render on the eGPU"; }
 if [ "$egpu_has_output" != 1 ] && [ "$boost" = 0 ]; then
   mkdir -p /run/nvegpu; printf '{"state":"SWITCHING","message":"%s"}\n' "The eGPU is ready. Waiting for the monitor: switch it on or wake it (up to 90 seconds)." > /run/nvegpu/gm-status.json 2>/dev/null

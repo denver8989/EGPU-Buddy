@@ -5,7 +5,7 @@ import { FaPlug } from "react-icons/fa";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
-  attach_pending: boolean; on_egpu: boolean; egpu_handheld?: boolean; output: string;
+  attach_pending: boolean; on_egpu: boolean; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
@@ -57,6 +57,14 @@ const maybeOfferScreen = async () => {
       const r = await setGameScreen(o.connector!);
       toaster.toast({ title: "EGPU Buddy", body: r.message }); }} />);
 };
+// every screen Game Mode can go to while the eGPU is attached: the handheld itself, screens on its USB-C (XR glasses),
+// and the eGPU's monitors/TVs (an off TV only when TV control can switch it on)
+const screenTargets = (s: Status, tvWakes: boolean) => [
+  { name: "eDP-1", label: "the handheld screen", detail: "Games still run on the eGPU" },
+  ...(s.handheld_displays ?? []).map((d) => ({ name: d.name, label: d.model || d.name,
+    detail: `${d.xr ? "XR glasses" : "Screen"} on the handheld's USB-C · ${d.detail.split(" · ").find((x) => x.includes("Hz")) ?? ""} · games still run on the eGPU` })),
+  ...s.displays.filter((d) => d.state !== "off" || tvWakes).map((d) => ({ name: d.name, label: d.model || d.name, detail: d.state === "off" ? "Off: choosing it turns it on" : d.detail })),
+];
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
@@ -82,7 +90,7 @@ const Row = ({ k, v }: { k: string; v: string }) => (
   <PanelSectionRow><Field label={k} focusable={false} bottomSeparator="none"><span style={{ fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", maxWidth: "100%" }}>{v || "—"}</span></Field></PanelSectionRow>
 );
 // the screen's own name ("X49 V") instead of its connector ("DP-7") where the EDID gives one
-const screenName = (s: Status) => s.displays.find((d) => d.name === s.output)?.model || s.output;
+const screenName = (s: Status) => s.output.startsWith("eDP") ? "the handheld screen" : [...s.displays, ...(s.handheld_displays ?? [])].find((d) => d.name === s.output)?.model || s.output;
 const gpuName = (n?: string) => (n ?? "").replace(/^NVIDIA\s+(GeForce\s+)?/i, "");
 // "alsa_output.pci-0000_03_00.1.HiFi__HDMI1__sink" -> "eGPU HDMI 1"; the built-in card -> "Built-in"
 const audioName = (sink: string, bdf: string) => {
@@ -98,7 +106,7 @@ const audioName = (sink: string, bdf: string) => {
 
 function stateLine(s: Status): string {
   if (!s.present) return s.driver_loaded ? "eGPU off the bus (driver still loaded)" : "No eGPU attached";
-  if (s.game_mode) return s.on_egpu ? `Attached — Game Mode on ${screenName(s)}` : s.egpu_handheld ? "Attached — Game Mode on the handheld screen, games on the eGPU" : "eGPU present — Game Mode on the handheld screen";
+  if (s.game_mode) return s.on_egpu ? `Attached — Game Mode on ${screenName(s)}` : s.egpu_handheld ? `Attached — Game Mode on ${screenName(s)}, games on the eGPU` : "eGPU present — Game Mode on the handheld screen";
   return "eGPU present (Desktop)";
 }
 
@@ -254,13 +262,10 @@ function Content() {
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || gameUp || (s?.present && (s?.on_egpu || s?.egpu_handheld))} onClick={() => showModal(<ConfirmModal strTitle="Attach the eGPU" strDescription="Game Mode restarts on the eGPU display: the screen goes dark for a few seconds. When it is back, reopen this menu to see the result." strOKButtonText="Attach" onOK={() => run(() => attach(false))} />)}>Attach eGPU</ButtonItem>
           </PanelSectionRow>
-          {s?.game_mode && s.on_egpu && <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp}
-            onClick={() => showModal(<ConfirmModal strTitle="Show Game Mode on the handheld screen" strDescription={"Games keep running on the eGPU and play on the handheld's own screen. Game Mode restarts there (the monitor goes dark). Switch back the same way."}
-              strOKButtonText="Switch" onOK={() => run(() => setGameScreen("eDP-1"))} />)}>Show Game Mode on the handheld screen<div style={{ fontSize: "11px", opacity: 0.7 }}>Games still run on the eGPU</div></ButtonItem></PanelSectionRow>}
-          {s?.game_mode && (s.on_egpu || s.egpu_handheld) && s.displays.filter((d) => d.name !== s.output && (d.state !== "off" || tvWakes)).map((d) => (
-            <PanelSectionRow key={d.name}><ButtonItem layout="below" disabled={busy || gameUp}
-              onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${d.model || d.name}`} strDescription={`${d.detail}\n\nGame Mode restarts on that screen: this one goes dark. Switch back the same way.`}
-                strOKButtonText="Switch" onOK={() => run(() => setGameScreen(d.name))} />)}>Show Game Mode on {d.model || d.name}<div style={{ fontSize: "11px", opacity: 0.7 }}>{d.state === "off" ? "Off: choosing it turns it on" : d.detail}</div></ButtonItem></PanelSectionRow>
+          {s?.game_mode && (s.on_egpu || s.egpu_handheld) && screenTargets(s, tvWakes).filter((t) => t.name !== s.output).map((t) => (
+            <PanelSectionRow key={t.name}><ButtonItem layout="below" disabled={busy || gameUp}
+              onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${t.label}`} strDescription={`${t.detail}\n\nGame Mode restarts on that screen (the current one goes dark for a few seconds). Switch back the same way.`}
+                strOKButtonText="Switch" onOK={() => run(() => setGameScreen(t.name))} />)}>Show Game Mode on {t.label}<div style={{ fontSize: "11px", opacity: 0.7 }}>{t.detail}</div></ButtonItem></PanelSectionRow>
           ))}
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || !s?.present || gameUp} onClick={() => showModal(<ConfirmModal strTitle="Safe Detach" strDescription="Game Mode moves to the handheld screen and the eGPU is removed from the bus: the screen goes dark for a few seconds and the monitor loses signal. Do not unplug yet. When the handheld screen is back, reopen this menu: it says when it is safe to unplug the cable." strOKButtonText="Detach" bDestructiveWarning onOK={() => run(safeDetach)} />)}>Safe Detach</ButtonItem>
@@ -440,10 +445,9 @@ function Content() {
       {tab === "setup" && s?.present && s.game_mode && (
         <PanelSection title="Game screen">
           <PanelSectionRow><DropdownItem label="Play games on" disabled={busy || gameUp}
-            selectedOption={s.on_egpu ? s.output : "eDP-1"}
-            rgOptions={[{ data: "eDP-1", label: "Handheld screen (games on the eGPU)" },
-              ...s.displays.filter((d) => d.state !== "off" || tvWakes).map((d) => ({ data: d.name, label: d.model || d.name }))]}
-            onChange={(o) => { if (o.data !== (s.on_egpu ? s.output : "eDP-1")) run(() => setGameScreen(o.data)); }} /></PanelSectionRow>
+            selectedOption={s.output && s.output !== "*" ? s.output : "eDP-1"}
+            rgOptions={screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label }))}
+            onChange={(o) => { if (o.data !== s.output) run(() => setGameScreen(o.data)); }} /></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)."}</div></PanelSectionRow>
         </PanelSection>
       )}
