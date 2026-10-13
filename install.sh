@@ -227,6 +227,8 @@ true
 fi
 rm -rf "$SYS_TMP"
 userctl daemon-reload >/dev/null 2>&1 || true   # no user session bus (install at boot, chroot): the next login picks the units up
+# helpers already running keep their old code until restarted; this does not touch Game Mode itself
+userctl try-restart egpu-wake-guard.service egpu-screen-watch.service egpu-display-failover.service >/dev/null 2>&1 || true
 want core && { userctl enable egpu-display-failover.service; userctl enable --now egpu-wake-guard.service; userctl enable --now egpu-screen-watch.service; } >/dev/null 2>&1 || true
 
 # ---- gamescope with GBM scan-out (NVIDIA scan-out corruption fix) --------------------------------

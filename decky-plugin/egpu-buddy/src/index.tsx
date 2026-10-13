@@ -18,7 +18,7 @@ const safeDetach = callable<[], Result>("safe_detach");
 const setPowerLimit = callable<[number], Result>("set_power_limit");
 const setCoreOffset = callable<[number], Result>("set_core_offset");
 const resetClocks = callable<[], Result>("reset_clocks");
-type Setup = { started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
+type Setup = { gm_restart?: boolean; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
 const acceptUntested = callable<[], Result>("accept_untested");
 const installSystem = callable<[boolean, string?], Result>("install_system");
@@ -209,8 +209,7 @@ function Content() {
           {su?.unsupported && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ff6b6b" }}>{su.unsupported}</div></PanelSectionRow>}
           {needsInstall && su && !su.busy && su.rc !== 0 && (
             <>
-              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.installed_version && !su.helpers_present ? "System files are missing (OS update)." : behind ? "Update ready — one Game Mode restart finishes it." : driverMissing ? "The NVIDIA driver is not installed. Keep the eGPU unplugged." : su.installed_version ? "Setup is incomplete." : "Not installed yet."}</div></PanelSectionRow>
-              {behind && <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp} onClick={() => run(restartGamemode)}>Restart Game Mode to finish</ButtonItem></PanelSectionRow>}
+              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.installed_version && !su.helpers_present ? "System files are missing (OS update)." : behind ? `Plugin ${su.payload_version} is in; its system files finish installing by themselves (after any running game is closed), or press Update system integration.` : driverMissing ? "The NVIDIA driver is not installed. Keep the eGPU unplugged." : su.installed_version ? "Setup is incomplete." : "Not installed yet."}</div></PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => installClick()}>{behind && su.helpers_present ? "Update system integration" : su.installed_version ? "Repair system integration" : "Install system integration"}</ButtonItem></PanelSectionRow>
             </>
           )}
@@ -231,8 +230,10 @@ function Content() {
                 </>
               ) : (
                 <>
-                  <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Installed. Restart Game Mode to finish.</div></PanelSectionRow>
-                  <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp} onClick={() => run(restartGamemode)}>Restart Game Mode now</ButtonItem></PanelSectionRow>
+                  {su.gm_restart ? (<>
+                    <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Installed. A few changed files are only read when Game Mode starts: they apply at the next start, or restart it now.</div></PanelSectionRow>
+                    <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp} onClick={() => run(restartGamemode)}>Restart Game Mode now</ButtonItem></PanelSectionRow>
+                  </>) : <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Installed. Nothing else to do.</div></PanelSectionRow>}
                 </>
               )}
             </>

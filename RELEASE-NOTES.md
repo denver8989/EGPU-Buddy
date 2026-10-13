@@ -1,3 +1,10 @@
+0.7.92 — updates without a Game Mode restart.
+
+**Fixed**
+- Updates no longer ask for a Game Mode restart unless files Game Mode loads at startup actually changed (most updates: nothing to do afterwards).
+- An update that arrives while a game is running finishes by itself once the game is closed.
+- The plugin's background helpers pick up their new version right away.
+
 0.7.91 — game-running notice.
 
 **Fixed**

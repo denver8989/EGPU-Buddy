@@ -588,11 +588,35 @@ def _cmdline_reboot_needed():
     return _sh(["/usr/local/sbin/egpu-kernel-cmdline", "--check"], 5)[0] != 0
 
 
+# Files Game Mode only reads when it starts (session script, gamescope build and its shims, gamescope scripts, the session
+# and Steam launcher drop-ins). An install asks for a Game Mode restart only when one of these actually changed;
+# everything else it installs takes effect at once or the next time it is used.
+def _session_files():
+    h = USER_HOME
+    # exact names and the suffixes gamescope/systemd load: the installer's .bak copies must not count as changes
+    pats = [".local/bin/nv-egpu-gamescope-session", ".local/bin/nv-egpu-gamescope-steam-scale-clamp",
+            ".local/bin/nv-egpu-gamescope-sdr-clamp", ".local/bin/steam-egpu-vk.sh", ".local/lib/nv-egpu-buddy/gamescope-shim/gamescope",
+            ".local/lib/nv-egpu-buddy/nv-egpu-gamescope-format-filter.so", ".local/gamescope-gbm/usr/bin/gamescope",
+            ".config/gamescope/scripts/*.lua", ".config/systemd/user/gamescope-session.service.d/*.conf",
+            ".config/systemd/user/steam-launcher.service.d/*.conf"]
+    return sorted(f for p in pats for f in glob.glob(os.path.join(h, p)) if os.path.isfile(f))
+
+
+def _session_fingerprint():
+    out = {}
+    for f in _session_files():
+        try:
+            with open(f, "rb") as fh: out[f] = hashlib.sha256(fh.read()).hexdigest()
+        except OSError: pass
+    return out
+
+
 def _setup_worker(action, with_driver=False, version=None, vendor="nvidia"):
     env = _clean_env(EGPU_TARGET_USER=USER, HOME=USER_HOME, EGPU_AUTO_YES="1", EGPU_ACCEPT_UNTESTED="1" if _accepted() else "0")
     ro = shutil.which("steamos-readonly")
     try:
         if action == "install":
+            before = _session_fingerprint(); _setup["gm_restart"] = False
             tgz = _fetch_payload(version)
             _slog(f"extracting to {SYSDIR}", 5)
             shutil.rmtree(SYSDIR, ignore_errors=True); os.makedirs(os.path.dirname(SYSDIR), exist_ok=True)
@@ -610,6 +634,9 @@ def _setup_worker(action, with_driver=False, version=None, vendor="nvidia"):
             _argv = ["bash", f"{SYSDIR}/install.sh"] + (["--amd"] if vendor == "amd" else [])
             rc = _run_logged(_argv, env, SYSDIR)
             if ro: subprocess.run([ro, "enable"], env=_clean_env())
+            # only a running Game Mode can be behind; otherwise the next start picks the new files up anyway
+            _setup["gm_restart"] = rc == 0 and _gamescope_running() and _session_fingerprint() != before
+            _slog("Game Mode restart " + ("needed: files it loads at start changed" if _setup["gm_restart"] else "not needed"), 99)
         else:
             if not os.path.exists(f"{SYSDIR}/uninstall.sh"):
                 raise RuntimeError("no installed copy to uninstall from")
@@ -741,7 +768,17 @@ def _continue_update():
     if _read(VERSION_FILE) == PAYLOAD_VERSION and os.path.exists(PRIV):
         _notify(f"EGPU Buddy updated to {PAYLOAD_VERSION}."); _reattach_after_update(True); return
     if _setup["busy"] or _game_running():
-        _notify(f"EGPU Buddy plugin {PAYLOAD_VERSION} installed. Open it and press Update system integration."); _reattach_after_update(False); return
+        _notify(f"EGPU Buddy plugin {PAYLOAD_VERSION} installed. The rest of the update finishes by itself after you close the game.")
+        def after_game():
+            for _ in range(4320):   # up to 12 hours
+                time.sleep(10)
+                if not _setup["busy"] and not _game_running():
+                    if _read(VERSION_FILE) == PAYLOAD_VERSION: return
+                    _setup.update(busy=True, rc=None, step="update", progress=0, started=time.time())
+                    try: os.replace(SETUP_LOG, SETUP_LOG + ".prev")
+                    except OSError: pass
+                    _update_worker(PAYLOAD_VERSION); return
+        threading.Thread(target=after_game, daemon=True).start(); return
     if _update_needs_detach() and not _settings().get("reattach_after_update"):   # started from an older plugin without the detach prompt
         _notify(f"EGPU Buddy plugin {PAYLOAD_VERSION} installed. The eGPU is in use: open EGPU Buddy and press Update system integration to finish without a reboot."); return
     _setup.update(busy=True, rc=None, step="update", progress=0, started=time.time())
@@ -847,7 +884,7 @@ class Plugin:
         # "writing the kernel parameters" every single run, so it asked for a reboot after every
         # install whether or not anything had changed. `--check` already answers this properly.
         needs_reboot = rc != 0
-        return {"installed_version": _read(VERSION_FILE), "payload_version": PAYLOAD_VERSION, "needs_reboot": needs_reboot,
+        return {"gm_restart": bool(_setup.get("gm_restart")), "installed_version": _read(VERSION_FILE), "payload_version": PAYLOAD_VERSION, "needs_reboot": needs_reboot,
                 "unsupported": _unsupported(), "untested": _untested(), "accepted_untested": _accepted(),
                 "cmdline_missing": out.replace("missing kernel parameters: ", "") if rc != 0 else "",
                 "cmdline_pending": rc != 0 and _sh(["/usr/local/sbin/egpu-kernel-cmdline", "--pending"], 5)[0] == 0,
