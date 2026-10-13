@@ -246,6 +246,10 @@ def _net_read(tv):
 
 def _net_wake(tv, take_input):
     if webos(tv["ip"], FOREGROUND, key=tv["key"])[1] is None:
+        if not take_input:
+            # an off TV can't say which input it would come up on (usually its tuner): powering it on is only
+            # right when we are also switching it to us
+            return "off - left alone"
         mac = bytes.fromhex(tv["mac"].replace(":", ""))
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as u:
             u.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)

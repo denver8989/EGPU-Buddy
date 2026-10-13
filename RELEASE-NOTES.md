@@ -1,3 +1,11 @@
+0.7.88 — TV stays off after sleep; Performance boost removed.
+
+**Fixed**
+- Waking the handheld from sleep turned a paired TV on (onto its TV tuner). A TV that is off now stays off.
+
+**Removed**
+- Performance boost (M3): tested against standard Game Mode it did not give a clean gain (more delay on screen). It is switched off on update.
+
 0.7.87 — Performance boost marked experimental.
 
 **Fixed**

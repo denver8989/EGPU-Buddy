@@ -25,7 +25,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.87"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.88"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/SteamOS-EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -940,23 +940,19 @@ class Plugin:
         return {"ok": msg.startswith("paired"), "message": msg}
 
     async def get_screen_offer(self):
-        """A screen newly connected to the eGPU while Game Mode is on another one -> offer to move. With the passthrough
-        libraries installed, a USB-C screen on the handheld (e.g. XR glasses) is offered too, but only with an eGPU."""
+        """A screen newly connected to the eGPU while Game Mode is on another one -> offer to move."""
         global _seen_screens
         bdf = _gpu_bdf()
         if not bdf or not _gamescope_running():
             _seen_screens = None; return {}
         now = {d["name"]: d for d in _displays(bdf)}
-        if os.path.exists(XPW_LIB):
-            now.update({d["name"]: {**d, "handheld": True} for d in _handheld_screens() if not d["builtin"]})
         new = [c for c in now if _seen_screens is not None and c not in _seen_screens]
         _seen_screens = set(now)
         cur = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]
         for c in new:
             # a TV that is on another input is not being looked at: don't offer it
             if c != cur and _sh(["/usr/local/sbin/egpu-screen", "state", c], 15)[1] != "other-input":
-                return {"connector": c, "name": now[c]["model"] or c, "detail": now[c]["detail"], "game": _game_running(),
-                        "handheld": bool(now[c].get("handheld"))}
+                return {"connector": c, "name": now[c]["model"] or c, "detail": now[c]["detail"], "game": _game_running()}
         return {}
 
     async def set_game_screen(self, connector: str):

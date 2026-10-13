@@ -39,11 +39,7 @@ const ackTrial = callable<[], Result>("ack_driver_trial");
 type Screen = { connector: string; name: string; state: string; ddc: boolean };
 const getScreens = callable<[], Screen[]>("get_screens");
 const wakeScreens = callable<[], Result>("wake_screens");
-const getScreenOffer = callable<[], { connector?: string; name?: string; detail?: string; game?: boolean; handheld?: boolean }>("get_screen_offer");
-type Handheld = { available: boolean; egpu: boolean; enabled: boolean; connector: string; transfer: string; active: boolean;
-  screens: { name: string; builtin: boolean; model: string; detail: string }[] };
-const getHandheld = callable<[], Handheld>("get_handheld_screen");
-const setHandheld = callable<[boolean, string, string], Result>("set_handheld_screen");
+const getScreenOffer = callable<[], { connector?: string; name?: string; detail?: string; game?: boolean }>("get_screen_offer");
 const setGameScreen = callable<[string], Result>("set_game_screen");
 const getTvControl = callable<[], { enabled: boolean; paired: string[] }>("get_tv_control");
 const setTvControl = callable<[boolean], Result>("set_tv_control");
@@ -58,14 +54,13 @@ const maybeOfferScreen = async () => {
     strOKButtonText={o.game ? "OK" : "Switch"} strCancelButtonText="Stay here"
     onOK={async () => {
       if (o.game) return;
-      // a USB-C screen on the handheld itself (e.g. XR glasses): the eGPU keeps rendering, the handheld's GPU shows it
-      const r = o.handheld ? await setHandheld(true, o.connector!, (await getHandheld()).transfer) : await setGameScreen(o.connector!);
+      const r = await setGameScreen(o.connector!);
       toaster.toast({ title: "EGPU Buddy", body: r.message }); }} />);
 };
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.87";
+const PLUGIN_VERSION = "0.7.88";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -139,7 +134,6 @@ function Content() {
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
-  const [hh, setHh] = useState<Handheld | null>(null);
   const [tr, setTr] = useState<Trial | null>(null);
   const staleChecked = useRef(false);
   const [confirmSetup, setConfirmSetup] = useState<"" | "install" | "uninstall" | "amd">("");
@@ -150,7 +144,7 @@ function Content() {
   const [pl, setPl] = useState<number | null>(null);
   const [off, setOff] = useState(0);
 
-  const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setHh(await getHandheld()); setTr(await getTrial());
+  const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -445,22 +439,6 @@ function Content() {
           <PanelSectionRow><ToggleField label="Automatic updates" description="Off (default): a new release is only announced here and you decide when to install it. On: it installs by itself when no game is running." checked={!!up?.auto_update} onChange={(v) => run(() => setAutoUpdate(v))} /></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => run(() => checkUpdate(false))}>Check for updates now</ButtonItem></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{up ? (up.available ? `Available: ${up.available}` : (up.checked ? "Up to date." : "Not checked yet.")) + (up.last_error ? ` ${up.last_error}` : "") : "…"}</div></PanelSectionRow>
-        </PanelSection>
-      )}
-      {tab === "setup" && hh && (
-        <PanelSection title="Performance boost (M3, experimental)">
-          {!hh.available ? (
-            <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Not available on this system yet.</div></PanelSectionRow>
-          ) : (<>
-            <PanelSectionRow><ToggleField label="Performance boost (M3)" description="Experimental, off by default. For an eGPU without a monitor: games run on the eGPU and play on the handheld's screen, each frame packed small with PyroWave. Not faster than standard Game Mode at normal frame rates (about 5% slower in tests); still being worked on. Switch it on before plugging in. A monitor on the eGPU is still used when one is connected." checked={hh.enabled} disabled={busy}
-              onChange={(v) => run(() => setHandheld(v, hh.connector, hh.transfer))} /></PanelSectionRow>
-            {hh.enabled && (<>
-              {hh.screens.length > 1 && <PanelSectionRow><DropdownItem label="Screen" disabled={busy} selectedOption={hh.connector}
-                rgOptions={hh.screens.map((d) => ({ data: d.name, label: d.builtin ? "Built-in screen" : `${d.model} (USB-C)` }))}
-                onChange={(o) => run(() => setHandheld(true, o.data, hh.transfer))} /></PanelSectionRow>}
-              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{hh.active ? "On now." : !hh.egpu ? "Ready: turns on when an eGPU without a monitor is plugged in." : "Waiting: a monitor is connected to the eGPU, so the monitor is used."}</div></PanelSectionRow>
-            </>)}
-          </>)}
         </PanelSection>
       )}
       {tab === "setup" && (
