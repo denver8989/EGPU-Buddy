@@ -184,7 +184,9 @@ function Content() {
   const driverMissing = !!(su?.slow_build && su.installed_version && su.helpers_present && su.driver_ready === false);
   const behind = !!(su?.installed_version && vt(su.installed_version) < vt(su.payload_version));
   const needsInstall = !!(su && !su.unsupported && (!su.helpers_present || !su.installed_version || behind || (!!su.cmdline_missing && !su.cmdline_pending) || driverMissing));
-  const updateReady = !!(up?.available && vt(up.available) > vt(PLUGIN_VERSION) && !needsInstall);   // an update is offered only when one was detected AND the setup is complete
+  // offered whenever a newer release exists and setup is complete, including half way through an earlier update (plugin
+  // newer than its system files): hiding it there left users with no way forward
+  const updateReady = !!(up?.available && vt(up.available) > vt(PLUGIN_VERSION) && (!needsInstall || (behind && !!su?.helpers_present)));
   const installClick = () => confirmInstall(su?.installed_version ? "Update the system files" : "Install", () => installSystem(false), su?.installed_version ? () => updateDetached("") : undefined);
   // An AMD or Intel eGPU needs neither the patched nvidia-open build (the long part of an install)
   // nor the GBM-scanout gamescope (that exists only to fix the NVIDIA scan-out corruption).

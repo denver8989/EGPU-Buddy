@@ -761,9 +761,14 @@ def _update_worker(version):
 
 
 def _continue_update():
-    """Second half of an update, run by the freshly installed plugin after the Decky restart."""
+    """Second half of an update, run by the freshly installed plugin after the Decky restart. Also finishes an update that
+    was left half done (plugin newer than its installed system files, e.g. a game was running at the time): without this
+    the plugin sat behind its own files and only a hidden button could bring it level."""
     d = _settings()
-    if d.pop("continue_update", None) != PAYLOAD_VERSION: return
+    pending = d.pop("continue_update", None) == PAYLOAD_VERSION
+    installed = _read(VERSION_FILE)
+    behind = bool(installed) and os.path.exists(PRIV) and _vt(installed) < _vt(PAYLOAD_VERSION) and not (_untested() and not _accepted())
+    if not (pending or behind): return
     _save_settings(d)
     if _read(VERSION_FILE) == PAYLOAD_VERSION and os.path.exists(PRIV):
         _notify(f"EGPU Buddy updated to {PAYLOAD_VERSION}."); _reattach_after_update(True); return

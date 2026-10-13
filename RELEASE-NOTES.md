@@ -1,3 +1,9 @@
+0.7.94 — no more stuck updates.
+
+**Fixed**
+- An update that was interrupted half way (for example while a game was running) finishes by itself the next time the plugin starts, after any running game is closed.
+- "Update to …" is always offered when a newer version exists, even half way through an earlier update. Before, it was hidden there and the menu could only offer a restart that installed nothing.
+
 0.7.93 — play on the handheld screen with the eGPU.
 
 **New**
