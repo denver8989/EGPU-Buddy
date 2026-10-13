@@ -328,7 +328,8 @@ def _screen_state(name):
 
 
 # XR glasses identify themselves by the display name in their EDID. Brands only (models change every year).
-XR_BRANDS = ("viture", "xreal", "nreal", "rayneo", "rokid", "legion glasses", "nxtwear", "inmo", "rog xreal", "dream glass",
+# video glasses that show up as a USB-C screen (AI / standalone glasses without a video input are left out)
+XR_BRANDS = ("viture", "xreal", "nreal", "rayneo", "rokid", "legion glasses", "nxtwear", "rog xreal", "dream glass",
              "lenovo glasses", "tcl glasses")
 
 

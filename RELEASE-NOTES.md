@@ -1,3 +1,9 @@
+0.7.104 — XR glasses pictures.
+
+**New**
+- XR glasses show with a proper picture on the main page.
+- The glasses pop-up shows the maker's own product picture for VITURE, XREAL, ROG XREAL, RayNeo / TCL and Rokid glasses.
+
 0.7.103 — XR glasses pop-up fixes.
 
 **Fixed**
