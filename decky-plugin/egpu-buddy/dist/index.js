@@ -123,8 +123,12 @@ const maybeOfferScreen = async () => {
     const o = await getScreenOffer();
     if (!o.connector)
         return;
-    DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `${o.name} connected`, strDescription: o.game ? `Close the running game first, then use "Show Game Mode on ${o.name}" in EGPU Buddy.`
-            : `${o.detail}\n\nShow Game Mode on ${o.name}? Game Mode restarts on it (the screen goes dark for a few seconds). You can switch back from EGPU Buddy.`, strOKButtonText: o.game ? "OK" : "Switch", strCancelButtonText: "Stay here", onOK: async () => {
+    // XR glasses: their picture and what passthrough means; any other screen: the plain question as before
+    const big = (svg) => SP_JSX.jsx("div", { style: { display: "flex", justifyContent: "center", margin: "4px 0 14px" }, dangerouslySetInnerHTML: { __html: svg.replace('width="96" height="38"', 'width="300" height="120"') } });
+    const ask = o.game ? `Close the running game first, then use "Show Game Mode on ${o.name}" in EGPU Buddy.`
+        : `Game Mode restarts on it (the screen goes dark for a few seconds). You can switch back from EGPU Buddy.`;
+    DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `${o.name} connected`, strDescription: o.xr ? SP_JSX.jsxs("div", { children: [big(glassesIcon(o.brand)), SP_JSX.jsxs("div", { children: [SP_JSX.jsx("b", { children: "XR glasses passthrough." }), " Play your eGPU games in the glasses: the eGPU keeps rendering, the handheld sends the picture to the glasses (", modeText(o.detail ?? ""), ") and the sound moves to the glasses' speakers. No HDMI-to-USB-C adapter on the eGPU needed."] }), SP_JSX.jsx("div", { style: { opacity: 0.7, marginTop: "10px" }, children: ask })] })
+            : o.game ? ask : `${o.detail}\n\nShow Game Mode on ${o.name}? ${ask}`, strOKButtonText: o.game ? "OK" : o.xr ? "Show in the glasses" : "Switch", strCancelButtonText: "Stay here", onOK: async () => {
             if (o.game)
                 return;
             const r = await setGameScreen(o.connector);
@@ -159,7 +163,7 @@ const screenTargets = (s, tvWakes) => [
 ];
 const screenState = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
-const PLUGIN_VERSION = "0.7.97";
+const PLUGIN_VERSION = "0.7.98";
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
 const Progress = ({ pct, title, step, started, expect }) => (SP_JSX.jsxs("div", { style: { width: "100%", boxSizing: "border-box", padding: "4px 0" }, children: [SP_JSX.jsxs("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }, children: [SP_JSX.jsx("span", { children: title }), SP_JSX.jsxs("span", { children: [Math.round(pct), "%"] })] }), SP_JSX.jsx("div", { style: { width: "100%", height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.15)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { width: `${Math.max(0, Math.min(100, pct))}%`, height: "100%", background: "#1a9fff", transition: "width .4s" } }) }), SP_JSX.jsx("div", { style: { fontSize: "12px", marginTop: "4px", whiteSpace: "normal" }, children: step }), SP_JSX.jsxs("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: [started ? `${mmss(Date.now() / 1000 - started)} elapsed` : "", expect ? ` · usually ${expect}` : ""] }), SP_JSX.jsx("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: "You can close this menu: it continues, and a notification appears when it is done." })] }));
