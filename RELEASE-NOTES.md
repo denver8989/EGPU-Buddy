@@ -1,3 +1,13 @@
+0.7.107 — wake and glasses fixes.
+
+**Fixed**
+- Waking from sleep no longer restarts Game Mode when it is on the handheld screen or XR glasses.
+- The glasses pop-up no longer comes back after waking from sleep.
+- The XR glasses option no longer flickers on and off on the main page.
+- XR glasses show their real top refresh rate (120 Hz) instead of 60 Hz.
+- Updates no longer sit at 90% for over a minute.
+- The handheld no longer re-runs eGPU setup every second while XR glasses are plugged in but not in use.
+
 0.7.106 — two new add-ons.
 
 **New** (Setup > Extras, off by default)

@@ -273,6 +273,19 @@ def _native_mode(e):
     return w, h, max(z for x, y, z in dtds + vics if (x, y) == (w, h))
 
 
+_hz_best = None
+def _best_hz(name, mode):
+    """The highest refresh this screen has reported at this resolution. XR glasses without a picture (Game Mode on
+    another screen) describe themselves as 60 Hz only, though they run at 120 Hz once they show something."""
+    global _hz_best
+    if _hz_best is None:
+        _hz_best = dict(_settings().get("screen_hz", {}))
+    key = f"{name}|{mode[0]}x{mode[1]}"
+    if mode[2] > _hz_best.get(key, 0):
+        _hz_best[key] = mode[2]; d = _settings(); d["screen_hz"] = _hz_best; _save_settings(d)
+    return _hz_best[key]
+
+
 def _screen_info(conn):
     """('LG TV SSCR2', 'HDMI · 3840x2160 @ 120 Hz · 72"') from the EDID: native mode at its top refresh + size."""
     path = f"/sys/class/drm/{conn}"
@@ -283,6 +296,7 @@ def _screen_info(conn):
     parts = []
     mode = _native_mode(e) if len(e) >= 128 else None
     if mode:
+        mode = (*mode[:2], _best_hz(_edid_name(path + "/edid"), mode))
         parts.append("{}x{} @ {} Hz".format(*mode))
     if len(e) >= 128 and e[21] and e[22]:
         parts.append(f'{round((e[21] ** 2 + e[22] ** 2) ** 0.5 / 2.54)}"')
@@ -351,7 +365,7 @@ def _game_screen_res():
     return ""
 
 
-def _handheld_screens():
+def _handheld_screens_now():
     """Connected screens driven by the handheld's own GPU: the built-in panel and USB-C displays (e.g. XR glasses)."""
     cards = {os.path.basename(c).split("-")[0] for c in glob.glob("/sys/class/drm/card[0-9]*-eDP-*")}
     out = []
@@ -365,6 +379,17 @@ def _handheld_screens():
             out.append({"name": conn, "builtin": conn.startswith("eDP"), "model": "Built-in screen" if conn.startswith("eDP") else (model or conn),
                         "detail": detail, "xr": xr, "brand": brand})
     return out
+
+
+# XR glasses drop off and reconnect about once a second while Game Mode is on another screen (no picture -> they reset
+# their link): keep a screen listed for 20 s after it was last seen, so its option does not flicker on the main page.
+_hh_seen = {}
+def _handheld_screens():
+    now = time.monotonic(); cur = _handheld_screens_now()
+    for d in cur:
+        _hh_seen[d["name"]] = (now, d)
+    names = {d["name"] for d in cur}
+    return cur + [d for n, (t, d) in list(_hh_seen.items()) if n not in names and now - t < 20]
 
 
 def _handheld_cfg():
@@ -645,10 +670,17 @@ def _setup_worker(action, with_driver=False, version=None, vendor="nvidia"):
             before = _session_fingerprint(); _setup["gm_restart"] = False
             tgz = _fetch_payload(version)
             _slog(f"extracting to {SYSDIR}", 5)
+            # the offline restore caches (driver packages, ~450 MB, and kernel modules) outlive a release: wiping them
+            # with the old release made every update download them again (over a minute stuck at 90%)
+            keep = {n: f"{SYSDIR}.{n}-keep" for n in ("pkgcache", "modcache") if os.path.isdir(f"{SYSDIR}/{n}")}
+            for n, k in keep.items():
+                shutil.rmtree(k, ignore_errors=True); os.rename(f"{SYSDIR}/{n}", k)
             shutil.rmtree(SYSDIR, ignore_errors=True); os.makedirs(os.path.dirname(SYSDIR), exist_ok=True)
             with tarfile.open(tgz) as t:
                 top = t.getnames()[0].split("/")[0]; t.extractall(os.path.dirname(SYSDIR))
             os.rename(os.path.join(os.path.dirname(SYSDIR), top), SYSDIR)
+            for n, k in keep.items():
+                shutil.rmtree(f"{SYSDIR}/{n}", ignore_errors=True); os.rename(k, f"{SYSDIR}/{n}")
             subprocess.run(["chown", "-R", USER, SYSDIR], env=_clean_env())
             comps = SETUP_COMPONENTS + (",driver" if shutil.which("pacman") and "driver" not in SETUP_COMPONENTS and os.environ.get("EGPU_SETUP_NO_DRIVER") != "1" else "")
             env.update(EGPU_COMPONENTS=comps, EGPU_PREBUILT_GAMESCOPE=f"{SYSDIR}/prebuilt/gamescope-gbm")
@@ -1201,7 +1233,7 @@ class Plugin:
     async def get_screen_offer(self):
         """A screen newly connected to the eGPU while Game Mode is on another one -> offer to move."""
         global _seen_screens
-        bdf = _gpu_bdf(); t = time.time()
+        bdf = _gpu_bdf(); t = time.monotonic()   # stands still during sleep: waking up is not a new connection
         now = {d["name"]: d for d in _displays(bdf)} if bdf else {}
         now.update({d["name"]: {**d, "handheld": True} for d in _handheld_screens() if not d["builtin"]})   # XR glasses etc.
         # first connection only: a screen that blinks out while Game Mode restarts on another one (glasses lose their

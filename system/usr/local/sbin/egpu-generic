@@ -79,6 +79,12 @@ logout_plasma(){ as_deck qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logo
 
 case "$verb" in
 attach)
+  # Runs on every display hotplug of the built-in GPU too (XR glasses on the handheld's USB-C reconnect about once a
+  # second while Game Mode is on another screen): a read-only look first, and nothing touched unless an AMD / Intel
+  # eGPU is there and not yet set up. NVIDIA has its own path (egpu-hotplug-mount.sh).
+  read -r bdf vendor card < <(egpu_find) || exit 0
+  [ "$vendor" != nvidia ] || exit 0
+  [ -e $MOVED ] && exit 0
   # platform guards first: the tunnel must be awake and its fatal errors masked BEFORE the card is
   # touched, or a link event during bring-up can take the whole machine down with a fabric flood.
   platform_guards

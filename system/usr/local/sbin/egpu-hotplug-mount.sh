@@ -789,6 +789,11 @@ if pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1; then
   # each restart fired the next one (and Decky gave up). Moving between eGPU screens is the plugin's prompt's job.
   _oc=$(tr '\0' '\n' </proc/"$(pgrep -n -x 'gamescope(-wl)?')"/environ 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p' | cut -d, -f1)
   case "$_oc" in ""|"*"|eDP-*) ;; *) log "Game Mode already on the eGPU display ($_oc) - nothing to switch"; exit 0 ;; esac
+  # Game Mode on the handheld screen (or XR glasses) with the games already on the eGPU: nothing to switch either. After a
+  # wake the dock re-announces itself and this ran a needless Game Mode restart (black screen for ~10 s, 2026-10-13).
+  if tr '\0' '\n' </proc/"$(pgrep -n -x 'gamescope(-wl)?')"/environ 2>/dev/null | grep -qx 'NV_EGPU_GAMESCOPE_HANDHELD_GPU=1'; then
+    log "Game Mode already renders on the eGPU (on ${_oc:-the handheld screen}) - nothing to switch"; exit 0
+  fi
   log "eGPU ready + Game Mode -> gamescope switch onto the eGPU$([ "$boost" = 1 ] && echo ' (handheld screen)')"; sleep 2
   # handheld screen: the session puts the sound on the handheld itself; on a monitor, sound follows and the monitor is
   # asked to wake (DDC/CI or CEC; a plugged-in monitor in standby otherwise only wakes from the signal)
