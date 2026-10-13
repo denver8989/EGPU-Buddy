@@ -134,6 +134,16 @@ fi
 # VK_DRIVER_FILES / VK_ICD_FILENAMES: the session's NVIDIA-only routing never reaches it and it composites on the built-in
 # GPU and opens ITS display node (seen on SteamOS, where the private build cannot run). A command-line option cannot be
 # stripped: name the eGPU explicitly; gamescope opens the KMS node that belongs to the Vulkan device it chose.
+# Handheld screen with the eGPU attached (nv-egpu-gamescope-session sets this): gamescope itself composites on the
+# handheld GPU and drives its screen; only Steam and the games (a separate service) get the eGPU.
+if [ "${NV_EGPU_GAMESCOPE_HANDHELD_GPU:-0}" = 1 ]; then
+  _card=$(basename "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)"); _card=${_card%%-*}   # the panel's card
+  _v=$(cat "/sys/class/drm/$_card/device/vendor" 2>/dev/null || true); _d=$(cat "/sys/class/drm/$_card/device/device" 2>/dev/null || true)
+  _icd=$(ls /usr/share/vulkan/icd.d/$(case "$_v" in 0x8086) echo intel;; *) echo radeon;; esac)_icd*.json 2>/dev/null | head -1 || true)
+  [ -n "$_icd" ] && export VK_DRIVER_FILES="$_icd" VK_ICD_FILENAMES="$_icd"
+  prefix=()   # exactly like stock Game Mode on the handheld: none of the eGPU-monitor workarounds
+  [ -n "$_v" ] && [ -n "$_d" ] && prefix+=(--prefer-vk-device "${_v#0x}:${_d#0x}")
+fi
 case "${VK_DRIVER_FILES:-}${VK_ICD_FILENAMES:-}" in *nvidia*)
   if [ -n "$(getcap "$gamescope_bin" 2>/dev/null)" ] && [[ " $* " != *" --prefer-vk-device "* ]]; then
     read -r _bdf _ < <(/usr/local/sbin/egpu-detect 2>/dev/null) || _bdf=""

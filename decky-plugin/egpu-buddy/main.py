@@ -956,6 +956,8 @@ class Plugin:
             "game_mode": game_mode, "game_running": _game_running() if game_mode else False,
             "attach_pending": os.path.exists(GM_PENDING), "dock_present": _dock_present(),
             "on_egpu": bool(bdf) and game_mode and output not in ("", "*", "eDP-1"),
+            # Game Mode on the handheld screen with the games on the eGPU (picked in the plugin, or no eGPU monitor)
+            "egpu_handheld": bool(bdf) and game_mode and _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") == "1",
             "output": output,
             "gm_status": _json(GM_STATUS), "desktop_status": _json(DESKTOP_STATUS),
             # Strip NULs and control characters: a hardware reset can leave this file NUL-padded
@@ -1037,7 +1039,7 @@ class Plugin:
         open(GAME_SCREEN, "w").write(connector + "\n")
         # once Game Mode is up there, ask the screen to turn on and select our input (HDMI-CEC / DDC/CI, where the
         # connection carries them; a screen that answers neither is simply left as it is)
-        _spawn_root_job("switch", ["/bin/bash", "-c", f'{SWITCH}; /usr/local/sbin/egpu-screen wake --input {connector}'])
+        _spawn_root_job("switch", ["/bin/bash", "-c", SWITCH if connector.startswith("eDP") else f'{SWITCH}; /usr/local/sbin/egpu-screen wake --input {connector}'])
         return {"ok": True, "message": f"Moving Game Mode to {connector}: the screen goes dark for a few seconds."}
 
     # Settings > Performance boost (M3), opt-in, off by default: with no monitor on the eGPU, Game Mode renders on the

@@ -1,3 +1,11 @@
+0.7.93 — play on the handheld screen with the eGPU.
+
+**New**
+- Setup > Game screen: play on the handheld's own screen while games run on the eGPU, or on any eGPU monitor/TV. The main page has "Show Game Mode on the handheld screen" too. Sound moves with it.
+
+**Fixed**
+- With nothing plugged into the eGPU, Game Mode used to show only a text console on the handheld. It now plays on the handheld screen with the games on the eGPU. A monitor that is plugged in but asleep or off still gets Game Mode and is woken.
+
 0.7.92 — updates without a Game Mode restart.
 
 **Fixed**

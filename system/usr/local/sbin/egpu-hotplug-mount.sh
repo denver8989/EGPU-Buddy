@@ -699,14 +699,10 @@ set_autologin_plasma(){ /usr/local/sbin/egpu-dm-session pin plasma >/dev/null 2>
 # A monitor that dropped into deep standby (no signal yet, because we are waiting for IT) can stop asserting hot-plug, and
 # then nothing ever changes by itself. So do not just wait: force a probe of every eGPU connector each cycle ("detect"
 # makes the driver query the monitor over DisplayPort AUX / DDC), and say in the UI what is being waited for.
-# Opt-in Performance boost (M3, plugin Settings), armed before the eGPU arrived: in Game Mode an eGPU without a monitor
-# renders for the handheld's own screen, so there is no monitor to wait for. Desktop mode is never affected.
-boost_armed() {
-  local h; h=$(getent passwd 1000 | cut -d: -f6)
-  [ -r "$h/.local/lib/nv-egpu-buddy/xpw/libxpw.so" ] && pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 &&
-    python3 -c 'import json,sys; sys.exit(0 if json.load(open("/var/lib/nvegpu/handheld-screen.json")).get("enabled") else 1)' 2>/dev/null
-}
-boost=0; [ "$egpu_has_output" != 1 ] && boost_armed && { boost=1; log "no eGPU monitor, Performance boost on: Game Mode renders on the eGPU for the handheld screen"; }
+# The handheld screen picked in the plugin for Game Mode: games render on the eGPU and play on the handheld's own screen,
+# so there is no monitor to wait for. Desktop mode is never affected.
+handheld_chosen() { [ "$(cat /var/lib/nvegpu/game-screen 2>/dev/null)" = eDP-1 ] && pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1; }
+boost=0; [ "$egpu_has_output" != 1 ] && handheld_chosen && { boost=1; log "handheld screen chosen: Game Mode stays on the handheld screen, games render on the eGPU"; }
 if [ "$egpu_has_output" != 1 ] && [ "$boost" = 0 ]; then
   mkdir -p /run/nvegpu; printf '{"state":"SWITCHING","message":"%s"}\n' "The eGPU is ready. Waiting for the monitor: switch it on or wake it (up to 90 seconds)." > /run/nvegpu/gm-status.json 2>/dev/null
   for _w in $(seq 1 45); do
@@ -740,6 +736,11 @@ if [ "$egpu_has_output" != 1 ] && [ "$boost" = 0 ]; then
       done
     fi
   fi
+fi
+# Nothing at all plugged into the eGPU (or nothing answered the forced signal): in Game Mode the games still render on the
+# eGPU and play on the handheld's own screen. The desktop keeps the old behaviour.
+if [ "$egpu_has_output" != 1 ] && [ "$boost" = 0 ] && pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1; then
+  boost=1; log "no monitor on the eGPU: Game Mode on the handheld screen, games render on the eGPU"
 fi
 if [ "$egpu_has_output" != 1 ] && [ "$boost" = 0 ]; then
   mkdir -p /run/nvegpu; printf '{"state":"IDLE","message":"%s"}\n' "The eGPU is ready, but its monitor is not responding. Staying on the built-in screen — switch the monitor on and it will take over by itself." > /run/nvegpu/gm-status.json 2>/dev/null
@@ -783,8 +784,11 @@ if pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1; then
   # each restart fired the next one (and Decky gave up). Moving between eGPU screens is the plugin's prompt's job.
   _oc=$(tr '\0' '\n' </proc/"$(pgrep -n -x 'gamescope(-wl)?')"/environ 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p' | cut -d, -f1)
   case "$_oc" in ""|"*"|eDP-*) ;; *) log "Game Mode already on the eGPU display ($_oc) - nothing to switch"; exit 0 ;; esac
-  log "eGPU ready + Game Mode -> gamescope switch onto the eGPU$([ "$boost" = 1 ] && echo ' (Performance boost, handheld screen)')"; sleep 2
-  gpu_healthy && { /usr/local/sbin/egpu-gamemode-switch >/dev/null 2>&1; log "gamemode-switch rc=$?"; egpu_audio_follow; }
+  log "eGPU ready + Game Mode -> gamescope switch onto the eGPU$([ "$boost" = 1 ] && echo ' (handheld screen)')"; sleep 2
+  # handheld screen: the session puts the sound on the handheld itself; on a monitor, sound follows and the monitor is
+  # asked to wake (DDC/CI or CEC; a plugged-in monitor in standby otherwise only wakes from the signal)
+  gpu_healthy && { /usr/local/sbin/egpu-gamemode-switch >/dev/null 2>&1; log "gamemode-switch rc=$?"
+    [ "$boost" = 1 ] || { egpu_audio_follow; /usr/local/sbin/egpu-screen wake 2>/dev/null | while read -r l; do log "screen $l"; done; }; }
   exit 0
 fi
 # Only a running desktop session may pin the autologin to the desktop (the NVIDIA-only re-login must come back to
