@@ -1,3 +1,8 @@
+0.7.102 — handheld sound fix.
+
+**Fixed**
+- Switching Game Mode to the handheld puts sound on its speakers (it could stay on the XR glasses).
+
 0.7.101 — one confirmation for updates.
 
 **Fixed**

@@ -127,8 +127,10 @@ for s in json.load(sys.stdin):
     path = ((s.get("properties") or {}).get("device.bus_path") or "").replace(":", "_"); name = s.get("name") or ""
     if not any(w in path or w in name.replace(":", "_") for w in skip):
         bus = (s.get("properties") or {}).get("device.bus") or ""
-        best.append((usb_first and bus != "usb", ".pro-output" in name, name))
-print(min(best)[2] if best else "")
+        # handheld screen: its speakers / jack, not a display-audio output (HDMI/DP) or the glasses still plugged in
+        display = bus == "usb" or "HDMI" in name or "DisplayPort" in name
+        best.append((usb_first and bus != "usb", not usb_first and display, ".pro-output" in name, name))
+print(min(best)[-1] if best else "")
 ' 2>/dev/null)
     [ -n "${sink:-}" ] || { echo "no handheld audio output found; leaving sound as it is"; exit 0; }
     [ "$(pactl get-default-sink 2>/dev/null)" = "$sink" ] && { echo "sound is already on the handheld"; exit 0; }
