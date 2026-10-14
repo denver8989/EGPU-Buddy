@@ -36,6 +36,13 @@ are supported in beta.
 - **Keeps itself working:** Decky restarts if it stops, and the setup repairs itself after OS updates.
 - **Desktop app** with the same controls for the docked desktop.
 
+## Demo video
+
+<p align="center">
+  <a href="https://youtu.be/SudZq7A79k8"><img src="https://img.youtube.com/vi/SudZq7A79k8/maxresdefault.jpg" alt="Watch the demo: SteamOS EGPU Buddy, hot-pluggable eGPU in Game Mode on a Linux handheld" width="70%"></a>
+</p>
+<p align="center"><em><a href="https://youtu.be/SudZq7A79k8">Watch on YouTube</a></em></p>
+
 ## Screenshots
 
 <p align="center">
