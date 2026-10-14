@@ -8,7 +8,8 @@
 
 # SteamOS EGPU Buddy
 
-Use an eGPU with a Linux gaming handheld in **Game Mode**, the way it works on Windows: plug it in and Game Mode
+**Hot-pluggable eGPU support for SteamOS, Bazzite and CachyOS handhelds** (Decky Loader plugin and desktop app).
+Use an eGPU (Thunderbolt, USB4 or OCuLink dock) with a Linux gaming handheld in **Game Mode**, the way it works on Windows: plug it in and Game Mode
 moves to your monitor or TV; unplug it, safely or by pulling the cable, and it goes back to the handheld screen;
 plug it in again and it comes back. It's all controlled from a Decky plugin in the Quick Access menu.
 
@@ -83,6 +84,30 @@ after a reboot.
 
 After the reboot, plug the eGPU in. Updates are offered in the plugin; automatic updates are off unless you turn
 them on. Every release stays available on the Releases page.
+
+## FAQ
+
+**Can I use an external GPU with my Linux gaming handheld in Game Mode?**
+Yes. EGPU Buddy makes the eGPU hot-pluggable in Steam Game Mode (gamescope): plug in and Game Mode moves to the
+eGPU's screen, unplug and it returns to the handheld screen.
+
+**Does it work with NVIDIA eGPUs on SteamOS?**
+Yes. It ships a gamescope fix for the NVIDIA Game Mode corruption (striping, flicker, garbled picture), plus
+hot-unplug-safe NVIDIA driver patches. RTX 30 and 50 are tested; an RTX 40 user reports it working.
+
+**Does it work with AMD or Intel eGPUs?**
+Beta, not yet tested on real hardware. Reports are welcome.
+
+**What happens if I pull the cable without ejecting?**
+The handheld recovers to its own screen within seconds, and plugging in again re-attaches.
+
+**Which systems are supported?**
+SteamOS 3.8 and CachyOS (Deckify) are tested; see [TESTED.md](TESTED.md) for exactly what was tried, and keep a way
+to boot without the eGPU.
+
+**Is it safe?**
+It changes the NVIDIA driver, boot settings and the Game Mode session. Use at your own risk and read
+[TESTED.md](TESTED.md) first.
 
 ## Reporting problems
 
