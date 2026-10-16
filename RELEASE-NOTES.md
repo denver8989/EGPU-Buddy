@@ -1,3 +1,13 @@
+0.7.114 — XG Mobile shown by name, cleaner power readings, desktop diagnostics.
+
+**Fixed**
+- The plugin and the desktop app show the GPU as "ASUS ROG XG Mobile · RTX 5070 Ti Laptop GPU".
+- XG Mobile and other laptop-class GPUs: the desktop app no longer offers a power-limit slider that does nothing, the power shows the draw alone, and the fan reads "set by the dock". Their power and fan are run by the dock, not the driver.
+- Safe Detach on the X11 desktop (SteamOS's default desktop) now stops before changing anything and says to use Safe Detach from Game Mode, instead of failing partway. Desktop support for X11 comes next.
+
+**New**
+- Support reports record which desktop is running (X11 or Wayland) and its logs, so a report saved from Desktop Mode ("Save EGPU Buddy report" icon) shows why something failed there.
+
 0.7.113 — the NVIDIA picture fix checks itself, Decky follows Steam's channel.
 
 **Fixed**
