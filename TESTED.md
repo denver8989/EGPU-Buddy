@@ -3,33 +3,6 @@
 Everything below was verified on the machines described in the README. "Verified" means it was exercised
 repeatedly and behaved as described.
 
-## 2026-10-16 — ROG Xbox Ally X + ASUS XG Mobile 2025 (on-device testing: SilverplayerX)
-
-On-device testing by **SilverplayerX** (Discord), on their own machine; not a machine this project has. Facts from
-their support reports.
-
-| | |
-|---|---|
-| Handheld | ASUSTeK COMPUTER INC. **ROG Xbox Ally X**, model RC73XA (DMI `ROG Xbox Ally X RC73XA_RC73XA`, version 1.0) |
-| APU | AMD Ryzen AI Z2 Extreme, Radeon 890M (Strix Point, `RADV STRIX1`, chip ID 0x150e) at `0000:64:00.0`, `card0` |
-| Built-in screen | TMX TL070FVXS01-0, 7", 1920x1080 @ 120 Hz, `eDP-1` |
-| eGPU | **ASUS ROG XG Mobile (2025)** over USB4 (Thunderbolt device `ASUSTeK GC34X`), **NVIDIA GeForce RTX 5070 Ti Laptop GPU** (GB205M, `10de:2f18`) at `0000:03:00.0`, `card1` |
-| Link | USB4 2 x 20 Gb/s, PCIe Gen3 x4 |
-| Screen on the eGPU | TV over HDMI (`HDMI-A-1`), 4K |
-| OS | **SteamOS 3.8.28** (stable), kernel `7.2.7-valve1-1-neptune-72` |
-| Driver | patched `nvidia-open` 610.57.04 (beta 615 attempted) |
-
-**Status: partly working, fixes not yet confirmed on the device.**
-
-- 0.7.109: the plugin assumed Legion Go 2 hardware. The handheld screen route never ran, Safe Detach failed (rc 6),
-  so the beta driver could not start, and the power slider read `NaN`. Fixed in 0.7.110 by hardware detection.
-- 0.7.110: the driver installs and some games run. Reported: the NVIDIA Game Mode fix not in effect (glitches), GPU
-  hangs (NVRM "TLB invalidation failed", "FSP command timed out", then off the bus), Safe Detach failing, a crash
-  when switching to Desktop (X11 took the eGPU as its primary GPU), a black screen during the beta driver trial.
-- 0.7.111 targets those, for a ROG Ally or an XG Mobile only (`NVreg_EnablePCIeGen3=1`, the corrected link pin with
-  ASPM off, X11 kept on the Radeon, no crash mark from a GPU hang, no re-attach after a failed Safe Detach). Waiting
-  for their next report; its snapshots will show what still fails.
-
 ## 2026-09-20 — second machine, second GPU family (0.7.68)
 
 Legion Go 1 (AMD Phoenix) + **SteamOS 3.8**, kernel 6.16.12-valve24.5, AOOSTAR AG03 enclosure (Intel JHL9480 TB5),

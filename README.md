@@ -56,14 +56,12 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 
 ## Tested hardware
 
-| | Legion Go 2 | Legion Go 1 |
-|---|---|---|
-| OS | CachyOS (Deckify) | SteamOS 3.8 |
-| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 |
-| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Acer X49 ultrawide (DisplayPort) |
-
-**On-device testing:** ROG Xbox Ally X with an ASUS XG Mobile 2025 (RTX 5070 Ti Laptop GPU) on SteamOS 3.8.28, by
-SilverplayerX: partly working, fixes in progress; exact hardware and status in [TESTED.md](TESTED.md).
+| | Legion Go 2 | Legion Go 1 | ROG Xbox Ally X |
+|---|---|---|---|
+| OS | CachyOS (Deckify) | SteamOS 3.8 | SteamOS 3.8 |
+| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU |
+| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) |
+| Status | Tested | Tested | Testing in progress (on-device testing: SilverplayerX) |
 
 **NVIDIA:** RTX 30 and RTX 50 tested here; RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**
 beta, not yet tested on real hardware. Reports are welcome. Details: [docs/TECHNICAL.md](docs/TECHNICAL.md).
