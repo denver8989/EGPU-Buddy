@@ -1,3 +1,10 @@
+0.7.115 — the driver is there from boot, even after a forced restart or a SteamOS update.
+
+**Fixed** (SteamOS)
+- A forced restart while the eGPU driver was being prepared could leave a broken driver file behind, so the next boot had no driver and the plugin asked to install one. The file is now written so that an interruption can never replace the working driver, and a broken one is thrown away at boot.
+- The driver for a SteamOS update's new kernel is prepared within about 2 minutes of the update being ready (was up to 10), so it is usually there from the first boot of the update.
+- While the driver is being built after a SteamOS update, the plugin says so instead of asking to install drivers, and does not start a second build.
+
 0.7.114 — XG Mobile shown by name, cleaner power readings, desktop diagnostics.
 
 **Fixed**
