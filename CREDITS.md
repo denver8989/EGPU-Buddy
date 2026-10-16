@@ -3,6 +3,13 @@
 Nothing in this repository would work without the people below. Where a fix is vendored, the file names in this repo
 say where it came from.
 
+## Testing on hardware this project does not have
+
+- **SilverplayerX** (Discord) — first tester on a **ROG Xbox Ally X with an ASUS XG Mobile 2025**. Their support
+  reports, logs and photos found the Legion Go 2 assumptions that broke the handheld screen, Safe Detach and the beta
+  driver there (0.7.110), the laptop-GPU power reading, the X11 desktop taking the eGPU, and the GPU dropping off the
+  link (0.7.111). Exact hardware: [TESTED.md](TESTED.md#2026-10-16--rog-xbox-ally-x--asus-xg-mobile-2025-community-tester-silverplayerx).
+
 ## ASUS XG Mobile
 
 - **Kentronix57 — [Decky-Loader-XGMobile-Manager](https://github.com/Kentronix57/Decky-Loader-XGMobile-Manager)** (GPL-3.0),
