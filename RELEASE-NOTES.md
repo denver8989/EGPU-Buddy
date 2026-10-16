@@ -1,3 +1,13 @@
+0.7.112 — one support report with everything, saved from Decky or the desktop.
+
+**New**
+- "Save support report to Desktop" is always in the plugin now (it was hidden behind a setting). It saves one file with everything EGPU Buddy logs.
+- Desktop Mode: a "Save EGPU Buddy report" icon saves the same report, even when Decky does not load.
+- The report says whether the NVIDIA Game Mode picture fix is really running, and if not, where it was skipped. It also shows how Game Mode was started, the session's own log, Steam sign-in events (account numbers removed), session switches and every other EGPU Buddy log.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- Safe Detach no longer fails with "Game Mode did not come back on the handheld screen" when Game Mode is in fact back there. If it still cannot confirm it, it restarts the session without the eGPU instead of giving up.
+
 0.7.111 — ROG Ally and XG Mobile stability, better support reports.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
