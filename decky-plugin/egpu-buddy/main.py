@@ -968,6 +968,16 @@ def _hw_line():
     return f"{d.get('chip', '?')} · profile {d.get('profile', '?')} · dock {d.get('dock', '?')} · XG Mobile {d.get('xg_mobile', '?')} · built-in GPU {d.get('igpu', '?')}" if d else "not checked yet"
 
 
+_dock_cache = {"bdf": None, "label": ""}
+def _dock_label(bdf):
+    """'ASUS ROG XG Mobile' when the eGPU sits in one (the GPU name alone, "RTX 5070 Ti Laptop GPU", does not say so);
+    '' for any other dock. Looked up once per attached GPU."""
+    if _dock_cache["bdf"] != bdf:
+        dock = _sh(["/usr/local/sbin/egpu-detect", "--dock"], 5)[1] if bdf else ""
+        _dock_cache.update(bdf=bdf, label="ASUS ROG XG Mobile" if dock.startswith("xg-mobile") else "")
+    return _dock_cache["label"]
+
+
 def _user_cmd(cmd, timeout=15):
     """A command in the session user's systemd/journal context (the backend runs as root). Output only."""
     try:
@@ -1001,6 +1011,8 @@ def _fix_verdict(gpid, exe, priv):
         v = "ACTIVE (Game Mode runs the GBM-scanout build)"
     elif not on_egpu:
         v = "not in use: Game Mode is on the handheld's own GPU (the fix is only for gamescope on the eGPU)"
+    elif w_ok and w.get("HANDHELD_GPU") == "1":
+        v = "not in use: Game Mode is on the handheld screen with the games on the eGPU (gamescope runs on the handheld's GPU by design)"
     elif not w_ok:
         v = "NOT ACTIVE: EGPU Buddy's session wrapper did not start this gamescope, so its routing and the GBM build were never applied"
     elif not s_ok:
@@ -1081,6 +1093,24 @@ def _support_report():
             for s in re.findall(r"^Session=(.*)$", _read(p), re.M)]
     lines += ["", "## Desktop session", f"sessions: {' '.join(sess) or '?'}", f"login manager: {'; '.join(pins) or 'no Session= lines'}",
               f"X11 desktop on the built-in GPU: {'yes' if os.path.exists('/etc/X11/xorg.conf.d/10-egpu-buddy-builtin-gpu.conf') else 'no'}"]
+    # which desktop runs NOW (Desktop Safe Detach and the desktop attach work on KWin/Wayland; SteamOS defaults to X11)
+    pid = lambda n: _sh(["pgrep", "-U", USER, "-x", n], 3)[1].split("\n")[0] or "none"
+    stype = [l for l in _sh(["loginctl", "list-sessions", "--no-legend"], 5)[1].splitlines() if USER in l]
+    types = []
+    for l in stype:
+        sid = l.split()[0]
+        info = dict(x.split("=", 1) for x in _sh(["loginctl", "show-session", sid, "-p", "Type", "-p", "Class", "-p", "State", "-p", "Desktop"], 5)[1].splitlines() if "=" in x)
+        if info.get("Class") == "user": types.append(f"{info.get('Type', '?')}/{info.get('Desktop', '?')} ({info.get('State', '?')})")
+    lines += [f"running now: session {', '.join(types) or '?'} · kwin_wayland {pid('kwin_wayland')} · kwin_x11 {pid('kwin_x11')} · "
+              f"Xorg {_sh(['pgrep', '-x', 'Xorg'], 3)[1].split(chr(10))[0] or 'none'} · plasmashell {pid('plasmashell')} · gamescope {pid('gamescope-wl')}",
+              f"Desktop Safe Detach status: {_read(f'/run/user/{UID}/nv-egpu-buddy/safe-detach-status.json') or '(none)'}"]
+    xlog = [l for l in _read(f"{USER_HOME}/.local/share/xorg/Xorg.0.log").splitlines() if re.search(r"\(EE\)|NVIDIA|nvidia|AutoAddGPU|amdgpu\(0\): Output|GPU", l)]
+    if xlog:
+        lines += ["", "## X11 desktop: Xorg log, errors and GPUs (last 40)"] + [l[:300] for l in xlog[-40:]]
+    dj = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
+              "kwin_x11|kwin_wayland|plasmashell.*(rror|crash)|startplasma|Xorg|egpu-safe-detach|safe-detach-ui|egpu-display|egpu-republish|relogin"], 20)[1].splitlines()
+    if dj:
+        lines += ["", "## Desktop and compositor log, this boot (last 60)"] + [l[:300] for l in dj[-60:]]
     # the attach, Game Mode switch/detach and driver trial logs: the journal tail alone was all NVRM flood after a GPU hang
     for title, path, n in (("Attach log", "/var/log/egpu-hotplug-mount.log", 40), ("Game Mode switch / detach log", "/var/log/egpu-gamemode.log", 25),
                            ("Safe Detach status", "/run/nvegpu/gm-status.json", 2), ("Safe Detach teardown (last run)", "/run/nvegpu/gm-helper.log", 30),
@@ -1278,6 +1308,7 @@ class Plugin:
             "game_mode": game_mode, "game_running": _game_running() if game_mode else False,
             "attach_pending": os.path.exists(GM_PENDING), "dock_present": _dock_present(),
             # Game Mode on the handheld screen (or a USB-C screen on it) with the games on the eGPU
+            "dock": _dock_label(bdf),
             "egpu_handheld": (hh := bool(bdf) and game_mode and _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") == "1"),
             "on_egpu": bool(bdf) and game_mode and output not in ("", "*", "eDP-1") and not hh,
             # USB-C screens on the handheld itself (XR glasses, portable monitors): offered only while an eGPU is attached

@@ -36,6 +36,8 @@ def sysfs_gpu(bdf):
          "utilization.gpu": read(dev + "/gpu_busy_percent"), "fan.speed": num(hw + "/pwm1", 2.55)}
     return {k: v for k, v in g.items() if v}
 
+_DOCK = [None, ""]   # [bdf it was looked up for, label]: egpu-detect is a script, not run on every poll
+
 def status():
     _, l, _ = sh(["lspci", "-Dn"]); bdf = next((x.split()[0] for x in l.splitlines() if " 0300: 10de:" in x), ""); vendor = "nvidia" if bdf else ""
     if not bdf:
@@ -57,7 +59,9 @@ def status():
                     if c.startswith(card + "-") and read(f"/sys/class/drm/{c}/status") == "connected":
                         displays.append({"name": c.split("-", 1)[1], "enabled": read(f"/sys/class/drm/{c}/enabled") == "enabled"})
     panel = [read(p + "/enabled") for p in __import__("glob").glob("/sys/class/drm/card*-eDP-1")]
-    return {"present": bool(bdf), "bdf": bdf, "vendor": vendor, "driver_loaded": driver, "tunnel": tunnel, "game_mode": game_mode,
+    # the dock, when the GPU name alone does not say what it is ("RTX 5070 Ti Laptop GPU" is an ASUS XG Mobile)
+    if _DOCK[0] != bdf: _DOCK[:] = [bdf, "ASUS ROG XG Mobile" if bdf and sh(["/usr/local/sbin/egpu-detect", "--dock"])[1].startswith("xg-mobile") else ""]
+    return {"present": bool(bdf), "bdf": bdf, "vendor": vendor, "dock": _DOCK[1], "driver_loaded": driver, "tunnel": tunnel, "game_mode": game_mode,
             "gpu": gpu, "displays": displays, "panel_enabled": (panel[0] == "enabled") if panel else None,
             "detach": jread(f"{RUN}/safe-detach-status.json"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0]}
 

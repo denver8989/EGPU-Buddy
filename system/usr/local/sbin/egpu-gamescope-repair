@@ -72,6 +72,8 @@ if [ "${1:-}" = --verify ]; then
   [ "$exe" = "$(readlink -f "$PRIV")" ] && { log "verify: the NVIDIA picture fix is running (gamescope $g)"; exit 0; }
   R=/run/user/$(stat -c %u "$UH")/nv-egpu-buddy
   wpid=$(sed -n 's/^pid=//p' "$R/session-wrapper" 2>/dev/null); spid=$(sed -n 's/^pid=//p' "$R/gamescope-shim" 2>/dev/null)
+  # handheld screen with the games on the eGPU: gamescope composites on the handheld's GPU by design (Valve's gamescope)
+  [ "$wpid" = "$g" ] && grep -qx 'HANDHELD_GPU=1' "$R/session-wrapper" 2>/dev/null && { log "verify: Game Mode is on the handheld screen with the games on the eGPU; the picture fix is not used on that route"; exit 0; }
   if [ ! -x "$PRIV" ]; then cause=not-installed
   elif [ "$wpid" != "$g" ]; then cause=wrapper
   elif [ "$spid" != "$g" ]; then cause=shim

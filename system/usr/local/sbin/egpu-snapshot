@@ -63,7 +63,7 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   stock=/usr/lib/steamos/gamescope-session; [ -r "$stock" ] || stock=$(command -v gamescope-session-plus 2>/dev/null)
   [ -n "$stock" ] && [ -r "$stock" ] && { echo "how $stock starts gamescope:"; grep -nE '(^|[ /"])gamescope( |"|$)|systemd-run|env -i|exec ' "$stock" 2>/dev/null | head -12 | cut -c1-200 | sed 's/^/  /'; }
   pid1(){ local p; p=$(pgrep -x "$1" 2>/dev/null | head -1); echo "${p:-none}"; }
-  echo "kwin_wayland: $(pid1 kwin_wayland) · Xorg: $(pid1 Xorg) · steam: $(pid1 steam) · game (reaper): $(pid1 reaper)"
+  echo "kwin_wayland: $(pid1 kwin_wayland) · kwin_x11: $(pid1 kwin_x11) · Xorg: $(pid1 Xorg) · steam: $(pid1 steam) · game (reaper): $(pid1 reaper)"
   echo "session marker: $(cat /run/user/1000/egpu-session-type 2>/dev/null) · detach marker: $(ls /run/user/1000/egpu-detach-mode /run/nvegpu/gm-detach-pending 2>/dev/null | tr '\n' ' ')"
   echo "login manager: $(grep -h '^Session=' /etc/sddm.conf.d/*.conf /etc/plasmalogin.conf.d/*.conf 2>/dev/null | tr '\n' ' ')"
   echo "hidden NVIDIA userspace: $(ls /usr/lib/*.egpu-off 2>/dev/null | wc -l) renamed, $(cat /run/nvegpu/bind-hidden 2>/dev/null | wc -l) bind-mounted"

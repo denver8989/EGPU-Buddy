@@ -119,6 +119,13 @@ pactl list short sinks 2>/dev/null | awk -v sink="$SINK" '$2 == sink { found=1 }
 prepare_internal_audio || fail 'Internal speaker hardware could not be prepared.'
 fi
 pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 && fail 'Desktop Safe Detach is not available in Game Mode.'
+# Desktop Safe Detach moves KWin on WAYLAND off the eGPU (plasma-kwin_wayland.service). SteamOS starts the X11 desktop by
+# default, where there is no such compositor to move: it waited for one and failed (ROG Xbox Ally X report). Stop here,
+# before anything is changed, and say what works instead. Not fail(): its recovery restarts KWin on Wayland.
+if ! pgrep -U "$(id -u)" -x kwin_wayland >/dev/null 2>&1 && pgrep -U "$(id -u)" -x 'kwin_x11|Xorg' >/dev/null 2>&1; then
+  status DO_NOT_UNPLUG 'Safe Detach does not support the X11 desktop yet; nothing was changed. Return to Gaming Mode and use Safe Detach there (it works), then unplug.'
+  echo 'X11 desktop: Desktop Safe Detach not supported yet; use it from Game Mode' >&2; exit 1
+fi
 IGPU_CARD=$(drm_card_for 0x1002 || true)
 GPU_CARD=$(drm_card_for 0x10de || true)
 [ -n "$IGPU_CARD" ] || fail 'Internal AMD display card is unavailable.'
