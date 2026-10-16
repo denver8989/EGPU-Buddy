@@ -586,6 +586,17 @@ def _egpu_on_bus():
     return ""
 
 
+DRIVER_JOBS = ("egpu-buddy-driver-build.service", "egpu-driver-prebuild.service", "egpu-buddy-driver-repack.service")
+def _driver_job():
+    """The background driver build the self-heal (new kernel after a SteamOS update), the prebuild timer (staged update) or
+    a re-pack is running now; '' = none. While one runs, the plugin says so instead of offering an install, and an install
+    does not start a second build next to it (seen: a forced restart into an update, then "install drivers")."""
+    for u in DRIVER_JOBS:
+        if _sh(["systemctl", "show", "-p", "ActiveState", "--value", u], 3)[1] in ("active", "activating"):
+            return u
+    return ""
+
+
 def _driver_ready():
     """The NVIDIA kernel module is resolvable for the running kernel (what the attach gate checks as well)."""
     return not shutil.which("pacman") or _sh(["modinfo", "-n", "nvidia"], 5)[0] == 0
@@ -1242,7 +1253,7 @@ class Plugin:
                 "cmdline_pending": rc != 0 and _sh(["/usr/local/sbin/egpu-kernel-cmdline", "--pending"], 5)[0] == 0,
                 "helpers_present": os.path.exists(PRIV) and os.path.exists(DETACH),
                 "busy": _setup["busy"], "step": _setup["step"], "rc": _setup["rc"], "progress": _setup["progress"],
-                "started": _setup["started"], "expect": _expect(), "driver_ready": _driver_ready(),
+                "started": _setup["started"], "expect": _expect(), "driver_ready": _driver_ready(), "driver_building": _driver_job(),
                 "installed_vendor": _installed_vendor(), "egpu_on_bus": _egpu_on_bus(),
                 "can_build_driver": bool(shutil.which("pacman")), "slow_build": bool(shutil.which("steamos-readonly")), "log": tail}
 
@@ -1272,6 +1283,9 @@ class Plugin:
         subprocess.Popen(["systemctl", "reboot"], env=_clean_env()); return {"ok": True, "message": "Rebooting"}
 
     async def install_system(self, with_driver: bool = False, vendor: str = "nvidia"):
+        if _driver_job():
+            return {"ok": False, "message": "The eGPU driver is being built for this SteamOS version in the background. "
+                                            "It is used by itself when it is done (a few minutes); nothing to install."}
         return _start_setup("install", bool(with_driver), vendor=(vendor if vendor in ("nvidia", "amd") else "nvidia"))
 
 

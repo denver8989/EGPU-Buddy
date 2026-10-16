@@ -50,6 +50,9 @@ nv_loaded(){ lsmod 2>/dev/null | grep -q '^nvidia'; }
 apply_staged(){
   [ -s "$IMG.new" ] && [ -s "$MANIFEST.new" ] || return 0
   nv_loaded && return 0
+  # a power-cut or forced restart while it was being packed leaves a cut-off image: never swap that in (the driver would
+  # not load at all). squashfs keeps its directory table at the END, so a truncated file fails this listing.
+  unsquashfs -l "$IMG.new" >/dev/null 2>&1 || { rm -f "$IMG.new" "$MANIFEST.new"; echo "staged driver extension was incomplete (interrupted?): discarded, the current one stays"; return 0; }
   rm -f /etc/extensions/$NAME /etc/extensions/$NAME.raw; systemd-sysext refresh >/dev/null 2>&1 || true
   mv -f "$IMG.new" "$IMG"; mv -f "$MANIFEST.new" "$MANIFEST"; echo "staged driver extension swapped in"
 }
@@ -189,8 +192,15 @@ fi
 
 # ---- 5. one image file, then activate --------------------------------------------------------------------------------
 say "packing the extension image"
-{ echo "userspace $PV"; for kd in "$SX.new"/usr/lib/modules/*/; do echo "kernel $(basename "$kd")"; done; echo "host $(host_fp)"; } > "$MANIFEST.new"
-rm -f "$IMG.new"; mksquashfs "$SX.new" "$IMG.new" -noappend -comp zstd -quiet -no-progress >/dev/null
+# Image FIRST, manifest LAST, each written under a temporary name and renamed once it is on disk: the manifest is what
+# says "this image is complete". Written the other way round, a forced restart during mksquashfs could leave a cut-off image
+# next to a complete manifest, which the next boot swapped in: the driver would not load (ROG Ally X report: forced restart, then "install drivers").
+rm -f "$IMG.new" "$IMG.part" "$MANIFEST.new"
+mksquashfs "$SX.new" "$IMG.part" -noappend -comp zstd -quiet -no-progress >/dev/null || { rm -f "$IMG.part"; echo "packing the driver image failed; the current one stays"; exit 8; }
+sync
+mv -f "$IMG.part" "$IMG.new"
+{ echo "userspace $PV"; for kd in "$SX.new"/usr/lib/modules/*/; do echo "kernel $(basename "$kd")"; done; echo "host $(host_fp)"; } > "$MANIFEST.part"
+sync; mv -f "$MANIFEST.part" "$MANIFEST.new"
 rm -rf "$SX.new"
 [ "${EGPU_STAGE_ONLY:-0}" = 1 ] && { say "staged for the next boot: $IMG.new"; exit 0; }
 if [ "${EGPU_DEFER_SWAP:-0}" = 1 ] && nv_loaded; then
@@ -198,7 +208,7 @@ if [ "${EGPU_DEFER_SWAP:-0}" = 1 ] && nv_loaded; then
 fi
 # unmerge before swapping the file that is loop-mounted
 rm -f /etc/extensions/$NAME /etc/extensions/$NAME.raw; systemd-sysext refresh >/dev/null 2>&1 || true
-mv -f "$IMG.new" "$IMG"; mv -f "$MANIFEST.new" "$MANIFEST"
+sync; mv -f "$IMG.new" "$IMG"; mv -f "$MANIFEST.new" "$MANIFEST"; sync
 link_ext; merge
 if active; then say "driver $PV active for $K (extension image on $(df -P "$BASE" | awk 'NR==2{print $6}'), system partition untouched)"
 else systemd-sysext refresh || true; echo "the extension was written but is not merged into /usr (the message above says why)"; exit 9; fi

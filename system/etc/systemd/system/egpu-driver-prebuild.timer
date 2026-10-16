@@ -2,8 +2,10 @@
 Description=SteamOS EGPU Buddy: look for a staged SteamOS update that needs the NVIDIA driver built ahead
 
 [Timer]
-OnBootSec=5min
-OnUnitInactiveSec=10min
+# every 2 minutes: Steam offers "Restart now" as soon as an update is staged, and a 10-minute check could miss it (ROG Ally X: no driver
+# prebuilt before a kernel update), so the first boot of the update had to build it (eGPU unusable meanwhile). Cheap.
+OnBootSec=2min
+OnUnitInactiveSec=2min
 
 [Install]
 WantedBy=timers.target

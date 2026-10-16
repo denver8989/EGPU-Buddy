@@ -19,7 +19,7 @@ const safeDetach = callable<[], Result>("safe_detach");
 const setPowerLimit = callable<[number], Result>("set_power_limit");
 const setCoreOffset = callable<[number], Result>("set_core_offset");
 const resetClocks = callable<[], Result>("reset_clocks");
-type Setup = { gm_restart?: boolean; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
+type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
 const acceptUntested = callable<[], Result>("accept_untested");
 const installSystem = callable<[boolean, string?], Result>("install_system");
@@ -346,7 +346,7 @@ function Content() {
       onOK={() => run(async () => { if (needAccept) await acceptUntested(); return go(); })} />);
   };
   // setup state comes from the SYSTEM, not from the last run: it is the same after closing the menu, a Decky restart or a reboot
-  const driverMissing = !!(su?.slow_build && su.installed_version && su.helpers_present && su.driver_ready === false);
+  const driverMissing = !!(su?.slow_build && su.installed_version && su.helpers_present && su.driver_ready === false && !su.driver_building);
   const behind = !!(su?.installed_version && vt(su.installed_version) < vt(su.payload_version));
   const needsInstall = !!(su && !su.unsupported && (!su.helpers_present || !su.installed_version || behind || (!!su.cmdline_missing && !su.cmdline_pending) || driverMissing));
   // offered whenever a newer release exists and setup is complete, including half way through an earlier update (plugin
@@ -374,6 +374,9 @@ function Content() {
         <PanelSection title="eGPU">
           <PanelSectionRow><div className={staticClasses.Text}>{s ? stateLine(s) : "Loading…"}</div></PanelSectionRow>
           {su?.unsupported && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ff6b6b" }}>{su.unsupported}</div></PanelSectionRow>}
+          {su?.driver_building && !su.busy && (
+            <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.driver_building.includes("prebuild") ? "A SteamOS update is ready: EGPU Buddy is preparing the eGPU driver for it. Restart once it says it is done." : "SteamOS changed the kernel: EGPU Buddy is building the eGPU driver for it in the background (a few minutes). The eGPU works again by itself when it is done; nothing to install."}</div></PanelSectionRow>
+          )}
           {needsInstall && su && !su.busy && su.rc !== 0 && (
             <>
               <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.installed_version && !su.helpers_present ? "System files are missing (OS update)." : behind ? `Plugin ${su.payload_version} is in; its system files finish installing by themselves (after any running game is closed), or press Update system integration.` : driverMissing ? "The NVIDIA driver is not installed. Keep the eGPU unplugged." : su.installed_version ? "Setup is incomplete." : "Not installed yet."}</div></PanelSectionRow>
