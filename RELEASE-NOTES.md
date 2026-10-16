@@ -1,3 +1,15 @@
+0.7.111 — ROG Ally and XG Mobile stability, better support reports.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- The eGPU no longer drops off the link: the NVIDIA driver is allowed to keep PCIe Gen3 (`NVreg_EnablePCIeGen3=1`), the link is locked without the stray compliance-test bit, and PCIe power saving is switched off. This was behind games freezing, the garbled picture and the GPU disappearing.
+- A GPU crash no longer switches the NVIDIA Game Mode picture fix off for good. The update turns it back on where earlier crashes had switched it off.
+- Switching to Desktop with the eGPU attached no longer crashes: the X11 desktop uses the handheld's own GPU.
+- Beta driver: if Safe Detach fails, Game Mode stays on the handheld screen instead of going black; if the beta driver fails and the eGPU will not detach, the tested driver is put back at the next restart.
+- The XG Mobile is detected on its own, so it gets these fixes on any handheld.
+
+**New**
+- Support reports include snapshots taken automatically when something fails (Safe Detach, the beta driver, a lost GPU) and after each attach, the previous boot's log, the whole last beta driver run, and which Game Mode picture path is running.
+
 0.7.110 — ROG Ally and XG Mobile fixes.
 
 **Fixed**
