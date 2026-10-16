@@ -975,8 +975,16 @@ def _support_report():
               f"GBM-scanout build: {'installed' if os.access(priv, os.X_OK) else 'not installed'}"
               + (f" · marked as crashing: {_read(USER_HOME + '/.local/state/nv-egpu-buddy/gamescope-bad')}" if os.path.exists(USER_HOME + "/.local/state/nv-egpu-buddy/gamescope-bad") else ""),
               f"running: {exe or '(none)'}" + (" (GBM-scanout build)" if exe and exe == os.path.realpath(priv) else "")]
+    # which desktop Switch to Desktop starts (an X11 one probes the eGPU as its primary GPU) and what the login manager is set to
+    sess = sorted(os.path.basename(p) for p in glob.glob("/usr/share/xsessions/*.desktop") + glob.glob("/usr/share/wayland-sessions/*.desktop"))
+    pins = [f"{os.path.basename(p)}: {s}" for p in sorted(glob.glob("/etc/sddm.conf.d/*.conf") + glob.glob("/etc/plasmalogin.conf.d/*.conf"))
+            for s in re.findall(r"^Session=(.*)$", _read(p), re.M)]
+    lines += ["", "## Desktop session", f"sessions: {' '.join(sess) or '?'}", f"login manager: {'; '.join(pins) or 'no Session= lines'}",
+              f"X11 desktop on the built-in GPU: {'yes' if os.path.exists('/etc/X11/xorg.conf.d/10-egpu-buddy-builtin-gpu.conf') else 'no'}"]
     # the attach, Game Mode switch/detach and driver trial logs: the journal tail alone was all NVRM flood after a GPU hang
     for title, path, n in (("Attach log", "/var/log/egpu-hotplug-mount.log", 40), ("Game Mode switch / detach log", "/var/log/egpu-gamemode.log", 25),
+                           ("Safe Detach status", "/run/nvegpu/gm-status.json", 2), ("Safe Detach teardown (last run)", "/run/nvegpu/gm-helper.log", 30),
+                           ("Safe Detach: what held the GPU", "/run/nvegpu/gm-holders.log", 15),
                            ("Beta driver trial log", "/var/log/egpu-driver-trial.log", 30), ("Cable-pull recovery log", "/var/log/egpu-surprise-recover.log", 15)):
         tail = _read(path).splitlines()[-n:]
         if tail:

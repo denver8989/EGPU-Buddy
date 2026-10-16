@@ -52,6 +52,28 @@ if [ "$dock" = xg-mobile-legacy ] && ! lspci -Dn 2>/dev/null | grep -qE ' 0300: 
   [ "$sw" = 0 ] && log "XG Mobile switch: off (nothing attached)"
 fi
 
+# 4. ROG Ally: the X11 desktop must stay on the built-in GPU. Its Radeon is a "display controller" (class 0x0380), not a
+#    VGA device, so Xorg takes the NVIDIA eGPU as the primary GPU, fails on it ("Cannot run in framebuffer mode") and the
+#    eGPU hung in that same instant (NVRM TLB invalidation / FSP timeouts, then off the bus: Ally X report, switching to
+#    Desktop with the eGPU attached). Name the built-in GPU explicitly and do not add other GPUs. Only the X11 desktop
+#    reads this; Game Mode and the Wayland desktop do not. Not written on any other device.
+XORG=/etc/X11/xorg.conf.d/10-egpu-buddy-builtin-gpu.conf
+if [ "$profile" = rog-ally ] && [ -n "$igpu" ]; then
+  IFS=':.' read -r _dom _bus _dev _fn <<<"$igpu"
+  busid="PCI:$((16#$_bus))@$((16#$_dom)):$((16#$_dev)):$((16#$_fn))"
+  want=$(printf '%s\n' "# EGPU Buddy (egpu-hw-repair, ROG Ally only): the X11 desktop uses the built-in GPU, never the eGPU" \
+    'Section "ServerFlags"' '    Option "AutoAddGPU" "false"' 'EndSection' \
+    'Section "Device"' '    Identifier "EGPU Buddy built-in GPU"' '    Driver "amdgpu"' "    BusID \"$busid\"" 'EndSection' \
+    'Section "Screen"' '    Identifier "EGPU Buddy screen"' '    Device "EGPU Buddy built-in GPU"' '    Option "NoOutputInitialSize" "1920 1080"' 'EndSection' \
+    'Section "ServerLayout"' '    Identifier "EGPU Buddy layout"' '    Screen "EGPU Buddy screen"' 'EndSection')
+  if [ "$(cat "$XORG" 2>/dev/null)" != "$want" ]; then
+    if [ $DRY = 1 ]; then echo "would: write $XORG ($busid)"
+    else mkdir -p "$(dirname "$XORG")" && printf '%s\n' "$want" > "$XORG" && log "wrote $XORG: X11 desktop on the built-in GPU ($busid)"; fi
+  fi
+elif [ -f "$XORG" ]; then
+  do_ rm -f "$XORG"; log "removed $XORG (not a ROG Ally)"
+fi
+
 if [ ${#fixed[@]} -gt 0 ] && [ $DRY = 0 ]; then
   name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ${product%% RC7*}"; name=${name%% }; [ "$name" = "your " ] && name="your ROG Ally"; [ "$dock" = xg-mobile-usb4 ] && name="$name with XG Mobile"
   mkdir -p /run/nvegpu

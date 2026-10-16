@@ -89,7 +89,7 @@ fi
 sudo rm -rf /home/.egpu-buddy-615 /var/lib/nvegpu/driver-trial /etc/nv-egpu-buddy/driver-dir
 sudo /usr/local/sbin/egpu-dm-session unpin >/dev/null 2>&1 || sudo rm -f /etc/plasmalogin.conf.d/zz-egpu-buddy-session.conf /etc/sddm.conf.d/zz-egpu-buddy-session.conf /etc/plasmalogin.conf.d/zz-steamos-autologin.conf
 sudo rm -f /etc/sudoers.d/steamos-egpu-buddy /etc/sudoers.d/zz-steamos-egpu-buddy
-sudo rm -f /etc/atomic-update.conf.d/egpu-buddy.conf
+sudo rm -f /etc/atomic-update.conf.d/egpu-buddy.conf /etc/X11/xorg.conf.d/10-egpu-buddy-builtin-gpu.conf
 # The install pins the NVIDIA userspace by adding it to pacman's IgnorePkg. Leaving that behind means
 # the package manager keeps holding packages back for software that is no longer here — which is not
 # "the machine as it was". Remove only the entries this project adds, never the whole line, and drop

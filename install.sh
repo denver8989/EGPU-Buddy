@@ -308,6 +308,7 @@ if [ "$MODE" = install ] && [ -d /etc/atomic-update.conf.d ]; then
 /etc/systemd/system/egpu-driver-prebuild.timer
 /etc/systemd/system/egpu-driver-prebuild.service
 /etc/pacman.d/gnupg/**
+/etc/X11/xorg.conf.d/10-egpu-buddy-builtin-gpu.conf
 KEEP
 fi
 
