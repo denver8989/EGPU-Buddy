@@ -967,9 +967,30 @@ def _support_report():
     for c in sorted(glob.glob("/sys/class/drm/card*-*")):
         if _read(f"{c}/status") == "connected":
             model, detail = _screen_info(os.path.basename(c)); lines.append(f"{os.path.basename(c)}: {model or '?'} {detail}")
+    # which gamescope Game Mode on the eGPU really runs: the GBM-scanout build (the NVIDIA picture fix) or Valve's fallback
+    priv = f"{USER_HOME}/.local/gamescope-gbm/usr/bin/gamescope"
+    _, gpid, _ = _sh(["pgrep", "-n", "-x", "gamescope(-wl)?"], 3)
+    exe = os.path.realpath(f"/proc/{gpid}/exe") if gpid else ""
+    lines += ["", "## Game Mode gamescope",
+              f"GBM-scanout build: {'installed' if os.access(priv, os.X_OK) else 'not installed'}"
+              + (f" · marked as crashing: {_read(USER_HOME + '/.local/state/nv-egpu-buddy/gamescope-bad')}" if os.path.exists(USER_HOME + "/.local/state/nv-egpu-buddy/gamescope-bad") else ""),
+              f"running: {exe or '(none)'}" + (" (GBM-scanout build)" if exe and exe == os.path.realpath(priv) else "")]
+    # the attach, Game Mode switch/detach and driver trial logs: the journal tail alone was all NVRM flood after a GPU hang
+    for title, path, n in (("Attach log", "/var/log/egpu-hotplug-mount.log", 40), ("Game Mode switch / detach log", "/var/log/egpu-gamemode.log", 25),
+                           ("Beta driver trial log", "/var/log/egpu-driver-trial.log", 30), ("Cable-pull recovery log", "/var/log/egpu-surprise-recover.log", 15)):
+        tail = _read(path).splitlines()[-n:]
+        if tail:
+            lines += ["", f"## {title} (last {n})"] + [t[:300] for t in tail]
     log = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
                "egpu|nv-egpu|nvidia|NVRM|thunderbolt|pcieport|gamescope.*(drm|vulkan)"], 20)[1].splitlines()
-    lines += ["", "## eGPU log lines from this boot (last 150)"] + log[-150:]
+    kept, burst = [], 0   # a GPU hang prints hundreds of NVRM lines in one go: keep the first 8 of each run
+    for l in log:
+        burst = burst + 1 if "NVRM:" in l else 0
+        if burst <= 8:
+            kept.append(l[:400])
+        elif burst == 9:
+            kept.append("  ... (more NVRM lines of the same burst left out)")
+    lines += ["", "## eGPU log lines from this boot (last 150)"] + kept[-150:]
     return _redact("\n".join(lines))
 
 
@@ -1200,7 +1221,7 @@ class Plugin:
         open(path, "w").write(text + "\n"); subprocess.run(["chown", USER, path, desk], env=_clean_env())
         # the issue link travels in a QR code, which holds ~3000 characters: the summary without the log, cut to fit
         from urllib.parse import quote
-        summary = text.split("\n## eGPU log lines")[0].replace("EGPU Buddy support report\n\n", "")
+        summary = text.split("\n## Game Mode gamescope")[0].replace("EGPU Buddy support report\n\n", "")
         tail = f"\nFull report: please attach egpu-buddy-report-{code}.txt from the Desktop folder.\n\n**What went wrong:**\n"
         while len(quote(summary + tail)) > 650:
             summary = summary.rsplit("\n", 1)[0]

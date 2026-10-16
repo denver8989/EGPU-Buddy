@@ -312,6 +312,16 @@ if egpu_is_ampere_consumer "$gpu"; then
   EGPU_SKIP_LINKPIN=0; EGPU_PIN_CORRECTED=1; EGPU_SKIP_REBAR=0; EGPU_SKIP_FLR=1
   log "RTX 30 series (GA10x): lean bring-up — no FLR, ReBAR attempted, corrected Gen3 link pin"
 fi
+# ROG Ally (egpu-detect --device; the Legion Go 1 and 2 are not matched and keep the legacy pin they were tested with).
+# The legacy pin leaves ENTER COMPLIANCE set in Link Control 2 (see pin_link_speed): the first link recovery that falls
+# back through Polling then parks the link in compliance mode and the GPU drops off the bus. On a ROG Xbox Ally X with an
+# XG Mobile 2025 (RTX 5070 Ti Laptop) that is what the reports show: games freeze, then NVRM "TLB invalidation failed",
+# "FSP command timed out" and the GPU gone from the bus. pcie_aspm=off only stops the kernel touching ASPM; whatever the
+# firmware enabled stays on, so it is switched off on both ends here as well.
+if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ]; then
+  EGPU_PIN_CORRECTED=1; EGPU_PIN_ASPM_OFF=1
+  log "ROG Ally: corrected link pin (no Enter Compliance bit), ASPM/L1SS off on both ends"
+fi
 if [ ! -L "$GDEV/driver" ] && [ "$EGPU_SKIP_FLR" = 1 ]; then
   # The FLR is what leaves this card decoding nothing: config space still reads, but every MMIO
   # read fails and the driver reports the GPU has "fallen off the bus". This project's own notes
@@ -450,6 +460,12 @@ pin_link_speed(){
     # (The legacy path is left exactly as it was tested on the RTX 5060 Ti.)
     local _b _g _gen; _g=${1:-$gpu}; _b=$(basename "$(dirname "$(readlink -f "/sys/bus/pci/devices/$_g")")")
     _gen=$(cat /etc/nv-egpu-buddy/link-gen 2>/dev/null || echo 3); case "$_gen" in 1|2|3|4|5) ;; *) _gen=3 ;; esac
+    if [ "${EGPU_PIN_ASPM_OFF:-0}" = 1 ]; then   # masked: ASPM Control bits only, then the L1 PM Substates enables
+      setpci -s "${_b#0000:}" CAP_EXP+10.w=0000:0003 2>/dev/null || true
+      setpci -s "${_g#0000:}" CAP_EXP+10.w=0000:0003 2>/dev/null || true
+      setpci -s "${_b#0000:}" ECAP_1E+08.l=00000000:0000000f 2>/dev/null || true
+      setpci -s "${_g#0000:}" ECAP_1E+08.l=00000000:0000000f 2>/dev/null || true
+    fi
     setpci -s "${_b#0000:}" CAP_EXP+30.w=002${_gen}:003f 2>/dev/null || true
     setpci -s "${_g#0000:}" CAP_EXP+30.w=002${_gen}:003f 2>/dev/null || true
     setpci -s "${_b#0000:}" CAP_EXP+10.w=0020:0020 2>/dev/null || true
