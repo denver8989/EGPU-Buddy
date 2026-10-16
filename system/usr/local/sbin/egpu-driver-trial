@@ -100,7 +100,14 @@ restore_old(){   # put 610 back; offline on both systems
 
 revert_and_attach(){ # <reason>
   put reverting "$1 Putting the tested driver $OPV back."
-  detach || true
+  if ! detach && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
+    # ROG Ally / XG Mobile: the beta driver did not come up AND the eGPU will not detach, i.e. it is not answering. Swapping
+    # the driver image under a loaded, stuck driver and attaching again is the black-screen path. The state stays
+    # "reverting": the boot step puts the tested driver back before the eGPU is touched (egpu-driver-trial-boot.service).
+    /usr/local/sbin/egpu-panel on >/dev/null 2>&1 || true
+    put reverting "$1 The eGPU did not detach, so the tested driver $OPV is put back at the next start: restart the handheld (hold the power button if it does not respond)."
+    return 0
+  fi
   if restore_old; then
     on_egpu || attach || true   # an eGPU that was unplugged meanwhile simply is not attached
     put reverted "$1 The tested driver $OPV is back."
@@ -131,7 +138,17 @@ case "${1:-status}" in
     steamos || remember_prev || { put failed "Nothing was changed: the tested driver's package files are not in the package cache, so a revert could not be guaranteed."; exit 4; }
     steamos && { bash "$OLD/install-steamos-sysext.sh" --status >/dev/null 2>&1 || { put failed "Nothing was changed: the tested driver's image is not in place."; exit 4; }; }
     put building "Safe Detach, then downloading and building the beta driver $TPV (10-20 minutes)."
-    detach || { put failed "Nothing was changed: Safe Detach did not finish."; attach >/dev/null 2>&1; exit 5; }
+    if ! detach; then
+      # ROG Ally / XG Mobile: a Safe Detach that fails there has so far meant the eGPU itself was failing. Attaching again
+      # put Game Mode back on that eGPU's monitor and switched the handheld screen off: a black screen on both. Leave
+      # Game Mode on the handheld screen instead (where the failed detach left it) and say so. Elsewhere, as tested.
+      if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; then
+        /usr/local/sbin/egpu-panel on >/dev/null 2>&1 || true
+        put failed "Nothing was changed: Safe Detach did not finish, so the beta driver was not installed. Game Mode stays on the handheld screen; press Attach (or replug the eGPU) to use it again, and send a support report."
+        exit 5
+      fi
+      put failed "Nothing was changed: Safe Detach did not finish."; attach >/dev/null 2>&1; exit 5
+    fi
     if ! install_new || [ "$(modver)" != "$TPV" ]; then
       revert_and_attach "The beta driver $TPV did not build or install (installed module: '$(modver)')."; finish; exit 6; fi
     put attempting "Beta driver $TPV installed; attaching the eGPU with it."
