@@ -1,3 +1,15 @@
+0.7.110 — ROG Ally and XG Mobile fixes.
+
+**Fixed**
+- ROG Ally X (and other handhelds that are not a Legion Go 2): the handheld screen works with games on the eGPU. The plugin was looking for the Legion Go 2's built-in GPU, so Game Mode fell back to a plain setup on the eGPU with a garbled picture.
+- Safe Detach no longer fails with "Game Mode did not come back on the handheld screen" on these machines, so the beta driver can be tried again.
+- The update clears what the failed first setup left behind and says so.
+- Laptop-class GPUs (ASUS XG Mobile): the power limit slider no longer shows NaN; these GPUs take their power from the dock.
+- The USB4 row names the dock maker (e.g. ASUSTeK GC34X), and support reports show the device model and dock.
+
+**New**
+- The original XG Mobile on its ASUS connector is switched on before Attach and off after Safe Detach (untested: no such dock here).
+
 0.7.109 — ultrawide resolution fix.
 
 **Fixed**

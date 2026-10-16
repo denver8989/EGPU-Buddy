@@ -321,6 +321,8 @@ function Content() {
   const tel = s?.telemetry ?? {};
   const plMin = Number(tel["power.min_limit"] ?? 100), plMax = Number(tel["power.max_limit"] ?? 320);
   const plNow = pl ?? Math.round(Number(tel["power.limit"] ?? plMax));
+  // laptop-class GPUs (ASUS XG Mobile) report the limits as [N/A]: the dock firmware owns the power, nvidia-smi -pl cannot set it
+  const plOk = [plMin, plMax, plNow].every(Number.isFinite) && plMax > plMin;
   const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
   // "mounted" for uninstall purposes: the driver is loaded, so /usr cannot be written and the
   // extension cannot be unmerged. Detaching is what clears it.
@@ -483,7 +485,7 @@ function Content() {
               {scr?.some((x) => x.ddc) && <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => {}); return r; })}>Wake screens</ButtonItem></PanelSectionRow>}
               <Row k="Audio" v={audioName(s.audio_sink, s.bdf)} />
               <Row k="Temp" v={tel["temperature.gpu"] ? `${tel["temperature.gpu"]} °C` : ""} />
-              <Row k="Power" v={tel["power.draw"] ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : ""} />
+              <Row k="Power" v={tel["power.draw"] ? (Number.isFinite(Number(tel["power.limit"])) ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : `${Math.round(Number(tel["power.draw"]))} W`) : ""} />
               <Row k="Core / mem" v={tel["clocks.gr"] ? `${tel["clocks.gr"]} / ${tel["clocks.mem"]} MHz` : ""} />
               <Row k="VRAM" v={tel["memory.used"] ? `${tel["memory.used"]} / ${tel["memory.total"]} MiB` : ""} />
               <Row k="Load" v={tel["utilization.gpu"] ? `${tel["utilization.gpu"]} %` : ""} />
@@ -504,10 +506,14 @@ function Content() {
           )}
           {!s.present ? null : controlsOk ? (
             <PanelSection title="Power controls">
+              {plOk ? (<>
               <PanelSectionRow>
                 <SliderField label="Power limit (W)" value={plNow} min={plMin} max={plMax} step={5} showValue onChange={setPl} />
               </PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={busy || pl === null} onClick={() => run(() => setPowerLimit(plNow))}>Apply power limit</ButtonItem></PanelSectionRow>
+              </>) : (
+              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power.</div></PanelSectionRow>
+              )}
               <PanelSectionRow>
                 <SliderField label="Core clock offset (MHz)" value={off} min={-300} max={300} step={15} showValue onChange={setOff} />
               </PanelSectionRow>

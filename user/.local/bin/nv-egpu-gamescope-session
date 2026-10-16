@@ -38,7 +38,9 @@ nvidia_at_bdf() { [ "$(cat "/sys/bus/pci/devices/$1/vendor" 2>/dev/null)" = "0x1
 FALLBACK_GPU=${EGPU_FALLBACK_BDF:-0000:62:00.0}
 EGPU_PCI=${EGPU_PCI_BDF:-$(detect_nvidia_gpu_bdf)}
 if [ -z "$EGPU_PCI" ] && nvidia_at_bdf "$FALLBACK_GPU"; then EGPU_PCI=$FALLBACK_GPU; fi
-IGPU_PCI=${IGPU_PCI:-0000:c2:00.0}
+# the built-in GPU is whichever drives the panel (0000:c2:00.0 on the Legion Go 2, elsewhere on an ROG Ally X); the old
+# literal left igpu_card empty on other handhelds, so the handheld-screen route never ran and stock gamescope took the eGPU
+IGPU_PCI=${IGPU_PCI:-$(_internal_gpu_bdf || echo 0000:c2:00.0)}
 PANEL=${EGPU_PANEL_CONNECTOR:-eDP-1}
 # Opt-in (plugin: Settings > Performance boost (M3)): the eGPU renders, a screen driven by the handheld's own GPU shows
 # it (the built-in screen, or a USB-C display such as XR glasses). Off unless this file says so; only with an eGPU.

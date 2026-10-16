@@ -2,6 +2,8 @@
 set -u; U=1000; RUNENV="XDG_RUNTIME_DIR=/run/user/$U DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$U/bus"; say(){ printf '  %s\n' "$*"; }
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 /usr/local/sbin/egpu-safe-detach --restore >/dev/null 2>&1
+# a proprietary-connector XG Mobile is not on the bus until its switch is on (no-op for USB4 docks, the XG Mobile 2025 too)
+[ "$(/usr/local/sbin/egpu-detect --dock 2>/dev/null)" = xg-mobile-legacy ] && { say "      powering the XG Mobile on"; /usr/local/sbin/egpu-detect --xgm-power on || say "      XG Mobile switch did not confirm; rescanning anyway"; sleep 2; }
 say "[1/4] PCI rescan"; echo 1 > /sys/bus/pci/rescan; sleep 4
 GPU=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}')
 [ -n "$GPU" ] || { /usr/local/sbin/egpu-detect 2>/dev/null | grep -qv ' nvidia' && { say "non-NVIDIA eGPU -> generic attach"; exec /usr/local/sbin/egpu-generic attach; }; }   # experimental

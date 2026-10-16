@@ -14,7 +14,11 @@ gs(){ pgrep -n -x 'gamescope(-wl)?'; }
 # the eGPU's own DRM nodes, looked up while it is still on the bus (card0/renderD129 on the Legion Go 2; card1/... where the
 # built-in GPU registered first, e.g. a Legion Go 1: there gamescope on the PANEL holds card0, and the old literal never passed)
 EGPU_NODES=$(read -r _b _ _ < <(/usr/local/sbin/egpu-detect 2>/dev/null) && ls "/sys/bus/pci/devices/$_b/drm" 2>/dev/null | grep -E '^(card|renderD)[0-9]+$' | tr '\n' '|' || true)
-EGPU_NODES=${EGPU_NODES:-card0|renderD129|}
+# egpu-detect needs a bridge chain behind the GPU; where it finds none, take the NVIDIA card's own nodes. Never a literal:
+# card0 is the eGPU on a Legion Go 2 but the PANEL's card on an ROG Ally X, and then no panel session ever passed (rc 6)
+_nv=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}')
+[ -n "$EGPU_NODES" ] || EGPU_NODES=$(ls "/sys/bus/pci/devices/$_nv/drm" 2>/dev/null | grep -E '^(card|renderD)[0-9]+$' | tr '\n' '|' || true)
+EGPU_NODES=${EGPU_NODES:-nvidia-egpu-not-found|}
 gs_on_panel(){ local g; g=$(gs); [ -n "$g" ] || return 1; tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -q '^OUTPUT_CONNECTOR=\*,' || return 1; ls -l /proc/$g/fd 2>/dev/null | grep -qE "/dev/dri/(${EGPU_NODES%|})\$|nvidia" && return 1; return 0; }
 # whatever happens (error, kill, timeout), the user must not be left without audio
 trap 'as_deck systemctl --user start wireplumber >/dev/null 2>&1; rm -f /run/user/$U/egpu-detach-mode' EXIT
@@ -35,4 +39,6 @@ sleep 4; log "panel session up (gamescope=$(gs)); removing the GPU"; status DETA
 if ! $HELPER --teardown-only > $ST/gm-helper.log 2>&1; then finish_fail "eGPU teardown failed; the GPU is still attached. Do not unplug. ($(grep -oE 'still held by:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-90))" 7; fi
 $HELPER --restore >/dev/null 2>&1; rm -f "$MARK" $ST/gm-detach-pending; as_deck systemctl --user start wireplumber >/dev/null 2>&1; /usr/local/sbin/egpu-panel on >/dev/null 2>&1; as_deck systemctl --user start gamescope-mangoapp.service >/dev/null 2>&1
 if lspci -Dn 2>/dev/null | grep -qE '0300: 10de:'; then status DO_NOT_UNPLUG "NVIDIA GPU still present after teardown. Do not unplug."; exit 8; fi
+# proprietary-connector XG Mobile: power the dock off only now that the GPU is gone (it would wedge the driver otherwise)
+egpu_switch=$(/usr/local/sbin/egpu-detect --dock 2>/dev/null); [ "$egpu_switch" = xg-mobile-legacy ] && { /usr/local/sbin/egpu-detect --xgm-power off && log "XG Mobile switched off" || log "XG Mobile switch-off did not confirm"; }
 status SAFE_COMPLETE "The eGPU is off the PCI bus. You may unplug it (or Attach again without replugging)."; log "done"; exit 0

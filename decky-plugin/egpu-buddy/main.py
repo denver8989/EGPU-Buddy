@@ -920,7 +920,8 @@ def _usb4():
         if re.search(r"-0$|:", os.path.basename(dev)) or not _read(f"{dev}/device_name"):
             continue   # the host router and its ports are not the dock
         per = float((re.findall(r"[\d.]+", _read(f"{dev}/rx_speed")) or ["0"])[0]); lanes = int(_read(f"{dev}/rx_lanes") or "0")
-        return {"name": _read(f"{dev}/device_name"), "per_lane": per, "lanes": lanes, "total": per * lanes,
+        vendor = _read(f"{dev}/vendor_name")   # "GC34X" alone did not say it is an ASUS XG Mobile
+        return {"name": " ".join(x for x in (vendor, _read(f"{dev}/device_name")) if x), "per_lane": per, "lanes": lanes, "total": per * lanes,
                 "slow": lanes < 2 or per < 20}
     return {}
 
@@ -937,6 +938,12 @@ def _redact(text):
     return text
 
 
+def _hw_line():
+    """profile and dock as egpu-hw-repair recorded them at the last update (ROG Ally / XG Mobile detection)."""
+    d = dict(l.split("=", 1) for l in _read("/var/lib/nvegpu/hardware").splitlines() if "=" in l)
+    return f"profile {d.get('profile', '?')} · dock {d.get('dock', '?')} · built-in GPU {d.get('igpu', '?')}" if d else "not checked yet"
+
+
 def _support_report():
     bdf = _gpu_bdf(); osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', _read("/etc/os-release"), re.M))
     lines = ["EGPU Buddy support report", "",
@@ -944,7 +951,8 @@ def _support_report():
              f"plugin {PAYLOAD_VERSION} · system {_read('/etc/nv-egpu-buddy/version') or '?'}",
              f"OS {osr.get('PRETTY_NAME', '?')} · kernel {os.uname().release}",
              f"NVIDIA driver {_sh(['modinfo', '-F', 'version', 'nvidia'], 5)[1] or 'not installed'}",
-             f"device {_read('/sys/class/dmi/id/sys_vendor')} {_read('/sys/class/dmi/id/product_version')}",
+             f"device {_read('/sys/class/dmi/id/sys_vendor')} {_read('/sys/class/dmi/id/product_name')} ({_read('/sys/class/dmi/id/product_version')})",
+             f"hardware {_hw_line()}",
              "", "## GPU and link"]
     if bdf:
         lines += [_sh(["lspci", "-nn", "-s", bdf], 5)[1],

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# SteamOS EGPU Buddy — hardware check and repair after an update. Runs as root from install.sh, which is what every
+# update (plugin "Update", the boot self-heal of a staged update) ends with, so a machine that a first setup got wrong
+# is put right without the user doing anything.
+#
+# Why it exists: until 0.7.110 the Game Mode session and the attach helper assumed the Legion Go 2's built-in GPU
+# address (0000:c2:00.0), and Safe Detach assumed the eGPU was card0. On other handhelds (first reported on a ROG Xbox
+# Ally X with an XG Mobile 2025) that left the handheld screen unusable, Safe Detach failing (rc 6), and with it the
+# beta driver trial. The scripts are fixed; this removes what the broken runs left behind.
+#
+#   egpu-hw-repair            check, repair, record /var/lib/nvegpu/hardware, leave a notice for the plugin
+#   egpu-hw-repair --dry-run  print what would be done
+set -u
+DRY=0; [ "${1:-}" = --dry-run ] && DRY=1
+[ "$(id -u)" = 0 ] || [ $DRY = 1 ] || { echo "run as root"; exit 1; }
+LOG=/var/log/egpu-hw-repair.log; HW=/var/lib/nvegpu/hardware; TRIAL=/var/lib/nvegpu/driver-trial
+U=$(getent passwd 1000 | cut -d: -f1); UH=$(getent passwd 1000 | cut -d: -f6); UH=${UH:-/home/deck}
+log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; echo "$*"; }
+do_(){ if [ $DRY = 1 ]; then echo "would: $*"; else "$@"; fi; }
+fixed=()
+
+DET=/usr/local/sbin/egpu-detect
+profile=$($DET --device 2>/dev/null || echo generic)
+dock=$($DET --dock 2>/dev/null || echo none)
+igpu=$($DET --igpu 2>/dev/null || true)
+model="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
+log "hardware: $model | profile $profile | dock $dock | built-in GPU ${igpu:-?}"
+[ $DRY = 1 ] || { mkdir -p "$(dirname "$HW")"; printf 'model=%s\nprofile=%s\ndock=%s\nigpu=%s\nchecked=%s\n' "$model" "$profile" "$dock" "$igpu" "$(date +%s)" > "$HW"; }
+
+# 1. Game Mode environment written by an attach that used the Legion Go 2's iGPU address on another machine. It is
+#    rewritten at the next attach; left in place it pins KWIN_DRM_DEVICES to a GPU that does not exist here.
+envf="$UH/.config/environment.d/10-egpu-gamescope-output.conf"
+if [ -n "$igpu" ] && [ "$igpu" != 0000:c2:00.0 ] && grep -q '0000:c2:00\.0' "$envf" 2>/dev/null; then
+  do_ rm -f "$envf"; log "removed $envf (it named the Legion Go 2's built-in GPU; this machine's is $igpu)"
+  fixed+=("Game Mode screen settings from the first setup")
+fi
+
+# 2. A beta driver trial that stopped at Safe Detach changed nothing (the trial says so itself). Clear the failure so
+#    the plugin offers the trial again instead of showing the old error, now that Safe Detach can work here.
+if [ "$(sed -n 's/^state=//p' "$TRIAL" 2>/dev/null | tail -1)" = failed ] &&
+   sed -n 's/^message=//p' "$TRIAL" 2>/dev/null | grep -q '^Nothing was changed: Safe Detach did not finish'; then
+  do_ mv -f "$TRIAL" "$TRIAL.failed-$(date +%Y%m%d-%H%M%S)"; log "cleared the failed beta driver trial (Safe Detach could not finish on this machine before)"
+  fixed+=("the failed beta driver attempt (you can try it again)")
+fi
+
+# 3. A proprietary-connector XG Mobile left switched on by an interrupted run while nothing is attached: the embedded
+#    controller keeps the value across reboots. Switch it off only when no NVIDIA GPU is on the bus.
+if [ "$dock" = xg-mobile-legacy ] && ! lspci -Dn 2>/dev/null | grep -qE ' 0300: 10de:'; then
+  sw=$($DET --xgm-power off 2>/dev/null; echo $?)
+  [ "$sw" = 0 ] && log "XG Mobile switch: off (nothing attached)"
+fi
+
+if [ ${#fixed[@]} -gt 0 ] && [ $DRY = 0 ]; then
+  name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ROG Ally"; [ "$dock" = xg-mobile-usb4 ] && name="$name with XG Mobile"
+  mkdir -p /run/nvegpu
+  printf 'Update fixed setup issues for %s: %s. Attach the eGPU again to use them.\n' "$name" "$(IFS=';'; echo "${fixed[*]}" | sed 's/;/, /g')" > /run/nvegpu/notice
+  chown "$U": /run/nvegpu/notice 2>/dev/null || true
+fi
+exit 0

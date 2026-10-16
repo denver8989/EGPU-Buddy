@@ -3,6 +3,16 @@
 Nothing in this repository would work without the people below. Where a fix is vendored, the file names in this repo
 say where it came from.
 
+## ASUS XG Mobile
+
+- **Kentronix57 — [Decky-Loader-XGMobile-Manager](https://github.com/Kentronix57/Decky-Loader-XGMobile-Manager)** (GPL-3.0),
+  **[tanayabhay-creator's fork](https://github.com/tanayabhay-creator/xg-mobile-manager-internal)** (GPL-3.0),
+  **stensmir — [xg-mobile-linux](https://github.com/stensmir/xg-mobile-linux)** (MIT) and
+  **ItzSkyeYT — [xgm-egpu](https://github.com/ItzSkyeYT/xgm-egpu)** (MIT) — documented how the proprietary-connector
+  XG Mobile is switched (`egpu_enable` / `egpu_connected`, the slow firmware write, switching off only after the GPU is
+  removed) and that laptop-class XG Mobile GPUs take no driver power limit. Those facts are reimplemented in
+  `egpu-detect`; no code was copied from the GPL projects.
+
 ## The scan-out corruption fix (Game Mode UI on NVIDIA)
 
 - **matt-schwartz (matte-schwartz on GitHub)** — found the root cause after two years of reports: gamescope's Vulkan-allocated scan-out

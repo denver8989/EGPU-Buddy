@@ -2,7 +2,8 @@
 # SteamOS EGPU Buddy — vendor-neutral eGPU detection. Source it for the functions, or run it:
 #   egpu-detect            -> "BDF VENDOR CARD" of the eGPU (exit 1 when none)   VENDOR = nvidia|amd|intel|other
 #   egpu-detect --igpu     -> BDF of the built-in GPU
-#   egpu-detect --device   -> device profile: legion-go-2 (the tested machine, device-specific fixes apply) | generic
+#   egpu-detect --device   -> device profile: legion-go-2 (the tested machine, device-specific fixes apply) | rog-ally | generic
+#   egpu-detect --dock     -> xg-mobile-usb4 | xg-mobile-legacy | usb4 | none   (which dock the eGPU is in, see egpu_dock)
 #   egpu-detect --untested -> one line per difference from the tested configuration (exit 0 = differs, lines printed; 1 = matches the tested machine)
 #   egpu-detect --selftest -> check the logic against a fake sysfs tree
 # The eGPU is the display-class PCI device that does NOT drive the built-in panel and sits behind a
@@ -58,8 +59,52 @@ egpu_find() {
 egpu_device_profile() {
   case "$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/product_family 2>/dev/null)" in
     "Legion Go 8ASP2") echo legion-go-2 ;;
-    *) echo generic ;;
+    *) case "$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/product_name 2>/dev/null)" in
+         *"ROG Ally"*|*RC71*|*RC72*|*RC73*) echo rog-ally ;;   # Ally, Ally X, ROG Xbox Ally / Ally X
+         *) echo generic ;;
+       esac ;;
   esac
+}
+
+# ASUS's eGPU switch: asus-nb-wmi on older kernels, asus-armoury on newer ones. Present only on machines with the
+# proprietary XG Mobile connector (original Ally RC71L, Flow laptops); it powers that dock on and off.
+egpu_asus_switch() {
+  local d; for d in "$EGPU_SYSFS_ROOT"/sys/devices/platform/asus-nb-wmi "$EGPU_SYSFS_ROOT"/sys/class/firmware-attributes/asus-armoury/attributes/egpu_enable; do
+    [ -e "$d/egpu_enable" ] && { echo "$d"; return 0; }
+    [ -e "$d/current_value" ] && { echo "$d"; return 0; }
+  done; return 1
+}
+
+# Which dock: the 2025 XG Mobile is a USB4 device (Thunderbolt name "GC3...", vendor ASUS) and attaches like any USB4
+# dock; the older ones sit on the proprietary connector, need egpu_enable=1 before they appear on the bus and =0 before
+# unplugging. Learned from the XG Mobile projects credited in CREDITS.md (facts reimplemented here, no code taken).
+egpu_dock() {
+  local d n v sw
+  for d in "$EGPU_SYSFS_ROOT"/sys/bus/thunderbolt/devices/*-*; do
+    case "${d##*/}" in *-0|*:*) continue ;; esac
+    n=$(cat "$d/device_name" 2>/dev/null); v=$(cat "$d/vendor_name" 2>/dev/null)
+    [ -n "$n" ] || continue
+    case "$v $n" in *ASUS*GC3*|*Asus*GC3*|*" GC3"*) echo xg-mobile-usb4; return 0 ;; esac
+    echo usb4; return 0
+  done
+  if sw=$(egpu_asus_switch); then
+    # egpu_connected = the dock's lock switch is closed (asus-nb-wmi only; asus-armoury has no such attribute)
+    [ "$(cat "$sw/egpu_connected" 2>/dev/null || echo 1)" = 1 ] && { echo xg-mobile-legacy; return 0; }
+  fi
+  echo none
+}
+
+# Power the proprietary-connector XG Mobile on/off. Only for xg-mobile-legacy: a USB4 XG Mobile has no switch to flip.
+# The write can block for half a minute or more while the firmware powers the dock, and a write that times out has
+# usually taken effect, so it runs under a timeout and the caller checks the bus, not the exit code. The value is kept by
+# the embedded controller across reboots: it is set only when the dock is locked in, and cleared after the GPU is removed.
+egpu_asus_power() {
+  local sw f v; sw=$(egpu_asus_switch) || return 1
+  f="$sw/egpu_enable"; [ -e "$f" ] || f="$sw/current_value"
+  case "$1" in on) v=1 ;; off) v=0 ;; *) return 2 ;; esac
+  [ "$(cat "$f" 2>/dev/null)" = "$v" ] && return 0
+  timeout 90 sh -c "echo $v > '$f'" 2>/dev/null || true
+  [ "$(cat "$f" 2>/dev/null)" = "$v" ]
 }
 
 # The one configuration this project has been verified on. Anything else is untested and the user must be told so.
@@ -106,6 +151,10 @@ _egpu_selftest() {
   [ "$(egpu_find)" = "0000:62:00.0 nvidia card0" ] || { echo "FAIL nvidia: $(egpu_find)"; return 1; }
   mkdir -p "$t/sys/class/drm/card0-DP-1" "$t/sys/class/drm/card0-DP-2"; echo connected > "$t/sys/class/drm/card0-DP-2/status"; echo disconnected > "$t/sys/class/drm/card0-DP-1/status"
   [ "$(egpu_connected_outputs card0)" = DP-2 ] || { echo "FAIL outputs"; return 1; }
+  # ROG Ally X shape: the panel GPU is card0, the eGPU is card1; the USB4 dock is an ASUS GC34X
+  mkdir -p "$t/sys/bus/thunderbolt/devices/0-0" "$t/sys/bus/thunderbolt/devices/0-1"
+  echo ASUSTeK > "$t/sys/bus/thunderbolt/devices/0-1/vendor_name"; echo GC34X > "$t/sys/bus/thunderbolt/devices/0-1/device_name"
+  [ "$(egpu_dock)" = xg-mobile-usb4 ] || { echo "FAIL dock: $(egpu_dock)"; return 1; }
   echo "selftest OK"
 }
 
@@ -113,6 +162,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   case "${1:-}" in
     --igpu) egpu_igpu_bdf ;;
     --device) egpu_device_profile ;;
+    --dock) egpu_dock ;;
+    --xgm-power) [ "$(egpu_dock)" = xg-mobile-legacy ] || [ "${2:-}" = off ] || exit 0; egpu_asus_power "${2:-}" ;;
     --untested) egpu_untested ;;
     --selftest) _egpu_selftest ;;
     *) egpu_find ;;

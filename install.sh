@@ -215,6 +215,8 @@ mkdir -p $USER_HOME/.local/state/nv-egpu-buddy && chown $USER_NAME: $USER_HOME/.
 systemctl start egpu-decky-guard.service >/dev/null 2>&1 || true
 # the shutdown teardown only acts in its ExecStop: start it now so it already covers the next power-off (no reboot needed)
 systemctl start egpu-buddy-shutdown.service >/dev/null 2>&1 || true
+# hardware check: undo what an earlier version got wrong on this machine (e.g. a ROG Ally set up with Legion Go 2 addresses)
+[ -x /usr/local/sbin/egpu-hw-repair ] && /usr/local/sbin/egpu-hw-repair >/dev/null 2>&1 || true
 if [ -f /etc/pacman.conf ]; then
   # pin the NVIDIA userspace to the patched modules' version: append to an existing IgnorePkg line, never replace it
   for pk in nvidia-utils lib32-nvidia-utils opencl-nvidia lib32-opencl-nvidia; do

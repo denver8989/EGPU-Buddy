@@ -351,14 +351,15 @@ recover_once() {
 write_gamescope_env() {
   local conf_dir="/home/deck/.config/environment.d"
   local conf_file="$conf_dir/10-egpu-gamescope-output.conf"
-  local egpu_card igpu_card output_connector
+  local egpu_card igpu_card igpu_bdf output_connector
   refresh_gpu_target
   egpu_card=$(find_card_node "$GPU")
-  igpu_card=$(find_card_node 0000:c2:00.0)
+  igpu_bdf=$(/usr/local/sbin/egpu-detect --igpu 2>/dev/null || echo 0000:c2:00.0)   # was the Legion Go 2's address only
+  igpu_card=$(find_card_node "$igpu_bdf")
   /usr/local/sbin/egpu-screen settle 2>/dev/null | while read -r l; do log "screen $l"; done  # lone TV: on + our input
   output_connector=$(egpu_output_connector_order)
   [ -n "$egpu_card" ] || egpu_card=/dev/dri/by-path/pci-$GPU-card
-  [ -n "$igpu_card" ] || igpu_card=/dev/dri/by-path/pci-0000:c2:00.0-card
+  [ -n "$igpu_card" ] || igpu_card=/dev/dri/by-path/pci-$igpu_bdf-card
   mkdir -p "$conf_dir"
   cat > "$conf_file" <<EOF
 # NV-EGPU-Buddy - NVIDIA-native Game Mode environment.
