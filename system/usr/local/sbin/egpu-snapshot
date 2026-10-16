@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# egpu-snapshot <reason> — write the whole eGPU picture to /var/log/egpu-buddy/ at the moment something went wrong.
+# Read-only: it changes nothing. Called by Safe Detach (on failure), the beta driver trial (on failure), the cable-pull
+# recovery and the attach hook; the support report includes the newest ones. Why: a report made later shows the machine
+# after a recovery or a reboot (the GPU gone, /run wiped), not the state that explains the failure. Keeps the last 12.
+# Every command runs under a timeout: a hung GPU makes nvidia-smi and some sysfs reads block.
+set -u
+[ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+DIR=/var/log/egpu-buddy; mkdir -p "$DIR"
+reason=$(printf '%s' "${1:-manual}" | tr -c 'a-zA-Z0-9-' '-' | cut -c1-40)
+OUT="$DIR/snap-$(date +%Y%m%d-%H%M%S)-$reason.txt"
+t(){ timeout "${T:-5}" "$@" 2>&1; }
+sec(){ printf '\n## %s\n' "$*"; }
+gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{print $1; exit}')
+[ -n "$gpu" ] || read -r gpu _ < <(/usr/local/sbin/egpu-detect 2>/dev/null) || gpu=""
+{
+  echo "EGPU Buddy snapshot: $reason · $(date '+%F %T') · uptime $(cut -d' ' -f1 /proc/uptime)s · version $(cat /etc/nv-egpu-buddy/version 2>/dev/null)"
+  echo "device $(cat /sys/class/dmi/id/product_name 2>/dev/null) · profile $(/usr/local/sbin/egpu-detect --device 2>/dev/null) · dock $(/usr/local/sbin/egpu-detect --dock 2>/dev/null) · XG Mobile seen $(cat /var/lib/nvegpu/xg-mobile-seen 2>/dev/null || echo no)"
+  echo "kernel $(uname -r) · cmdline $(cat /proc/cmdline)"
+  sec "PCI tree"; t lspci -tv
+  if [ -n "$gpu" ]; then
+    br=$(basename "$(dirname "$(readlink -f "/sys/bus/pci/devices/$gpu")")")
+    sec "eGPU $gpu and its bridge $br (link, ASPM, AER, BARs)"
+    for d in "$br" "$gpu"; do t lspci -vvv -s "${d#0000:}" | grep -E '^[0-9a-f]|LnkCap|LnkSta|LnkCtl|DevSta|Region|Expansion|ASPM|L1Sub|UESta|CESta|Kernel driver|Physical Resizable|BAR [0-9]:'; done
+    echo "config head: $(t xxd -l 8 "/sys/bus/pci/devices/$gpu/config" | head -1)"
+    echo "link: $(cat /sys/bus/pci/devices/$gpu/current_link_speed 2>/dev/null) x$(cat /sys/bus/pci/devices/$gpu/current_link_width 2>/dev/null) · power $(cat /sys/bus/pci/devices/$gpu/power_state 2>/dev/null) · runtime PM $(cat /sys/bus/pci/devices/$gpu/power/control 2>/dev/null)/$(cat /sys/bus/pci/devices/$gpu/power/runtime_status 2>/dev/null) · BAR1 $(( $(stat -c %s /sys/bus/pci/devices/$gpu/resource1 2>/dev/null || echo 0) / 1048576 ))MiB"
+    sec "nvidia-smi"; T=8 t nvidia-smi --query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,clocks.gr,clocks.mem,pcie.link.gen.current,pcie.link.width.current,memory.used,memory.total --format=csv
+    T=8 t nvidia-smi -q -d PERFORMANCE | grep -E 'Clocks Event|Active|Idle|Slowdown|Power Cap|Thermal' | head -20
+  else sec "eGPU"; echo "no NVIDIA GPU on the bus"; fi
+  sec "USB4 / Thunderbolt"
+  for d in /sys/bus/thunderbolt/devices/*-*; do [ -e "$d/device_name" ] || continue
+    echo "${d##*/}: $(cat "$d/vendor_name" 2>/dev/null) $(cat "$d/device_name" 2>/dev/null) · authorized $(cat "$d/authorized" 2>/dev/null) · rx $(cat "$d/rx_speed" 2>/dev/null) x$(cat "$d/rx_lanes" 2>/dev/null) · gen $(cat "$d/generation" 2>/dev/null)"; done
+  sec "DRM cards"
+  for c in /sys/class/drm/card[0-9]*; do case "${c##*/}" in *-*) continue ;; esac
+    echo "${c##*/}: $(basename "$(readlink -f "$c/device")") $(basename "$(readlink -f "$c/device/driver" 2>/dev/null)") · $(for n in "$c"-*; do [ -e "$n/status" ] && printf '%s=%s ' "${n##*/${c##*/}-}" "$(cat "$n/status")"; done)"; done
+  sec "modules"; lsmod 2>/dev/null | grep -E '^(nvidia|amdgpu|thunderbolt|snd_hda_intel)'
+  sec "who holds the NVIDIA device nodes"
+  nodes="/dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm"
+  [ -n "$gpu" ] && for n in /sys/bus/pci/devices/$gpu/drm/*; do case "${n##*/}" in card*|renderD*) nodes="$nodes /dev/dri/${n##*/}" ;; esac; done
+  for p in $(timeout 5 fuser $nodes 2>/dev/null | tr -s ' \n' ' ' | grep -oE '[0-9]+'); do echo "  $p $(cat /proc/$p/comm 2>/dev/null) state=$(awk '{print $3}' /proc/$p/stat 2>/dev/null) cmd=$(tr '\0' ' ' </proc/$p/cmdline 2>/dev/null | cut -c1-100)"; done
+  echo "processes in D state: $(ps -eo pid,stat,comm,wchan:24 2>/dev/null | awk '$2 ~ /D/' | tr '\n' ';')"
+  sec "session"
+  g=$(pgrep -n -x 'gamescope(-wl)?'); echo "gamescope: ${g:-none} $( [ -n "$g" ] && readlink -f /proc/$g/exe)"
+  [ -n "$g" ] && tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -E '^(OUTPUT_CONNECTOR|KWIN_DRM_DEVICES|WLR_DRM_DEVICES|VK_DRIVER_FILES|VK_ICD_FILENAMES|GAMESCOPE_PREFER_DRM|NV_EGPU_[A-Z_]*|gamescope_[a-z_]*|DRI_PRIME)=' | sed 's/^/  /'
+  [ -n "$g" ] && echo "  gamescope DRM fds: $(ls -l /proc/$g/fd 2>/dev/null | grep -oE '/dev/(dri/[a-zA-Z0-9]+|nvidia[a-z0-9-]*)' | sort | uniq -c | tr '\n' ' ')"
+  pid1(){ local p; p=$(pgrep -x "$1" 2>/dev/null | head -1); echo "${p:-none}"; }
+  echo "kwin_wayland: $(pid1 kwin_wayland) · Xorg: $(pid1 Xorg) · steam: $(pid1 steam) · game (reaper): $(pid1 reaper)"
+  echo "session marker: $(cat /run/user/1000/egpu-session-type 2>/dev/null) · detach marker: $(ls /run/user/1000/egpu-detach-mode /run/nvegpu/gm-detach-pending 2>/dev/null | tr '\n' ' ')"
+  echo "login manager: $(grep -h '^Session=' /etc/sddm.conf.d/*.conf /etc/plasmalogin.conf.d/*.conf 2>/dev/null | tr '\n' ' ')"
+  echo "hidden NVIDIA userspace: $(ls /usr/lib/*.egpu-off 2>/dev/null | wc -l) renamed, $(cat /run/nvegpu/bind-hidden 2>/dev/null | wc -l) bind-mounted"
+  sec "/run/nvegpu"; for f in /run/nvegpu/*.json /run/nvegpu/*.log; do [ -f "$f" ] && { echo "--- ${f##*/}"; tail -n 30 "$f"; }; done
+  sec "kernel log (last 80 eGPU lines, NVRM bursts cut)"
+  T=10 t journalctl -k -b --no-pager -o short-monotonic | grep -iE 'nvidia|NVRM|xid|thunderbolt|pcieport|aer|dpc|amdgpu.*(ring|timeout|reset)|BAR|link' \
+    | awk '/NVRM:/{n++; if(n<=8)print; else if(n==9)print "  ... (NVRM burst cut)"; next}{n=0; print}' | tail -n 80
+  sec "eGPU Buddy log lines (last 60)"
+  T=10 t journalctl -b --no-pager -o short-monotonic | grep -E 'egpu|nv-egpu|gamescope.*(drm|vulkan|Error|error)' | grep -v 'NVRM' | cut -c1-300 | tail -n 60
+} > "$OUT" 2>&1
+ls -1t "$DIR"/snap-*.txt 2>/dev/null | tail -n +13 | xargs -r rm -f
+echo "$OUT"

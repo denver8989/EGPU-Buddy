@@ -945,6 +945,7 @@ def _hw_line():
 
 
 def _support_report():
+    _sh(["/usr/local/sbin/egpu-snapshot", "report"], 60)   # the state right now, as the newest snapshot below
     bdf = _gpu_bdf(); osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', _read("/etc/os-release"), re.M))
     lines = ["EGPU Buddy support report", "",
              "## Versions",
@@ -999,6 +1000,24 @@ def _support_report():
         elif burst == 9:
             kept.append("  ... (more NVRM lines of the same burst left out)")
     lines += ["", "## eGPU log lines from this boot (last 150)"] + kept[-150:]
+    # after a crash the user reboots before making a report: the boot that failed is the previous one
+    prev = _sh(["journalctl", "-b", "-1", "--no-pager", "-o", "short-monotonic", "--grep",
+                "egpu|nv-egpu|NVRM|Xid|thunderbolt|pcieport|gamescope.*(drm|vulkan|rror)|Xorg|sddm"], 20)[1].splitlines()
+    pk, burst = [], 0
+    for l in prev:
+        burst = burst + 1 if "NVRM:" in l else 0
+        if burst <= 8:
+            pk.append(l[:300])
+    if pk:
+        lines += ["", "## eGPU log lines from the previous boot (last 100)"] + pk[-100:]
+    # snapshots egpu-snapshot took at the moment something failed (Safe Detach, driver trial, GPU lost) or after an attach
+    snaps = sorted(glob.glob("/var/log/egpu-buddy/snap-*.txt"), key=os.path.getmtime, reverse=True)
+    lines += ["", f"## Snapshots ({len(snaps)} kept, newest 3 in full)"] + [os.path.basename(p) for p in snaps]
+    for p in snaps[:3]:
+        lines += ["", f"======== {os.path.basename(p)} ========"] + _read(p).splitlines()[:400]
+    hw = _read("/var/log/egpu-hw-repair.log").splitlines()[-10:]
+    if hw:
+        lines += ["", "## Hardware check log (last 10)"] + hw
     return _redact("\n".join(lines))
 
 

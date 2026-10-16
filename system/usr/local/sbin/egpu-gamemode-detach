@@ -22,7 +22,7 @@ EGPU_NODES=${EGPU_NODES:-nvidia-egpu-not-found|}
 gs_on_panel(){ local g; g=$(gs); [ -n "$g" ] || return 1; tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -q '^OUTPUT_CONNECTOR=\*,' || return 1; ls -l /proc/$g/fd 2>/dev/null | grep -qE "/dev/dri/(${EGPU_NODES%|})\$|nvidia" && return 1; return 0; }
 # whatever happens (error, kill, timeout), the user must not be left without audio
 trap 'as_deck systemctl --user start wireplumber >/dev/null 2>&1; rm -f /run/user/$U/egpu-detach-mode' EXIT
-finish_fail(){ log "FAILED: $1"; status DO_NOT_UNPLUG "$1"; $HELPER --restore >/dev/null 2>&1; as_deck systemctl --user start gamescope-mangoapp.service >/dev/null 2>&1; rm -f "$MARK" $ST/gm-detach-pending; as_deck systemctl --user start wireplumber >/dev/null 2>&1; exit "${2:-5}"; }
+finish_fail(){ log "FAILED: $1"; /usr/local/sbin/egpu-snapshot "safe-detach-failed-rc${2:-5}" >/dev/null 2>&1; status DO_NOT_UNPLUG "$1"; $HELPER --restore >/dev/null 2>&1; as_deck systemctl --user start gamescope-mangoapp.service >/dev/null 2>&1; rm -f "$MARK" $ST/gm-detach-pending; as_deck systemctl --user start wireplumber >/dev/null 2>&1; exit "${2:-5}"; }
 gpu=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}'); [ -n "$gpu" ] || { status SAFE_COMPLETE "No eGPU attached."; log "no GPU on bus"; exit 0; }
 [ -n "$(gs)" ] || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1 || { log "not in Game Mode"; exit 2; }
 log "start (gpu=$gpu, gamescope=$(gs))"; status DETACHING "Moving Game Mode to the handheld screen. Do not unplug yet."

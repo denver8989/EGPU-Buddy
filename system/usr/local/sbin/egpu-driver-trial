@@ -26,7 +26,8 @@ log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; sync -d "$LOG" 
 get(){ sed -n "s/^$1=//p" "$STATE" 2>/dev/null | tail -1; }
 # state + one line for the plugin; written and flushed at every step so a hard reset leaves the true last step on disk
 put(){ local st=$1; shift; { echo "state=$st"; echo "message=$*"; echo "target=${TPV:-}"; echo "prev=$(get prev)"; echo "started=$(get started)"; echo "time=$(date +%s)"; } > "$STATE.new"
-  mv -f "$STATE.new" "$STATE"; sync -f "$STATE" 2>/dev/null || sync; log "[$st] $*"; }
+  mv -f "$STATE.new" "$STATE"; sync -f "$STATE" 2>/dev/null || sync; log "[$st] $*"
+  case "$st" in reverting|failed) /usr/local/sbin/egpu-snapshot "driver-trial-$st" >/dev/null 2>&1 ;; esac; }
 steamos(){ command -v steamos-readonly >/dev/null 2>&1; }
 TPV=$(sed -n 's/^pkgver=//p' "$NEW/PKGBUILD" 2>/dev/null); OPV=$(sed -n 's/^pkgver=//p' "$OLD/PKGBUILD" 2>/dev/null)
 modver(){ modinfo -F version nvidia 2>/dev/null | head -1; }

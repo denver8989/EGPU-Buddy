@@ -140,7 +140,7 @@ sudo rm -f /etc/nv-egpu-buddy/version
 # these a reinstall is not a fresh install: it inherits old state, an old gamescope and
 # an old routing file. Listed in one place so --verify can check the same set.
 runtime_leftovers | while read -r d; do sudo rm -rf "$d"; done
-sudo rm -f /var/log/egpu-*.log /run/nvegpu/* 2>/dev/null
+sudo rm -rf /var/log/egpu-*.log /var/log/egpu-buddy /run/nvegpu/* 2>/dev/null
 userctl daemon-reload
 if [ -n "${UNINSTALL_INCOMPLETE:-}" ] || ls /usr/local/sbin/egpu-* /usr/local/sbin/nv-egpu-buddy-* >/dev/null 2>&1; then
   echo "WARNING: some files could not be removed. Run 'sudo steamos-readonly disable' and uninstall again."
