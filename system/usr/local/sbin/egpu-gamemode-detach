@@ -19,9 +19,24 @@ EGPU_NODES=$(read -r _b _ _ < <(/usr/local/sbin/egpu-detect 2>/dev/null) && ls "
 _nv=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}')
 [ -n "$EGPU_NODES" ] || EGPU_NODES=$(ls "/sys/bus/pci/devices/$_nv/drm" 2>/dev/null | grep -E '^(card|renderD)[0-9]+$' | tr '\n' '|' || true)
 EGPU_NODES=${EGPU_NODES:-nvidia-egpu-not-found|}
-gs_on_panel(){ local g; g=$(gs); [ -n "$g" ] || return 1; tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -q '^OUTPUT_CONNECTOR=\*,' || return 1; ls -l /proc/$g/fd 2>/dev/null | grep -qE "/dev/dri/(${EGPU_NODES%|})\$|nvidia" && return 1; return 0; }
-# whatever happens (error, kill, timeout), the user must not be left without audio
-trap 'as_deck systemctl --user start wireplumber >/dev/null 2>&1; rm -f /run/user/$U/egpu-detach-mode' EXIT
+# ROG Ally or XG Mobile (each detected on its own, as everywhere else): the two changes below apply there ONLY; every other
+# device keeps the check and the failure exactly as tested. Why: on an ROG Xbox Ally X with an XG Mobile 2025 (SteamOS
+# 3.8.28) gamescope is started without the session wrapper's environment, so OUTPUT_CONNECTOR is never in it (every switch
+# log line says OUTPUT_CONNECTOR=?) and the check below failed every time (rc 6), even with Game Mode back on the handheld.
+ALLY_XGM=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && ALLY_XGM=1
+# the handheld panel's own card (card0 on an ROG Ally X); looked up, never a literal (it is card1 on a Legion Go 2)
+PANEL_CARD=$(basename "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)" 2>/dev/null); PANEL_CARD=${PANEL_CARD%%-*}
+gs_on_panel(){ local g; g=$(gs); [ -n "$g" ] || return 1
+  if [ "$ALLY_XGM" = 1 ]; then
+    # decided by what gamescope really has open: the panel's card, and (below) nothing of the eGPU's
+    [ -n "$PANEL_CARD" ] && ls -l /proc/$g/fd 2>/dev/null | grep -qE "/dev/dri/$PANEL_CARD\$" || return 1
+  else
+    tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -q '^OUTPUT_CONNECTOR=\*,' || return 1
+  fi
+  ls -l /proc/$g/fd 2>/dev/null | grep -qE "/dev/dri/(${EGPU_NODES%|})\$|nvidia" && return 1; return 0; }
+# whatever happens (error, kill, timeout), the user must not be left without audio, nor without a session
+DM_STOPPED=0
+trap 'as_deck systemctl --user start wireplumber >/dev/null 2>&1; rm -f /run/user/$U/egpu-detach-mode; [ "$DM_STOPPED" = 1 ] && systemctl start display-manager.service >/dev/null 2>&1' EXIT
 finish_fail(){ log "FAILED: $1"; /usr/local/sbin/egpu-snapshot "safe-detach-failed-rc${2:-5}" >/dev/null 2>&1; status DO_NOT_UNPLUG "$1"; $HELPER --restore >/dev/null 2>&1; as_deck systemctl --user start gamescope-mangoapp.service >/dev/null 2>&1; rm -f "$MARK" $ST/gm-detach-pending; as_deck systemctl --user start wireplumber >/dev/null 2>&1; exit "${2:-5}"; }
 gpu=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}'); [ -n "$gpu" ] || { status SAFE_COMPLETE "No eGPU attached."; log "no GPU on bus"; exit 0; }
 [ -n "$(gs)" ] || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1 || { log "not in Game Mode"; exit 2; }
@@ -31,12 +46,31 @@ $HELPER --prep >/dev/null 2>&1 || finish_fail "Could not hide the NVIDIA userspa
 as_deck bash -c 'pactl set-default-sink "$(pactl list short sinks | awk "!/pci-0000_0[0-9a-f]_00.1/ && /alsa_output/{print \$2; exit}")" >/dev/null 2>&1; p=$(printf %s "'"${gpu%.*}"'" | tr : _); for c in $(pactl list short cards | awk -v p="$p" "index(\$2,p){print \$2}"); do pactl set-card-profile "$c" off; done; systemctl --user stop wireplumber' >/dev/null 2>&1
 rm -f /run/user/1000/nv-egpu-buddy-gamescope-starts; G0=$(gs); as_deck systemctl --user stop gamescope-session.target >/dev/null 2>&1 &
 for _ in $(seq 1 60); do sleep 2; g=$(gs); [ -n "$g" ] && [ "$g" != "$G0" ] && gs_on_panel && break; done
+if [ "$ALLY_XGM" = 1 ] && ! gs_on_panel; then
+# ROG Ally or XG Mobile ONLY (other devices take the else branch, unchanged). Game Mode could not be confirmed on the
+# handheld screen, so detach the way the XG Mobile projects credited in CREDITS.md do, which never move a running Game
+# Mode off the eGPU: stop the whole graphical session, remove the eGPU while nothing holds it, start the session again
+# (it comes back on the handheld; the detach marker keeps it off the eGPU until the GPU is gone). The EXIT trap starts the
+# session again if anything below fails. This script runs in its own systemd unit, so stopping the session does not end it.
+  systemctl is-active --quiet display-manager.service || finish_fail "Game Mode did not come back on the handheld screen; the eGPU is still attached." 6
+  log "Game Mode not confirmed on the handheld screen; ROG Ally / XG Mobile: stopping the session to remove the eGPU"
+  status DETACHING "Restarting Game Mode without the eGPU; the screen goes dark for a moment. Do not unplug yet."
+  DM_STOPPED=1; systemctl stop display-manager.service >/dev/null 2>&1
+  as_deck systemctl --user stop gamescope-session.target gamescope-mangoapp.service >/dev/null 2>&1
+  for _ in $(seq 1 20); do [ -z "$(gs)" ] && break; sleep 1; done
+  pkill -x 'gamescope(-wl)?' 2>/dev/null; sleep 2
+  { echo "holders before teardown (session stopped):"; for hp in $(fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm 2>/dev/null | tr -s ' \n' ' '); do echo "  $hp $(cat /proc/$hp/comm 2>/dev/null) cmd=$(tr '\0' ' ' </proc/$hp/cmdline 2>/dev/null | cut -c1-80)"; done; } > $ST/gm-holders.log 2>&1
+  if ! $HELPER --teardown-only > $ST/gm-helper.log 2>&1; then finish_fail "eGPU teardown failed with the session stopped; the GPU is still attached. Do not unplug. ($(grep -oE 'still held by:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-90))" 7; fi
+  DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1
+  log "eGPU removed with the session stopped; session started again on the handheld screen"
+else
 gs_on_panel || finish_fail "Game Mode did not come back on the handheld screen; the eGPU is still attached." 6
 # the MangoHud overlay (gamescope-mangoapp.service) opens /dev/nvidia* through NVML -> stop it for the teardown
 as_deck systemctl --user stop gamescope-mangoapp.service >/dev/null 2>&1
 sleep 4; log "panel session up (gamescope=$(gs)); removing the GPU"; status DETACHING "Game Mode is on the handheld screen. Removing the eGPU. Do not unplug yet."
 { echo "holders before teardown:"; for hp in $(fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm 2>/dev/null | tr -s ' \n' ' '); do echo "  $hp $(cat /proc/$hp/comm 2>/dev/null) libs=[$(grep -oE '/[^ ]*nvidia[^ ]*\.so[^ ]*' /proc/$hp/maps 2>/dev/null | xargs -n1 basename 2>/dev/null | sort -u | tr '\n' ' ')] cmd=$(tr '\0' ' ' </proc/$hp/cmdline 2>/dev/null | cut -c1-80)"; done; } > $ST/gm-holders.log 2>&1
 if ! $HELPER --teardown-only > $ST/gm-helper.log 2>&1; then finish_fail "eGPU teardown failed; the GPU is still attached. Do not unplug. ($(grep -oE 'still held by:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-90))" 7; fi
+fi
 $HELPER --restore >/dev/null 2>&1; rm -f "$MARK" $ST/gm-detach-pending; as_deck systemctl --user start wireplumber >/dev/null 2>&1; /usr/local/sbin/egpu-panel on >/dev/null 2>&1; as_deck systemctl --user start gamescope-mangoapp.service >/dev/null 2>&1
 if lspci -Dn 2>/dev/null | grep -qE '0300: 10de:'; then status DO_NOT_UNPLUG "NVIDIA GPU still present after teardown. Do not unplug."; exit 8; fi
 # proprietary-connector XG Mobile: power the dock off only now that the GPU is gone (it would wedge the driver otherwise)

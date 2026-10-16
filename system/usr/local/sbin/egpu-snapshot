@@ -31,6 +31,12 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   sec "USB4 / Thunderbolt"
   for d in /sys/bus/thunderbolt/devices/*-*; do [ -e "$d/device_name" ] || continue
     echo "${d##*/}: $(cat "$d/vendor_name" 2>/dev/null) $(cat "$d/device_name" 2>/dev/null) · authorized $(cat "$d/authorized" 2>/dev/null) · rx $(cat "$d/rx_speed" 2>/dev/null) x$(cat "$d/rx_lanes" 2>/dev/null) · gen $(cat "$d/generation" 2>/dev/null)"; done
+  # whether this machine has ASUS's eGPU switch (the older XG Mobiles need it; unknown so far for the 2025 one on an Ally X)
+  sec "ASUS eGPU switch"
+  asw=""; for a in egpu_connected egpu_enable dgpu_disable gpu_mux_mode; do
+    f=/sys/devices/platform/asus-nb-wmi/$a; [ -e "$f" ] && asw="$asw asus-nb-wmi/$a=$(t cat "$f")"
+    f=/sys/class/firmware-attributes/asus-armoury/attributes/$a/current_value; [ -e "$f" ] && asw="$asw asus-armoury/$a=$(t cat "$f")"
+  done; echo "${asw:- none on this machine}"
   sec "DRM cards"
   for c in /sys/class/drm/card[0-9]*; do case "${c##*/}" in *-*) continue ;; esac
     echo "${c##*/}: $(basename "$(readlink -f "$c/device")") $(basename "$(readlink -f "$c/device/driver" 2>/dev/null)") · $(for n in "$c"-*; do [ -e "$n/status" ] && printf '%s=%s ' "${n##*/${c##*/}-}" "$(cat "$n/status")"; done)"; done
@@ -44,6 +50,16 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   g=$(pgrep -n -x 'gamescope(-wl)?'); echo "gamescope: ${g:-none} $( [ -n "$g" ] && readlink -f /proc/$g/exe)"
   [ -n "$g" ] && tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -E '^(OUTPUT_CONNECTOR|KWIN_DRM_DEVICES|WLR_DRM_DEVICES|VK_DRIVER_FILES|VK_ICD_FILENAMES|GAMESCOPE_PREFER_DRM|NV_EGPU_[A-Z_]*|gamescope_[a-z_]*|DRI_PRIME)=' | sed 's/^/  /'
   [ -n "$g" ] && echo "  gamescope DRM fds: $(ls -l /proc/$g/fd 2>/dev/null | grep -oE '/dev/(dri/[a-zA-Z0-9]+|nvidia[a-z0-9-]*)' | sort | uniq -c | tr '\n' ' ')"
+  # how gamescope was started: if the session wrapper's routing (OUTPUT_CONNECTOR, VK_*) and the GBM-scanout build are
+  # missing from it, these lines show which launcher skipped them. Variable NAMES only, no values.
+  if [ -n "$g" ]; then
+    echo "  gamescope environment (names): $(tr '\0' '\n' </proc/$g/environ 2>/dev/null | cut -d= -f1 | sort | tr '\n' ' ')"
+    echo "  started by:"; p=$g; for _ in 1 2 3 4 5 6 7 8; do p=$(awk '/^PPid:/{print $2}' /proc/$p/status 2>/dev/null); [ -n "$p" ] && [ "$p" -gt 1 ] || break
+      echo "    $p $(cat /proc/$p/comm 2>/dev/null): $(tr '\0' ' ' </proc/$p/cmdline 2>/dev/null | cut -c1-160)"; done
+  fi
+  echo "gamescope-session.service: $(t runuser -u deck -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user show -p ExecStart -p DropInPaths gamescope-session.service | tr '\n' ' ' | cut -c1-400)"
+  stock=/usr/lib/steamos/gamescope-session; [ -r "$stock" ] || stock=$(command -v gamescope-session-plus 2>/dev/null)
+  [ -n "$stock" ] && [ -r "$stock" ] && { echo "how $stock starts gamescope:"; grep -nE '(^|[ /"])gamescope( |"|$)|systemd-run|env -i|exec ' "$stock" 2>/dev/null | head -12 | cut -c1-200 | sed 's/^/  /'; }
   pid1(){ local p; p=$(pgrep -x "$1" 2>/dev/null | head -1); echo "${p:-none}"; }
   echo "kwin_wayland: $(pid1 kwin_wayland) · Xorg: $(pid1 Xorg) · steam: $(pid1 steam) · game (reaper): $(pid1 reaper)"
   echo "session marker: $(cat /run/user/1000/egpu-session-type 2>/dev/null) · detach marker: $(ls /run/user/1000/egpu-detach-mode /run/nvegpu/gm-detach-pending 2>/dev/null | tr '\n' ' ')"
