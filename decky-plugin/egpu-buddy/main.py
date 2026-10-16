@@ -52,22 +52,41 @@ DECKY_REPAIR = "/usr/local/sbin/egpu-decky-prerelease"
 def _steamos_branch():
     rc, out, _ = _sh(["steamos-select-branch", "-c"], 5) if shutil.which("steamos-select-branch") else (1, "", "")
     return out.strip().split()[0].lower() if rc == 0 and out.strip() else ""
+def _steam_beta():
+    """The Steam client's beta as Steam records it; '' = the stable client (steam-egpu-vk.sh keeps 'steamdeck_stable')."""
+    b = _read(f"{USER_HOME}/.local/share/Steam/package/beta").strip()
+    return "" if b in ("", "steamdeck_stable") else b
+def _decky_wants_prerelease():
+    """Decky's pre-release follows Steam beta clients: wanted while Steam OR SteamOS is on a beta/preview channel."""
+    want = _settings().get("decky_prerelease_repair")
+    return bool(want) if want is not None else (_steamos_branch() not in ("", "rel", "stable") or bool(_steam_beta()))
 def _decky_watchdog_tick():
     if not os.path.exists(DECKY_REPAIR): return
-    if _decky_ui["seen"]: return                                   # the UI is loading: nothing to do
     if not (_gamescope_running() and _proc_running("steam")): _decky_ui["gs_since"] = 0.0; return
     now = time.time(); _decky_ui["gs_since"] = _decky_ui["gs_since"] or now
     if now - _decky_ui["gs_since"] < 600 or now - _started < 600: return
-    d = _settings(); want = d.get("decky_prerelease_repair")
-    if want is None: want = _steamos_branch() not in ("", "rel", "stable")
+    d = _settings(); installed = _read(f"{USER_HOME}/homebrew/services/.loader.version")
+    ours = d.get("decky_prerelease_by_us", "")
+    if ours and installed != ours:   # changed since (Decky's own updater, or by hand): no longer ours to put back
+        d.pop("decky_prerelease_by_us", None); _save_settings(d); ours = ""
+    want = _decky_wants_prerelease()
+    # Back to Decky's stable release once Steam and SteamOS are both on their stable channel again. Only a pre-release this
+    # plugin installed is ever replaced (a Decky someone chose by hand is left alone); same backup + rollback, once a day.
+    if ours and not want:
+        if now - d.get("decky_stable_last", 0) < 86400: return
+        d["decky_stable_last"] = now; _save_settings(d)
+        decky.logger.info(f"decky watchdog: Steam and SteamOS are on their stable channel; putting Decky's stable release back (was pre-release {ours})")
+        _spawn_root_job("decky-stable", [DECKY_REPAIR, "--stable"]); return
+    if _decky_ui["seen"]: return                                   # the UI is loading: nothing to do
     if not want or now - d.get("decky_repair_last", 0) < 86400: return
-    installed = _read(f"{USER_HOME}/homebrew/services/.loader.version")
     try:
         rels = json.loads(_get("https://api.github.com/repos/SteamDeckHomebrew/decky-loader/releases", 20).decode())
         tag = next((r.get("tag_name", "") for r in rels if r.get("prerelease")), "")
     except Exception as ex:  # noqa: BLE001
         decky.logger.info(f"decky watchdog: release check failed: {ex}"); return
-    d["decky_repair_last"] = now; _save_settings(d)
+    d["decky_repair_last"] = now
+    if tag and tag != installed: d["decky_prerelease_by_us"] = tag   # cleared above if it does not stay installed
+    _save_settings(d)
     if not tag or tag == installed:
         decky.logger.info(f"decky watchdog: UI not loading, but no newer pre-release than {installed or '?'}"); return
     decky.logger.info(f"decky watchdog: Decky UI has not loaded for 10 min; installing pre-release {tag} (was {installed or '?'})")
@@ -1011,6 +1030,9 @@ def _support_report():
              f"NVIDIA driver {_sh(['modinfo', '-F', 'version', 'nvidia'], 5)[1] or 'not installed'}",
              f"device {_read('/sys/class/dmi/id/sys_vendor')} {_read('/sys/class/dmi/id/product_name')} ({_read('/sys/class/dmi/id/product_version')})",
              f"hardware {_hw_line()}",
+             f"Decky Loader {_read(f'{USER_HOME}/homebrew/services/.loader.version') or '?'}"
+             + (f" (pre-release installed by EGPU Buddy: {_settings().get('decky_prerelease_by_us')})" if _settings().get("decky_prerelease_by_us") else "")
+             + f" · Steam client {_steam_beta() or 'stable'} · SteamOS channel {_steamos_branch() or '?'}",
              "", "## GPU and link"]
     if bdf:
         lines += [_sh(["lspci", "-nn", "-s", bdf], 5)[1],

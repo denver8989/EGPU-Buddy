@@ -27,6 +27,94 @@ reason(){
   return 1
 }
 if [ "${1:-}" = --needed ]; then r=$(reason) || exit 1; echo "gamescope repair needed: $r"; exit 0; fi
+
+# ---- --verify: is Game Mode on the eGPU REALLY running the NVIDIA picture fix? Started ~40 s after every Game Mode start
+# (egpu-gamemode-switch) and attach (egpu-hotplug-mount). Why: the checks above only fire when the GBM build cannot start
+# or keeps crashing. On a ROG Xbox Ally X it was installed and fine, yet Valve's gamescope ran (UI corruption) and every
+# check passed. The cause is read from the breadcrumbs the session wrapper and the gamescope shim leave with their PID
+# (each one execs the next, so gamescope keeps that PID). Checking and logging happen everywhere (read-only); REPAIRS are
+# armed on a ROG Ally or with an XG Mobile only, once per cause and OS build (no loops). Where the fix runs (a Legion Go
+# with the AORUS box), this finds it running and does nothing.
+VDONE=/var/lib/nvegpu/gamescope-verify-tried; GSVER=/var/lib/nvegpu/gamescope-os-version-noticed
+ally_xgm(){ [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }
+usd(){ runuser -u "$(stat -c %U "$UH")" -- env XDG_RUNTIME_DIR=/run/user/$(stat -c %u "$UH") \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(stat -c %u "$UH")/bus systemctl --user "$@" 2>/dev/null; }
+reload_when_idle(){   # the same rules as the reload after a rebuild below: never while a game, attach or detach runs
+  for _ in $(seq 1 720); do
+    pgrep -n -x 'gamescope(-wl)?' >/dev/null || { log "verify: Game Mode is not running; the repair applies at its next start"; return 0; }
+    if ! pgrep -x reaper >/dev/null && [ ! -e /run/nvegpu/gm-attach-pending ] && ! grep -qE '"state":"(SWITCHING|DETACHING)"' /run/nvegpu/gm-status.json 2>/dev/null; then
+      log "verify: no game running: reloading Game Mode"; /usr/local/sbin/egpu-gamemode-switch >> "$LOG" 2>&1 && log "verify: reloaded" || log "verify: reload did not complete (rc $?)"; return 0
+    fi
+    sleep 30
+  done
+  log "verify: a game kept running for 6 hours; the repair applies at the next Game Mode start"
+}
+# 3. SteamOS moved past the gamescope the fix is built from: the fix keeps working (it is a whole gamescope of its own), but
+#    it no longer has what the newer one adds. Say so once per OS gamescope version: that needs an EGPU Buddy update.
+os_gamescope_note(){
+  local osv fixv; osv=$(pacman -Q gamescope 2>/dev/null | awk '{print $2}'); osv=${osv%%-*}
+  fixv=$(timeout 5 "$PRIV" --version 2>&1 | grep -oE 'gamescope version [0-9.]+' | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+  [ -n "$osv" ] && [ -n "$fixv" ] || return 0
+  [ "$(printf '%s\n%s\n' "$fixv" "$osv" | sort -V | tail -1)" = "$fixv" ] && return 0      # the fix is as new or newer
+  [ "$(cat "$GSVER" 2>/dev/null)" = "$osv" ] && return 0
+  echo "$osv" > "$GSVER"
+  log "verify: SteamOS now ships gamescope $osv, newer than the NVIDIA picture fix's gamescope $fixv"
+  mkdir -p /run/nvegpu; printf '%s\n' "SteamOS updated gamescope to $osv. The NVIDIA picture fix keeps working on its own gamescope ($fixv); an EGPU Buddy update will bring it up to date." > /run/nvegpu/notice
+  chown "$(stat -c %U "$UH")": /run/nvegpu/notice 2>/dev/null || true
+}
+if [ "${1:-}" = --verify ]; then
+  [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+  exec 8>/run/egpu-gamescope-repair.lock; flock -n 8 || { log "verify: a repair is already running"; exit 0; }
+  g=$(pgrep -n -x 'gamescope(-wl)?') || exit 0
+  ls -l /proc/$g/fd 2>/dev/null | grep -q '/dev/nvidia' || exit 0      # on the handheld's own GPU: the fix is not used there
+  [ -x "$PRIV" ] && os_gamescope_note
+  exe=$(readlink -f /proc/$g/exe)
+  [ "$exe" = "$(readlink -f "$PRIV")" ] && { log "verify: the NVIDIA picture fix is running (gamescope $g)"; exit 0; }
+  R=/run/user/$(stat -c %u "$UH")/nv-egpu-buddy
+  wpid=$(sed -n 's/^pid=//p' "$R/session-wrapper" 2>/dev/null); spid=$(sed -n 's/^pid=//p' "$R/gamescope-shim" 2>/dev/null)
+  if [ ! -x "$PRIV" ]; then cause=not-installed
+  elif [ "$wpid" != "$g" ]; then cause=wrapper
+  elif [ "$spid" != "$g" ]; then cause=shim
+  elif [ -s "$BAD" ]; then cause=marked
+  elif ldd "$PRIV" 2>/dev/null | grep -q 'not found'; then cause=libraries
+  else cause=other; fi
+  log "verify: Game Mode on the eGPU is NOT running the NVIDIA picture fix (gamescope $g = $exe); cause: $cause"
+  ally_xgm || { log "verify: automatic repair is armed on a ROG Ally / XG Mobile only; nothing changed on this machine"; exit 0; }
+  [ "$(cat "$VDONE" 2>/dev/null)" = "$OS $cause" ] && { log "verify: already tried for '$cause' on this OS build; the support report has the details"; exit 0; }
+  mkdir -p "$(dirname "$VDONE")"; echo "$OS $cause" > "$VDONE"
+  case "$cause" in
+    wrapper)
+      # the session unit must start EGPU Buddy's wrapper (it patches the stock session and puts the shim in front of
+      # gamescope). If something else is in effect, add a drop-in that sorts after every other one; check it took.
+      SDD=$UH/.config/systemd/user/gamescope-session.service.d; LAST=$SDD/zzz-nv-egpu-buddy-ally.conf
+      eff=$(usd show -p ExecStart --value gamescope-session.service)
+      log "verify: session unit ExecStart: ${eff:0:200} · drop-ins: $(usd show -p DropInPaths --value gamescope-session.service | cut -c1-300)"
+      if [ -n "$eff" ] && [[ "$eff" != *nv-egpu-gamescope-session* ]] && [ -f "$SDD/10-nv-egpu-buddy.conf" ]; then
+        printf '%s\n' "# EGPU Buddy (egpu-gamescope-repair --verify, ROG Ally / XG Mobile): another drop-in replaced our ExecStart; this sorts last" \
+          '[Service]' 'ExecStart=' "ExecStart=$UH/.local/bin/nv-egpu-gamescope-session" > "$LAST" && chown "$(stat -c %U "$UH")": "$LAST"
+        usd daemon-reload
+        if [[ "$(usd show -p ExecStart --value gamescope-session.service)" == *nv-egpu-gamescope-session* ]]; then
+          log "verify: the session starts through EGPU Buddy's wrapper again ($LAST)"; reload_when_idle
+        else rm -f "$LAST"; usd daemon-reload; log "verify: that did not take; took it out again"; fi
+      else
+        log "verify: the unit already names the wrapper (or none could be read), but the wrapper did not start this gamescope; not changing anything"
+      fi ;;
+    shim)
+      if [ -x "$UH/.local/lib/nv-egpu-buddy/gamescope-shim/gamescope" ]; then
+        log "verify: the wrapper ran but gamescope was found outside the shim (PATH: $(sed -n 's/^PATH=//p' "$R/session-wrapper" | cut -c1-200)); not changing anything"
+      else
+        log "verify: the gamescope shim is missing: re-applying EGPU Buddy's files"
+        SELFHEAL_FORCE=1 bash "$UH/.local/share/steamos-egpu-buddy/selfheal.sh" >> "$LOG" 2>&1 || true; reload_when_idle
+      fi ;;
+    marked)
+      log "verify: clearing the 'crashing' mark ($(cat "$BAD" 2>/dev/null)) so the GBM build is used again"
+      rm -f "$BAD"; reload_when_idle ;;
+    libraries)
+      log "verify: the GBM build cannot start on this OS: rebuilding it"; rm -f "$DONE"; flock -u 8; exec "$0" ;;
+    *) log "verify: no automatic repair for '$cause'; the support report has the details" ;;
+  esac
+  exit 0
+fi
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 r=$(reason) || { log "nothing to repair"; exit 0; }
 log "=== GBM-scanout gamescope: $r (OS $OS) ==="

@@ -3,15 +3,19 @@
 # follows Steam beta clients. Started by the EGPU Buddy backend only when Decky's backend runs but its UI never loaded
 # (what a Steam beta does to a stable Decky). Everything Decky had is backed up first and put back if the new loader does
 # not come up, so this can never leave Decky worse off than it found it.
+#   egpu-decky-prerelease           the pre-release (Steam beta client, or SteamOS on a non-stable channel)
+#   egpu-decky-prerelease --stable  back to Decky's stable release, the same way, when both are on their stable channel
+#                                   again (the backend only asks for that when it installed the pre-release itself)
 set -u
+KIND=prerelease; [ "${1:-}" = --stable ] && KIND=release
 U=$(stat -c %U /home/deck 2>/dev/null || echo deck); UH=/home/deck; H=$UH/homebrew/services
 LOG=/var/log/egpu-decky-repair.log; BK=/var/lib/nvegpu/decky-backup; UNIT=/etc/systemd/system/plugin_loader.service
 log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 [ -d "$H" ] && [ -f "$UNIT" ] || { log "Decky Loader is not installed here; nothing done"; exit 0; }
-log "=== Decky Loader pre-release (installed: $(cat "$H/.loader.version" 2>/dev/null || echo ?)) ==="
+log "=== Decky Loader $KIND (installed: $(cat "$H/.loader.version" 2>/dev/null || echo ?)) ==="
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-curl -fsSL --max-time 60 -o "$T/install.sh" https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install_prerelease.sh \
+curl -fsSL --max-time 60 -o "$T/install.sh" https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install_$KIND.sh \
   || { log "could not download Decky's installer; nothing changed"; exit 0; }
 head -1 "$T/install.sh" | grep -q '^#!' || { log "the downloaded installer is not a script; nothing changed"; exit 0; }
 rm -rf "$BK"; mkdir -p "$BK"; cp -a "$H" "$BK/services" && cp -a "$UNIT" "$BK/plugin_loader.service" || { log "backup failed; nothing changed"; exit 0; }

@@ -27,6 +27,8 @@ for _ in $(seq 1 60); do sleep 2; g=$(pgrep -n -x 'gamescope(-wl)?'); [ -n "$g" 
 g=$(pgrep -n -x 'gamescope(-wl)?'); oc=$(tr '\0' '\n' </proc/${g:-0}/environ 2>/dev/null | grep -oE '^OUTPUT_CONNECTOR=.*' | cut -d= -f2)
 if [ -n "$g" ]; then
   log "gamescope up (pid $g) OUTPUT_CONNECTOR=${oc:-?}"
+  # is the NVIDIA picture fix what runs now? A check (repairs are armed on a ROG Ally / XG Mobile only; see the script)
+  systemd-run --no-block --collect --quiet --on-active=40 /usr/local/sbin/egpu-gamescope-repair --verify >/dev/null 2>&1 || true
 # mangoapp (Steam performance overlay) races the session restart and hits its start limit -> revive it
 as_deck systemctl --user reset-failed gamescope-mangoapp.service 2>/dev/null; as_deck systemctl --user restart gamescope-mangoapp.service 2>/dev/null || true
   case "${oc%%,*}" in ""|"*"|eDP-1) printf '{"state":"ATTACHED","message":"Game Mode is on the handheld screen."}\n' > $ST/gm-status.json ;;

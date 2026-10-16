@@ -45,6 +45,9 @@ exec 9>/run/egpu-hotplug-mount.lock 2>/dev/null || true
 flock -n 9 2>/dev/null || { log "another instance running — skip"; exit 0; }
 # read-only state capture for the support report, 45 s in (after the session has moved or failed to)
 systemd-run --no-block --collect --quiet --on-active=45 /usr/local/sbin/egpu-snapshot attach >/dev/null 2>&1 || true
+# booted with the eGPU attached, Game Mode starts on it without a switch: check the NVIDIA picture fix then too (a check;
+# repairs are armed on a ROG Ally / XG Mobile only, see egpu-gamescope-repair --verify)
+systemd-run --no-block --collect --quiet --on-active=90 /usr/local/sbin/egpu-gamescope-repair --verify >/dev/null 2>&1 || true
 
 find_gpu(){
   local d
