@@ -986,10 +986,21 @@ def _support_report():
     for title, path, n in (("Attach log", "/var/log/egpu-hotplug-mount.log", 40), ("Game Mode switch / detach log", "/var/log/egpu-gamemode.log", 25),
                            ("Safe Detach status", "/run/nvegpu/gm-status.json", 2), ("Safe Detach teardown (last run)", "/run/nvegpu/gm-helper.log", 30),
                            ("Safe Detach: what held the GPU", "/run/nvegpu/gm-holders.log", 15),
-                           ("Beta driver trial log", "/var/log/egpu-driver-trial.log", 30), ("Cable-pull recovery log", "/var/log/egpu-surprise-recover.log", 15)):
+                           ("Cable-pull recovery log", "/var/log/egpu-surprise-recover.log", 15)):
         tail = _read(path).splitlines()[-n:]
         if tail:
             lines += ["", f"## {title} (last {n})"] + [t[:300] for t in tail]
+    # the beta driver trial: its state file and the WHOLE last run (every step, the build output, the health check, the
+    # revert), not a tail: a failed trial is diagnosed from where in that run it went wrong
+    trial = _read("/var/log/egpu-driver-trial.log").splitlines()
+    if trial:
+        start = max((i for i, l in enumerate(trial) if "==== beta driver trial" in l), default=max(0, len(trial) - 200))
+        run = trial[start:]
+        lines += ["", "## Beta driver trial: state", _read("/var/lib/nvegpu/driver-trial") or "(no state file)",
+                  "", f"## Beta driver trial: last run ({len(run)} lines" + (", first 60 and last 240 shown" if len(run) > 300 else "") + ")"]
+        lines += [t[:300] for t in (run if len(run) <= 300 else run[:60] + ["  ... (build output cut) ..."] + run[-240:])]
+        if start > 0:
+            lines += ["", "## Beta driver trial: earlier entries (last 20 before that run)"] + [t[:300] for t in trial[max(0, start - 20):start]]
     log = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
                "egpu|nv-egpu|nvidia|NVRM|thunderbolt|pcieport|gamescope.*(drm|vulkan)"], 20)[1].splitlines()
     kept, burst = [], 0   # a GPU hang prints hundreds of NVRM lines in one go: keep the first 8 of each run

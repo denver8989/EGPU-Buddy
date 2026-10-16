@@ -114,6 +114,7 @@ case "${1:-status}" in
   boot)
     st=$(get state); case "$st" in building|attempting|reverting)
       log "boot: the machine restarted during the driver trial (last step: $st)"
+      /usr/local/sbin/egpu-snapshot "driver-trial-interrupted-$st" >/dev/null 2>&1 || true   # with the previous boot's journal tail
       if restore_old; then put reverted "The machine restarted during the beta driver trial (last step: $st). The tested driver $OPV was put back before the eGPU was used."
       else put failed "The machine restarted during the beta driver trial and the tested driver could not be put back automatically. Details: $LOG"; fi ;;
     esac; exit 0 ;;

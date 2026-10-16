@@ -53,6 +53,11 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   sec "kernel log (last 80 eGPU lines, NVRM bursts cut)"
   T=10 t journalctl -k -b --no-pager -o short-monotonic | grep -iE 'nvidia|NVRM|xid|thunderbolt|pcieport|aer|dpc|amdgpu.*(ring|timeout|reset)|BAR|link' \
     | awk '/NVRM:/{n++; if(n<=8)print; else if(n==9)print "  ... (NVRM burst cut)"; next}{n=0; print}' | tail -n 80
+  case "$reason" in *interrupted*)   # taken at boot after a hang or forced power-off: what happened is in the previous boot
+    sec "previous boot: kernel + eGPU Buddy lines (last 120, NVRM bursts cut)"
+    T=15 t journalctl -b -1 --no-pager -o short-monotonic | grep -iE 'egpu|nv-egpu|nvidia|NVRM|xid|thunderbolt|pcieport|gamescope|sysext|driver-trial' \
+      | awk '/NVRM:/{n++; if(n<=8)print; else if(n==9)print "  ... (NVRM burst cut)"; next}{n=0; print}' | cut -c1-300 | tail -n 120 ;;
+  esac
   sec "eGPU Buddy log lines (last 60)"
   T=10 t journalctl -b --no-pager -o short-monotonic | grep -E 'egpu|nv-egpu|gamescope.*(drm|vulkan|Error|error)' | grep -v 'NVRM' | cut -c1-300 | tail -n 60
 } > "$OUT" 2>&1
