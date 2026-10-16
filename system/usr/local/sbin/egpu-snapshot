@@ -57,6 +57,8 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
     echo "  started by:"; p=$g; for _ in 1 2 3 4 5 6 7 8; do p=$(awk '/^PPid:/{print $2}' /proc/$p/status 2>/dev/null); [ -n "$p" ] && [ "$p" -gt 1 ] || break
       echo "    $p $(cat /proc/$p/comm 2>/dev/null): $(tr '\0' ' ' </proc/$p/cmdline 2>/dev/null | cut -c1-160)"; done
   fi
+  for b in session-wrapper gamescope-shim; do   # breadcrumbs: did the wrapper / shim start this gamescope (same PID) and with what
+    echo "$b: $(grep -v '^PATH=' /run/user/1000/nv-egpu-buddy/$b 2>/dev/null | tr '\n' ' ' || true)"; done
   echo "gamescope-session.service: $(t runuser -u deck -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user show -p ExecStart -p DropInPaths gamescope-session.service | tr '\n' ' ' | cut -c1-400)"
   stock=/usr/lib/steamos/gamescope-session; [ -r "$stock" ] || stock=$(command -v gamescope-session-plus 2>/dev/null)
   [ -n "$stock" ] && [ -r "$stock" ] && { echo "how $stock starts gamescope:"; grep -nE '(^|[ /"])gamescope( |"|$)|systemd-run|env -i|exec ' "$stock" 2>/dev/null | head -12 | cut -c1-200 | sed 's/^/  /'; }

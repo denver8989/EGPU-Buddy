@@ -271,7 +271,7 @@ if want desktopapp; then
   cp "$ROOT"/desktop-app/egpu-buddy "$ROOT"/desktop-app/egpu-buddy-server.py "$ROOT"/desktop-app/egpu-buddy-window.py "$ROOT"/desktop-app/egpu-buddy.qml "$ROOT"/desktop-app/index.html "$ROOT"/desktop-app/egpu-buddy.png "$D/"
   chmod +x "$D/egpu-buddy" "$D"/*.py; ln -sf "$D/egpu-buddy" "$USER_HOME/.local/bin/egpu-buddy"
   # menu: the app and "Safely Eject eGPU"; Plasma autostart: the tray icon; desktop folder (when there is one): both launchers
-  for f in egpu-buddy egpu-safe-detach; do sed "s#/home/deck#$USER_HOME#g" "$ROOT/desktop-app/$f.desktop" > "$A/$f.desktop"; uown "$A/$f.desktop"
+  for f in egpu-buddy egpu-safe-detach egpu-buddy-report; do sed "s#/home/deck#$USER_HOME#g" "$ROOT/desktop-app/$f.desktop" > "$A/$f.desktop"; uown "$A/$f.desktop"
     if [ -d "$USER_HOME/Desktop" ]; then cp "$A/$f.desktop" "$USER_HOME/Desktop/$f.desktop"; chmod +x "$USER_HOME/Desktop/$f.desktop"; uown "$USER_HOME/Desktop/$f.desktop"; fi; done
   # the tray runs as a user service (survives the compositor restarts this project performs); drop the old autostart entry
   rm -f "$USER_HOME/.config/autostart/egpu-buddy-tray.desktop"

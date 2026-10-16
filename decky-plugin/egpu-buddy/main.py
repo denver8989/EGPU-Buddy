@@ -17,7 +17,12 @@ import time
 import ssl
 import urllib.request
 
-import decky  # type: ignore
+try:
+    import decky  # type: ignore
+except ImportError:   # run by egpu-report (Desktop Mode icon, terminal): the same report code without Decky
+    import logging, types
+    decky = types.SimpleNamespace(DECKY_USER=os.environ.get("EGPU_REPORT_USER", ""), DECKY_USER_HOME="", DECKY_PLUGIN_DIR="",
+                                  logger=logging.getLogger("egpu-buddy"))
 
 USER = getattr(decky, "DECKY_USER", "") or "deck"
 USER_HOME = getattr(decky, "DECKY_USER_HOME", "") or f"/home/{USER}"
@@ -944,6 +949,58 @@ def _hw_line():
     return f"{d.get('chip', '?')} · profile {d.get('profile', '?')} · dock {d.get('dock', '?')} · XG Mobile {d.get('xg_mobile', '?')} · built-in GPU {d.get('igpu', '?')}" if d else "not checked yet"
 
 
+def _user_cmd(cmd, timeout=15):
+    """A command in the session user's systemd/journal context (the backend runs as root). Output only."""
+    try:
+        uid = pwd.getpwnam(USER).pw_uid
+    except KeyError:
+        return ""
+    return _sh(["runuser", "-u", USER, "--", "env", f"XDG_RUNTIME_DIR=/run/user/{uid}",
+                f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus", *cmd], timeout)[1]
+
+
+def _fix_verdict(gpid, exe, priv):
+    """Is the NVIDIA picture fix (the GBM-scanout gamescope) what Game Mode is really running, and if not, where the chain
+    broke. The session wrapper and the gamescope shim each leave a breadcrumb with their PID; every step execs the next, so
+    a breadcrumb with gamescope's own PID proves that step started THIS gamescope. Read-only."""
+    try:
+        run = f"/run/user/{pwd.getpwnam(USER).pw_uid}/nv-egpu-buddy"
+    except KeyError:
+        run = "/run/user/1000/nv-egpu-buddy"
+    crumb = {n: dict(l.split("=", 1) for l in _read(f"{run}/{n}").splitlines() if "=" in l) for n in ("session-wrapper", "gamescope-shim")}
+    out = []
+    if not gpid:
+        return ["NVIDIA picture fix: Game Mode is not running"]
+    try:
+        fds = [os.readlink(f"/proc/{gpid}/fd/{f}") for f in os.listdir(f"/proc/{gpid}/fd")]
+    except OSError:
+        fds = []
+    on_egpu = any(t.startswith("/dev/nvidia") for t in fds)
+    w, s = crumb["session-wrapper"], crumb["gamescope-shim"]
+    w_ok, s_ok = w.get("pid") == gpid, s.get("pid") == gpid
+    if exe and exe == os.path.realpath(priv):
+        v = "ACTIVE (Game Mode runs the GBM-scanout build)"
+    elif not on_egpu:
+        v = "not in use: Game Mode is on the handheld's own GPU (the fix is only for gamescope on the eGPU)"
+    elif not w_ok:
+        v = "NOT ACTIVE: EGPU Buddy's session wrapper did not start this gamescope, so its routing and the GBM build were never applied"
+    elif not s_ok:
+        v = "NOT ACTIVE: the session wrapper ran, but gamescope was started without EGPU Buddy's gamescope shim"
+    elif s.get("chosen") != s.get("requested"):
+        why = ("it is marked as crashing on this OS build" if s.get("marked_bad") else
+               "the GBM build cannot start on this OS (missing libraries)" if "not found" in _sh(["ldd", priv], 10)[1] else
+               "the GBM build was not requested for this route" if not s.get("requested") else "unknown")
+        v = f"NOT ACTIVE: the shim chose {s.get('chosen')} because {why}"
+    else:
+        v = "NOT ACTIVE: reason unknown (see the breadcrumbs below)"
+    out.append(f"NVIDIA picture fix: {v}")
+    out.append(f"gamescope PID {gpid} · on the eGPU: {'yes' if on_egpu else 'no'} · started by the session wrapper: "
+               f"{'yes' if w_ok else 'no'} · through the shim: {'yes' if s_ok else 'no'}")
+    for n, d in crumb.items():
+        out.append(f"{n} breadcrumb: " + (" · ".join(f"{k}={v2}" for k, v2 in d.items() if k != "PATH") or "(none this boot)"))
+    return out
+
+
 def _support_report():
     _sh(["/usr/local/sbin/egpu-snapshot", "report"], 60)   # the state right now, as the newest snapshot below
     bdf = _gpu_bdf(); osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', _read("/etc/os-release"), re.M))
@@ -976,6 +1033,26 @@ def _support_report():
               f"GBM-scanout build: {'installed' if os.access(priv, os.X_OK) else 'not installed'}"
               + (f" · marked as crashing: {_read(USER_HOME + '/.local/state/nv-egpu-buddy/gamescope-bad')}" if os.path.exists(USER_HOME + "/.local/state/nv-egpu-buddy/gamescope-bad") else ""),
               f"running: {exe or '(none)'}" + (" (GBM-scanout build)" if exe and exe == os.path.realpath(priv) else "")]
+    lines += _fix_verdict(gpid, exe, priv)
+    # how Game Mode was started: the session unit as systemd sees it (with every drop-in) and the OS's gamescope package
+    lines += ["", "## Game Mode session unit", f"OS gamescope package: {_sh(['pacman', '-Q', 'gamescope'], 5)[1] or '?'}",
+              _user_cmd(["systemctl", "--user", "show", "-p", "ExecStart", "-p", "DropInPaths", "-p", "ActiveState", "-p", "SubState",
+                         "-p", "MainPID", "gamescope-session.service"], 10)]
+    lines += [l[:300] for l in _user_cmd(["systemctl", "--user", "cat", "gamescope-session.service"], 10).splitlines()[:80]]
+    # the session's own output (the wrapper logs there): which route it took, or that it never ran
+    sj = _user_cmd(["journalctl", "--user", "-b", "--no-pager", "-o", "short-monotonic", "-u", "gamescope-session.service",
+                    "-u", "steam-launcher.service", "--grep", "nv-egpu|egpu|Gamescope Session|rror|Failed|Started|Stopped|exited"], 20).splitlines()
+    lines += ["", "## Game Mode session log, this boot (last 80)"] + [l[:300] for l in sj[-80:]]
+    # Steam sign-in events (a user reported being signed out during the beta driver attempt); account numbers removed
+    con = [l for l in _read(f"{USER_HOME}/.local/share/Steam/logs/connection_log.txt").splitlines()
+           if re.search(r"(?i)log(ged)?\s*(on|off)|logon|logoff|disconnect|relogin|expired", l)]
+    if con:
+        lines += ["", "## Steam sign-in events (last 20)"] + [re.sub(r"\[U:\d:\d+\]|\b\d{6,}\b", "[id]", l)[:300] for l in con[-20:]]
+    # login manager and session switches (Switch to Desktop, return to Game Mode)
+    sw = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
+              "sddm|plasmalogin|steamos-session-select|session-select|Switch to|autologin"], 20)[1].splitlines()
+    if sw:
+        lines += ["", "## Session switches this boot (last 40)"] + [l[:300] for l in sw[-40:]]
     # which desktop Switch to Desktop starts (an X11 one probes the eGPU as its primary GPU) and what the login manager is set to
     sess = sorted(os.path.basename(p) for p in glob.glob("/usr/share/xsessions/*.desktop") + glob.glob("/usr/share/wayland-sessions/*.desktop"))
     pins = [f"{os.path.basename(p)}: {s}" for p in sorted(glob.glob("/etc/sddm.conf.d/*.conf") + glob.glob("/etc/plasmalogin.conf.d/*.conf"))
@@ -1029,7 +1106,26 @@ def _support_report():
     hw = _read("/var/log/egpu-hw-repair.log").splitlines()[-10:]
     if hw:
         lines += ["", "## Hardware check log (last 10)"] + hw
+    # every other EGPU Buddy log, so this one report holds everything: system logs, background jobs (Safe Detach, driver
+    # trial, setup and updates run as their own units and write to /tmp), and the plugin's own log as Decky keeps it
+    seen = {"/var/log/egpu-hotplug-mount.log", "/var/log/egpu-gamemode.log", "/var/log/egpu-surprise-recover.log",
+            "/var/log/egpu-driver-trial.log", "/var/log/egpu-hw-repair.log"}
+    decky_logs = sorted(glob.glob(f"{USER_HOME}/homebrew/logs/{os.path.basename(PLUGIN_DIR)}/*.log"), key=os.path.getmtime)[-1:]
+    for p in sorted(set(glob.glob("/var/log/egpu-*.log") + glob.glob("/tmp/egpu-buddy-*.log") + glob.glob("/tmp/nv-egpu-*.log")) - seen) + decky_logs:
+        tail = _read(p).splitlines()[-30:]
+        if tail:
+            lines += ["", f"## {p} (last 30)"] + [t[:300] for t in tail]
     return _redact("\n".join(lines))
+
+
+def _save_report():
+    """The support report as ONE file in the user's Desktop folder (the plugin button and egpu-report both use this)."""
+    text = _support_report()
+    code = "".join(__import__("random").choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
+    desk = os.path.join(USER_HOME, "Desktop"); os.makedirs(desk, exist_ok=True)
+    path = os.path.join(desk, f"egpu-buddy-report-{code}.txt")
+    open(path, "w").write(text + "\n"); subprocess.run(["chown", USER, path, desk], env=_clean_env())
+    return code, path, text
 
 
 class Plugin:
@@ -1252,11 +1348,7 @@ class Plugin:
         return _usb4() if _addon("usb4") else {}
 
     async def make_report(self):
-        text = _support_report()
-        code = "".join(__import__("random").choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
-        desk = os.path.join(USER_HOME, "Desktop"); os.makedirs(desk, exist_ok=True)
-        path = os.path.join(desk, f"egpu-buddy-report-{code}.txt")
-        open(path, "w").write(text + "\n"); subprocess.run(["chown", USER, path, desk], env=_clean_env())
+        code, path, text = _save_report()
         # the issue link travels in a QR code, which holds ~3000 characters: the summary without the log, cut to fit
         from urllib.parse import quote
         summary = text.split("\n## Game Mode gamescope")[0].replace("EGPU Buddy support report\n\n", "")
@@ -1467,3 +1559,7 @@ class Plugin:
 
     async def _unload(self):
         decky.logger.info("EGPU Buddy backend unloaded")
+
+
+if __name__ == "__main__":   # egpu-report: the same single report, saved to the Desktop folder, path printed
+    print(_save_report()[1])

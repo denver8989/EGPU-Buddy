@@ -493,15 +493,15 @@ function Content() {
             </>
             )}
           </PanelSection>
-          {ad?.report && (
+          {(
             <PanelSection title="Support report">
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={async () => { setReport(null); try { setReport(await makeReport()); } catch { setMsg("Could not make the report."); } }}>Make support report</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={async () => { setReport(null); try { setReport(await makeReport()); } catch { setMsg("Could not make the report."); } }}>Save support report to Desktop</ButtonItem></PanelSectionRow>
               {report && (<>
                 <PanelSectionRow><div style={{ fontSize: "12px" }}>Scan with your phone to open a new GitHub issue with the report summary filled in. The full report is saved as <b>{report.file}</b>: attach it to the issue.</div></PanelSectionRow>
                 <PanelSectionRow><div style={{ width: "240px", margin: "0 auto", background: "#fff", borderRadius: "4px" }} dangerouslySetInnerHTML={{ __html: qrSvg(report.url) }} /></PanelSectionRow>
                 <Row k="Code" v={report.code} />
               </>)}
-              <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>Inside: versions (OS, kernel, driver, plugin), GPU and link, screens, and this boot's eGPU log lines. No serial numbers, Wi-Fi names, IP addresses or user names.</div></PanelSectionRow>
+              <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>One file with everything EGPU Buddy logs (versions, GPU and link, screens, Game Mode, attach, Safe Detach, driver trial and the system log), saved in the Desktop folder. Also in Desktop Mode: the "Save EGPU Buddy report" icon. No serial numbers, Wi-Fi names, IP addresses or user names.</div></PanelSectionRow>
             </PanelSection>
           )}
           {!s.present ? null : controlsOk ? (
@@ -656,7 +656,6 @@ function Content() {
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }}>{tv.paired.length ? "Pair again" : "Find and pair TV"}</ButtonItem></PanelSectionRow>
           </>)}
-          <PanelSectionRow><ToggleField label="Support report button" description="Adds &quot;Make support report&quot; to the Details tab, for GitHub issues." checked={!!ad?.report} onChange={(v) => run(async () => { const r = await setAddon("report", v); await refresh(); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
     </>

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# egpu-report — save the EGPU Buddy support report (ONE file with everything) in the Desktop folder and print its path.
+# The same code as the plugin's "Save support report to Desktop" button: the plugin's own main.py, run outside Decky, so
+# it also works in Desktop Mode (the "Save EGPU Buddy report" icon runs egpu-buddy --report) and when Decky does not load.
+set -u
+[ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
+U=$(getent passwd 1000 | cut -d: -f1); UH=$(getent passwd 1000 | cut -d: -f6)
+for m in "$UH/homebrew/plugins/EGPU-Buddy/main.py" "$UH/.local/share/steamos-egpu-buddy/decky-plugin/egpu-buddy/main.py"; do
+  [ -f "$m" ] && exec env EGPU_REPORT_USER="$U" python3 -I "$m"
+done
+echo "the EGPU Buddy plugin files were not found (install or update EGPU Buddy first)" >&2; exit 2

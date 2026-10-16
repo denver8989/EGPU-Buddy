@@ -175,4 +175,9 @@ if [ -n "${NV_EGPU_GAMESCOPE_XGPU_DRIVERS:-}" ]; then
       [ -n "$_v" ] && [ -n "$_d" ] && prefix+=(--prefer-vk-device "${_v#0x}:${_d#0x}"); fi
   fi
 fi
+# Breadcrumb for the support report (read-only for everything else): which binary this shim chose for this PID and from
+# what (the PID stays the same through exec), so the report can tell whether the NVIDIA picture fix is the one running.
+{ mkdir -p "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy" && printf '%s\n' "pid=$$" "time=$(date '+%F %T')" "chosen=$gamescope_bin" \
+    "requested=${NV_EGPU_BUDDY_GAMESCOPE_BIN:-}" "gbm_scanout=${gamescope_drm_gbm_scanout:-}" "marked_bad=$(cat /home/deck/.local/state/nv-egpu-buddy/gamescope-bad 2>/dev/null)" \
+    "args=${prefix_hdr[*]} ${prefix[*]}" > "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/gamescope-shim"; } 2>/dev/null || true
 exec "$gamescope_bin" "${prefix_hdr[@]}" "${prefix[@]}" "$@"

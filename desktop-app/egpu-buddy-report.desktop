@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Save EGPU Buddy report
+GenericName=eGPU support report
+Comment=Save one file with everything EGPU Buddy logs in the Desktop folder, to attach to a support request
+Exec=/home/deck/.local/bin/egpu-buddy --report
+Icon=/home/deck/.local/share/egpu-buddy/egpu-buddy.png
+Terminal=false
+Categories=Settings;System;
+Keywords=egpu;nvidia;report;log;support;

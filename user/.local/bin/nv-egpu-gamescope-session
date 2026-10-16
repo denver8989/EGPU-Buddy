@@ -783,6 +783,12 @@ if [ "${1:-}" = "--print-env" ] || [ "${NV_EGPU_GAMESCOPE_SESSION_PRINT_ENV:-0}"
   exit 0
 fi
 
+# Breadcrumb for the support report (read-only for everything else): this PID becomes the stock session and then gamescope
+# (each one execs the next), so the report can tell whether THIS wrapper started the running gamescope, and with what.
+{ mkdir -p "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy" && printf '%s\n' "pid=$$" "time=$(date '+%F %T')" "stock_session=$stock_session" \
+    "detach_mode=$detach_mode" "egpu_card=$egpu_card" "igpu_card=$igpu_card" "outputs=$outputs" "OUTPUT_CONNECTOR=${OUTPUT_CONNECTOR:-}" \
+    "HANDHELD_GPU=${NV_EGPU_GAMESCOPE_HANDHELD_GPU:-0}" "XGPU=${GAMESCOPE_XGPU_MODE:-}" "VK_DRIVER_FILES=${VK_DRIVER_FILES:-}" "PATH=$PATH" \
+    > "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/session-wrapper"; } 2>/dev/null || true
 # diagnostics: NV_EGPU_DIAG=1 in /run/nvegpu/diag turns on Proton + Vulkan loader logging for every game of this session
 if [ -e /run/nvegpu/diag ]; then export PROTON_LOG=1 VK_LOADER_DEBUG=error,warn WINEDEBUG=-all,+vulkan; fi   # NV_EGPU_DIAG_PROTON_LOG
 # Boot straight onto the eGPU left the handheld panel LIT: turning it off only ever happened on
