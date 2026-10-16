@@ -51,6 +51,19 @@ if [ "$(sed -n 's/^state=//p' "$TRIAL" 2>/dev/null | tail -1)" = failed ] &&
   fixed+=("the failed beta driver attempt (you can try it again)")
 fi
 
+# 2b. ROG Ally or XG Mobile: the NVIDIA Game Mode fix (GBM-scanout gamescope) switched off by the session shim's crash
+#     guard. Before 0.7.111 the guard could not tell a GPU hang from the build crashing; on these machines the eGPU hung
+#     (link retrains), so the build was marked as crashing and Game Mode ran Valve's gamescope from then on: the
+#     corrupted picture the fix exists to prevent. The mark matches the binary's timestamp and size, which an update keeps,
+#     so it never cleared. Clear it (and the once-per-OS-build rebuild record) so the fix is used again; the guard now
+#     asks the GPU before marking. A Legion Go with the AORUS box keeps its mark handling unchanged.
+GSBAD="$UH/.local/state/nv-egpu-buddy/gamescope-bad"
+if { [ "$profile" = rog-ally ] || [ -n "$xgm" ]; } && [ -s "$GSBAD" ]; then
+  do_ rm -f "$GSBAD" /var/lib/nvegpu/gamescope-rebuilt-for
+  log "cleared the 'GBM-scanout gamescope is crashing' mark ($(cat "$GSBAD" 2>/dev/null)): the NVIDIA Game Mode fix is used again"
+  fixed+=("the NVIDIA Game Mode picture fix, which GPU crashes had switched off")
+fi
+
 # 3. A proprietary-connector XG Mobile left switched on by an interrupted run while nothing is attached: the embedded
 #    controller keeps the value across reboots. Switch it off only when no NVIDIA GPU is on the bus.
 if [ "$dock" = xg-mobile-legacy ] && ! lspci -Dn 2>/dev/null | grep -qE ' 0300: 10de:'; then
@@ -101,7 +114,7 @@ fi
 [ $ONLY_XORG = 1 ] && exit 0
 
 if [ ${#fixed[@]} -gt 0 ] && [ $DRY = 0 ]; then
-  name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ${product%% RC7*}"; name=${name%% }; [ "$name" = "your " ] && name="your ROG Ally"; [ -n "$xgm" ] && name="$name with XG Mobile"
+  name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ${product%% RC7*}"; name=${name%% }; [ "$name" = "your" ] && name="your ROG Ally"; [ -n "$xgm" ] && name="$name with XG Mobile"
   mkdir -p /run/nvegpu
   printf 'Update fixed setup issues for %s: %s. Attach the eGPU again to use them.\n' "$name" "$(IFS=';'; echo "${fixed[*]}" | sed 's/;/, /g')" > /run/nvegpu/notice
   chown "$U": /run/nvegpu/notice 2>/dev/null || true

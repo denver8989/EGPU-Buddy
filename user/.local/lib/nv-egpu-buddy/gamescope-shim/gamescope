@@ -121,7 +121,20 @@ if [ "$gamescope_bin" != /usr/bin/gamescope ]; then
     printf '%s\n' "$_gs_now" >> "$_gs_starts" 2>/dev/null || true
     read -r _a _b _c _ <<<"$_gs_recent" || true
     case "${_a:-x}${_b:-x}${_c:-x}" in *[!0-9]*) _c="" ;; esac   # anything unexpected in the file: no decision
-    if [ -n "${_c:-}" ] && [ $((_b - _a)) -lt 20 ] && [ $((_c - _b)) -lt 20 ] 2>/dev/null; then
+    # ROG Ally / XG Mobile (each detected on its own): restarts caused by the eGPU failing (GPU hang, link down) are not
+    # this build crashing. Marking it there switched the session to Valve's gamescope for good (corrupted picture on
+    # NVIDIA) even once the GPU was fine again: the repair rebuilds once per OS build and the rebuild was marked the same
+    # way. So before marking, ask the GPU: no answer (or gone from the bus) = the GPU's fault, keep the GBM build.
+    # Elsewhere (Legion Go with the AORUS box) the guard is exactly as it was tested.
+    _gs_loop=0; { [ -n "${_c:-}" ] && [ $((_b - _a)) -lt 20 ] && [ $((_c - _b)) -lt 20 ]; } 2>/dev/null && _gs_loop=1
+    _gs_gpufault=0
+    if [ "$_gs_loop" = 1 ] && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } &&
+       ! timeout 5 nvidia-smi -L >/dev/null 2>&1; then _gs_gpufault=1; fi
+    if [ "$_gs_gpufault" = 1 ]; then
+      : > "$_gs_starts" 2>/dev/null || true
+      echo "nv-egpu-gamescope-shim: 3 quick restarts, but the NVIDIA GPU is not answering: the GPU failed, not $gamescope_bin; not marking it" >&2
+      logger -t egpu-buddy "gamescope restarted 3 times with the eGPU not answering: GPU fault, the GBM-scanout build stays in use" 2>/dev/null || true
+    elif [ "$_gs_loop" = 1 ]; then
       mkdir -p "$_gs_state" 2>/dev/null || true
       printf '%s\n' "$_gs_id" > "$_gs_bad" 2>/dev/null || true
       : > "$_gs_starts" 2>/dev/null || true
