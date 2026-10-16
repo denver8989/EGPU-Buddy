@@ -24,6 +24,7 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
     for d in "$br" "$gpu"; do t lspci -vvv -s "${d#0000:}" | grep -E '^[0-9a-f]|LnkCap|LnkSta|LnkCtl|DevSta|Region|Expansion|ASPM|L1Sub|UESta|CESta|Kernel driver|Physical Resizable|BAR [0-9]:'; done
     echo "config head: $(t xxd -l 8 "/sys/bus/pci/devices/$gpu/config" | head -1)"
     echo "link: $(cat /sys/bus/pci/devices/$gpu/current_link_speed 2>/dev/null) x$(cat /sys/bus/pci/devices/$gpu/current_link_width 2>/dev/null) · power $(cat /sys/bus/pci/devices/$gpu/power_state 2>/dev/null) · runtime PM $(cat /sys/bus/pci/devices/$gpu/power/control 2>/dev/null)/$(cat /sys/bus/pci/devices/$gpu/power/runtime_status 2>/dev/null) · BAR1 $(( $(stat -c %s /sys/bus/pci/devices/$gpu/resource1 2>/dev/null || echo 0) / 1048576 ))MiB"
+    sec "NVIDIA driver options in effect"; grep -E 'EnablePCIeGen3|DynamicPowerManagement|EnableResizableBar|RegistryDwords|PreserveVideoMemory' /proc/driver/nvidia/params 2>/dev/null || echo "(driver not loaded)"
     sec "nvidia-smi"; T=8 t nvidia-smi --query-gpu=name,driver_version,pstate,temperature.gpu,power.draw,clocks.gr,clocks.mem,pcie.link.gen.current,pcie.link.width.current,memory.used,memory.total --format=csv
     T=8 t nvidia-smi -q -d PERFORMANCE | grep -E 'Clocks Event|Active|Idle|Slowdown|Power Cap|Thermal' | head -20
   else sec "eGPU"; echo "no NVIDIA GPU on the bus"; fi

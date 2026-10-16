@@ -11,7 +11,9 @@ say where it came from.
   **ItzSkyeYT — [xgm-egpu](https://github.com/ItzSkyeYT/xgm-egpu)** (MIT) — documented how the proprietary-connector
   XG Mobile is switched (`egpu_enable` / `egpu_connected`, the slow firmware write, switching off only after the GPU is
   removed) and that laptop-class XG Mobile GPUs take no driver power limit. Those facts are reimplemented in
-  `egpu-detect`; no code was copied from the GPL projects.
+  `egpu-detect`; no code was copied from the GPL projects. xgm-egpu's FINDINGS.md also traced, in the driver source,
+  why XG Mobile links died ~10 s after init: the RM allows Gen3 only with `NVreg_EnablePCIeGen3=1` and otherwise
+  retrains the link down. `egpu-hw-repair` sets that option on a ROG Ally or with an XG Mobile (written here, not copied).
 
 ## The scan-out corruption fix (Game Mode UI on NVIDIA)
 

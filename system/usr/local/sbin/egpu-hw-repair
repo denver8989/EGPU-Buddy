@@ -10,7 +10,8 @@
 #
 #   egpu-hw-repair            check, repair, record /var/lib/nvegpu/hardware, leave a notice for the plugin
 #   egpu-hw-repair --dry-run  print what would be done
-#   egpu-hw-repair --xorg     only the X11 desktop guard (step 4); egpu-hotplug-mount runs it when an XG Mobile attaches
+#   egpu-hw-repair --xorg     only the X11 desktop guard and the Gen3 driver option (steps 4-5); egpu-hotplug-mount runs
+#                             it when an XG Mobile attaches, before the driver loads
 set -u
 DRY=0; [ "${1:-}" = --dry-run ] && DRY=1; ONLY_XORG=0; [ "${1:-}" = --xorg ] && ONLY_XORG=1
 [ "$(id -u)" = 0 ] || [ $DRY = 1 ] || { echo "run as root"; exit 1; }
@@ -79,6 +80,23 @@ if { [ "$profile" = rog-ally ] || [ -n "$xgm" ]; } && [ -n "$igpu" ]; then
   fi
 elif [ -f "$XORG" ]; then
   do_ rm -f "$XORG"; log "removed $XORG (neither a ROG Ally nor an XG Mobile)"
+fi
+# 5. ROG Ally or XG Mobile: let the NVIDIA driver keep the PCIe link at Gen3. Its RMPcieLinkSpeed policy allows Gen3 only
+#    with NVreg_EnablePCIeGen3=1; on a platform it does not recognise it pulls a Gen3 link down to Gen2 about 10 s after
+#    init and as the GPU leaves P0, and that retrain is what dropped XG Mobile links off the bus (Xid 79, "GPU has fallen
+#    off the bus"). Found from the driver source by the xgm-egpu project (CREDITS.md). The Ally X / XG Mobile 2025 link is
+#    Gen3 x4 and its laptop GPU changes power state constantly. Read at the next driver load (every Attach reloads it).
+#    A Legion Go with the AORUS box keeps the driver options it was tested with.
+GEN3=/etc/modprobe.d/zz-nvidia-egpu-pcie-gen3.conf
+if [ "$profile" = rog-ally ] || [ -n "$xgm" ]; then
+  want3=$(printf '%s\n' "# EGPU Buddy (egpu-hw-repair, ROG Ally / XG Mobile): the driver must not retrain the link down from Gen3" \
+    "options nvidia NVreg_EnablePCIeGen3=1")
+  if [ "$(cat "$GEN3" 2>/dev/null)" != "$want3" ]; then
+    if [ $DRY = 1 ]; then echo "would: write $GEN3"
+    else printf '%s\n' "$want3" > "$GEN3" && log "wrote $GEN3: NVreg_EnablePCIeGen3=1 (active from the next Attach)"; fi
+  fi
+elif [ -f "$GEN3" ]; then
+  do_ rm -f "$GEN3"; log "removed $GEN3 (neither a ROG Ally nor an XG Mobile)"
 fi
 [ $ONLY_XORG = 1 ] && exit 0
 
