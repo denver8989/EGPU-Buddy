@@ -3,10 +3,10 @@
 Everything below was verified on the machines described in the README. "Verified" means it was exercised
 repeatedly and behaved as described.
 
-## 2026-10-16 — ROG Xbox Ally X + ASUS XG Mobile 2025 (community tester: SilverplayerX)
+## 2026-10-16 — ROG Xbox Ally X + ASUS XG Mobile 2025 (on-device testing: SilverplayerX)
 
-Tested by **SilverplayerX** (Discord) on their own machine; not a machine this project has. Facts from their support
-reports.
+On-device testing by **SilverplayerX** (Discord), on their own machine; not a machine this project has. Facts from
+their support reports.
 
 | | |
 |---|---|

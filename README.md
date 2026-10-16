@@ -62,7 +62,7 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 | eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 |
 | Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Acer X49 ultrawide (DisplayPort) |
 
-**Community testing:** ROG Xbox Ally X with an ASUS XG Mobile 2025 (RTX 5070 Ti Laptop GPU) on SteamOS 3.8.28, by
+**On-device testing:** ROG Xbox Ally X with an ASUS XG Mobile 2025 (RTX 5070 Ti Laptop GPU) on SteamOS 3.8.28, by
 SilverplayerX: partly working, fixes in progress; exact hardware and status in [TESTED.md](TESTED.md).
 
 **NVIDIA:** RTX 30 and RTX 50 tested here; RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**
