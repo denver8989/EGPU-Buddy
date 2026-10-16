@@ -1,3 +1,13 @@
+0.7.113 — the NVIDIA picture fix checks itself, Decky follows Steam's channel.
+
+**Fixed**
+- After every Game Mode start on the eGPU, EGPU Buddy checks that the NVIDIA picture fix is really the one running, not only installed. On a ROG Ally, or any handheld with an ASUS XG Mobile, it repairs what it finds and reloads Game Mode once no game is running. Elsewhere it only notes it in the support report. Where the fix is running, as on a Legion Go with the AORUS box, nothing changes.
+- Decky Loader now follows the Steam client's beta as well as SteamOS's channel. When both are back on stable, a pre-release EGPU Buddy installed is swapped back for Decky's stable release, with the same backup and automatic rollback. A Decky version you chose yourself is left alone.
+
+**New**
+- When a SteamOS update brings a newer gamescope than the one the NVIDIA picture fix is built from, the plugin tells you once.
+- Support reports show the Decky version and the Steam and SteamOS channels.
+
 0.7.112 — one support report with everything, saved from Decky or the desktop.
 
 **New**
