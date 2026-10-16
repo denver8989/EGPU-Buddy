@@ -23,9 +23,11 @@ DET=/usr/local/sbin/egpu-detect
 profile=$($DET --device 2>/dev/null || echo generic)
 dock=$($DET --dock 2>/dev/null || echo none)
 igpu=$($DET --igpu 2>/dev/null || true)
-model="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $(cat /sys/class/dmi/id/product_name 2>/dev/null)"
-log "hardware: $model | profile $profile | dock $dock | built-in GPU ${igpu:-?}"
-[ $DRY = 1 ] || { mkdir -p "$(dirname "$HW")"; printf 'model=%s\nprofile=%s\ndock=%s\nigpu=%s\nchecked=%s\n' "$model" "$profile" "$dock" "$igpu" "$(date +%s)" > "$HW"; }
+product=$(cat /sys/class/dmi/id/product_name 2>/dev/null)
+model="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $product"
+chip=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo 2>/dev/null | head -1)   # e.g. Z1 Extreme vs Z2 Extreme
+log "hardware: $model | $chip | profile $profile | dock $dock | built-in GPU ${igpu:-?}"
+[ $DRY = 1 ] || { mkdir -p "$(dirname "$HW")"; printf 'model=%s\nchip=%s\nprofile=%s\ndock=%s\nigpu=%s\nchecked=%s\n' "$model" "$chip" "$profile" "$dock" "$igpu" "$(date +%s)" > "$HW"; }
 
 # 1. Game Mode environment written by an attach that used the Legion Go 2's iGPU address on another machine. It is
 #    rewritten at the next attach; left in place it pins KWIN_DRM_DEVICES to a GPU that does not exist here.
@@ -51,7 +53,7 @@ if [ "$dock" = xg-mobile-legacy ] && ! lspci -Dn 2>/dev/null | grep -qE ' 0300: 
 fi
 
 if [ ${#fixed[@]} -gt 0 ] && [ $DRY = 0 ]; then
-  name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ROG Ally"; [ "$dock" = xg-mobile-usb4 ] && name="$name with XG Mobile"
+  name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ${product%% RC7*}"; name=${name%% }; [ "$name" = "your " ] && name="your ROG Ally"; [ "$dock" = xg-mobile-usb4 ] && name="$name with XG Mobile"
   mkdir -p /run/nvegpu
   printf 'Update fixed setup issues for %s: %s. Attach the eGPU again to use them.\n' "$name" "$(IFS=';'; echo "${fixed[*]}" | sed 's/;/, /g')" > /run/nvegpu/notice
   chown "$U": /run/nvegpu/notice 2>/dev/null || true

@@ -60,7 +60,10 @@ egpu_device_profile() {
   case "$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/product_family 2>/dev/null)" in
     "Legion Go 8ASP2") echo legion-go-2 ;;
     *) case "$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/product_name 2>/dev/null)" in
-         *"ROG Ally"*|*RC71*|*RC72*|*RC73*) echo rog-ally ;;   # Ally, Ally X, ROG Xbox Ally / Ally X
+         # Ally RC71L and Ally X RC72LA (Z1 / Z1 Extreme), ROG Xbox Ally RC73YA and Ally X RC73XA (Z2 A / Z2 Extreme).
+         # "ROG Xbox Ally X" has no "ROG Ally" in it, so match the word and the model codes. The chip is not part of the
+         # profile: nothing here depends on it, and egpu-hw-repair records it for support reports.
+         *Ally*|*RC71*|*RC72*|*RC73*) echo rog-ally ;;
          *) echo generic ;;
        esac ;;
   esac
@@ -155,6 +158,8 @@ _egpu_selftest() {
   mkdir -p "$t/sys/bus/thunderbolt/devices/0-0" "$t/sys/bus/thunderbolt/devices/0-1"
   echo ASUSTeK > "$t/sys/bus/thunderbolt/devices/0-1/vendor_name"; echo GC34X > "$t/sys/bus/thunderbolt/devices/0-1/device_name"
   [ "$(egpu_dock)" = xg-mobile-usb4 ] || { echo "FAIL dock: $(egpu_dock)"; return 1; }
+  mkdir -p "$t/sys/class/dmi/id"; echo "ROG Xbox Ally X RC73XA_RC73XA" > "$t/sys/class/dmi/id/product_name"
+  [ "$(egpu_device_profile)" = rog-ally ] || { echo "FAIL profile: $(egpu_device_profile)"; return 1; }
   echo "selftest OK"
 }
 

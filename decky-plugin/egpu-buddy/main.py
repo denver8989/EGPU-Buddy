@@ -941,7 +941,7 @@ def _redact(text):
 def _hw_line():
     """profile and dock as egpu-hw-repair recorded them at the last update (ROG Ally / XG Mobile detection)."""
     d = dict(l.split("=", 1) for l in _read("/var/lib/nvegpu/hardware").splitlines() if "=" in l)
-    return f"profile {d.get('profile', '?')} · dock {d.get('dock', '?')} · built-in GPU {d.get('igpu', '?')}" if d else "not checked yet"
+    return f"{d.get('chip', '?')} · profile {d.get('profile', '?')} · dock {d.get('dock', '?')} · built-in GPU {d.get('igpu', '?')}" if d else "not checked yet"
 
 
 def _support_report():
