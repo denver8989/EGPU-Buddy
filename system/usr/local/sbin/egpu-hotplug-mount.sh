@@ -312,15 +312,25 @@ if egpu_is_ampere_consumer "$gpu"; then
   EGPU_SKIP_LINKPIN=0; EGPU_PIN_CORRECTED=1; EGPU_SKIP_REBAR=0; EGPU_SKIP_FLR=1
   log "RTX 30 series (GA10x): lean bring-up — no FLR, ReBAR attempted, corrected Gen3 link pin"
 fi
-# ROG Ally (egpu-detect --device; the Legion Go 1 and 2 are not matched and keep the legacy pin they were tested with).
+# ROG Ally (egpu-detect --device) or an ASUS XG Mobile (egpu-detect --dock), each detected on its own: an XG Mobile on a
+# Legion Go gets this too. A Legion Go with any other dock is not matched and keeps the legacy pin it was tested with.
 # The legacy pin leaves ENTER COMPLIANCE set in Link Control 2 (see pin_link_speed): the first link recovery that falls
 # back through Polling then parks the link in compliance mode and the GPU drops off the bus. On a ROG Xbox Ally X with an
 # XG Mobile 2025 (RTX 5070 Ti Laptop) that is what the reports show: games freeze, then NVRM "TLB invalidation failed",
 # "FSP command timed out" and the GPU gone from the bus. pcie_aspm=off only stops the kernel touching ASPM; whatever the
 # firmware enabled stays on, so it is switched off on both ends here as well.
-if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ]; then
+_hw_dev=$(/usr/local/sbin/egpu-detect --device 2>/dev/null); _hw_dock=$(/usr/local/sbin/egpu-detect --dock 2>/dev/null)
+case "$_hw_dock" in xg-mobile-*)
+  # remembered for the X11 desktop guard (egpu-hw-repair runs at updates, usually with nothing attached); put it in now,
+  # before the user can switch to the desktop with this dock attached
+  mkdir -p /var/lib/nvegpu; echo "$_hw_dock" > /var/lib/nvegpu/xg-mobile-seen
+  /usr/local/sbin/egpu-hw-repair --xorg >/dev/null 2>&1 || true ;;
+esac
+_hw_why=""; [ "$_hw_dev" = rog-ally ] && _hw_why="ROG Ally"
+case "$_hw_dock" in xg-mobile-*) _hw_why="${_hw_why:+$_hw_why + }XG Mobile ($_hw_dock)" ;; esac
+if [ -n "$_hw_why" ]; then
   EGPU_PIN_CORRECTED=1; EGPU_PIN_ASPM_OFF=1
-  log "ROG Ally: corrected link pin (no Enter Compliance bit), ASPM/L1SS off on both ends"
+  log "$_hw_why: corrected link pin (no Enter Compliance bit), ASPM/L1SS off on both ends"
 fi
 if [ ! -L "$GDEV/driver" ] && [ "$EGPU_SKIP_FLR" = 1 ]; then
   # The FLR is what leaves this card decoding nothing: config space still reads, but every MMIO

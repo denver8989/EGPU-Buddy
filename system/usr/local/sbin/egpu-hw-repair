@@ -10,8 +10,9 @@
 #
 #   egpu-hw-repair            check, repair, record /var/lib/nvegpu/hardware, leave a notice for the plugin
 #   egpu-hw-repair --dry-run  print what would be done
+#   egpu-hw-repair --xorg     only the X11 desktop guard (step 4); egpu-hotplug-mount runs it when an XG Mobile attaches
 set -u
-DRY=0; [ "${1:-}" = --dry-run ] && DRY=1
+DRY=0; [ "${1:-}" = --dry-run ] && DRY=1; ONLY_XORG=0; [ "${1:-}" = --xorg ] && ONLY_XORG=1
 [ "$(id -u)" = 0 ] || [ $DRY = 1 ] || { echo "run as root"; exit 1; }
 LOG=/var/log/egpu-hw-repair.log; HW=/var/lib/nvegpu/hardware; TRIAL=/var/lib/nvegpu/driver-trial
 U=$(getent passwd 1000 | cut -d: -f1); UH=$(getent passwd 1000 | cut -d: -f6); UH=${UH:-/home/deck}
@@ -26,8 +27,12 @@ igpu=$($DET --igpu 2>/dev/null || true)
 product=$(cat /sys/class/dmi/id/product_name 2>/dev/null)
 model="$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) $product"
 chip=$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo 2>/dev/null | head -1)   # e.g. Z1 Extreme vs Z2 Extreme
-log "hardware: $model | $chip | profile $profile | dock $dock | built-in GPU ${igpu:-?}"
-[ $DRY = 1 ] || { mkdir -p "$(dirname "$HW")"; printf 'model=%s\nchip=%s\nprofile=%s\ndock=%s\nigpu=%s\nchecked=%s\n' "$model" "$chip" "$profile" "$dock" "$igpu" "$(date +%s)" > "$HW"; }
+# XG Mobile: detected on its own, not as part of the Ally profile (a Legion Go can be docked to one). Attached now, or seen
+# at an earlier attach (egpu-hotplug-mount records it): updates usually run with nothing attached.
+xgm=$(case "$dock" in xg-mobile-*) echo "$dock" ;; *) cat /var/lib/nvegpu/xg-mobile-seen 2>/dev/null ;; esac)
+if [ $ONLY_XORG = 0 ]; then
+log "hardware: $model | $chip | profile $profile | dock $dock | XG Mobile ${xgm:-never seen} | built-in GPU ${igpu:-?}"
+[ $DRY = 1 ] || { mkdir -p "$(dirname "$HW")"; printf 'model=%s\nchip=%s\nprofile=%s\ndock=%s\nxg_mobile=%s\nigpu=%s\nchecked=%s\n' "$model" "$chip" "$profile" "$dock" "${xgm:-no}" "$igpu" "$(date +%s)" > "$HW"; }
 
 # 1. Game Mode environment written by an attach that used the Legion Go 2's iGPU address on another machine. It is
 #    rewritten at the next attach; left in place it pins KWIN_DRM_DEVICES to a GPU that does not exist here.
@@ -51,17 +56,19 @@ if [ "$dock" = xg-mobile-legacy ] && ! lspci -Dn 2>/dev/null | grep -qE ' 0300: 
   sw=$($DET --xgm-power off 2>/dev/null; echo $?)
   [ "$sw" = 0 ] && log "XG Mobile switch: off (nothing attached)"
 fi
+fi   # ONLY_XORG
 
-# 4. ROG Ally: the X11 desktop must stay on the built-in GPU. Its Radeon is a "display controller" (class 0x0380), not a
+# 4. ROG Ally or XG Mobile (each detected on its own): the X11 desktop must stay on the built-in GPU. Its Radeon is a "display controller" (class 0x0380), not a
 #    VGA device, so Xorg takes the NVIDIA eGPU as the primary GPU, fails on it ("Cannot run in framebuffer mode") and the
 #    eGPU hung in that same instant (NVRM TLB invalidation / FSP timeouts, then off the bus: Ally X report, switching to
-#    Desktop with the eGPU attached). Name the built-in GPU explicitly and do not add other GPUs. Only the X11 desktop
-#    reads this; Game Mode and the Wayland desktop do not. Not written on any other device.
+#    Desktop with the eGPU attached; that eGPU was an XG Mobile's laptop GPU, so a Legion Go docked to one gets this too).
+#    Name the built-in GPU explicitly and do not add other GPUs. Only the X11 desktop reads this; Game Mode and the
+#    Wayland desktop do not. Not written on any other machine (a Legion Go with the AORUS box keeps the X11 defaults).
 XORG=/etc/X11/xorg.conf.d/10-egpu-buddy-builtin-gpu.conf
-if [ "$profile" = rog-ally ] && [ -n "$igpu" ]; then
+if { [ "$profile" = rog-ally ] || [ -n "$xgm" ]; } && [ -n "$igpu" ]; then
   IFS=':.' read -r _dom _bus _dev _fn <<<"$igpu"
   busid="PCI:$((16#$_bus))@$((16#$_dom)):$((16#$_dev)):$((16#$_fn))"
-  want=$(printf '%s\n' "# EGPU Buddy (egpu-hw-repair, ROG Ally only): the X11 desktop uses the built-in GPU, never the eGPU" \
+  want=$(printf '%s\n' "# EGPU Buddy (egpu-hw-repair, ROG Ally / XG Mobile): the X11 desktop uses the built-in GPU, never the eGPU" \
     'Section "ServerFlags"' '    Option "AutoAddGPU" "false"' 'EndSection' \
     'Section "Device"' '    Identifier "EGPU Buddy built-in GPU"' '    Driver "amdgpu"' "    BusID \"$busid\"" 'EndSection' \
     'Section "Screen"' '    Identifier "EGPU Buddy screen"' '    Device "EGPU Buddy built-in GPU"' '    Option "NoOutputInitialSize" "1920 1080"' 'EndSection' \
@@ -71,11 +78,12 @@ if [ "$profile" = rog-ally ] && [ -n "$igpu" ]; then
     else mkdir -p "$(dirname "$XORG")" && printf '%s\n' "$want" > "$XORG" && log "wrote $XORG: X11 desktop on the built-in GPU ($busid)"; fi
   fi
 elif [ -f "$XORG" ]; then
-  do_ rm -f "$XORG"; log "removed $XORG (not a ROG Ally)"
+  do_ rm -f "$XORG"; log "removed $XORG (neither a ROG Ally nor an XG Mobile)"
 fi
+[ $ONLY_XORG = 1 ] && exit 0
 
 if [ ${#fixed[@]} -gt 0 ] && [ $DRY = 0 ]; then
-  name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ${product%% RC7*}"; name=${name%% }; [ "$name" = "your " ] && name="your ROG Ally"; [ "$dock" = xg-mobile-usb4 ] && name="$name with XG Mobile"
+  name=$(echo $model); name=${name:-this machine}; [ "$profile" = rog-ally ] && name="your ${product%% RC7*}"; name=${name%% }; [ "$name" = "your " ] && name="your ROG Ally"; [ -n "$xgm" ] && name="$name with XG Mobile"
   mkdir -p /run/nvegpu
   printf 'Update fixed setup issues for %s: %s. Attach the eGPU again to use them.\n' "$name" "$(IFS=';'; echo "${fixed[*]}" | sed 's/;/, /g')" > /run/nvegpu/notice
   chown "$U": /run/nvegpu/notice 2>/dev/null || true

@@ -3,7 +3,8 @@
 #   egpu-detect            -> "BDF VENDOR CARD" of the eGPU (exit 1 when none)   VENDOR = nvidia|amd|intel|other
 #   egpu-detect --igpu     -> BDF of the built-in GPU
 #   egpu-detect --device   -> device profile: legion-go-2 (the tested machine, device-specific fixes apply) | rog-ally | generic
-#   egpu-detect --dock     -> xg-mobile-usb4 | xg-mobile-legacy | usb4 | none   (which dock the eGPU is in, see egpu_dock)
+#   egpu-detect --dock     -> xg-mobile-usb4 | xg-mobile-legacy | usb4 | none   (which dock the eGPU is in, see egpu_dock;
+#                             independent of --device: an XG Mobile on a Legion Go is legion-go-2 + xg-mobile-usb4)
 #   egpu-detect --untested -> one line per difference from the tested configuration (exit 0 = differs, lines printed; 1 = matches the tested machine)
 #   egpu-detect --selftest -> check the logic against a fake sysfs tree
 # The eGPU is the display-class PCI device that does NOT drive the built-in panel and sits behind a
@@ -160,6 +161,11 @@ _egpu_selftest() {
   [ "$(egpu_dock)" = xg-mobile-usb4 ] || { echo "FAIL dock: $(egpu_dock)"; return 1; }
   mkdir -p "$t/sys/class/dmi/id"; echo "ROG Xbox Ally X RC73XA_RC73XA" > "$t/sys/class/dmi/id/product_name"
   [ "$(egpu_device_profile)" = rog-ally ] || { echo "FAIL profile: $(egpu_device_profile)"; return 1; }
+  # the dock is detected on its own: a Legion Go 2 docked to the same XG Mobile is legion-go-2 + xg-mobile-usb4
+  echo "Legion Go 8ASP2" > "$t/sys/class/dmi/id/product_family"
+  [ "$(egpu_device_profile)" = legion-go-2 ] && [ "$(egpu_dock)" = xg-mobile-usb4 ] || { echo "FAIL Legion Go 2 + XG Mobile: $(egpu_device_profile) $(egpu_dock)"; return 1; }
+  echo "AORUS RTX506T AI BOX" > "$t/sys/bus/thunderbolt/devices/0-1/device_name"; echo GIGABYTE > "$t/sys/bus/thunderbolt/devices/0-1/vendor_name"
+  [ "$(egpu_dock)" = usb4 ] || { echo "FAIL AORUS dock: $(egpu_dock)"; return 1; }
   echo "selftest OK"
 }
 
