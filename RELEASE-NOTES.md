@@ -1,3 +1,10 @@
+0.7.117 — a flight recorder for support reports.
+
+**New**
+- EGPU Buddy keeps a running timeline while an eGPU is attached: every 3 seconds it notes whether you are in Game Mode or the desktop, which GPU the screen and the game are using, whether the NVIDIA picture fix is active, and the GPU's load, clocks, power, temperature, memory and link. Every change, and every GPU or link error, is written down immediately, so it survives a forced restart.
+- Support reports include that timeline and the last three days of EGPU Buddy's log, so most problems can be traced from one report without another test.
+- It only reads and records, never changes anything, and does almost nothing while no eGPU is attached. Frames per second are not recorded, so Steam's performance overlay keeps working.
+
 0.7.116 — fuller support reports for Desktop Safe Detach.
 
 **New**
