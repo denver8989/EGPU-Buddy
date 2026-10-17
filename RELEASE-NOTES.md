@@ -1,3 +1,8 @@
+0.7.116 — fuller support reports for Desktop Safe Detach.
+
+**New**
+- Support reports include Desktop Safe Detach's step-by-step output, which GPU each desktop login chose, and the desktop session's own log, so a failed Desktop Safe Detach can be traced exactly.
+
 0.7.115 — the driver is there from boot, even after a forced restart or a SteamOS update.
 
 **Fixed** (SteamOS)
