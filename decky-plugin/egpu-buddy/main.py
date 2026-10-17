@@ -1118,6 +1118,19 @@ def _support_report():
     xlog = [l for l in _read(f"{USER_HOME}/.local/share/xorg/Xorg.0.log").splitlines() if re.search(r"\(EE\)|NVIDIA|nvidia|AutoAddGPU|amdgpu\(0\): Output|GPU", l)]
     if xlog:
         lines += ["", "## X11 desktop: Xorg log, errors and GPUs (last 40)"] + [l[:300] for l in xlog[-40:]]
+    # Desktop Safe Detach: the root helper's own output (which step failed, what still held the eGPU), the Plasma env
+    # script's GPU choice for every desktop login (a detach restarts KWin; under SDDM that is a whole new login), and the
+    # detach job's output in the user session
+    hl = _read(f"/run/user/{UID}/nv-egpu-buddy/helper.log").splitlines()
+    if hl:
+        lines += ["", "## Desktop Safe Detach: root helper output (last run, last 60)"] + [l[:300] for l in hl[-60:]]
+    el = _read(f"{USER_HOME}/.egpu-desktop-display.log").splitlines()
+    if el:
+        lines += ["", "## Desktop login: GPU chosen for KWin (last 40)"] + [l[:300] for l in el[-40:]]
+    uj = _user_cmd(["journalctl", "--user", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
+                    "safe-detach|egpu|kwin_wayland.*(rror|DRM|drm)|plasma-kwin"], 20).splitlines()
+    if uj:
+        lines += ["", "## Desktop Safe Detach and KWin, user session log this boot (last 60)"] + [l[:300] for l in uj[-60:]]
     dj = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
               "kwin_x11|kwin_wayland|plasmashell.*(rror|crash)|startplasma|Xorg|egpu-safe-detach|safe-detach-ui|egpu-display|egpu-republish|relogin"], 20)[1].splitlines()
     if dj:
