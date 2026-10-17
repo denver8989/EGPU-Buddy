@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# egpu-flight-recorder — a running timeline of what the eGPU setup is doing, so a support report shows what happened
+# between snapshots (which GPU each desktop login took during a Safe Detach, when the NVIDIA picture fix dropped out, how
+# the link and the GPU behaved in a game) without another test round on the device.
+#
+# Read-only: it changes nothing. While an NVIDIA eGPU is on the bus it samples every 3 s; otherwise it only checks every
+# 10 s, so a machine without an eGPU does next to nothing. Each sample is one line:
+#   S <session> comp=<compositor>:<GPU it holds> fix=<GBM gamescope on|off> out=<screen> game=<appid>:<name>@<GPU>
+#     gpu=<bdf> util=<gpu>/<mem>% clk=<core>/<mem>MHz pw=<W> t=<C> vram=<MiB> ps=<pstate> link=<speed> x<width>
+#     aer=c<correctable>/n<nonfatal>/f<fatal>
+# Every change of state is an EVENT line (also in the journal, tag egpu-buddy), synced to disk at once so a forced
+# restart keeps it; important ones also take an egpu-snapshot (at most one every 20 s). Kernel GPU errors (Xid, "fallen
+# off the bus", AER, DPC) are EVENT lines too. Not recorded: frames per second (gamescope's stats pipe has one reader,
+# Steam's performance overlay; reading it here would take the overlay's data away).
+# /var/log/egpu-buddy/flight.log, rotated at 4 MB into flight.log.1 (about two days of play). Started by
+# egpu-flight-recorder.service.
+set -u
+DIR=/var/log/egpu-buddy; LOG=$DIR/flight.log; MAX=$((4 * 1024 * 1024))
+U=$(getent passwd 1000 | cut -d: -f1); UH=$(getent passwd 1000 | cut -d: -f6); UH=${UH:-/home/deck}
+PRIV=$(readlink -f "$UH/.local/gamescope-gbm/usr/bin/gamescope" 2>/dev/null || echo "$UH/.local/gamescope-gbm/usr/bin/gamescope")
+mkdir -p "$DIR"
+w(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
+ev(){ w "EVENT $*"; sync "$LOG" 2>/dev/null || sync; logger -t egpu-buddy "$*" 2>/dev/null || true; }
+snap_last=0
+snap(){ local now; now=$(date +%s); [ $((now - snap_last)) -ge 20 ] || return 0; snap_last=$now
+  systemd-run --no-block --collect --quiet /usr/local/sbin/egpu-snapshot "flight-$1" >/dev/null 2>&1 || true; }
+
+nvidia_gpu(){ local d; for d in /sys/bus/pci/devices/*; do
+  [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue; case "$(cat "$d/class" 2>/dev/null)" in 0x03*) echo "${d##*/}"; return 0 ;; esac; done; return 1; }
+# which GPU a process holds: egpu, igpu, both or none (from its open device files)
+gpu_of(){ local p=$1 fds e=0 i=0 n; fds=$(ls -l "/proc/$p/fd" 2>/dev/null | grep -oE '/dev/(nvidia[a-z0-9-]*|dri/[a-zA-Z]+[0-9]+)' | sort -u)
+  for n in $fds; do case "$n" in /dev/nvidia*) e=1 ;; /dev/dri/*) case " $ENODES " in *" ${n#/dev/dri/} "*) e=1 ;; *) i=1 ;; esac ;; esac; done
+  case "$e$i" in 11) echo both ;; 10) echo egpu ;; 01) echo igpu ;; *) echo none ;; esac; }
+aer(){ local f=/sys/bus/pci/devices/$1/aer_dev_$2; awk '/^TOTAL/{print $2; exit}' "$f" 2>/dev/null || echo -; }
+
+cursor=""; prev=""; prev_aer=""; prev_gpu=""
+ev "flight recorder started (EGPU Buddy $(cat /etc/nv-egpu-buddy/version 2>/dev/null || echo ?), kernel $(uname -r))"
+while :; do
+  gpu=$(nvidia_gpu || true)
+  ENODES=""; [ -n "$gpu" ] && ENODES=$(ls "/sys/bus/pci/devices/$gpu/drm" 2>/dev/null | grep -E '^(card|renderD)[0-9]+$' | tr '\n' ' ')
+  gs=$(pgrep -n -x 'gamescope(-wl)?' || true); kw=$(pgrep -n -U "$U" -x kwin_wayland || true)
+  kx=$(pgrep -n -U "$U" -x kwin_x11 || true); xo=$(pgrep -n -x Xorg || true)
+  if [ -n "$gs" ]; then mode=game; comp="gamescope:$(gpu_of "$gs")"
+  elif [ -n "$kw" ]; then mode=desktop-wayland; comp="kwin:$(gpu_of "$kw")"
+  elif [ -n "$kx" ]; then mode=desktop-x11; comp="Xorg:$( [ -n "$xo" ] && gpu_of "$xo" || echo none)"
+  else mode=none; comp=none; fi
+  fix=-; out=-
+  if [ -n "$gs" ]; then
+    [ "$(readlink -f "/proc/$gs/exe" 2>/dev/null)" = "$PRIV" ] && fix=on || fix=off
+    out=$(tr '\0' '\n' < "/proc/$gs/environ" 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p' | cut -d, -f1); out=${out:-?}
+  fi
+  # the running game (Steam starts every game under "reaper ... AppId=N") and whether it renders on the eGPU
+  game=-; rp=$(pgrep -n -x reaper || true)
+  if [ -n "$rp" ]; then
+    app=$(tr '\0' ' ' < "/proc/$rp/cmdline" 2>/dev/null | grep -oE 'AppId=[0-9]+' | head -1 | cut -d= -f2)
+    on=igpu; name=?
+    if [ -n "$gpu" ] && [ -n "$app" ]; then
+      for p in $(fuser /dev/nvidia0 2>/dev/null | tr -s ' ' '\n'); do
+        grep -qa "SteamAppId=$app" "/proc/$p/environ" 2>/dev/null && { on=egpu; name=$(cat "/proc/$p/comm" 2>/dev/null); break; }; done
+    fi
+    game="${app:-?}:${name}@${on}"
+  fi
+  line="S $mode comp=$comp fix=$fix out=$out game=$game"
+  if [ -n "$gpu" ]; then
+    smi=""; [ -e /sys/module/nvidia ] && smi=$(timeout 4 nvidia-smi -i "$gpu" --format=csv,noheader,nounits \
+      --query-gpu=utilization.gpu,utilization.memory,clocks.gr,clocks.mem,power.draw,temperature.gpu,memory.used,pstate,pcie.link.gen.current,pcie.link.width.current 2>/dev/null | tr -d ' ')
+    IFS=, read -r ug um cg cm pw tp vr ps lg lw <<< "${smi:-,,,,,,,,,}"
+    ls_=$(sed 's/ PCIe//; s/ //g' "/sys/bus/pci/devices/$gpu/current_link_speed" 2>/dev/null); lw_=$(cat "/sys/bus/pci/devices/$gpu/current_link_width" 2>/dev/null)
+    a="c$(aer "$gpu" correctable)/n$(aer "$gpu" nonfatal)/f$(aer "$gpu" fatal)"
+    line="$line gpu=$gpu util=${ug:-?}/${um:-?}% clk=${cg:-?}/${cm:-?}MHz pw=${pw:-?}W t=${tp:-?}C vram=${vr:-?}M ps=${ps:-?} link=${ls_:-?}x${lw_:-?}(gen${lg:-?}x${lw:-?}) aer=$a"
+  fi
+  w "$line"
+  # events: what changed since the last sample
+  if [ "$gpu" != "$prev_gpu" ]; then
+    if [ -n "$gpu" ]; then ev "eGPU on the bus: $gpu ($(cat /sys/bus/pci/devices/$gpu/device 2>/dev/null))"; else ev "eGPU gone from the bus (was $prev_gpu)"; snap gpu-gone; fi
+    prev_gpu=$gpu
+  fi
+  key="$mode $comp fix=$fix out=$out game=$game"
+  [ -z "$prev" ] && ev "state at start: $key"
+  if [ -n "$prev" ] && [ "$key" != "$prev" ]; then
+    ev "state: $key (was: $prev)"
+    case "$prev $key" in *"fix=on"*"fix=off"*) snap fix-off ;; esac
+    [ "${prev%% *}" != "$mode" ] && snap "session-$mode"
+    case "$comp" in *:both) snap compositor-on-both-gpus ;; esac
+  fi
+  prev=$key
+  if [ -n "$gpu" ] && [ -n "$prev_aer" ] && [ "${a:-}" != "$prev_aer" ]; then ev "PCIe errors on $gpu: $a (was $prev_aer)"; snap pcie-errors; fi
+  prev_aer=${a:-}; [ -z "$gpu" ] && prev_aer=""
+  # kernel GPU / link errors since the last look
+  # the first look only takes the position (older lines are in the report's kernel log already)
+  had=$cursor
+  if [ -n "$cursor" ]; then k=$(journalctl -k --no-pager -o cat --after-cursor="$cursor" --show-cursor 2>/dev/null)
+  else k=$(journalctl -k --no-pager -o cat -n 1 --show-cursor 2>/dev/null); fi
+  c=$(printf '%s\n' "$k" | sed -n 's/^-- cursor: //p' | tail -1); [ -n "$c" ] && cursor=$c
+  [ -n "$had" ] || k=""
+  hits=$(printf '%s\n' "$k" | grep -E 'NVRM: Xid|fallen off the bus|GPU has fallen|AER:|DPC:|pciehp.*(Link Down|Card not present)|nvidia-modeset: ERROR' | head -5)
+  if [ -n "$hits" ]; then while IFS= read -r h; do ev "kernel: ${h:0:240}"; done <<< "$hits"; snap kernel-gpu-error; fi
+  [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt "$MAX" ] && mv -f "$LOG" "$LOG.1"
+  if [ -n "$gpu" ]; then sleep 3; else sleep 10; fi
+done

@@ -1079,6 +1079,23 @@ def _support_report():
               + (f" · marked as crashing: {_read(USER_HOME + '/.local/state/nv-egpu-buddy/gamescope-bad')}" if os.path.exists(USER_HOME + "/.local/state/nv-egpu-buddy/gamescope-bad") else ""),
               f"running: {exe or '(none)'}" + (" (GBM-scanout build)" if exe and exe == os.path.realpath(priv) else "")]
     lines += _fix_verdict(gpid, exe, priv)
+    # the flight recorder's timeline (egpu-flight-recorder): every change of state, kernel GPU error and PCIe error count
+    # since it started (two rotated files, ~2 days of play), then the last ~10 minutes of 3-second samples
+    fl = _read("/var/log/egpu-buddy/flight.log.1").splitlines() + _read("/var/log/egpu-buddy/flight.log").splitlines()
+    if fl:
+        evs = [l for l in fl if " EVENT " in l]
+        lines += ["", f"## Flight recorder: events ({len(evs)}, last 200)"] + [l[:400] for l in evs[-200:]]
+        lines += ["", "## Flight recorder: samples, last ~10 minutes (every 3 s while the eGPU is on the bus)"] + \
+                 [l[:400] for l in [l for l in fl if " S " in l][-200:]]
+    else:
+        lines += ["", "## Flight recorder", "no timeline yet (egpu-flight-recorder.service: "
+                  + (_sh(["systemctl", "is-active", "egpu-flight-recorder.service"], 3)[1] or "?") + ")"]
+    # what EGPU Buddy's scripts said in the journal over the last three days (every boot, not only this and the previous)
+    jt = _sh(["journalctl", "--no-pager", "-o", "short-iso", "--since", "-3 days", "-t", "egpu-buddy", "-t", "egpu-decky-guard",
+              "-t", "egpu-driver-prebuild", "-t", "egpu-buddy-selfheal"], 20)[1].splitlines()
+    jt = [l for l in jt if "flight recorder" not in l and " state: " not in l]   # the recorder's own lines are above
+    if jt:
+        lines += ["", "## EGPU Buddy journal, last 3 days (last 80)"] + [l[:300] for l in jt[-80:]]
     # how Game Mode was started: the session unit as systemd sees it (with every drop-in) and the OS's gamescope package
     lines += ["", "## Game Mode session unit", f"OS gamescope package: {_sh(['pacman', '-Q', 'gamescope'], 5)[1] or '?'}",
               _user_cmd(["systemctl", "--user", "show", "-p", "ExecStart", "-p", "DropInPaths", "-p", "ActiveState", "-p", "SubState",

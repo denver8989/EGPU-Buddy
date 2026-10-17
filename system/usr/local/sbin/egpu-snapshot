@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # egpu-snapshot <reason> — write the whole eGPU picture to /var/log/egpu-buddy/ at the moment something went wrong.
 # Read-only: it changes nothing. Called by Safe Detach (on failure), the beta driver trial (on failure), the cable-pull
-# recovery and the attach hook; the support report includes the newest ones. Why: a report made later shows the machine
-# after a recovery or a reboot (the GPU gone, /run wiped), not the state that explains the failure. Keeps the last 12.
+# recovery, the attach hook and the flight recorder; the support report includes the newest ones. Why: a report made later shows the machine
+# after a recovery or a reboot (the GPU gone, /run wiped), not the state that explains the failure. Keeps the last 30.
 # Every command runs under a timeout: a hung GPU makes nvidia-smi and some sysfs reads block.
 set -u
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
@@ -79,5 +79,5 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   sec "eGPU Buddy log lines (last 60)"
   T=10 t journalctl -b --no-pager -o short-monotonic | grep -E 'egpu|nv-egpu|gamescope.*(drm|vulkan|Error|error)' | grep -v 'NVRM' | cut -c1-300 | tail -n 60
 } > "$OUT" 2>&1
-ls -1t "$DIR"/snap-*.txt 2>/dev/null | tail -n +13 | xargs -r rm -f
+ls -1t "$DIR"/snap-*.txt 2>/dev/null | tail -n +31 | xargs -r rm -f   # 30: the flight recorder adds snapshots at state changes
 echo "$OUT"

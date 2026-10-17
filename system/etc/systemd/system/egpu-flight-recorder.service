@@ -1,0 +1,16 @@
+[Unit]
+Description=SteamOS EGPU Buddy: flight recorder (a read-only timeline of the eGPU, the session and the game, for support reports)
+ConditionPathExists=/usr/local/sbin/egpu-flight-recorder
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/local/sbin/egpu-flight-recorder
+Restart=always
+RestartSec=10
+# it only reads: keep it out of the way of the session and the game
+Nice=15
+IOSchedulingClass=idle
+CPUSchedulingPolicy=batch
+
+[Install]
+WantedBy=multi-user.target
