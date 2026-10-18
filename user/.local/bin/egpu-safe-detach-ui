@@ -126,6 +126,13 @@ if ! pgrep -U "$(id -u)" -x kwin_wayland >/dev/null 2>&1 && pgrep -U "$(id -u)" 
   status DO_NOT_UNPLUG 'Safe Detach does not support the X11 desktop yet; nothing was changed. Return to Gaming Mode and use Safe Detach there (it works), then unplug.'
   echo 'X11 desktop: Desktop Safe Detach not supported yet; use it from Game Mode' >&2; exit 1
 fi
+# ROG Ally / XG Mobile under SDDM (SteamOS): moving KWin off the eGPU restarts it, and SDDM ends the login session when
+# KWin restarts. Twice per detach, then the desktop came back on the TV with the eGPU never released (ROG Xbox Ally X
+# reports, 0.7.116 and 0.7.117). Game Mode's Safe Detach works there. Elsewhere (Legion Go) this is unchanged.
+if { [ "$DEVICE" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && systemctl is-active --quiet sddm.service 2>/dev/null; then
+  status DO_NOT_UNPLUG 'On this handheld, Safe Detach works from Gaming Mode; nothing was changed. Return to Gaming Mode, use Safe Detach there, then unplug.'
+  echo 'ROG Ally / XG Mobile under SDDM: Desktop Safe Detach ends the login session; use it from Game Mode' >&2; exit 1
+fi
 IGPU_CARD=$(drm_card_for 0x1002 || true)
 GPU_CARD=$(drm_card_for 0x10de || true)
 [ -n "$IGPU_CARD" ] || fail 'Internal AMD display card is unavailable.'

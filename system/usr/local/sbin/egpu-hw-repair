@@ -111,6 +111,21 @@ if [ "$profile" = rog-ally ] || [ -n "$xgm" ]; then
 elif [ -f "$GEN3" ]; then
   do_ rm -f "$GEN3"; log "removed $GEN3 (neither a ROG Ally nor an XG Mobile)"
 fi
+# 6. ROG Ally or XG Mobile: nouveau must never take the eGPU. The NVIDIA driver image's own blacklist did not stop it during
+#    a beta driver trial (ROG Xbox Ally X report: nouveau bound the RTX 5070 Ti at the attach rescan, "already bound to
+#    nouveau", no driver, Game Mode crash-looping on a black screen). /etc is read whatever image is merged. A Legion Go
+#    with the AORUS box keeps the driver set-up it was tested with.
+NONV=/etc/modprobe.d/zz-egpu-xgm-no-nouveau.conf
+if [ "$profile" = rog-ally ] || [ -n "$xgm" ]; then
+  wantn=$(printf '%s\n' "# EGPU Buddy (egpu-hw-repair, ROG Ally / XG Mobile): the eGPU is driven by the NVIDIA driver, never nouveau" \
+    "blacklist nouveau" "install nouveau /bin/false")
+  if [ "$(cat "$NONV" 2>/dev/null)" != "$wantn" ]; then
+    if [ $DRY = 1 ]; then echo "would: write $NONV"
+    else printf '%s\n' "$wantn" > "$NONV" && log "wrote $NONV: nouveau blocked"; fi
+  fi
+elif [ -f "$NONV" ]; then
+  do_ rm -f "$NONV"; log "removed $NONV (neither a ROG Ally nor an XG Mobile)"
+fi
 [ $ONLY_XORG = 1 ] && exit 0
 
 if [ ${#fixed[@]} -gt 0 ] && [ $DRY = 0 ]; then

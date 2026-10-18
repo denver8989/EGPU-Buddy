@@ -277,12 +277,30 @@ egpu_pci_present() {
   [ "$(cat "/sys/bus/pci/devices/$EGPU_PCI/vendor" 2>/dev/null)" = "0x10de" ]
 }
 
+# ROG Ally / XG Mobile (each detected on its own): only route Game Mode to the eGPU while the NVIDIA driver holds it and
+# the shim has not seen it fail. nouveau holding the card (beta driver trial) or a GPU that stopped answering made every
+# gamescope start die at vkCreateInstance, and the session restarted it every 2 s on a black screen until a forced
+# restart (ROG Xbox Ally X report). Then the handheld screen is used instead. Elsewhere the readiness test is as tested.
+ALLYXGM=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && ALLYXGM=1
+GPUFAULT=${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/egpu-gpufault
+allyxgm_egpu_usable() {
+  [ "$ALLYXGM" = 1 ] || return 0
+  local drv; drv=$(basename "$(readlink -f "/sys/bus/pci/devices/$EGPU_PCI/driver" 2>/dev/null)")
+  local why=""
+  [ "$drv" = nvidia ] || why="the eGPU $EGPU_PCI is not held by the NVIDIA driver (${drv:-none})"
+  [ -z "$why" ] && [ -e "$GPUFAULT" ] && why="the eGPU stopped answering (gamescope crash loop); until the next Attach"
+  [ -z "$why" ] && return 0
+  [ "${_allyxgm_said:-}" = "$why" ] || { log "$why: handheld routing"; _allyxgm_said=$why; }
+  return 1
+}
+
 egpu_native_ready() {
   refresh_egpu_state
   [ -n "$egpu_card" ] &&
     [ -n "$igpu_card" ] &&
     { [ -n "$outputs" ] || handheld_passthrough_target >/dev/null || handheld_chosen; } &&
-    [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ]
+    [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ] &&
+    allyxgm_egpu_usable
 }
 
 wait_for_egpu_native_ready() {
@@ -590,6 +608,8 @@ if [ -e "${XDG_RUNTIME_DIR:-/run/user/1000}/egpu-detach-mode" ] || [ -e /run/nve
 else
   wait_for_egpu_native_ready || refresh_egpu_state
 fi
+# ROG Ally / XG Mobile: a card the NVIDIA driver does not hold, or one that stopped answering, is not a Game Mode target
+[ -n "$egpu_card" ] && ! allyxgm_egpu_usable && egpu_card=""
 
 # NV-EGPU-Buddy safe detach (Game Mode): while the marker exists the relaunched session must NOT take the eGPU
 # even though it is still on the bus (the detach helper removes it once this session is up on the panel).

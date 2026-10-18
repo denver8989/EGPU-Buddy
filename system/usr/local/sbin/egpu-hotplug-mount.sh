@@ -336,6 +336,12 @@ case "$_hw_dock" in xg-mobile-*) _hw_why="${_hw_why:+$_hw_why + }XG Mobile ($_hw
 if [ -n "$_hw_why" ]; then
   EGPU_PIN_CORRECTED=1; EGPU_PIN_ASPM_OFF=1
   log "$_hw_why: corrected link pin (no Enter Compliance bit), ASPM/L1SS off on both ends"
+  # nouveau bound the eGPU at the enumeration (ROG Xbox Ally X, beta driver trial): the NVIDIA driver then finds no
+  # device and Game Mode crash-loops on the dead card. Hand it back before anything else touches the card.
+  if [ "$(basename "$(readlink -f "$GDEV/driver" 2>/dev/null)")" = nouveau ]; then
+    echo "$gpu" > /sys/bus/pci/drivers/nouveau/unbind 2>/dev/null; modprobe -r nouveau 2>/dev/null
+    log "$_hw_why: nouveau had bound the eGPU; released it ($( [ -L "$GDEV/driver" ] && echo 'still bound' || echo 'unbound'))"
+  fi
 fi
 if [ ! -L "$GDEV/driver" ] && [ "$EGPU_SKIP_FLR" = 1 ]; then
   # The FLR is what leaves this card decoding nothing: config space still reads, but every MMIO

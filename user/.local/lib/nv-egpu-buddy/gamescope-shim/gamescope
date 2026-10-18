@@ -134,6 +134,8 @@ if [ "$gamescope_bin" != /usr/bin/gamescope ]; then
       : > "$_gs_starts" 2>/dev/null || true
       echo "nv-egpu-gamescope-shim: 3 quick restarts, but the NVIDIA GPU is not answering: the GPU failed, not $gamescope_bin; not marking it" >&2
       logger -t egpu-buddy "gamescope restarted 3 times with the eGPU not answering: GPU fault, the GBM-scanout build stays in use" 2>/dev/null || true
+      # ... and the session wrapper stops routing to it until the next Attach (else: restarts every 2 s on a black screen)
+      mkdir -p "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy" 2>/dev/null && : > "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy/egpu-gpufault" 2>/dev/null || true
     elif [ "$_gs_loop" = 1 ]; then
       mkdir -p "$_gs_state" 2>/dev/null || true
       printf '%s\n' "$_gs_id" > "$_gs_bad" 2>/dev/null || true

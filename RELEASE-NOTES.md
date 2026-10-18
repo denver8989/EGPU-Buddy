@@ -1,3 +1,11 @@
+0.7.118 — ROG Ally / XG Mobile: beta driver and Safe Detach fixes.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- Beta driver: Linux's built-in nouveau driver no longer takes the eGPU, which stopped both the beta and the tested NVIDIA driver from loading.
+- No more endless black screen: when the NVIDIA driver does not hold the eGPU, or the eGPU stops answering, Game Mode goes to the handheld screen instead of restarting every 2 seconds.
+- An Attach that does not get the NVIDIA driver up stops before switching screens.
+- Desktop Safe Detach (which logged the desktop out and never released the eGPU) now says to use Safe Detach from Gaming Mode, which works, and changes nothing.
+
 0.7.117 — a flight recorder for support reports.
 
 **New**
