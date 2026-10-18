@@ -4,7 +4,7 @@
 - Beta driver: Linux's built-in nouveau driver no longer takes the eGPU, which stopped both the beta and the tested NVIDIA driver from loading.
 - No more endless black screen: when the NVIDIA driver does not hold the eGPU, or the eGPU stops answering, Game Mode goes to the handheld screen instead of restarting every 2 seconds.
 - An Attach that does not get the NVIDIA driver up stops before switching screens.
-- Desktop Safe Detach (which logged the desktop out and never released the eGPU) now says to use Safe Detach from Gaming Mode, which works, and changes nothing.
+- Desktop Safe Detach failed there: the picture showed on both the TV and the handheld, then only on the TV with the handheld black, and the eGPU was never released. It now changes nothing and says to use Safe Detach from Gaming Mode.
 
 0.7.117 — a flight recorder for support reports.
 
