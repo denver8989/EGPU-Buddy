@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# egpu-desktop-detach — Desktop Safe Detach on a ROG Ally, or any handheld that has used an ASUS XG Mobile, under SDDM
+# (SteamOS). Called by egpu-safe-detach-ui instead of its KWin handoff; every other device keeps that handoff unchanged.
+#
+# Why: the handoff restarts KWin to move it off the eGPU. Under SDDM a KWin restart ends the login session, SDDM logs in
+# again, twice per detach, and the eGPU was never released: the picture showed on the TV and the handheld, then on the
+# TV only with the handheld black (ROG Xbox Ally X reports on 0.7.116 and 0.7.117). So instead, the way Game Mode's
+# fallback on this hardware does it (egpu-gamemode-detach): pin the next login to the DESKTOP, stop the login session so
+# nothing holds the eGPU, remove the eGPU, start the session again. It comes back as the desktop on the handheld screen,
+# never Game Mode. The EXIT trap starts the session again whatever happens.
+set -u; U=1000; RUNENV="XDG_RUNTIME_DIR=/run/user/$U DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$U/bus"
+[ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+{ [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } ||
+  { echo "only for a ROG Ally / XG Mobile; other devices use the desktop handoff"; exit 2; }
+# stopping the session ends the caller (the desktop app runs inside it): run in our own unit
+# $1 = wayland|x11: the desktop the user is on, the one the next login keeps
+if [ "${1:-}" != --run ]; then
+  case "${1:-wayland}" in wayland|x11) ;; *) echo "usage: egpu-desktop-detach [wayland|x11]"; exit 64 ;; esac
+  exec systemd-run --collect --quiet --unit="egpu-desktop-detach-$(date +%s)" /usr/local/sbin/egpu-desktop-detach --run "${1:-wayland}"
+fi
+DESK=plasma; [ "${2:-}" = x11 ] && DESK=plasmax11
+ST=/run/nvegpu; mkdir -p $ST; LOG=/var/log/egpu-gamemode.log; HELPER=/usr/local/sbin/egpu-safe-detach
+log(){ printf '%s desktop-detach: %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
+as_deck(){ runuser -u deck -- env $RUNENV "$@"; }
+# the desktop app reads the user's status file; it is gone while the session is down, so /run/nvegpu carries it too
+status(){ printf '{"state":"%s","message":"%s"}\n' "$1" "$2" > $ST/gm-status.json
+  [ -d /run/user/$U ] && { mkdir -p /run/user/$U/nv-egpu-buddy; cp $ST/gm-status.json /run/user/$U/nv-egpu-buddy/safe-detach-status.json; chown -R deck: /run/user/$U/nv-egpu-buddy; } 2>/dev/null; }
+DM_STOPPED=0
+trap '[ "$DM_STOPPED" = 1 ] && systemctl start display-manager.service >/dev/null 2>&1' EXIT
+fail(){ log "FAILED: $1"; /usr/local/sbin/egpu-snapshot "desktop-detach-failed-rc$2" >/dev/null 2>&1; $HELPER --restore >/dev/null 2>&1
+  [ "$DM_STOPPED" = 1 ] && { DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1; sleep 15; }
+  status DO_NOT_UNPLUG "$1"; exit "$2"; }
+
+gpu=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}')
+[ -n "$gpu" ] || { status SAFE_COMPLETE "No eGPU attached."; exit 0; }
+systemctl is-active --quiet display-manager.service || fail "The login manager is not running; nothing was changed." 3
+log "start (gpu=$gpu)"
+status DETACHING "Restarting the desktop on the handheld screen without the eGPU; the screen goes dark for a moment. Do not unplug yet."
+/usr/local/sbin/egpu-dm-session pin $DESK >/dev/null 2>&1 || fail "Could not keep the next login on the desktop; nothing was changed." 4
+$HELPER --prep >/dev/null 2>&1 || fail "Could not hide the NVIDIA userspace; nothing was changed." 5
+# audio off the eGPU's HDMI first, then WirePlumber stopped (it keeps the card open): as Game Mode's Safe Detach does
+as_deck bash -c 'pactl set-default-sink "$(pactl list short sinks | awk "!/pci-0000_0[0-9a-f]_00.1/ && /alsa_output/{print \$2; exit}")" >/dev/null 2>&1; p=$(printf %s "'"${gpu%.*}"'" | tr : _); for c in $(pactl list short cards | awk -v p="$p" "index(\$2,p){print \$2}"); do pactl set-card-profile "$c" off; done; systemctl --user stop wireplumber' >/dev/null 2>&1
+DM_STOPPED=1; systemctl stop display-manager.service >/dev/null 2>&1
+# the user manager outlives the login session: let its desktop units go, then whatever still holds the eGPU (Steam, a game)
+as_deck systemctl --user stop graphical-session.target >/dev/null 2>&1
+nodes="/dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm $(ls -d /sys/bus/pci/devices/$gpu/drm/* 2>/dev/null | sed -n 's#.*/\(card[0-9]*\|renderD[0-9]*\)$#/dev/dri/\1#p' | tr '\n' ' ')"
+held(){ fuser $nodes 2>/dev/null | tr -s ' \n' ' ' | grep -q '[0-9]'; }
+for _ in $(seq 1 15); do held || break; sleep 1; done
+if held; then
+  for hp in $(fuser $nodes 2>/dev/null | tr -s ' \n' ' '); do [ "$(stat -c %u /proc/$hp 2>/dev/null)" = $U ] && kill -TERM "$hp" 2>/dev/null; done
+  for _ in $(seq 1 10); do held || break; sleep 1; done
+fi
+{ echo "holders before teardown (session stopped):"; for hp in $(fuser $nodes 2>/dev/null | tr -s ' \n' ' '); do echo "  $hp $(cat /proc/$hp/comm 2>/dev/null) cmd=$(tr '\0' ' ' </proc/$hp/cmdline 2>/dev/null | cut -c1-80)"; done; } > $ST/gm-holders.log 2>&1
+$HELPER --teardown-only > $ST/gm-helper.log 2>&1 ||
+  fail "eGPU teardown failed; the GPU is still attached. Do not unplug. ($(grep -oE 'still held by:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-90))" 7
+$HELPER --restore >/dev/null 2>&1
+DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1
+/usr/local/sbin/egpu-panel on >/dev/null 2>&1
+log "eGPU removed with the session stopped; desktop starting again on the handheld screen"
+lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' && fail "NVIDIA GPU still present after teardown. Do not unplug." 8
+# the pin is released once the desktop is back (as the KWin handoff does); the desktop's own autostart sets it again
+for _ in $(seq 1 60); do pgrep -U $U -x 'kwin_wayland|kwin_x11' >/dev/null 2>&1 && break; sleep 1; done
+pgrep -U $U -x 'kwin_wayland|kwin_x11' >/dev/null 2>&1 && /usr/local/sbin/egpu-dm-session unpin >/dev/null 2>&1
+sleep 5   # the user's runtime directory exists again: the desktop app finds its status there
+status SAFE_COMPLETE "The eGPU is off the PCI bus. You may unplug it (or Attach again without replugging)."; log "done"; exit 0

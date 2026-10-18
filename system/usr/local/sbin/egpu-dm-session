@@ -4,7 +4,7 @@
 # plasmalogin (/etc/plasmalogin.conf.d), SteamOS uses sddm (/etc/sddm.conf.d) and its Game Mode session file is named
 # differently (gamescope-wayland.desktop vs gamescope-session.desktop). Everything here is looked up, nothing is hardcoded:
 # without this, a desktop Safe Detach on SteamOS comes back in Game Mode and the detach cannot finish.
-#   egpu-dm-session pin plasma|gamescope|bigpicture   write our drop-in (sorts last, wins)
+#   egpu-dm-session pin plasma|plasmax11|gamescope|bigpicture   write our drop-in (sorts last, wins)
 #   egpu-dm-session unpin                             remove it again (system default is back)
 #   egpu-dm-session show                              directory + session currently pinned
 set -u
@@ -30,6 +30,7 @@ session_file(){   # $1 = plasma|gamescope|bigpicture -> the .desktop this system
   local want n c
   case "$1" in
     plasma)     want="plasma.desktop plasmawayland.desktop plasmax11.desktop" ;;
+    plasmax11)  want="plasmax11.desktop plasma.desktop" ;;   # the X11 desktop kept (egpu-desktop-detach)
     gamescope)  want="gamescope-session.desktop gamescope-wayland.desktop" ;;
     bigpicture) want="egpu-bigpicture.desktop gamescope-session.desktop gamescope-wayland.desktop" ;;
     *) return 1 ;;

@@ -1,3 +1,8 @@
+0.7.119 — ROG Ally / XG Mobile: Desktop Safe Detach works.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- Desktop Safe Detach removes the eGPU and brings you back to the same desktop (X11 or Wayland) on the handheld screen. It used to show the picture on both screens, then the TV only, and never release the eGPU. The screen goes dark for a few seconds while the desktop restarts.
+
 0.7.118 — ROG Ally / XG Mobile: beta driver and Safe Detach fixes.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
