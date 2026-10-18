@@ -1,3 +1,8 @@
+0.7.120 — housekeeping for the ROG Ally / XG Mobile fixes.
+
+**Changed**
+- The ROG Ally / XG Mobile fixes now live only in Ally / XG Mobile code; the Game Mode switch every other device uses is exactly as in 0.7.117.
+
 0.7.119 — ROG Ally / XG Mobile: Desktop Safe Detach works.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)

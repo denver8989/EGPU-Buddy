@@ -288,7 +288,7 @@ allyxgm_egpu_usable() {
   local drv; drv=$(basename "$(readlink -f "/sys/bus/pci/devices/$EGPU_PCI/driver" 2>/dev/null)")
   local why=""
   [ "$drv" = nvidia ] || why="the eGPU $EGPU_PCI is not held by the NVIDIA driver (${drv:-none})"
-  [ -z "$why" ] && [ -e "$GPUFAULT" ] && why="the eGPU stopped answering (gamescope crash loop); until the next Attach"
+  [ -z "$why" ] && [ -e "$GPUFAULT" ] && why="the eGPU stopped answering (gamescope crash loop); until it is attached or plugged in again"
   [ -z "$why" ] && return 0
   [ "${_allyxgm_said:-}" = "$why" ] || { log "$why: handheld routing"; _allyxgm_said=$why; }
   return 1

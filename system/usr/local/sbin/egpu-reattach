@@ -14,6 +14,8 @@ say "[2/4] fresh nvidia stack"; modprobe -r nvidia_drm nvidia_modeset nvidia_uvm
 # the session onto a card the NVIDIA driver does not hold. Elsewhere this attach is exactly as tested.
 ALLYXGM=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && ALLYXGM=1
 drv(){ basename "$(readlink -f "/sys/bus/pci/devices/$GPU/driver" 2>/dev/null)"; }
+# a fresh Attach gives an eGPU that stopped answering in an earlier session its chance again (the session wrapper's marker)
+[ $ALLYXGM = 1 ] && rm -f /run/user/$U/nv-egpu-buddy/egpu-gpufault
 if [ $ALLYXGM = 1 ] && [ "$(drv)" = nouveau ]; then
   echo "$GPU" > /sys/bus/pci/drivers/nouveau/unbind 2>/dev/null; modprobe -r nouveau 2>/dev/null; say "      nouveau had taken the GPU: released"
 fi
