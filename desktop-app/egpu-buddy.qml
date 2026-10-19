@@ -40,6 +40,9 @@ ApplicationWindow {
     readonly property var swatches: ["ff0000", "ff6000", "ffd000", "00ff40", "00e0ff", "0040ff", "a000ff", "ffffff"]
     readonly property var balancedCurve: [30, 50, 60, 65, 70, 75, 80, 85, 15, 25, 35, 45, 55, 65, 80, 100]
     property bool offTouched: false
+    // the XG Mobile intro animation: once, the first time either app shows the XG Mobile controls (shared flag)
+    property bool introShowing: false
+    property bool introDone: false
     function lightFx(fx, rgb, speed) { act("xgm-light-effect", { value: (fx || xgm.effect || "static") + ":" + (rgb || xgm.color || "ff0000") + ":" + (speed || xgm.speed || "normal") }) }
     function cap1(x) { x = String(x || ""); return x.charAt(0).toUpperCase() + x.slice(1) }
     property bool ptTouched: false
@@ -67,6 +70,8 @@ ApplicationWindow {
             showSeq = r.show_seq || 0
             // the applied limit (the helper keeps it; NVIDIA cannot read it back), else no limit: the slider at the top
             if (on && xg && !ptTouched) { pt.to = xgTop; pt.value = +(xgm.power_target || 0) || xgTop }
+            if (on && xg && xgm.intro_seen !== true && !introShowing && !introDone) {
+                introShowing = true; call("POST", "/api/action", { action: "xgm-intro-seen" }, function() {}) }
             if (on && xg && !offTouched) { coreOff.value = +((xgm.offset || [0, 0])[0]); memOff.value = +((xgm.offset || [0, 0])[1]) }
             if (on && clkMax > 0 && !clkTouched) { clkSl.to = clkMax; clkSl.value = +(g.clock_limit || 0) || clkMax }
             if (on && !sliderTouched) { pl.from = Math.max(100, Math.round(+g["power.min_limit"] || 100)); pl.to = Math.min(320, Math.round(+g["power.max_limit"] || 320)); pl.value = Math.round(+g["power.limit"] || pl.to) }
@@ -232,6 +237,17 @@ ApplicationWindow {
                 Button { text: "Apply"; onClicked: { win.act("xgm-power", { value: Math.round(pt.value) >= win.xgTop ? "off" : Math.round(pt.value) }); win.ptTouched = false } }
             }
             Label { text: "XG Mobile"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: win.on && win.xg }
+            Item { id: intro; Layout.fillWidth: true; visible: win.introShowing && win.on && win.xg
+                Layout.preferredHeight: visible ? introImg.height : 0
+                AnimatedImage { id: introImg; anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(480, parent.width); height: width * 316 / 560; fillMode: Image.PreserveAspectFit
+                    source: win.introShowing ? "file:///usr/local/share/egpu-buddy/xgm-intro.gif" : ""; playing: win.introShowing
+                    onStatusChanged: if (status === AnimatedImage.Error) { win.introShowing = false; win.introDone = true }
+                    onCurrentFrameChanged: if (frameCount > 1 && currentFrame === frameCount - 1) introFade.start()
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: introFade.start() } }
+                NumberAnimation { id: introFade; target: introImg; property: "opacity"; to: 0; duration: 600
+                    onFinished: { win.introShowing = false; win.introDone = true } }
+            }
             RowLayout { Layout.fillWidth: true; spacing: 8; visible: win.on && win.xg
                 Label { text: "Fan"; Layout.preferredWidth: 90 }
                 Repeater { model: win.fanModes

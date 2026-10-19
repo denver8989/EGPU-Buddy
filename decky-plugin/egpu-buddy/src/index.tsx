@@ -6,7 +6,7 @@ import qrcode from "qrcode-generator";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
-  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
+  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { intro_seen?: boolean; fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
@@ -22,7 +22,8 @@ const setClockLimit = callable<[number], Result>("set_clock_limit");
 const xgmFan = callable<[string], Result>("xgm_fan");
 const xgmLight = callable<[boolean], Result>("xgm_light");
 const xgmPower = callable<[number], Result>("xgm_power");
-const xgmSet = callable<[string, string], Result>("xgm");   // light-effect, brightness, offset
+const xgmSet = callable<[string, string], Result>("xgm");
+const xgmIntro = callable<[], string>("xgm_intro");   // the one-time XG Mobile intro animation (data URI, or "")   // light-effect, brightness, offset
 const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"], ["ffd000", "Yellow"], ["00ff40", "Green"], ["00e0ff", "Cyan"], ["0040ff", "Blue"], ["a000ff", "Purple"], ["ffffff", "White"]];
 const resetClocks = callable<[], Result>("reset_clocks");
 type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
@@ -314,7 +315,9 @@ function Content() {
   const [off, setOff] = useState(0);
   const [clk, setClk] = useState<number | null>(null);
   const [pt, setPt] = useState<number | null>(null);   // ASUS XG Mobile power target (W)
-  const [xoff, setXoff] = useState<[number, number] | null>(null);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
+  const [xoff, setXoff] = useState<[number, number] | null>(null);
+  const [intro, setIntro] = useState<{ src: string; fading: boolean } | null>(null);   // XG Mobile intro, once
+  const introAsked = useRef(false);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
 
   const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
@@ -343,6 +346,12 @@ function Content() {
   const ptNow = pt ?? (s?.xgm?.power_target || xgTop);
   const xoffNow: [number, number] = xoff ?? [s?.xgm?.offset?.[0] ?? 0, s?.xgm?.offset?.[1] ?? 0];
   const lightOn = s?.xgm?.light !== false;
+  // the XG Mobile intro: the first time the XG Mobile controls show (in either app: the backend keeps one shared flag)
+  useEffect(() => {
+    if (introAsked.current || !s?.present || !s.driver_loaded || !s.dock?.includes("XG Mobile") || !s.xgm || s.xgm.intro_seen) return;
+    introAsked.current = true;
+    xgmIntro().then((src) => { if (src) { setIntro({ src, fading: false }); setTimeout(() => setIntro((i) => i && { ...i, fading: true }), 7000); setTimeout(() => setIntro(null), 7700); } }).catch(() => {});
+  }, [s]);
   const lightFx = (fx?: string, rgb?: string, speed?: string) => run(() => xgmSet("light-effect", `${fx || s?.xgm?.effect || "static"}:${rgb || s?.xgm?.color || "ff0000"}:${speed || s?.xgm?.speed || "normal"}`));
   const clkNow = clk ?? (Math.round(Number(tel["clock_limit"])) || clkMax);   // the applied limit (kept by the helper), else none
   const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
@@ -531,6 +540,8 @@ function Content() {
           )}
           {s.present && xg && s.driver_loaded && (
             <PanelSection title="XG Mobile">
+              {intro && (<PanelSectionRow><img src={intro.src} onClick={() => setIntro({ ...intro, fading: true })}
+                style={{ width: "100%", display: "block", borderRadius: "4px", transition: "opacity 0.6s", opacity: intro.fading ? 0 : 1 }} /></PanelSectionRow>)}
               {!plOk && (<>
               <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>NVIDIA does not let the driver set this GPU's power limit (its cap is {xgTop} W). A power target below it makes EGPU Buddy hold the GPU there by limiting its clock{xgLive.target && xgLive.cap ? ` (now ${xgLive.cap} MHz)` : ""}.</div></PanelSectionRow>
               <PanelSectionRow>

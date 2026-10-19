@@ -10,6 +10,7 @@
   egpu-xgm offset <core MHz>:<memory MHz>   GPU clock offsets (performance state P0), 0:0 = none
   egpu-xgm power-target <watts|off>
   egpu-xgm restore                re-apply the saved settings (after an attach)
+  egpu-xgm intro-seen             the XG Mobile intro animation was shown (both apps show it once, the first time)
   egpu-xgm notify-shutdown        tell the dock the host is going away (G-Helper does on exit and shutdown)
   egpu-xgm govern <bdf> <watts>   the power target loop (run as the egpu-xgm-powercap unit, not by hand)
 
@@ -270,6 +271,7 @@ if __name__ == "__main__":
     elif a[:1] == ["brightness"] and len(a) == 2 and a[1] in ("0", "1", "2", "3"): brightness(int(a[1]))
     elif a[:1] == ["offset"] and len(a) == 2: offset(a[1])
     elif a[:1] == ["notify-shutdown"]: notify_shutdown()
+    elif a[:1] == ["intro-seen"]: save(intro_seen=True)
     elif a[:1] == ["power-target"] and len(a) == 2 and (a[1] == "off" or a[1].isdigit()): power_target(a[1])
     elif a[:1] == ["restore"]: restore()
     elif a[:1] == ["govern"] and len(a) == 3: govern(a[1], a[2])

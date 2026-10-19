@@ -812,6 +812,10 @@ case "$action" in
     require_gpu_alive "set-gpu-power-limit"
     nvidia-smi -pl "$limit"
     ;;
+  xgm-intro-seen)
+    # the one-time XG Mobile intro animation (/usr/local/share/egpu-buddy/xgm-intro.*) was shown by one of the apps
+    exec /usr/local/sbin/egpu-xgm intro-seen
+    ;;
   xgm-fan|xgm-fan-curve|xgm-light|xgm-light-effect|xgm-brightness|xgm-offset|xgm-power-target)
     # ASUS XG Mobile only (egpu-xgm: fan mode and lights over the dock's USB HID, a power target held by a clock limit)
     [ "$#" -eq 1 ] || die "$action requires one argument" 2

@@ -3,6 +3,7 @@
 Talks only to the NV-EGPU-Buddy system helpers; no Go Hub, no LACT daemon.
 """
 import asyncio
+import base64
 import hashlib
 import json
 import glob
@@ -1691,6 +1692,18 @@ class Plugin:
     async def xgm_light(self, on: bool):
         rc, out, err = _sh([PRIV, "xgm-light", "on" if on else "off"], 20)
         return {"ok": rc == 0, "message": (out if rc == 0 else err or out)[-200:]}
+
+    async def xgm_intro(self):
+        """The XG Mobile intro animation as a data URI, once: shown the first time either app shows the XG Mobile
+        controls (the flag is shared with the desktop app). '' when already shown or not installed."""
+        if _xgm_state().get("intro_seen"):
+            return ""
+        try:
+            data = open("/usr/local/share/egpu-buddy/xgm-intro.webp", "rb").read()
+        except OSError:
+            return ""
+        _sh([PRIV, "xgm-intro-seen"], 10)
+        return "data:image/webp;base64," + base64.b64encode(data).decode()
 
     async def xgm(self, action: str, value: str):
         """ASUS XG Mobile: light effect, brightness, clock offsets (the helper validates the value)."""
