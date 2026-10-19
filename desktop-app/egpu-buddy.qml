@@ -52,10 +52,13 @@ ApplicationWindow {
             if (on && clkMax > 0 && !clkTouched) { clkSl.to = clkMax; clkSl.value = clkMax }
             if (on && !sliderTouched) { pl.from = Math.max(100, Math.round(+g["power.min_limit"] || 100)); pl.to = Math.min(320, Math.round(+g["power.max_limit"] || 320)); pl.value = Math.round(+g["power.limit"] || pl.to) }
             var d = r.detach, gm = r.gm, l = r.last
-            if (d && d.state && d.state !== "IDLE") { msgErr = /FAIL|DO_NOT|INCOMPLETE/.test(d.state); msg = d.state + ": " + (d.message || "") }
+            // a finished Safe Detach stays in its status file: once the eGPU is back with its driver it no longer applies
+            var stale = !!(d && d.state === "SAFE_COMPLETE" && r.present && r.driver_loaded)
+            if (d && d.state && d.state !== "IDLE" && !stale) { msgErr = /FAIL|DO_NOT|INCOMPLETE/.test(d.state); msg = d.state + ": " + (d.message || "") }
             else if (gm && gm.state && gm.state !== "ATTACHED") { msgErr = false; msg = gm.state + ": " + (gm.message || "") }
             else if (l && l.action) { msgErr = l.state === "failed"
                 msg = l.state === "running" ? l.action + ": working…" : l.state === "ok" ? l.action + ": done." + (l.out ? "\n" + l.out : "") : l.action + " failed (rc " + l.rc + ")\n" + (l.out || "no output") }
+            else if (stale) { msgErr = false; msg = "The eGPU is attached again." }
             // an update just finished (this app was restarted by it): show its result once
             var u = r.update || {}
             if (!updSeen && u.state && u.state !== "running" && Date.now() / 1000 - (u.t || 0) < 120) { win.show(); win.raise(); updateDlg.open() }
@@ -151,7 +154,7 @@ ApplicationWindow {
             width: win.width - 32; x: 16; y: 12; spacing: 12
             RowLayout { Layout.fillWidth: true; spacing: 10
                 Label { text: "EGPU Buddy"; font.pixelSize: 22; font.bold: true }
-                Label { text: win.g.name || (win.s.present ? "NVIDIA GPU (driver not loaded)" : "not detected"); opacity: 0.75; Layout.fillWidth: true; elide: Text.ElideRight }
+                Label { text: (win.g.name && win.s.dock ? win.s.dock + " · " + win.g.name.replace(/^NVIDIA\s+(GeForce\s+)?/i, "") : win.g.name) || (win.s.present ? "NVIDIA GPU (driver not loaded)" : "not detected"); opacity: 0.75; Layout.fillWidth: true; elide: Text.ElideRight }
                 Badge { text: win.s.present ? "On the bus" : "No eGPU"; lit: !!win.s.present }
                 Badge { text: win.s.tunnel ? "Tunnel up" : "No tunnel"; lit: !!win.s.tunnel }
                 Badge { text: win.s.driver_loaded ? "Driver loaded" : "Driver unloaded"; lit: !!win.s.driver_loaded }

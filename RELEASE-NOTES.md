@@ -1,3 +1,9 @@
+0.7.133 — desktop app: the dock in the title, no stale Safe Detach message.
+
+**Fixed**
+- The desktop app kept showing "SAFE_COMPLETE: The eGPU is off the PCI bus" after the eGPU was attached again. Once the eGPU is back with its driver, it now says so.
+- The desktop app names the dock like the Game Mode plugin does: "ASUS ROG XG Mobile · RTX 5070 Ti Laptop GPU" rather than just the GPU.
+
 0.7.132 — laptop-class GPUs (ASUS XG Mobile): a clock limit as power control, clearer power and fan.
 
 **Fixed**
