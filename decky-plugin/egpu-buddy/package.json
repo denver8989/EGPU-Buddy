@@ -1,6 +1,6 @@
 {
   "name": "egpu-buddy",
-  "version": "0.7.128",
+  "version": "0.7.129",
   "description": "EGPU Buddy Decky plugin: eGPU attach, safe detach, details and power controls",
   "type": "module",
   "scripts": {
