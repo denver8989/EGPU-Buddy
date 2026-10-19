@@ -1694,16 +1694,19 @@ class Plugin:
         return {"ok": rc == 0, "message": (out if rc == 0 else err or out)[-200:]}
 
     async def xgm_intro(self):
-        """The XG Mobile intro animation as a data URI, once: shown the first time either app shows the XG Mobile
-        controls (the flag is shared with the desktop app). '' when already shown or not installed."""
-        if _xgm_state().get("intro_seen"):
+        """The XG Mobile intro animation as a data URI until the plugin has shown it once (xgm_intro_done; the desktop
+        app has its own flag). '' when already shown or not installed."""
+        if _xgm_state().get("intro_seen_plugin"):
             return ""
         try:
-            data = open("/usr/local/share/egpu-buddy/xgm-intro.webp", "rb").read()
+            return "data:image/webp;base64," + base64.b64encode(open("/usr/local/share/egpu-buddy/xgm-intro.webp", "rb").read()).decode()
         except OSError:
             return ""
-        _sh([PRIV, "xgm-intro-seen"], 10)
-        return "data:image/webp;base64," + base64.b64encode(data).decode()
+
+    async def xgm_intro_done(self):
+        """The intro played to its end or was tapped away: never again in the plugin."""
+        _sh([PRIV, "xgm-intro-seen", "plugin"], 10)
+        return True
 
     async def xgm(self, action: str, value: str):
         """ASUS XG Mobile: light effect, brightness, clock offsets (the helper validates the value)."""

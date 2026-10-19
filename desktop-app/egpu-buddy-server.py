@@ -131,8 +131,8 @@ def action(p):
     if a in ("xgm-fan", "xgm-fan-curve", "xgm-light", "xgm-light-effect", "xgm-brightness", "xgm-offset", "xgm-power"):   # ASUS XG Mobile (the helper refuses any other dock)
         arg = str((p or {}).get("value", "")); rc, o, e = sh(["sudo", "-n", PRIV, {"xgm-power": "xgm-power-target"}.get(a, a), arg], 20)
         return {"ok": rc == 0, "out": o or e}
-    if a == "xgm-intro-seen":   # the one-time XG Mobile intro animation was shown
-        rc, o, e = sh(["sudo", "-n", PRIV, "xgm-intro-seen"], 10); return {"ok": rc == 0, "silent": True}
+    if a == "xgm-intro-seen":   # the XG Mobile intro animation was shown in this app (it plays once here, once in the plugin)
+        rc, o, e = sh(["sudo", "-n", PRIV, "xgm-intro-seen", "desktop"], 10); return {"ok": rc == 0, "silent": True}
     if a == "reset-clocks":
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}

@@ -6,7 +6,7 @@ import qrcode from "qrcode-generator";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
-  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { intro_seen?: boolean; fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
+  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { intro_seen_plugin?: boolean; fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
@@ -23,7 +23,8 @@ const xgmFan = callable<[string], Result>("xgm_fan");
 const xgmLight = callable<[boolean], Result>("xgm_light");
 const xgmPower = callable<[number], Result>("xgm_power");
 const xgmSet = callable<[string, string], Result>("xgm");
-const xgmIntro = callable<[], string>("xgm_intro");   // the one-time XG Mobile intro animation (data URI, or "")   // light-effect, brightness, offset
+const xgmIntro = callable<[], string>("xgm_intro");   // the XG Mobile intro animation (data URI, or "" once shown)
+const xgmIntroDone = callable<[], boolean>("xgm_intro_done");   // light-effect, brightness, offset
 const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"], ["ffd000", "Yellow"], ["00ff40", "Green"], ["00e0ff", "Cyan"], ["0040ff", "Blue"], ["a000ff", "Purple"], ["ffffff", "White"]];
 const resetClocks = callable<[], Result>("reset_clocks");
 type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
@@ -346,12 +347,25 @@ function Content() {
   const ptNow = pt ?? (s?.xgm?.power_target || xgTop);
   const xoffNow: [number, number] = xoff ?? [s?.xgm?.offset?.[0] ?? 0, s?.xgm?.offset?.[1] ?? 0];
   const lightOn = s?.xgm?.light !== false;
-  // the XG Mobile intro: the first time the XG Mobile controls show (in either app: the backend keeps one shared flag)
+  // the XG Mobile intro: the first time the plugin shows the XG Mobile controls, once. Marked shown only when it has played
+  // to the end or was tapped away, so closing the panel early shows it again next time
+  const introTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const endIntro = () => { if (introTimer.current) clearTimeout(introTimer.current); introTimer.current = null
+    setIntro((i) => i && { ...i, fading: true }); xgmIntroDone().catch(() => {})
+    setTimeout(() => setIntro(null), 600); };
   useEffect(() => {
-    if (introAsked.current || !s?.present || !s.driver_loaded || !s.dock?.includes("XG Mobile") || !s.xgm || s.xgm.intro_seen) return;
+    if (!visible) {   // the panel closed before the intro ended: not counted, it plays again the next time
+      if (introTimer.current) { clearTimeout(introTimer.current); introTimer.current = null; introAsked.current = false
+        setIntro(null); }
+      return;
+    }
+    if (introAsked.current || !s?.present || !s.driver_loaded || !s.dock?.includes("XG Mobile") || !s.xgm || s.xgm.intro_seen_plugin) return;
     introAsked.current = true;
-    xgmIntro().then((src) => { if (src) { setIntro({ src, fading: false }); setTimeout(() => setIntro((i) => i && { ...i, fading: true }), 7000); setTimeout(() => setIntro(null), 7700); } }).catch(() => {});
-  }, [s]);
+    // a distinct URL per play (a media type parameter): Chromium shares one animation timeline per image URL, so a
+    // repeat after the panel was closed would start mid-way. Plain data: URLs, like the plugin's other pictures
+    xgmIntro().then((d) => {
+      if (d) { setIntro({ src: d.replace("data:image/webp;", `data:image/webp;play=${Date.now()};`), fading: false }); introTimer.current = setTimeout(endIntro, 7100); } }).catch(() => {});
+  }, [s, visible]);
   const lightFx = (fx?: string, rgb?: string, speed?: string) => run(() => xgmSet("light-effect", `${fx || s?.xgm?.effect || "static"}:${rgb || s?.xgm?.color || "ff0000"}:${speed || s?.xgm?.speed || "normal"}`));
   const clkNow = clk ?? (Math.round(Number(tel["clock_limit"])) || clkMax);   // the applied limit (kept by the helper), else none
   const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
@@ -540,7 +554,7 @@ function Content() {
           )}
           {s.present && xg && s.driver_loaded && (
             <PanelSection title="XG Mobile">
-              {intro && (<PanelSectionRow><img src={intro.src} onClick={() => setIntro({ ...intro, fading: true })}
+              {intro && (<PanelSectionRow><img src={intro.src} onClick={endIntro}
                 style={{ width: "100%", display: "block", borderRadius: "4px", transition: "opacity 0.6s", opacity: intro.fading ? 0 : 1 }} /></PanelSectionRow>)}
               {!plOk && (<>
               <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>NVIDIA does not let the driver set this GPU's power limit (its cap is {xgTop} W). A power target below it makes EGPU Buddy hold the GPU there by limiting its clock{xgLive.target && xgLive.cap ? ` (now ${xgLive.cap} MHz)` : ""}.</div></PanelSectionRow>

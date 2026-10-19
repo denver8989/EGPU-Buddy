@@ -1,3 +1,8 @@
+0.7.135 — ASUS XG Mobile: an intro animation, once.
+
+**New** (ASUS XG Mobile only)
+- The first time the XG Mobile controls appear, an animated XG Mobile logo plays once at the top of the XG Mobile section, then fades away for good: once in the desktop app and once in the Game Mode plugin. A tap or click skips it. In Game Mode it only counts as seen once it has played to the end or was tapped away, so closing the panel early shows it again next time.
+
 0.7.134 — ASUS XG Mobile: everything G-Helper offers for it, in the desktop app and the Game Mode plugin: power target in watts, fan modes and a custom fan curve, lights, clock offsets.
 
 **New** (ASUS XG Mobile only; every other eGPU is unchanged)
