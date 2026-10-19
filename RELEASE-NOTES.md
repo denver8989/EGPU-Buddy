@@ -1,3 +1,9 @@
+0.7.121 — ROG Ally / XG Mobile: Desktop Safe Detach fixes.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- "Return to Gaming Mode" works again after a failed Desktop Safe Detach (it went back to the desktop until a restart).
+- Desktop Safe Detach waits for the NVIDIA driver to be released instead of giving up straight away.
+
 0.7.120 — housekeeping for the ROG Ally / XG Mobile fixes.
 
 **Changed**
