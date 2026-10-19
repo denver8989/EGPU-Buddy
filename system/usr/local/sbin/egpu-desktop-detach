@@ -69,11 +69,36 @@ if inuse; then
   for v in /sys/class/vtconsole/vtcon*; do [ "$(cat "$v/bind" 2>/dev/null)" = 1 ] && grep -qi 'frame buffer' "$v/name" && echo 0 > "$v/bind" 2>/dev/null && FBCON="$FBCON $v"; done
   for _ in $(seq 1 5); do inuse || break; sleep 1; done
   dlog "text console released (${FBCON:- none was bound}); driver users now: $(cat /sys/module/nvidia_drm/refcnt 2>/dev/null)"
-  # still held: record the other things that can keep it (GPU buffers shared with another driver or process), for the report
+  # Still held: GPU buffers shared with another process or driver. nvidia-drm exports them through the kernel's
+  # drm_gem_prime_export(), which labels every such buffer "drm" (exp_name, "white lie for debug" in drm_prime.c) while
+  # pinning nvidia_drm as its owner. Searching for "nvidia" never found one (0.7.124 reported "0" and no process on
+  # Ally X reports while nvidia_drm stayed at 1-2), and fuser on the device nodes cannot see them either: a shared-buffer
+  # handle is not a device file. So: every process that holds any shared buffer, and every user process with the NVIDIA
+  # driver libraries still loaded. The login session is stopped, so a user process left holding the eGPU is stale; it
+  # is asked to quit, then stopped. (The desktop on this hardware ran on both GPUs, sharing buffers between them.)
   if inuse; then
     mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug 2>/dev/null
-    dlog "still in use. shared GPU buffers: $(grep -ciE 'nvidia' /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null) from the eGPU; held by processes: $(grep -lE 'exp_name:.*nvidia' /proc/[0-9]*/fdinfo/* 2>/dev/null | cut -d/ -f3 | sort -u | while read -r p; do printf '%s(%s) ' "$p" "$(cat /proc/$p/comm 2>/dev/null)"; done)· modules: $(lsmod | awk '/^nvidia/{printf "%s=%s[%s] ", $1, $3, $4}')"
-    grep -iE -A4 'nvidia' /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null | head -40 > $ST/gm-dmabuf.log
+    holders(){ local p
+      for p in /proc/[0-9]*; do
+        n=$(grep -l '^exp_name:' "$p"/fdinfo/* 2>/dev/null | wc -l)
+        nv=$(grep -lE 'libnvidia|libGLX_nvidia|libEGL_nvidia|libcuda|nvidia_drv' "$p/maps" 2>/dev/null)
+        [ "$n" -gt 0 ] || [ -n "$nv" ] || continue
+        printf '%s %s %s %s %s\n' "${p#/proc/}" "$(stat -c %u "$p" 2>/dev/null)" "$n" "$([ -n "$nv" ] && echo nvlib || echo -)" "$(cat "$p/comm" 2>/dev/null)"
+      done; }
+    # the holder table last: snapshots keep the end of each /run/nvegpu log
+    { echo "--- /sys/kernel/debug/dma_buf/bufinfo (exporter names read \"drm\" for nvidia-drm and amdgpu alike)"
+      head -80 /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null
+      echo "--- nvidia_drm users: $(cat /sys/module/nvidia_drm/refcnt 2>/dev/null)"; echo "pid uid shared-buffers nvidia-libs name"; holders; } > $ST/gm-dmabuf.log 2>&1
+    dlog "still in use: shared buffers in the kernel: $(grep -cE '^[0-9]{8}' /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null); holders: $(holders | awk '{printf "%s(%s,uid %s,%s bufs,%s) ", $1, $5, $2, $3, $4}')"
+    for sig in TERM KILL; do
+      victims=$(holders | awk -v u=$U '$2==u{print $1}')
+      [ -n "$victims" ] || break
+      dlog "asking the session's leftover processes that hold the eGPU to quit ($sig): $(for v in $victims; do printf '%s(%s) ' $v "$(cat /proc/$v/comm 2>/dev/null)"; done)"
+      kill -$sig $victims 2>/dev/null
+      for _ in $(seq 1 10); do inuse || break; sleep 1; done
+      inuse || break
+    done
+    dlog "driver users after that: nvidia_drm=$(cat /sys/module/nvidia_drm/refcnt 2>/dev/null) nvidia_uvm=$(cat /sys/module/nvidia_uvm/refcnt 2>/dev/null)$(inuse && printf '; still held by: %s' "$(holders | awk '{printf "%s(%s,uid %s) ", $1, $5, $2}')")"
   fi
 fi
 # what each screen shows, for the log: connected = cable in, lit = a picture is being sent to it
