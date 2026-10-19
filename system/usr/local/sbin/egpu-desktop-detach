@@ -43,6 +43,7 @@ gpu=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}'
 systemctl is-active --quiet display-manager.service || fail "The login manager is not running; nothing was changed." 3
 log "start (gpu=$gpu)"
 status DETACHING "Restarting the desktop on the handheld screen without the eGPU; the screen goes dark for a moment. Do not unplug yet."
+systemctl stop egpu-xgm-powercap 2>/dev/null   # XG Mobile power target loop: no nvidia-smi polling while the GPU is handed off
 /usr/local/sbin/egpu-dm-session pin $DESK >/dev/null 2>&1 || fail "Could not keep the next login on the desktop; nothing was changed." 4
 $HELPER --prep >/dev/null 2>&1 || fail "Could not hide the NVIDIA userspace; nothing was changed." 5
 # audio off the eGPU's HDMI first, then WirePlumber stopped (it keeps the card open): as Game Mode's Safe Detach does

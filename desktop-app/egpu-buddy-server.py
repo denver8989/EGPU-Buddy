@@ -50,6 +50,13 @@ def clock_limit(bdf):
     except (OSError, ValueError):
         return 0
 
+def xgm_state():
+    """ASUS XG Mobile: the settings egpu-xgm saved (fan mode, lights, power target) and its power target loop's last
+    reading ("live", only while it runs: written every second)."""
+    s = jread("/var/lib/nvegpu/xgm.json") or {}; live = jread("/run/nvegpu/xgm-powercap.json") or {}
+    return {"fan": s.get("fan", "auto"), "light": s.get("light"), "power_target": s.get("power_target"),
+            "live": live if __import__("time").time() - (live.get("t") or 0) < 5 else {}}
+
 _DOCK = [None, ""]   # [bdf it was looked up for, label]: egpu-detect is a script, not run on every poll
 
 def status():
@@ -66,6 +73,7 @@ def status():
         rc, out, _ = sh(["timeout", "6", "nvidia-smi", "-i", bdf, f"--query-gpu={f}", "--format=csv,noheader,nounits"], 8)
         if rc == 0 and out: gpu = dict(zip(f.split(","), [v.strip() for v in out.split(",")]))
         if gpu and _DOCK[1]: gpu["clock_limit"] = clock_limit(bdf)
+    xgm = xgm_state() if _DOCK[1] else {}
     _, bolt, _ = sh(["boltctl", "list"]); tunnel = "authorized" in bolt.lower()
     game_mode = sh(["pgrep", "-x", "gamescope(-wl)?"])[0] == 0
     displays = []
@@ -77,7 +85,7 @@ def status():
                     if c.startswith(card + "-") and read(f"/sys/class/drm/{c}/status") == "connected":
                         displays.append({"name": c.split("-", 1)[1], "enabled": read(f"/sys/class/drm/{c}/enabled") == "enabled"})
     panel = [read(p + "/enabled") for p in __import__("glob").glob("/sys/class/drm/card*-eDP-1")]
-    return {"present": bool(bdf), "bdf": bdf, "vendor": vendor, "dock": _DOCK[1], "driver_loaded": driver, "tunnel": tunnel, "game_mode": game_mode,
+    return {"present": bool(bdf), "bdf": bdf, "vendor": vendor, "dock": _DOCK[1], "xgm": xgm, "driver_loaded": driver, "tunnel": tunnel, "game_mode": game_mode,
             "gpu": gpu, "displays": displays, "panel_enabled": (panel[0] == "enabled") if panel else None,
             "detach": jread(f"{RUN}/safe-detach-status.json"),
             "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0]}
@@ -121,6 +129,9 @@ def action(p):
     if a == "clock-limit":   # laptop-class GPUs (ASUS XG Mobile): no power limit from the driver, a clock limit instead
         m = int((p or {}).get("mhz", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-graphics-clock", str(m)], 20)
         return {"ok": rc == 0, "out": (f"GPU clock limited to {m} MHz" if rc == 0 else o or e)}   # not nvidia-smi's persistence-mode warning
+    if a in ("xgm-fan", "xgm-light", "xgm-power"):   # ASUS XG Mobile (the helper refuses any other dock)
+        arg = str((p or {}).get("value", "")); rc, o, e = sh(["sudo", "-n", PRIV, {"xgm-power": "xgm-power-target"}.get(a, a), arg], 20)
+        return {"ok": rc == 0, "out": o or e}
     if a == "reset-clocks":
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}

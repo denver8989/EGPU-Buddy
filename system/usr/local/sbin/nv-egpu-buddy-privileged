@@ -812,6 +812,18 @@ case "$action" in
     require_gpu_alive "set-gpu-power-limit"
     nvidia-smi -pl "$limit"
     ;;
+  xgm-fan|xgm-light|xgm-power-target)
+    # ASUS XG Mobile only (egpu-xgm: fan mode and lights over the dock's USB HID, a power target held by a clock limit)
+    [ "$#" -eq 1 ] || die "$action requires one argument" 2
+    case "$(/usr/local/sbin/egpu-detect --dock 2>/dev/null)" in xg-mobile-*) ;; *) die "not an ASUS XG Mobile" 2 ;; esac
+    case "$action:$1" in
+      xgm-fan:auto|xgm-fan:quiet|xgm-fan:balanced|xgm-fan:performance|xgm-fan:max|xgm-light:on|xgm-light:off|xgm-power-target:off) ;;
+      xgm-power-target:*) [[ "$1" =~ ^[0-9]{2,3}$ ]] || die "invalid power target: $1" 2 ;;
+      *) die "invalid $action argument: $1" 2 ;;
+    esac
+    [ "$action" = xgm-power-target ] && [ "$1" != off ] && require_gpu_alive "$action"
+    exec /usr/local/sbin/egpu-xgm "${action#xgm-}" "$1"
+    ;;
   set-gpu-graphics-clock)
     [ "$#" -eq 1 ] || die "set-gpu-graphics-clock requires one argument (MHz)"
     clock=$1
@@ -843,6 +855,10 @@ print(sys.argv[1], sys.argv[2], "%.1f" % (time.monotonic() - age))' "$GPU" "$clo
   reset-gpu-clocks)
     [ "$#" -eq 0 ] || die "reset-gpu-clocks takes no arguments"
     require_gpu_alive "reset-gpu-clocks"
+    # an XG Mobile power target holds the clock through its own loop: Reset clocks ends it too
+    if systemctl is-active -q egpu-xgm-powercap 2>/dev/null || grep -q '"power_target": [0-9]' /var/lib/nvegpu/xgm.json 2>/dev/null; then
+      /usr/local/sbin/egpu-xgm power-target off >/dev/null 2>&1
+    fi
     nvidia-smi -rgc
     rm -f /run/nvegpu/clock-limit
     if [ -x /usr/local/bin/nv-egpu-offset-helper ]; then

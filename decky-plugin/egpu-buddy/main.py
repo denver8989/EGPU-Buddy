@@ -997,6 +997,14 @@ def _hw_line():
     return f"{d.get('chip', '?')} · profile {d.get('profile', '?')} · dock {d.get('dock', '?')} · XG Mobile {d.get('xg_mobile', '?')} · built-in GPU {d.get('igpu', '?')}" if d else "not checked yet"
 
 
+def _xgm_state():
+    """ASUS XG Mobile: the settings egpu-xgm saved (fan mode, lights, power target) and its power target loop's last
+    reading ("live", only while it runs: written every second)."""
+    s = _json("/var/lib/nvegpu/xgm.json") or {}; live = _json("/run/nvegpu/xgm-powercap.json") or {}
+    return {"fan": s.get("fan", "auto"), "light": s.get("light"), "power_target": s.get("power_target"),
+            "live": live if time.time() - (live.get("t") or 0) < 5 else {}}
+
+
 _dock_cache = {"bdf": None, "label": ""}
 def _dock_label(bdf):
     """'ASUS ROG XG Mobile' when the eGPU sits in one (the GPU name alone, "RTX 5070 Ti Laptop GPU", does not say so);
@@ -1079,6 +1087,8 @@ def _xg_power_report(bdf):
                + " ".join(unit.split()))
     out += [l[:300] for l in _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "-u", "nvidia-powerd.service"], 10)[1].splitlines()[-15:]]
     out.append("USB (ASUS): " + ("; ".join(_sh(["lsusb", "-d", "0b05:"], 5)[1].splitlines()) or "none"))
+    out.append("egpu-xgm: " + (_sh(["/usr/local/sbin/egpu-xgm", "status"], 10)[1] or "not installed or no answer"))
+    out += [l[:300] for l in _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "-u", "egpu-xgm-powercap", "-u", "egpu-xgm-restore"], 10)[1].splitlines()[-10:]]
     wmi = [f"{os.path.basename(p)}={_read(p)}" for p in sorted(glob.glob("/sys/devices/platform/asus-nb-wmi/egpu_*"))]
     out.append("asus-wmi: " + (" ".join(wmi) or "no egpu_* attributes"))
     attrs = sorted(os.path.basename(p) for p in glob.glob("/sys/class/firmware-attributes/*/attributes/*"))
@@ -1403,6 +1413,7 @@ class Plugin:
             "attach_pending": os.path.exists(GM_PENDING), "dock_present": _dock_present(),
             # Game Mode on the handheld screen (or a USB-C screen on it) with the games on the eGPU
             "dock": _dock_label(bdf),
+            "xgm": _xgm_state() if _dock_label(bdf) else {},
             "egpu_handheld": (hh := bool(bdf) and game_mode and _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") == "1"),
             "on_egpu": bool(bdf) and game_mode and output not in ("", "*", "eDP-1") and not hh,
             # USB-C screens on the handheld itself (XR glasses, portable monitors): offered only while an eGPU is attached
@@ -1672,6 +1683,20 @@ class Plugin:
     async def set_power_limit(self, watts: int):
         rc, out, err = _sh([PRIV, "set-gpu-power-limit", str(int(watts))], 20)
         return {"ok": rc == 0, "message": (err or out)[-200:]}
+
+    async def xgm_fan(self, mode: str):
+        """ASUS XG Mobile: fan mode sent to the dock (auto = its own curve)."""
+        rc, out, err = _sh([PRIV, "xgm-fan", str(mode)], 20)
+        return {"ok": rc == 0, "message": (out if rc == 0 else err or out)[-200:]}
+
+    async def xgm_light(self, on: bool):
+        rc, out, err = _sh([PRIV, "xgm-light", "on" if on else "off"], 20)
+        return {"ok": rc == 0, "message": (out if rc == 0 else err or out)[-200:]}
+
+    async def xgm_power(self, watts: int):
+        """ASUS XG Mobile: a power target (W) held by limiting the GPU clock; 0 = none."""
+        rc, out, err = _sh([PRIV, "xgm-power-target", str(int(watts)) if int(watts) > 0 else "off"], 30)
+        return {"ok": rc == 0, "message": (out if rc == 0 else err or out)[-200:]}
 
     async def set_clock_limit(self, mhz: int):
         """Laptop-class GPUs (ASUS XG Mobile) take no power limit from the driver: a GPU clock limit is their power control."""

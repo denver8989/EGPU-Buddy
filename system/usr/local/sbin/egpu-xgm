@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""egpu-xgm — ASUS ROG XG Mobile controls (root). Only for an XG Mobile; every other eGPU never reaches this.
+
+  egpu-xgm status                 JSON: the dock's control device, saved settings, the power target's state
+  egpu-xgm fan <auto|quiet|balanced|performance|max>
+  egpu-xgm light <on|off>
+  egpu-xgm power-target <watts|off>
+  egpu-xgm restore                re-apply the saved fan, light and power target (after an attach)
+  egpu-xgm govern <bdf> <watts>   the power target loop (run as the egpu-xgm-powercap unit, not by hand)
+
+Fan and light: the dock's vendor HID interface (report 0x5E, 300-byte feature reports), the protocol G-Helper uses for
+every XG Mobile including the 2025 GC34 (app/USB/XGM.cs; https://github.com/seerge/g-helper/issues/5008) and Handheld
+Daemon uses from Linux: the "^ASUS Tech.Inc." handshake, E4 02 (host active), then D1 01 + an 8-point curve (8
+temperatures in °C, 8 duties in %) or D1 02 (the dock's own automatic curve); C5 50/00 + BD 00 01/00 for the lights.
+Nothing is read back from the dock (no command for its fan speed is known).
+
+Power: NVIDIA does not let the driver set a laptop GPU's power limit (nvidia-smi -pl: not supported), so the target is
+held by limiting the GPU clock (nvidia-smi -lgc) from its measured power draw, once a second. It stops itself when the
+eGPU is detached or lost; Safe Detach also stops it first.
+"""
+import fcntl, glob, json, os, signal, subprocess, sys, time
+
+STATE = "/var/lib/nvegpu/xgm.json"           # saved settings: {"fan": "balanced", "light": true, "power_target": 90}
+LIVE = "/run/nvegpu/xgm-powercap.json"       # the power target loop now: {"target", "cap", "draw", "t"}
+UNIT = "egpu-xgm-powercap"
+PIDS = {0x1970, 0x1A9A, 0x1C28, 0x1C29, 0x1BC1}   # XG Mobile 2022, 2023, 2025 models (G-Helper's list)
+REPORT = 0x5E
+# 8 temperatures (°C), then 8 fan duties (%). Every curve reaches 100 % by 87 °C, before the GPU's own thermal limit.
+CURVES = {
+    "quiet":       [30, 50, 60, 65, 70, 75, 80, 87,   0, 10, 20, 30, 40, 55, 75, 100],
+    "balanced":    [30, 50, 60, 65, 70, 75, 80, 85,  15, 25, 35, 45, 55, 65, 80, 100],
+    "performance": [30, 45, 55, 60, 65, 70, 75, 80,  30, 40, 50, 60, 70, 80, 90, 100],
+    "max":         [30, 40, 50, 60, 70, 80, 90, 95, 100, 100, 100, 100, 100, 100, 100, 100],
+}
+FANS = ["auto"] + list(CURVES)
+MIN_W = 40   # below this a laptop RTX 50 cannot hold even its lowest clocks under load
+
+
+def die(msg, rc=1):
+    print(f"egpu-xgm: {msg}", file=sys.stderr); sys.exit(rc)
+
+
+def load():
+    try: return json.load(open(STATE))
+    except (OSError, ValueError): return {}
+
+
+def save(**kv):
+    s = load(); s.update(kv); os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    tmp = STATE + ".tmp"; json.dump(s, open(tmp, "w")); os.chmod(tmp, 0o644); os.replace(tmp, STATE)
+
+
+def hidraw():
+    """/dev/hidrawN of the XG Mobile's vendor interface: an ASUS XG Mobile product whose report descriptor declares
+    report 0x5E (85 5E). The dock's other interfaces (if any) do not."""
+    for node in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
+        try:
+            hid_id = dict(l.split("=", 1) for l in open(f"{node}/device/uevent").read().split() if "=" in l).get("HID_ID", "")
+            _, vid, pid = hid_id.split(":")
+            if int(vid, 16) != 0x0B05 or int(pid, 16) not in PIDS: continue
+            if b"\x85\x5e" in open(f"{node}/device/report_descriptor", "rb").read():
+                return "/dev/" + os.path.basename(node)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def send(*cmds):
+    dev = hidraw()
+    if not dev: die("no XG Mobile control device (is the XG Mobile connected?)", 3)
+    req = (3 << 30) | (300 << 16) | (ord("H") << 8) | 0x06    # HIDIOCSFEATURE(300)
+    fd = os.open(dev, os.O_RDWR)
+    try:
+        for c in ([REPORT] + list(b"ASUS Tech.Inc."), [REPORT, 0xE4, 0x02]) + cmds:   # handshake, host active, then ours
+            buf = bytearray(300); buf[:len(c)] = bytes(c); fcntl.ioctl(fd, req, buf)
+    finally:
+        os.close(fd)
+
+
+def fan(mode):
+    if mode not in FANS: die(f"fan mode must be one of {', '.join(FANS)}", 2)
+    send([REPORT, 0xD1, 0x02] if mode == "auto" else [REPORT, 0xD1, 0x01] + CURVES[mode])
+    save(fan=mode); print(f"XG Mobile fan: {mode}")
+
+
+def light(on):
+    send([REPORT, 0xC5, 0x50 if on else 0x00], [REPORT, 0xBD, 0x00, 0x01 if on else 0x00])
+    save(light=on); print(f"XG Mobile lights {'on' if on else 'off'}")
+
+
+def egpu_bdf():
+    out = subprocess.run(["/usr/local/sbin/egpu-detect"], capture_output=True, text=True).stdout.split()
+    return out[0] if len(out) >= 2 and out[1] == "nvidia" else ""
+
+
+def smi(bdf, *args, t=8):
+    try: return subprocess.run(["timeout", str(t), "nvidia-smi", "-i", bdf, *args], capture_output=True, text=True, timeout=t + 2)
+    except Exception: return None
+
+
+def power_target(arg):
+    subprocess.run(["systemctl", "stop", UNIT], capture_output=True)
+    try: os.remove("/run/nvegpu/clock-limit")   # a manual clock limit is replaced (the loop owns the clock now) or reset
+    except OSError: pass
+    if arg == "off":
+        save(power_target=None)
+        bdf = egpu_bdf()
+        if bdf: smi(bdf, "-rgc")
+        try: os.remove(LIVE)
+        except OSError: pass
+        print("power target off: the GPU runs up to its own limit"); return
+    w = int(arg); bdf = egpu_bdf()
+    if not bdf: die("the XG Mobile's GPU is not attached", 3)
+    r = smi(bdf, "--query-gpu=enforced.power.limit", "--format=csv,noheader,nounits")
+    try: top = float(r.stdout.strip())
+    except (AttributeError, ValueError): top = 115.0
+    if not MIN_W <= w <= top: die(f"power target must be between {MIN_W} and {top:.0f} W", 2)
+    save(power_target=w)
+    rc = subprocess.run(["systemd-run", f"--unit={UNIT}", "--collect", "--quiet", "--description=EGPU Buddy XG Mobile power target",
+                         "-p", "Nice=5", sys.argv[0], "govern", bdf, str(w)], capture_output=True, text=True)
+    if rc.returncode: die(f"could not start the power target: {(rc.stderr or rc.stdout).strip()}")
+    print(f"power target {w} W: EGPU Buddy keeps the GPU at or under it by limiting its clock")
+
+
+def govern(bdf, target):
+    target = float(target); dev = f"/sys/bus/pci/devices/{bdf}"; stop = []
+    signal.signal(signal.SIGTERM, lambda *_: stop.append(1)); signal.signal(signal.SIGINT, lambda *_: stop.append(1))
+    leaving = lambda: any(os.path.exists(f"/run/nvegpu/{f}") for f in ("deliberate-removal", "surprise-pending")) or not os.path.exists(dev)
+    r = smi(bdf, "--query-gpu=clocks.max.graphics", "--format=csv,noheader,nounits")
+    try: top = int(float(r.stdout.strip()))
+    except (AttributeError, ValueError): top = 3000
+    cap, applied, fails = top, top, 0
+    while not stop and not leaving():
+        r = smi(bdf, "--query-gpu=power.draw", "--format=csv,noheader,nounits", t=4)
+        try: draw = float(r.stdout.strip()); fails = 0
+        except (AttributeError, ValueError):
+            fails += 1
+            if fails >= 5: break   # the GPU stopped answering: lost or detached
+            time.sleep(1); continue
+        err = draw - target
+        if err > 2: cap -= min(300, max(15, int(err * 8)))                  # over: step down, harder the further over
+        elif err < -6 and cap < top: cap += min(120, max(15, int(-err * 4)))  # well under: give clock back
+        cap = max(600, min(top, cap // 15 * 15))
+        if cap != applied and not leaving():
+            smi(bdf, *(["-rgc"] if cap >= top else ["-lgc", f"210,{cap}"])); applied = cap
+        try:
+            json.dump({"target": target, "cap": cap if cap < top else 0, "draw": round(draw, 1), "t": time.time()}, open(LIVE + ".tmp", "w"))
+            os.chmod(LIVE + ".tmp", 0o644); os.replace(LIVE + ".tmp", LIVE)
+        except OSError: pass
+        for _ in range(10):
+            if stop: break
+            time.sleep(0.1)
+    if not leaving() and applied < top: smi(bdf, "-rgc")   # stopped by the user: give the GPU its clocks back
+    try: os.remove(LIVE)
+    except OSError: pass
+
+
+def status():
+    s = load(); live = {}
+    try: live = json.load(open(LIVE))
+    except (OSError, ValueError): pass
+    active = subprocess.run(["systemctl", "is-active", UNIT], capture_output=True, text=True).stdout.strip() == "active"
+    print(json.dumps({"device": hidraw(), "fan": s.get("fan", "auto"), "light": s.get("light"), "power_target": s.get("power_target"),
+                      "governing": active, "live": live if active else {}}))
+
+
+def restore():
+    s = load()
+    if hidraw():
+        if s.get("fan", "auto") != "auto": fan(s["fan"])
+        if s.get("light") is not None: light(bool(s["light"]))
+    if s.get("power_target") and egpu_bdf(): power_target(str(s["power_target"]))
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if os.geteuid() != 0: die("must run as root (through nv-egpu-buddy-privileged)")
+    if a[:1] == ["status"]: status()
+    elif a[:1] == ["fan"] and len(a) == 2: fan(a[1])
+    elif a[:1] == ["light"] and len(a) == 2 and a[1] in ("on", "off"): light(a[1] == "on")
+    elif a[:1] == ["power-target"] and len(a) == 2 and (a[1] == "off" or a[1].isdigit()): power_target(a[1])
+    elif a[:1] == ["restore"]: restore()
+    elif a[:1] == ["govern"] and len(a) == 3: govern(a[1], a[2])
+    else: die(__doc__.split("\n\n")[1], 2)

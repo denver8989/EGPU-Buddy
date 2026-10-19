@@ -168,6 +168,7 @@ say "      audio driver: $([ -L /sys/bus/pci/devices/$HDA/driver ] && echo still
 # ---- 3. release every /dev/nvidia* user, then FULLY unload the nvidia stack ----
 say "[3/5] releasing NVIDIA users + unloading the driver stack…"
 systemctl stop nvidia-persistenced 2>/dev/null; systemctl stop lactd 2>/dev/null   # LACT, if installed
+systemctl stop egpu-xgm-powercap 2>/dev/null   # the XG Mobile power target loop (polls nvidia-smi); egpu-xgm restore brings it back on attach
 for h in /etc/nv-egpu-buddy/hooks.d/pre-unload/*; do [ -x "$h" ] && "$h" >/dev/null 2>&1; done
 # The Decky backend keeps /dev/nvidia* open (it polls nvidia-smi), so the unload step below kills it. Nothing restarted it
 # and Game Mode then came up with no plugins at all (seen on a real device). Remember it here, restart it at the end.

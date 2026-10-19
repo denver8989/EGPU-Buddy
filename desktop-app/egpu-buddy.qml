@@ -30,6 +30,14 @@ ApplicationWindow {
     // ASUS XG Mobile: the cap the GPU really runs at (enforced.power.limit, queried only for it), shown where power.limit is [N/A]
     readonly property bool xg: String(s.dock || "").indexOf("XG Mobile") >= 0
     readonly property bool xgCap: xg && !isNum(g["power.limit"]) && isNum(g["enforced.power.limit"])
+    // ASUS XG Mobile controls (egpu-xgm): fan mode and lights sent to the dock, a power target held by a clock limit
+    readonly property var xgm: (s.xgm || {})
+    readonly property var xgLive: (xgm.live || {})
+    readonly property bool xgTarget: xg && isNum(xgLive.target)
+    readonly property int xgTop: isNum(g["enforced.power.limit"]) ? Math.round(+g["enforced.power.limit"]) : 115
+    readonly property var fanModes: ["auto", "quiet", "balanced", "performance", "max"]
+    function cap1(x) { x = String(x || ""); return x.charAt(0).toUpperCase() + x.slice(1) }
+    property bool ptTouched: false
     readonly property int clkMax: isNum(g["clocks.max.graphics"]) ? Math.round(+g["clocks.max.graphics"]) : 0
     property bool clkTouched: false
     property string msg: "Ready."
@@ -53,6 +61,7 @@ ApplicationWindow {
             if (showSeq >= 0 && (r.show_seq || 0) !== showSeq) { win.show(); win.raise(); win.requestActivate() }
             showSeq = r.show_seq || 0
             // the applied limit (the helper keeps it; NVIDIA cannot read it back), else no limit: the slider at the top
+            if (on && xg && !ptTouched) { pt.to = xgTop; pt.value = +(xgm.power_target || 0) || xgTop }
             if (on && clkMax > 0 && !clkTouched) { clkSl.to = clkMax; clkSl.value = +(g.clock_limit || 0) || clkMax }
             if (on && !sliderTouched) { pl.from = Math.max(100, Math.round(+g["power.min_limit"] || 100)); pl.to = Math.min(320, Math.round(+g["power.max_limit"] || 320)); pl.value = Math.round(+g["power.limit"] || pl.to) }
             var d = r.detach, gm = r.gm, l = r.last
@@ -166,15 +175,16 @@ ApplicationWindow {
             }
             GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 8; rowSpacing: 8
                 Cell { value: win.num(win.g["temperature.gpu"]); unit: "°C"; label: "GPU temp" }
-                Cell { value: win.num(win.g["power.draw"]); label: win.xgCap ? "Power / cap" : "Power"
-                       unit: win.isNum(win.g["power.limit"]) ? "/ " + win.num(win.g["power.limit"]) + " W" : win.xgCap ? "/ " + win.num(win.g["enforced.power.limit"]) + " W" : "W" }
+                Cell { value: win.num(win.g["power.draw"]); label: win.xgTarget ? "Power / target" : win.xgCap ? "Power / cap" : "Power"
+                       unit: win.xgTarget ? "/ " + win.num(win.xgLive.target) + " W"
+                           : win.isNum(win.g["power.limit"]) ? "/ " + win.num(win.g["power.limit"]) + " W" : win.xgCap ? "/ " + win.num(win.g["enforced.power.limit"]) + " W" : "W" }
                 Cell { value: win.num(win.g["utilization.gpu"]); unit: "%"; label: "GPU util" }
                 Cell { value: win.g["memory.used"] ? win.num(win.g["memory.used"] / 1024, 1) + " G" : "–"; label: "VRAM" }
                 Cell { value: win.num(win.g["clocks.gr"]); unit: "MHz"; label: "GPU clock" }
                 Cell { value: win.num(win.g["clocks.mem"]); unit: "MHz"; label: "Memory clock" }
                 // the XG Mobile runs its own fan (automatic, or Armoury Crate's mode on Windows): no Linux interface reads it
-                Cell { value: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? win.num(win.g["fan.speed"]) : "Auto"; unit: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? "%" : ""
-                       label: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? "Fan" : "Fan · run by the XG Mobile" }
+                Cell { value: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? win.num(win.g["fan.speed"]) : win.cap1(win.xgm.fan || "auto"); unit: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? "%" : ""
+                       label: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? "Fan" : "XG Mobile fan mode" }
                 Cell { value: win.g["pcie.link.gen.current"] ? "Gen" + win.g["pcie.link.gen.current"] + " x" + win.g["pcie.link.width.current"] : "–"; label: "PCIe link" }
             }
             Flow { Layout.fillWidth: true; spacing: 14
@@ -185,11 +195,28 @@ ApplicationWindow {
                 Label { text: "Handheld panel  <b>" + (win.s.panel_enabled == null ? "—" : win.s.panel_enabled ? "on" : "off") + "</b>"; textFormat: Text.StyledText }
             }
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11 }
-            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && !win.plOk
+            // ASUS XG Mobile: power target (W), fan mode and lights
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && win.xg && !win.plOk
+                text: "NVIDIA does not let the driver set this GPU's power limit (its cap is " + win.xgTop + " W). A power target below it makes EGPU Buddy hold the GPU there by limiting its clock"
+                      + (win.xgTarget && +win.xgLive.cap ? " (clock now held at " + win.xgLive.cap + " MHz)" : "") + ". The fan mode is set in the XG Mobile itself." }
+            RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && win.xg && !win.plOk
+                Label { text: "Power target" }
+                Slider { id: pt; Layout.fillWidth: true; from: 40; to: 115; stepSize: 5; value: 115; onMoved: win.ptTouched = true }
+                Label { text: Math.round(pt.value) >= win.xgTop ? "No target" : Math.round(pt.value) + " W"; Layout.preferredWidth: 80; horizontalAlignment: Text.AlignRight }
+                Button { text: "Apply"; onClicked: { win.act("xgm-power", { value: Math.round(pt.value) >= win.xgTop ? "off" : Math.round(pt.value) }); win.ptTouched = false } }
+            }
+            RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && win.xg
+                Label { text: "XG Mobile fan" }
+                Repeater { model: win.fanModes
+                    Button { text: modelData === "auto" ? "Auto" : win.cap1(modelData); highlighted: (win.xgm.fan || "auto") === modelData
+                             Layout.fillWidth: true; onClicked: win.act("xgm-fan", { value: modelData }) } }
+                Switch { text: "Lights"; checked: win.xgm.light !== false; onToggled: win.act("xgm-light", { value: checked ? "on" : "off" }) }
+            }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && !win.xg && !win.plOk
                 text: "This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power"
                       + (win.xgCap ? " (cap now " + win.num(win.g["enforced.power.limit"]) + " W" + (win.isNum(win.g["power.max_limit"]) ? ", at most " + win.num(win.g["power.max_limit"]) + " W" : "") + ")" : "")
                       + ". Limit its clock instead to lower power and heat." }
-            RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && !win.plOk && win.clkMax > 0
+            RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && !win.xg && !win.plOk && win.clkMax > 0
                 Label { text: "Max GPU clock" }
                 Slider { id: clkSl; Layout.fillWidth: true; from: 600; to: 3000; stepSize: 15; value: 3000; onMoved: win.clkTouched = true }
                 Label { text: Math.round(clkSl.value) + " MHz" + (+(win.g.clock_limit || 0) && !win.clkTouched ? " (on)" : ""); Layout.preferredWidth: 110; horizontalAlignment: Text.AlignRight }
@@ -205,7 +232,7 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true; spacing: 10
                 Button { text: "Safe Detach"; Layout.fillWidth: true; enabled: !!win.s.present; opacity: enabled ? 1 : 0.4; onClicked: confirmDetach.open() }
                 Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); opacity: enabled ? 1 : 0.4; onClicked: win.act("attach") }
-                Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.clkTouched = false; win.act("reset-clocks") } }
+                Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.clkTouched = false; win.ptTouched = false; win.act("reset-clocks") } }
                 Button { text: win.updRunning ? "Updating…" : "Update"; Layout.fillWidth: true; onClicked: updateDlg.open() }
             }
             Frame { Layout.fillWidth: true

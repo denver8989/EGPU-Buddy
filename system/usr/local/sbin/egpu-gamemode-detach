@@ -41,6 +41,7 @@ finish_fail(){ log "FAILED: $1"; /usr/local/sbin/egpu-snapshot "safe-detach-fail
 gpu=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}'); [ -n "$gpu" ] || { status SAFE_COMPLETE "No eGPU attached."; log "no GPU on bus"; exit 0; }
 [ -n "$(gs)" ] || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1 || { log "not in Game Mode"; exit 2; }
 log "start (gpu=$gpu, gamescope=$(gs))"; status DETACHING "Moving Game Mode to the handheld screen. Do not unplug yet."
+systemctl stop egpu-xgm-powercap 2>/dev/null   # XG Mobile power target loop: no nvidia-smi polling while the GPU is handed off
 touch "$MARK"; chown deck:deck "$MARK" 2>/dev/null; date +%s > $ST/gm-detach-pending
 $HELPER --prep >/dev/null 2>&1 || finish_fail "Could not hide the NVIDIA userspace." 5
 as_deck bash -c 'pactl set-default-sink "$(pactl list short sinks | awk "!/pci-0000_0[0-9a-f]_00.1/ && /alsa_output/{print \$2; exit}")" >/dev/null 2>&1; p=$(printf %s "'"${gpu%.*}"'" | tr : _); for c in $(pactl list short cards | awk -v p="$p" "index(\$2,p){print \$2}"); do pactl set-card-profile "$c" off; done; systemctl --user stop wireplumber' >/dev/null 2>&1

@@ -592,6 +592,10 @@ if [ -z "$egpu_card" ]; then   # no DRM card = no display to move a session to: 
   wait; exit 0
 fi
 log "mounted $gpu + display stack ready (DRM card: $egpu_card)"
+# ASUS XG Mobile: re-apply its saved fan mode, lights and power target (egpu-xgm; nothing saved = nothing done). Its own
+# unit, delayed: this script may exit early below, and the power target needs a settled driver
+case "$(/usr/local/sbin/egpu-detect --dock 2>/dev/null)" in xg-mobile-*)
+  [ -x /usr/local/sbin/egpu-xgm ] && systemd-run --no-block --collect --quiet --unit=egpu-xgm-restore --on-active=20 /usr/local/sbin/egpu-xgm restore 2>/dev/null ;; esac
 
 # ---- display-aware session completion: land the eGPU display on a NVIDIA-ONLY session ----
 egpu_has_output=0

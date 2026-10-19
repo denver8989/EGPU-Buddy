@@ -1,3 +1,15 @@
+0.7.134 — ASUS XG Mobile: a power target in watts, fan modes and lights, in the desktop app and the Game Mode plugin.
+
+**New** (ASUS XG Mobile only; every other eGPU is unchanged)
+- **Power target (W).** NVIDIA does not let the driver set a laptop GPU's power limit, so the XG Mobile's GPU always ran up to its cap (115 W on the RTX 5070 Ti). Pick a lower target and EGPU Buddy holds the GPU there, checking its power draw every second and limiting its clock as needed. The power reading shows "draw / target W". Reset clocks removes the target. It replaces the "Max GPU clock" slider.
+- **Fan mode:** Auto (the XG Mobile's own), Quiet, Balanced, Performance or Max, sent to the dock over USB the way G-Helper (the open-source Armoury Crate replacement) does it. Every mode reaches full speed by 87 °C. The dock does not report its fan speed, so the app shows the chosen mode.
+- **XG Mobile lights** on or off.
+- The fan mode, lights and power target are re-applied when the XG Mobile is attached again.
+- The support report's XG Mobile section shows these settings and the power target's log.
+
+**Fixed**
+- The clock limit slider jumped back to the maximum after Apply, so the limit looked unapplied.
+
 0.7.133 — ASUS XG Mobile: the real power cap and the fan shown, a power and fan check in the support report.
 
 **Fixed**

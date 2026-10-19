@@ -122,7 +122,7 @@ log "kwin=$(pgrep -U 1000 -x kwin_wayland | head -1) on $(k=$(pgrep -U 1000 -x k
 # not a cable pull, and the processes below are using a healthy GPU. Stop here.
 lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' && { rm -f /run/nvegpu/surprise-pending; log "GPU is back on the bus: transient removal, not a cable pull - nothing killed"; exit 0; }
 # 3. unload the orphaned nvidia stack (no device behind it) once nothing holds it; retry up to 60s, kill respawners
-systemctl stop nvidia-persistenced 2>/dev/null; systemctl stop lactd 2>/dev/null
+systemctl stop nvidia-persistenced 2>/dev/null; systemctl stop lactd 2>/dev/null; systemctl stop egpu-xgm-powercap 2>/dev/null
 # old-session Go Hub (python3 WebKit) survives the session end and keeps dmabufs exported by the removed card -> pins nvidia_drm
 for h in /etc/nv-egpu-buddy/hooks.d/pre-unload/*; do [ -x "$h" ] && "$h" >/dev/null 2>&1; done   # e.g. stop apps holding /dev/nvidia*
 sleep 1

@@ -6,7 +6,7 @@ import qrcode from "qrcode-generator";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
-  attach_pending: boolean; on_egpu: boolean; dock?: string; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
+  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { fan?: string; light?: boolean | null; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
@@ -19,6 +19,9 @@ const safeDetach = callable<[], Result>("safe_detach");
 const setPowerLimit = callable<[number], Result>("set_power_limit");
 const setCoreOffset = callable<[number], Result>("set_core_offset");
 const setClockLimit = callable<[number], Result>("set_clock_limit");
+const xgmFan = callable<[string], Result>("xgm_fan");
+const xgmLight = callable<[boolean], Result>("xgm_light");
+const xgmPower = callable<[number], Result>("xgm_power");
 const resetClocks = callable<[], Result>("reset_clocks");
 type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
@@ -307,7 +310,8 @@ function Content() {
   const [busy, setBusy] = useState(false);
   const [pl, setPl] = useState<number | null>(null);
   const [off, setOff] = useState(0);
-  const [clk, setClk] = useState<number | null>(null);   // laptop-class GPUs: a GPU clock limit is their power control
+  const [clk, setClk] = useState<number | null>(null);
+  const [pt, setPt] = useState<number | null>(null);   // ASUS XG Mobile power target (W)   // laptop-class GPUs: a GPU clock limit is their power control
 
   const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
@@ -330,6 +334,10 @@ function Content() {
   const xgCap = xg && !Number.isFinite(Number(tel["power.limit"])) && Number.isFinite(Number(tel["enforced.power.limit"])) ? Math.round(Number(tel["enforced.power.limit"])) : null;
   // laptop-class GPUs: the clock limit spans 600 MHz to the GPU's own maximum (clocks.max.graphics)
   const clkMax = Math.round(Number(tel["clocks.max.graphics"]) || 0), clkMin = Math.min(600, clkMax);
+  // ASUS XG Mobile: power target 40 W to its cap (at the cap = no target), fan mode and lights through egpu-xgm
+  const xgTop = Math.round(Number(tel["enforced.power.limit"])) || 115;
+  const xgLive = s?.xgm?.live ?? {};
+  const ptNow = pt ?? (s?.xgm?.power_target || xgTop);
   const clkNow = clk ?? (Math.round(Number(tel["clock_limit"])) || clkMax);   // the applied limit (kept by the helper), else none
   const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
   // "mounted" for uninstall purposes: the driver is loaded, so /usr cannot be written and the
@@ -496,11 +504,11 @@ function Content() {
               {scr?.some((x) => x.ddc) && <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => {}); return r; })}>Wake screens</ButtonItem></PanelSectionRow>}
               <Row k="Audio" v={audioName(s.audio_sink, s.bdf)} />
               <Row k="Temp" v={tel["temperature.gpu"] ? `${tel["temperature.gpu"]} °C` : ""} />
-              <Row k="Power" v={tel["power.draw"] ? (Number.isFinite(Number(tel["power.limit"])) ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : xgCap !== null ? `${Math.round(Number(tel["power.draw"]))} / ${xgCap} W cap` : `${Math.round(Number(tel["power.draw"]))} W`) : ""} />
+              <Row k="Power" v={tel["power.draw"] ? (Number.isFinite(Number(tel["power.limit"])) ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : xgLive.target ? `${Math.round(Number(tel["power.draw"]))} / ${xgLive.target} W target` : xgCap !== null ? `${Math.round(Number(tel["power.draw"]))} / ${xgCap} W cap` : `${Math.round(Number(tel["power.draw"]))} W`) : ""} />
               <Row k="Core / mem" v={tel["clocks.gr"] ? `${tel["clocks.gr"]} / ${tel["clocks.mem"]} MHz` : ""} />
               <Row k="VRAM" v={tel["memory.used"] ? `${tel["memory.used"]} / ${tel["memory.total"]} MiB` : ""} />
               <Row k="Load" v={tel["utilization.gpu"] ? `${tel["utilization.gpu"]} %` : ""} />
-              <Row k="Fan" v={tel["fan.speed"] && Number.isFinite(Number(tel["fan.speed"])) ? `${tel["fan.speed"]} %` : (tel["name"] && s.dock ? (xg ? "auto, run by the XG Mobile (not readable on Linux)" : "run by the dock (not readable on Linux)") : "")} />
+              <Row k="Fan" v={tel["fan.speed"] && Number.isFinite(Number(tel["fan.speed"])) ? `${tel["fan.speed"]} %` : (tel["name"] && s.dock ? (xg ? `${s.xgm?.fan ?? "auto"} mode (set in the XG Mobile; its speed is not readable)` : "run by the dock (not readable on Linux)") : "")} />
             </>
             )}
           </PanelSection>
@@ -515,6 +523,24 @@ function Content() {
               <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>One file with everything EGPU Buddy logs (versions, GPU and link, screens, Game Mode, attach, Safe Detach, driver trial and the system log), saved in the Desktop folder. Also in Desktop Mode: the "Save EGPU Buddy report" icon. No serial numbers, Wi-Fi names, IP addresses or user names.</div></PanelSectionRow>
             </PanelSection>
           )}
+          {s.present && xg && s.driver_loaded && (
+            <PanelSection title="XG Mobile">
+              {!plOk && (<>
+              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>NVIDIA does not let the driver set this GPU's power limit (its cap is {xgTop} W). A power target below it makes EGPU Buddy hold the GPU there by limiting its clock{xgLive.target && xgLive.cap ? ` (now ${xgLive.cap} MHz)` : ""}.</div></PanelSectionRow>
+              <PanelSectionRow>
+                <SliderField label={ptNow >= xgTop ? "Power target: none" : "Power target (W)"} value={ptNow} min={40} max={xgTop} step={5} showValue onChange={setPt} />
+              </PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy || pt === null} onClick={() => { const w = ptNow >= xgTop ? 0 : ptNow; setPt(null); run(() => xgmPower(w)); }}>Apply power target</ButtonItem></PanelSectionRow>
+              </>)}
+              <PanelSectionRow>
+                <DropdownItem label="Fan mode" selectedOption={s.xgm?.fan ?? "auto"} disabled={busy}
+                  rgOptions={[["auto", "Auto (the XG Mobile's own)"], ["quiet", "Quiet"], ["balanced", "Balanced"], ["performance", "Performance"], ["max", "Max"]].map(([data, label]) => ({ data, label }))}
+                  onChange={(o) => run(() => xgmFan(String(o.data)))} />
+              </PanelSectionRow>
+              <PanelSectionRow><ToggleField label="XG Mobile lights" checked={s.xgm?.light !== false} disabled={busy} onChange={(v) => run(() => xgmLight(v))} /></PanelSectionRow>
+              {!controlsOk && msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
+            </PanelSection>
+          )}
           {!s.present ? null : controlsOk ? (
             <PanelSection title="Power controls">
               {plOk ? (<>
@@ -524,8 +550,8 @@ function Content() {
               <PanelSectionRow><ButtonItem layout="below" disabled={busy || pl === null} onClick={() => run(() => setPowerLimit(plNow))}>Apply power limit</ButtonItem></PanelSectionRow>
               </>) : (
               <>
-              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power{xgCap !== null ? ` (cap now ${xgCap} W${Number.isFinite(plMax) ? `, at most ${Math.round(plMax)} W` : ""})` : ""}. Limit its clock instead to lower power and heat.</div></PanelSectionRow>
-              {clkMax > 0 && (<>
+              {!xg && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power{xgCap !== null ? ` (cap now ${xgCap} W${Number.isFinite(plMax) ? `, at most ${Math.round(plMax)} W` : ""})` : ""}. Limit its clock instead to lower power and heat.</div></PanelSectionRow>}
+              {!xg && clkMax > 0 && (<>
               <PanelSectionRow>
                 <SliderField label="Max GPU clock (MHz)" value={clkNow} min={clkMin} max={clkMax} step={15} showValue onChange={setClk} />
               </PanelSectionRow>
@@ -537,7 +563,7 @@ function Content() {
                 <SliderField label="Core clock offset (MHz)" value={off} min={-300} max={300} step={15} showValue onChange={setOff} />
               </PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(() => setCoreOffset(off))}>Apply offset</ButtonItem></PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setOff(0); setPl(null); setClk(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setOff(0); setPl(null); setClk(null); setPt(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
               {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
             </PanelSection>
           ) : (
