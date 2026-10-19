@@ -49,7 +49,8 @@ status(){
 }
 fail(){ status DO_NOT_UNPLUG "$1"; printf '%s\n' "$1" >&2; systemctl --user unmask --runtime app-steam@autostart.service >/dev/null 2>&1; sudo -n /usr/local/sbin/egpu-safe-detach --restore >/dev/null 2>&1 || true
   # never leave the user dark: if the eGPU is still attached, put KWin back on it
-  if lspci -Dn 2>/dev/null | grep -qiE '0300: 10de:'; then
+  # (not for a check that failed before anything was changed: GPU_CARD is only known after those)
+  if [ -n "${GPU_CARD:-}" ] && lspci -Dn 2>/dev/null | grep -qiE '0300: 10de:'; then
     rm -f "$RUN/egpu-detach-mode" "$HANDOFF_LOCK"
     systemctl --user unset-environment KWIN_RENDER_NODES; systemctl --user set-environment "KWIN_DRM_DEVICES=/dev/dri/$GPU_CARD" "__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json" "__GLX_VENDOR_LIBRARY_NAME=nvidia" "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json" "VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json" >/dev/null 2>&1
     # full session relogin (plasmalogin Relogin=true) = the recovery that has come up NVIDIA-first every time
@@ -112,6 +113,9 @@ recover_after_unplug(){
 # Preserve the real-call-validated Pro Audio microphone; never substitute HiFi Mic1.
 if [ "$DEVICE" = legion-go-2 ]; then
 [ -n "$SPEAKER_CARD" ] || fail 'Internal Realtek audio card is unavailable.'
+# the card can come back on its HiFi profile (seen 2026-10-19), which hid the Pro Audio nodes and blocked Safe Detach with
+# "microphone is not selected": select them the way the post-unplug recovery does, then check
+pactl set-card-profile alsa_card.pci-0000_c2_00.6 pro-audio >/dev/null 2>&1; sleep 1; pactl set-default-source "$SOURCE" >/dev/null 2>&1
 [ "$(pactl get-default-source 2>/dev/null || true)" = "$SOURCE" ] || fail 'Internal Pro Audio microphone is not selected.'
 # While docked, HDMI/DisplayPort is the correct default playback route.  The
 # internal speaker becomes the default only after the physical unplug.

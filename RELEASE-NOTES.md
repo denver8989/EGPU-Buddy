@@ -1,3 +1,8 @@
+0.7.125 — Legion Go 2: Safe Detach no longer refuses over the microphone.
+
+**Fixed**
+- Legion Go 2: Safe Detach stopped with "Internal Pro Audio microphone is not selected" when the built-in sound card had switched to its HiFi mode. It now selects the Pro Audio microphone itself and carries on.
+
 0.7.124 — ROG Ally / XG Mobile: fuller Safe Detach log.
 
 **Changed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
