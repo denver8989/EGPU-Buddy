@@ -20,7 +20,7 @@ def jread(p):
     except Exception: return None
 
 FIELDS = ("name,driver_version,temperature.gpu,power.draw,power.limit,power.min_limit,power.max_limit,clocks.gr,clocks.mem,"
-          "memory.used,memory.total,utilization.gpu,pcie.link.gen.current,pcie.link.width.current,fan.speed,pstate")
+          "memory.used,memory.total,utilization.gpu,pcie.link.gen.current,pcie.link.width.current,fan.speed,pstate,clocks.max.graphics")
 def sysfs_gpu(bdf):
     """Mesa-driver (AMD) telemetry under the nvidia-smi key names, so the page is shared. Experimental."""
     import glob
@@ -102,6 +102,8 @@ def action(p):
         return {"ok": True, "started": "update"}
     if a == "power-limit":
         w = int((p or {}).get("watts", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-power-limit" if s["vendor"] in ("", "nvidia") else "set-generic-power-cap", str(w)], 20); return {"ok": rc == 0, "out": o or e}
+    if a == "clock-limit":   # laptop-class GPUs (ASUS XG Mobile): no power limit from the driver, a clock limit instead
+        m = int((p or {}).get("mhz", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-graphics-clock", str(m)], 20); return {"ok": rc == 0, "out": o or e}
     if a == "reset-clocks":
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}

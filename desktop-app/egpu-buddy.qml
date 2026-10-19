@@ -23,6 +23,12 @@ ApplicationWindow {
     property var g: (s.gpu || {})
     readonly property bool on: !!(s.present && s.driver_loaded && g.name)
     property bool sliderTouched: false
+    // laptop-class GPUs (ASUS XG Mobile) report the power limits and the fan as [N/A]: the dock firmware owns them. They get a
+    // GPU clock limit as their power control instead (the same as the HTML window and the Decky plugin since 0.7.114)
+    function isNum(v) { return v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(v)) }
+    readonly property bool plOk: isNum(g["power.min_limit"]) && isNum(g["power.max_limit"]) && isNum(g["power.limit"]) && +g["power.max_limit"] > +g["power.min_limit"]
+    readonly property int clkMax: isNum(g["clocks.max.graphics"]) ? Math.round(+g["clocks.max.graphics"]) : 0
+    property bool clkTouched: false
     property string msg: "Ready."
     property bool msgErr: false
     property bool updSeen: false
@@ -43,6 +49,7 @@ ApplicationWindow {
             s = r
             if (showSeq >= 0 && (r.show_seq || 0) !== showSeq) { win.show(); win.raise(); win.requestActivate() }
             showSeq = r.show_seq || 0
+            if (on && clkMax > 0 && !clkTouched) { clkSl.to = clkMax; clkSl.value = clkMax }
             if (on && !sliderTouched) { pl.from = Math.max(100, Math.round(+g["power.min_limit"] || 100)); pl.to = Math.min(320, Math.round(+g["power.max_limit"] || 320)); pl.value = Math.round(+g["power.limit"] || pl.to) }
             var d = r.detach, gm = r.gm, l = r.last
             if (d && d.state && d.state !== "IDLE") { msgErr = /FAIL|DO_NOT|INCOMPLETE/.test(d.state); msg = d.state + ": " + (d.message || "") }
@@ -152,12 +159,13 @@ ApplicationWindow {
             }
             GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 8; rowSpacing: 8
                 Cell { value: win.num(win.g["temperature.gpu"]); unit: "°C"; label: "GPU temp" }
-                Cell { value: win.num(win.g["power.draw"]); unit: win.g["power.limit"] ? "/ " + win.num(win.g["power.limit"]) + " W" : "W"; label: "Power" }
+                Cell { value: win.num(win.g["power.draw"]); unit: win.isNum(win.g["power.limit"]) ? "/ " + win.num(win.g["power.limit"]) + " W" : "W"; label: "Power" }
                 Cell { value: win.num(win.g["utilization.gpu"]); unit: "%"; label: "GPU util" }
                 Cell { value: win.g["memory.used"] ? win.num(win.g["memory.used"] / 1024, 1) + " G" : "–"; label: "VRAM" }
                 Cell { value: win.num(win.g["clocks.gr"]); unit: "MHz"; label: "GPU clock" }
                 Cell { value: win.num(win.g["clocks.mem"]); unit: "MHz"; label: "Memory clock" }
-                Cell { value: win.num(win.g["fan.speed"]); unit: "%"; label: "Fan" }
+                Cell { value: win.isNum(win.g["fan.speed"]) || !win.s.dock ? win.num(win.g["fan.speed"]) : "dock"; unit: win.isNum(win.g["fan.speed"]) ? "%" : ""
+                       label: win.isNum(win.g["fan.speed"]) || !win.s.dock ? "Fan" : "Fan (run by the " + (String(win.s.dock).indexOf("XG Mobile") >= 0 ? "XG Mobile" : "dock") + ")" }
                 Cell { value: win.g["pcie.link.gen.current"] ? "Gen" + win.g["pcie.link.gen.current"] + " x" + win.g["pcie.link.width.current"] : "–"; label: "PCIe link" }
             }
             Flow { Layout.fillWidth: true; spacing: 14
@@ -168,7 +176,15 @@ ApplicationWindow {
                 Label { text: "Handheld panel  <b>" + (win.s.panel_enabled == null ? "—" : win.s.panel_enabled ? "on" : "off") + "</b>"; textFormat: Text.StyledText }
             }
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11 }
-            RowLayout { Layout.fillWidth: true; spacing: 10
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && !win.plOk
+                text: "This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power. Limit its clock instead to lower power and heat." }
+            RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && !win.plOk && win.clkMax > 0
+                Label { text: "Max GPU clock" }
+                Slider { id: clkSl; Layout.fillWidth: true; from: 600; to: 3000; stepSize: 15; value: 3000; onMoved: win.clkTouched = true }
+                Label { text: Math.round(clkSl.value) + " MHz"; Layout.preferredWidth: 80; horizontalAlignment: Text.AlignRight }
+                Button { text: "Apply"; onClicked: { win.act("clock-limit", { mhz: Math.round(clkSl.value) }); win.clkTouched = false } }
+            }
+            RowLayout { Layout.fillWidth: true; spacing: 10; visible: !win.on || win.plOk
                 Label { text: "Power limit" }
                 Slider { id: pl; Layout.fillWidth: true; from: 100; to: 320; stepSize: 5; value: 320; enabled: win.on; onMoved: win.sliderTouched = true }
                 Label { text: win.on ? Math.round(pl.value) + " W" : "– W"; Layout.preferredWidth: 60; horizontalAlignment: Text.AlignRight }
@@ -178,7 +194,7 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true; spacing: 10
                 Button { text: "Safe Detach"; Layout.fillWidth: true; enabled: !!win.s.present; opacity: enabled ? 1 : 0.4; onClicked: confirmDetach.open() }
                 Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); opacity: enabled ? 1 : 0.4; onClicked: win.act("attach") }
-                Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: win.act("reset-clocks") }
+                Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.clkTouched = false; win.act("reset-clocks") } }
                 Button { text: win.updRunning ? "Updating…" : "Update"; Layout.fillWidth: true; onClicked: updateDlg.open() }
             }
             Frame { Layout.fillWidth: true

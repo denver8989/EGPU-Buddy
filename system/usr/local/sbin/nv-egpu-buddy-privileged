@@ -815,8 +815,9 @@ case "$action" in
   set-gpu-graphics-clock)
     [ "$#" -eq 1 ] || die "set-gpu-graphics-clock requires one argument (MHz)"
     clock=$1
-    if [[ ! "$clock" =~ ^[0-9]+$ ]] || [ "$clock" -lt 210 ] || [ "$clock" -gt 2100 ]; then
-      die "invalid graphics clock: $clock (must be between 210 and 2100)" 2
+    # up to 3500: laptop RTX 50 GPUs boost past 2100 (RTX 5070 Ti Laptop in an XG Mobile: 2745 MHz seen)
+    if [[ ! "$clock" =~ ^[0-9]+$ ]] || [ "$clock" -lt 210 ] || [ "$clock" -gt 3500 ]; then
+      die "invalid graphics clock: $clock (must be between 210 and 3500)" 2
     fi
     require_gpu_alive "set-gpu-graphics-clock"
     nvidia-smi -lgc "210,$clock"

@@ -215,7 +215,7 @@ def _gamescope_env(key):
 def _nvidia_query(bdf):
     fields = ("name,driver_version,temperature.gpu,power.draw,power.limit,power.max_limit,power.min_limit,"
               "clocks.gr,clocks.mem,memory.used,memory.total,utilization.gpu,pcie.link.gen.current,"
-              "pcie.link.width.current,fan.speed")
+              "pcie.link.width.current,fan.speed,clocks.max.graphics")
     rc, out, _ = _sh(["timeout", "6", "nvidia-smi", "-i", bdf, f"--query-gpu={fields}", "--format=csv,noheader,nounits"], 8)
     if rc != 0 or not out:
         return {}
@@ -1622,6 +1622,11 @@ class Plugin:
     async def set_power_limit(self, watts: int):
         rc, out, err = _sh([PRIV, "set-gpu-power-limit", str(int(watts))], 20)
         return {"ok": rc == 0, "message": (err or out)[-200:]}
+
+    async def set_clock_limit(self, mhz: int):
+        """Laptop-class GPUs (ASUS XG Mobile) take no power limit from the driver: a GPU clock limit is their power control."""
+        rc, out, err = _sh([PRIV, "set-gpu-graphics-clock", str(int(mhz))], 20)
+        return {"ok": rc == 0, "message": (err or out)[-200:] or (f"GPU clock limited to {int(mhz)} MHz" if rc == 0 else "")}
 
     async def set_core_offset(self, mhz: int):
         rc, out, err = _sh([PRIV, "set-gpu-core-offset", str(int(mhz))], 20)

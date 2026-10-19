@@ -18,6 +18,7 @@ const attach = callable<[boolean], Result>("attach");
 const safeDetach = callable<[], Result>("safe_detach");
 const setPowerLimit = callable<[number], Result>("set_power_limit");
 const setCoreOffset = callable<[number], Result>("set_core_offset");
+const setClockLimit = callable<[number], Result>("set_clock_limit");
 const resetClocks = callable<[], Result>("reset_clocks");
 type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
@@ -306,6 +307,7 @@ function Content() {
   const [busy, setBusy] = useState(false);
   const [pl, setPl] = useState<number | null>(null);
   const [off, setOff] = useState(0);
+  const [clk, setClk] = useState<number | null>(null);   // laptop-class GPUs: a GPU clock limit is their power control
 
   const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
@@ -323,6 +325,9 @@ function Content() {
   const plNow = pl ?? Math.round(Number(tel["power.limit"] ?? plMax));
   // laptop-class GPUs (ASUS XG Mobile) report the limits as [N/A]: the dock firmware owns the power, nvidia-smi -pl cannot set it
   const plOk = [plMin, plMax, plNow].every(Number.isFinite) && plMax > plMin;
+  // laptop-class GPUs: the clock limit spans 600 MHz to the GPU's own maximum (clocks.max.graphics)
+  const clkMax = Math.round(Number(tel["clocks.max.graphics"]) || 0), clkMin = Math.min(600, clkMax);
+  const clkNow = clk ?? clkMax;
   const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
   // "mounted" for uninstall purposes: the driver is loaded, so /usr cannot be written and the
   // extension cannot be unmerged. Detaching is what clears it.
@@ -492,7 +497,7 @@ function Content() {
               <Row k="Core / mem" v={tel["clocks.gr"] ? `${tel["clocks.gr"]} / ${tel["clocks.mem"]} MHz` : ""} />
               <Row k="VRAM" v={tel["memory.used"] ? `${tel["memory.used"]} / ${tel["memory.total"]} MiB` : ""} />
               <Row k="Load" v={tel["utilization.gpu"] ? `${tel["utilization.gpu"]} %` : ""} />
-              <Row k="Fan" v={tel["fan.speed"] && tel["fan.speed"] !== "[N/A]" ? `${tel["fan.speed"]} %` : (tel["name"] && s.dock ? "set by the dock" : "")} />
+              <Row k="Fan" v={tel["fan.speed"] && Number.isFinite(Number(tel["fan.speed"])) ? `${tel["fan.speed"]} %` : (tel["name"] && s.dock ? `run by the ${s.dock.includes("XG Mobile") ? "XG Mobile" : "dock"} (not readable on Linux)` : "")} />
             </>
             )}
           </PanelSection>
@@ -515,13 +520,21 @@ function Content() {
               </PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={busy || pl === null} onClick={() => run(() => setPowerLimit(plNow))}>Apply power limit</ButtonItem></PanelSectionRow>
               </>) : (
-              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power.</div></PanelSectionRow>
+              <>
+              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power. Limit its clock instead to lower power and heat.</div></PanelSectionRow>
+              {clkMax > 0 && (<>
+              <PanelSectionRow>
+                <SliderField label="Max GPU clock (MHz)" value={clkNow} min={clkMin} max={clkMax} step={15} showValue onChange={setClk} />
+              </PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy || clk === null} onClick={() => run(() => setClockLimit(clkNow))}>Apply clock limit</ButtonItem></PanelSectionRow>
+              </>)}
+              </>
               )}
               <PanelSectionRow>
                 <SliderField label="Core clock offset (MHz)" value={off} min={-300} max={300} step={15} showValue onChange={setOff} />
               </PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(() => setCoreOffset(off))}>Apply offset</ButtonItem></PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setOff(0); setPl(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setOff(0); setPl(null); setClk(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
               {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
             </PanelSection>
           ) : (

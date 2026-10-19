@@ -1,3 +1,11 @@
+0.7.132 — laptop-class GPUs (ASUS XG Mobile): a clock limit as power control, clearer power and fan.
+
+**Fixed**
+- The desktop app on SteamOS showed a power-limit slider that cannot work on an XG Mobile's laptop GPU, "– W" as its limit and no fan. It now shows the power draw, says the fan is run by the XG Mobile (it cannot be read on Linux), and explains why there is no power limit.
+
+**New**
+- Laptop-class GPUs (ASUS XG Mobile): a "Max GPU clock" slider in the Decky plugin and the desktop app. NVIDIA does not let the driver set these GPUs' power limit; capping the clock lowers power and heat instead. Reset clocks removes the cap. GPUs that take a power limit keep the power slider exactly as before.
+
 0.7.131 — ROG Ally / XG Mobile: Desktop Safe Detach finishes even when the kernel still holds the eGPU.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
