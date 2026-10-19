@@ -53,6 +53,6 @@ case "$rc" in 0) say "done: $VER"; st ok 100 "Updated to $VER." ;;
   *) say "the system files reported rc=$rc; see $LOG"; st failed 100 "The system files update failed (rc $rc). See /var/log/egpu-buddy-update.log." ;; esac
 # the running desktop app is the old version: restart it (its window shows the result once), a few seconds after the
 # window has shown 100 %
-( sleep 4; pkill -u "$U" -f 'egpu-buddy-server[.]py' || true
-  runuser -u "$U" -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user try-restart egpu-buddy-tray.service ) >/dev/null 2>&1 &
+# (its own timer unit: a background job of this script dies with it when it runs as a unit, which the app always does)
+systemd-run --quiet --collect --on-active=4 --unit="egpu-buddy-app-restart-$(date +%s)" /bin/sh -c "pkill -u $U -f 'egpu-buddy-server[.]py'; runuser -u $U -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user try-restart egpu-buddy-tray.service" >/dev/null 2>&1 || true
 [ "$rc" = 21 ] && exit 0; exit "$rc"

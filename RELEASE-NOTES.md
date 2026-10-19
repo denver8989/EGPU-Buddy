@@ -1,3 +1,8 @@
+0.7.127 — the desktop app restarts itself after an update.
+
+**Fixed**
+- After updating from the desktop app, EGPU Buddy now restarts itself and shows the result (it kept running the old version until the next login).
+
 0.7.126 — update from the desktop app.
 
 **New**
