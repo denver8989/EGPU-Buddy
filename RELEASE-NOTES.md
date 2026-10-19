@@ -1,3 +1,11 @@
+0.7.129 — ROG Ally / XG Mobile: Desktop Safe Detach finds what holds the eGPU.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- Desktop Safe Detach could not unload the NVIDIA driver because programs left from the desktop still held GPU memory shared with the handheld's own GPU, and the check could not see them. It now finds them, closes them, and waits for the driver to be free before removing the eGPU.
+
+**New**
+- Support reports show which GPUs the desktop really uses and the settings it received, the free disk space, and while gaming, what is holding the GPU's clocks down.
+
 0.7.128 — no crash reports after a desktop Safe Detach.
 
 **Fixed**
