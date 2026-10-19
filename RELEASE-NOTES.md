@@ -1,3 +1,8 @@
+0.7.123 — ROG Ally / XG Mobile: Desktop Safe Detach releases the text console.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- Desktop Safe Detach could not unload the NVIDIA driver because the text console still held the eGPU's screen; it now lets go of it for the removal.
+
 0.7.122 — ROG Ally / XG Mobile: Desktop Safe Detach checks the screens.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)

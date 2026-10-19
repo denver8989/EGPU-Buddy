@@ -25,14 +25,15 @@ as_deck(){ runuser -u deck -- env $RUNENV "$@"; }
 # the desktop app reads the user's status file; it is gone while the session is down, so /run/nvegpu carries it too
 status(){ printf '{"state":"%s","message":"%s"}\n' "$1" "$2" > $ST/gm-status.json
   [ -d /run/user/$U ] && { mkdir -p /run/user/$U/nv-egpu-buddy; cp $ST/gm-status.json /run/user/$U/nv-egpu-buddy/safe-detach-status.json; chown -R deck: /run/user/$U/nv-egpu-buddy; } 2>/dev/null; }
-DM_STOPPED=0
-trap '[ "$DM_STOPPED" = 1 ] && systemctl start display-manager.service >/dev/null 2>&1' EXIT
+DM_STOPPED=0; FBCON=""
+fbcon_back(){ for v in $FBCON; do echo 1 > "$v/bind" 2>/dev/null; done; FBCON=""; }
+trap 'fbcon_back; [ "$DM_STOPPED" = 1 ] && systemctl start display-manager.service >/dev/null 2>&1' EXIT
 # the desktop pin is released once the desktop is back, on success and failure alike: left behind, it sent every
 # "Return to Gaming Mode" back to the desktop until a reboot (ROG Xbox Ally X report on 0.7.120)
 unpin_when_back(){ for _ in $(seq 1 60); do pgrep -U $U -x 'kwin_wayland|kwin_x11' >/dev/null 2>&1 && break; sleep 1; done
   pgrep -U $U -x 'kwin_wayland|kwin_x11' >/dev/null 2>&1 && /usr/local/sbin/egpu-dm-session unpin >/dev/null 2>&1; }
 fail(){ log "FAILED: $1"; /usr/local/sbin/egpu-snapshot "desktop-detach-failed-rc$2" >/dev/null 2>&1; $HELPER --restore >/dev/null 2>&1
-  [ "$DM_STOPPED" = 1 ] && { DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1; }
+  fbcon_back; [ "$DM_STOPPED" = 1 ] && { DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1; }
   unpin_when_back; sleep 5; status DO_NOT_UNPLUG "$1"; exit "$2"; }
 
 gpu=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}')
@@ -58,6 +59,15 @@ fi
 # the unload then failed straight away ("nvidia stack still loaded", Ally X on 0.7.120): wait for the users to drop to 0
 inuse(){ cat /sys/module/nvidia_drm/refcnt /sys/module/nvidia_uvm/refcnt 2>/dev/null | grep -qv '^0$'; }
 for _ in $(seq 1 20); do inuse || break; sleep 1; done
+# still in use with no process on it (Ally X on 0.7.122: nvidia_drm=2): with the session stopped the screen drops to text
+# mode and the text console takes the framebuffers, the eGPU's too. Game Mode never drops to text, so its detach is not
+# affected. Unbind the console for the removal (NVIDIA's way to unload nvidia-drm with fbdev on); bound again after it.
+if inuse; then
+  log "driver still in use with no process on it: $(for m in nvidia_drm nvidia_modeset nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)· consoles: $(for v in /sys/class/vtconsole/vtcon*; do printf '%s(%s,bind=%s) ' "${v##*/}" "$(cat $v/name)" "$(cat $v/bind)"; done)· framebuffers: $(cat /sys/class/graphics/fb*/name 2>/dev/null | tr '\n' ' ')"
+  for v in /sys/class/vtconsole/vtcon*; do [ "$(cat "$v/bind" 2>/dev/null)" = 1 ] && grep -qi 'frame buffer' "$v/name" && echo 0 > "$v/bind" 2>/dev/null && FBCON="$FBCON $v"; done
+  for _ in $(seq 1 5); do inuse || break; sleep 1; done
+  log "text console released (${FBCON:- none was bound}); driver users now: $(cat /sys/module/nvidia_drm/refcnt 2>/dev/null)"
+fi
 # what each screen shows, for the log: connected = cable in, lit = a picture is being sent to it
 screens(){ for c in /sys/class/drm/card*-*; do [ -e "$c/status" ] || continue; case "${c##*/}" in *Writeback*) continue ;; esac
   printf '%s=%s%s ' "${c##*/}" "$(cat "$c/status")" "$([ "$(cat "$c/enabled" 2>/dev/null)" = enabled ] && echo ',lit')"; done; }
@@ -66,7 +76,7 @@ log "screens with the session stopped: $(screens)"
   echo "holders before teardown (session stopped):"; for hp in $(fuser $nodes 2>/dev/null | tr -s ' \n' ' '); do echo "  $hp $(cat /proc/$hp/comm 2>/dev/null) cmd=$(tr '\0' ' ' </proc/$hp/cmdline 2>/dev/null | cut -c1-80)"; done; } > $ST/gm-holders.log 2>&1
 $HELPER --teardown-only > $ST/gm-helper.log 2>&1 ||
   fail "eGPU teardown failed; the GPU is still attached. Do not unplug. ($(grep -oE 'still held by:.*|still loaded:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-120))" 7
-$HELPER --restore >/dev/null 2>&1
+$HELPER --restore >/dev/null 2>&1; fbcon_back
 DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1
 /usr/local/sbin/egpu-panel on >/dev/null 2>&1
 log "eGPU removed with the session stopped; desktop starting again on the handheld screen"
