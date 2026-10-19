@@ -47,7 +47,9 @@ flock -n 9 2>/dev/null || { log "another instance running — skip"; exit 0; }
 # card) must finish before this attach loads the driver: the two used to overlap when the eGPU was plugged back within a
 # minute, the recovery stopping processes and unloading modules under the new attach (ROG Ally + XG Mobile, 2026-10-19:
 # re-attach failed with Xid 56, then a reboot). The recovery stops early once the eGPU is back on the bus.
-if [ -e /run/egpu-surprise-recover.lock ] && ! flock -n /run/egpu-surprise-recover.lock true 2>/dev/null; then
+# ROG Ally or ASUS XG Mobile hardware only (where it was seen); every other device attaches exactly as before.
+if { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } &&
+   [ -e /run/egpu-surprise-recover.lock ] && ! flock -n /run/egpu-surprise-recover.lock true 2>/dev/null; then
   log "a cable-pull recovery is still running: waiting for it before attaching"
   flock -w 120 /run/egpu-surprise-recover.lock true 2>/dev/null && log "cable-pull recovery finished" || log "cable-pull recovery still running after 120 s: attaching anyway"
 fi

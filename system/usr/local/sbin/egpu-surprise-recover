@@ -122,8 +122,11 @@ log "kwin=$(pgrep -U 1000 -x kwin_wayland | head -1) on $(k=$(pgrep -U 1000 -x k
 # not a cable pull, and the processes below are using a healthy GPU. Stop here.
 lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' && { rm -f /run/nvegpu/surprise-pending; log "GPU is back on the bus: transient removal, not a cable pull - nothing killed"; exit 0; }
 # Plugged back in while this runs: from then on the NVIDIA users and the driver belong to the new attach (which waits for
-# this script's lock). Checked before every step that stops processes or unloads modules below.
-back(){ lspci -Dn 2>/dev/null | grep -qE '0300: 10de:'; }
+# this script's lock). Checked before every step that stops processes or unloads modules below. These additions (this
+# check, the console release and the holder record below) apply on ROG Ally or ASUS XG Mobile hardware only, where the
+# overlap was seen (2026-10-19); every other device runs this recovery exactly as before.
+XGA=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && XGA=1
+back(){ [ "$XGA" = 1 ] && lspci -Dn 2>/dev/null | grep -qE '0300: 10de:'; }
 # 3. unload the orphaned nvidia stack (no device behind it) once nothing holds it; retry up to 60s, kill respawners
 systemctl stop nvidia-persistenced 2>/dev/null; systemctl stop lactd 2>/dev/null; systemctl stop egpu-xgm-powercap 2>/dev/null
 # old-session Go Hub (python3 WebKit) survives the session end and keeps dmabufs exported by the removed card -> pins nvidia_drm
@@ -161,7 +164,7 @@ for i in $(seq 1 20); do
   # No process left but the driver still in use: the text console holds the framebuffers, the removed eGPU's too
   # (nvidia-drm fbdev). Unbind it, NVIDIA's documented way to unload nvidia-drm with fbdev on, as Desktop Safe Detach
   # does; bound again below. The session's compositor owns the screen, so nothing visible changes.
-  if [ "$i" = 3 ] && [ -z "$FBCON" ]; then
+  if [ "$XGA" = 1 ] && [ "$i" = 3 ] && [ -z "$FBCON" ]; then
     for v in /sys/class/vtconsole/vtcon*; do [ "$(cat "$v/bind" 2>/dev/null)" = 1 ] && grep -qi 'frame buffer' "$v/name" 2>/dev/null && echo 0 > "$v/bind" 2>/dev/null && FBCON="$FBCON $v"; done
     log "driver still in use with no process on it ($(for m in nvidia_drm nvidia_modeset nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)): text console released (${FBCON:- none was bound})"
   fi
@@ -171,7 +174,7 @@ for v in $FBCON; do echo 1 > "$v/bind" 2>/dev/null; done
 log "nvidia modules left: $(lsmod | grep '^nvidia' | awk '{print $1"="$3}' | tr '\n' ' ')"
 # Still loaded with the eGPU gone: what holds it is in the kernel (GPU buffers another driver still references). Record
 # it for the support report: the exporters and attachments of every shared buffer, and each DRM device's framebuffers.
-if lsmod | grep -q '^nvidia' && ! back; then
+if [ "$XGA" = 1 ] && lsmod | grep -q '^nvidia' && ! back; then
   mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug 2>/dev/null
   { date '+%F %T'; echo "driver users: $(for m in nvidia_drm nvidia_modeset nvidia_uvm nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)"
     echo "--- /sys/kernel/debug/dma_buf/bufinfo"; head -120 /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null
