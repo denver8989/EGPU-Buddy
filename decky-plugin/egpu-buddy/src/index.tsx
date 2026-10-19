@@ -325,6 +325,9 @@ function Content() {
   const plNow = pl ?? Math.round(Number(tel["power.limit"] ?? plMax));
   // laptop-class GPUs (ASUS XG Mobile) report the limits as [N/A]: the dock firmware owns the power, nvidia-smi -pl cannot set it
   const plOk = [plMin, plMax, plNow].every(Number.isFinite) && plMax > plMin;
+  // ASUS XG Mobile: the cap the GPU really runs at (enforced.power.limit, queried only for it) where power.limit is [N/A]
+  const xg = !!s?.dock?.includes("XG Mobile");
+  const xgCap = xg && !Number.isFinite(Number(tel["power.limit"])) && Number.isFinite(Number(tel["enforced.power.limit"])) ? Math.round(Number(tel["enforced.power.limit"])) : null;
   // laptop-class GPUs: the clock limit spans 600 MHz to the GPU's own maximum (clocks.max.graphics)
   const clkMax = Math.round(Number(tel["clocks.max.graphics"]) || 0), clkMin = Math.min(600, clkMax);
   const clkNow = clk ?? clkMax;
@@ -493,11 +496,11 @@ function Content() {
               {scr?.some((x) => x.ddc) && <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => {}); return r; })}>Wake screens</ButtonItem></PanelSectionRow>}
               <Row k="Audio" v={audioName(s.audio_sink, s.bdf)} />
               <Row k="Temp" v={tel["temperature.gpu"] ? `${tel["temperature.gpu"]} °C` : ""} />
-              <Row k="Power" v={tel["power.draw"] ? (Number.isFinite(Number(tel["power.limit"])) ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : `${Math.round(Number(tel["power.draw"]))} W`) : ""} />
+              <Row k="Power" v={tel["power.draw"] ? (Number.isFinite(Number(tel["power.limit"])) ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : xgCap !== null ? `${Math.round(Number(tel["power.draw"]))} / ${xgCap} W cap` : `${Math.round(Number(tel["power.draw"]))} W`) : ""} />
               <Row k="Core / mem" v={tel["clocks.gr"] ? `${tel["clocks.gr"]} / ${tel["clocks.mem"]} MHz` : ""} />
               <Row k="VRAM" v={tel["memory.used"] ? `${tel["memory.used"]} / ${tel["memory.total"]} MiB` : ""} />
               <Row k="Load" v={tel["utilization.gpu"] ? `${tel["utilization.gpu"]} %` : ""} />
-              <Row k="Fan" v={tel["fan.speed"] && Number.isFinite(Number(tel["fan.speed"])) ? `${tel["fan.speed"]} %` : (tel["name"] && s.dock ? `run by the ${s.dock.includes("XG Mobile") ? "XG Mobile" : "dock"} (not readable on Linux)` : "")} />
+              <Row k="Fan" v={tel["fan.speed"] && Number.isFinite(Number(tel["fan.speed"])) ? `${tel["fan.speed"]} %` : (tel["name"] && s.dock ? (xg ? "auto, run by the XG Mobile (not readable on Linux)" : "run by the dock (not readable on Linux)") : "")} />
             </>
             )}
           </PanelSection>
@@ -521,7 +524,7 @@ function Content() {
               <PanelSectionRow><ButtonItem layout="below" disabled={busy || pl === null} onClick={() => run(() => setPowerLimit(plNow))}>Apply power limit</ButtonItem></PanelSectionRow>
               </>) : (
               <>
-              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power. Limit its clock instead to lower power and heat.</div></PanelSectionRow>
+              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power{xgCap !== null ? ` (cap now ${xgCap} W${Number.isFinite(plMax) ? `, at most ${Math.round(plMax)} W` : ""})` : ""}. Limit its clock instead to lower power and heat.</div></PanelSectionRow>
               {clkMax > 0 && (<>
               <PanelSectionRow>
                 <SliderField label="Max GPU clock (MHz)" value={clkNow} min={clkMin} max={clkMax} step={15} showValue onChange={setClk} />

@@ -212,10 +212,15 @@ def _gamescope_env(key):
     return ""
 
 
-def _nvidia_query(bdf):
+# ASUS XG Mobile only: its laptop GPU reports power.limit as [N/A] (the driver may not set it), but the cap it really runs
+# at is readable as enforced.power.limit (Dynamic Boost / the dock firmware decide it)
+XG_FIELDS = ",enforced.power.limit,power.default_limit"
+
+
+def _nvidia_query(bdf, xg=False):
     fields = ("name,driver_version,temperature.gpu,power.draw,power.limit,power.max_limit,power.min_limit,"
               "clocks.gr,clocks.mem,memory.used,memory.total,utilization.gpu,pcie.link.gen.current,"
-              "pcie.link.width.current,fan.speed,clocks.max.graphics")
+              "pcie.link.width.current,fan.speed,clocks.max.graphics") + (XG_FIELDS if xg else "")
     rc, out, _ = _sh(["timeout", "6", "nvidia-smi", "-i", bdf, f"--query-gpu={fields}", "--format=csv,noheader,nounits"], 8)
     if rc != 0 or not out:
         return {}
@@ -1043,6 +1048,36 @@ def _fix_verdict(gpid, exe, priv):
     return out
 
 
+def _xg_power_report(bdf):
+    """XG Mobile only. Its RTX 50 laptop GPU takes no power limit from nvidia-smi: on laptops the cap is Dynamic Boost's
+    (nvidia-powerd, which needs SBIOS support) and the fan is the dock's own (no Linux interface for the 2025 model).
+    What the GPU, nvidia-powerd and the ASUS platform drivers say, to tell which of those this device has."""
+    out = []
+    if os.path.exists("/sys/module/nvidia"):
+        q = "power.draw,power.limit,enforced.power.limit,power.default_limit,power.min_limit,power.max_limit,fan.speed,clocks.max.graphics"
+        out.append(f"{q}: {_sh(['timeout', '6', 'nvidia-smi', '-i', bdf, f'--query-gpu={q}', '--format=csv,noheader'], 8)[1] or '?'}")
+        out += [l.rstrip()[:200] for l in _sh(["timeout", "6", "nvidia-smi", "-i", bdf, "-q", "-d", "POWER"], 8)[1].splitlines()
+                if ":" in l and "Timestamp" not in l][:30]
+    else:
+        out.append("NVIDIA driver not loaded")
+    unit = _sh(["systemctl", "show", "-p", "LoadState", "-p", "UnitFileState", "-p", "ActiveState", "nvidia-powerd.service"], 5)[1]
+    out.append(f"nvidia-powerd: binary {'present' if os.access('/usr/bin/nvidia-powerd', os.X_OK) else 'missing'} · "
+               f"dbus policy {'present' if os.path.exists('/usr/share/dbus-1/system.d/nvidia-dbus.conf') else 'missing'} · "
+               + " ".join(unit.split()))
+    out += [l[:300] for l in _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "-u", "nvidia-powerd.service"], 10)[1].splitlines()[-15:]]
+    out.append("USB (ASUS): " + ("; ".join(_sh(["lsusb", "-d", "0b05:"], 5)[1].splitlines()) or "none"))
+    wmi = [f"{os.path.basename(p)}={_read(p)}" for p in sorted(glob.glob("/sys/devices/platform/asus-nb-wmi/egpu_*"))]
+    out.append("asus-wmi: " + (" ".join(wmi) or "no egpu_* attributes"))
+    attrs = sorted(os.path.basename(p) for p in glob.glob("/sys/class/firmware-attributes/*/attributes/*"))
+    nv = [f"{a}={_read(p)}" for p in sorted(glob.glob("/sys/class/firmware-attributes/*/attributes/nv_*/current_value")
+                                            + glob.glob("/sys/class/firmware-attributes/*/attributes/egpu_*/current_value"))
+          for a in [p.split("/")[-2]]]
+    out.append("firmware attributes: " + (" ".join(attrs) or "none (asus-armoury not loaded; Linux 6.19+)"))
+    if nv:
+        out.append("  values: " + " ".join(nv))
+    return out
+
+
 def _support_report():
     _sh(["/usr/local/sbin/egpu-snapshot", "report"], 60)   # the state right now, as the newest snapshot below
     bdf = _gpu_bdf(); osr = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', _read("/etc/os-release"), re.M))
@@ -1065,6 +1100,8 @@ def _support_report():
     u = _usb4()
     if u:
         lines.append(f"USB4 {u['name']}: {u['lanes']} x {u['per_lane']:g} Gb/s")
+    if bdf and _dock_label(bdf):
+        lines += ["", "## ASUS XG Mobile: power and fan"] + _xg_power_report(bdf)
     lines += ["", "## Screens", f"Game Mode output: {_gamescope_env('OUTPUT_CONNECTOR') or '(not running)'}",
               f"chosen game screen: {_read(GAME_SCREEN) or 'automatic'}"]
     for c in sorted(glob.glob("/sys/class/drm/card*-*")):
@@ -1368,7 +1405,7 @@ class Plugin:
                      "width": _read(f"/sys/bus/pci/devices/{bdf}/current_link_width") if bdf else ""},
             "displays": [{**d, "state": _screen_state(d["name"])} for d in _displays(bdf)] if bdf else [],
             "audio_sink": _audio_sink(),
-            "telemetry": _nvidia_query(bdf) if (bdf and driver) else {},
+            "telemetry": _nvidia_query(bdf, bool(_dock_label(bdf))) if (bdf and driver) else {},
             "ts": time.time(),
         }
         return status

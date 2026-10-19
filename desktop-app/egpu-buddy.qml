@@ -27,6 +27,9 @@ ApplicationWindow {
     // GPU clock limit as their power control instead (the same as the HTML window and the Decky plugin since 0.7.114)
     function isNum(v) { return v !== undefined && v !== null && v !== "" && !isNaN(parseFloat(v)) }
     readonly property bool plOk: isNum(g["power.min_limit"]) && isNum(g["power.max_limit"]) && isNum(g["power.limit"]) && +g["power.max_limit"] > +g["power.min_limit"]
+    // ASUS XG Mobile: the cap the GPU really runs at (enforced.power.limit, queried only for it), shown where power.limit is [N/A]
+    readonly property bool xg: String(s.dock || "").indexOf("XG Mobile") >= 0
+    readonly property bool xgCap: xg && !isNum(g["power.limit"]) && isNum(g["enforced.power.limit"])
     readonly property int clkMax: isNum(g["clocks.max.graphics"]) ? Math.round(+g["clocks.max.graphics"]) : 0
     property bool clkTouched: false
     property string msg: "Ready."
@@ -162,13 +165,15 @@ ApplicationWindow {
             }
             GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 8; rowSpacing: 8
                 Cell { value: win.num(win.g["temperature.gpu"]); unit: "°C"; label: "GPU temp" }
-                Cell { value: win.num(win.g["power.draw"]); unit: win.isNum(win.g["power.limit"]) ? "/ " + win.num(win.g["power.limit"]) + " W" : "W"; label: "Power" }
+                Cell { value: win.num(win.g["power.draw"]); label: win.xgCap ? "Power / cap" : "Power"
+                       unit: win.isNum(win.g["power.limit"]) ? "/ " + win.num(win.g["power.limit"]) + " W" : win.xgCap ? "/ " + win.num(win.g["enforced.power.limit"]) + " W" : "W" }
                 Cell { value: win.num(win.g["utilization.gpu"]); unit: "%"; label: "GPU util" }
                 Cell { value: win.g["memory.used"] ? win.num(win.g["memory.used"] / 1024, 1) + " G" : "–"; label: "VRAM" }
                 Cell { value: win.num(win.g["clocks.gr"]); unit: "MHz"; label: "GPU clock" }
                 Cell { value: win.num(win.g["clocks.mem"]); unit: "MHz"; label: "Memory clock" }
-                Cell { value: win.isNum(win.g["fan.speed"]) || !win.s.dock ? win.num(win.g["fan.speed"]) : "dock"; unit: win.isNum(win.g["fan.speed"]) ? "%" : ""
-                       label: win.isNum(win.g["fan.speed"]) || !win.s.dock ? "Fan" : "Fan (run by the " + (String(win.s.dock).indexOf("XG Mobile") >= 0 ? "XG Mobile" : "dock") + ")" }
+                // the XG Mobile runs its own fan (automatic, or Armoury Crate's mode on Windows): no Linux interface reads it
+                Cell { value: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? win.num(win.g["fan.speed"]) : "Auto"; unit: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? "%" : ""
+                       label: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? "Fan" : "Fan · run by the XG Mobile" }
                 Cell { value: win.g["pcie.link.gen.current"] ? "Gen" + win.g["pcie.link.gen.current"] + " x" + win.g["pcie.link.width.current"] : "–"; label: "PCIe link" }
             }
             Flow { Layout.fillWidth: true; spacing: 14
@@ -180,7 +185,9 @@ ApplicationWindow {
             }
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11 }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && !win.plOk
-                text: "This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power. Limit its clock instead to lower power and heat." }
+                text: "This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power"
+                      + (win.xgCap ? " (cap now " + win.num(win.g["enforced.power.limit"]) + " W" + (win.isNum(win.g["power.max_limit"]) ? ", at most " + win.num(win.g["power.max_limit"]) + " W" : "") + ")" : "")
+                      + ". Limit its clock instead to lower power and heat." }
             RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && !win.plOk && win.clkMax > 0
                 Label { text: "Max GPU clock" }
                 Slider { id: clkSl; Layout.fillWidth: true; from: 600; to: 3000; stepSize: 15; value: 3000; onMoved: win.clkTouched = true }

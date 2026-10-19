@@ -21,6 +21,8 @@ def jread(p):
 
 FIELDS = ("name,driver_version,temperature.gpu,power.draw,power.limit,power.min_limit,power.max_limit,clocks.gr,clocks.mem,"
           "memory.used,memory.total,utilization.gpu,pcie.link.gen.current,pcie.link.width.current,fan.speed,pstate,clocks.max.graphics")
+# ASUS XG Mobile only: its laptop GPU reports power.limit as [N/A]; the cap it really runs at is enforced.power.limit
+XG_FIELDS = ",enforced.power.limit,power.default_limit"
 def sysfs_gpu(bdf):
     """Mesa-driver (AMD) telemetry under the nvidia-smi key names, so the page is shared. Experimental."""
     import glob
@@ -45,9 +47,12 @@ def status():
         if rc == 0 and len(o) >= 2 and o[1] != "nvidia": bdf, vendor = o[0], o[1]
     driver = os.path.exists("/sys/module/nvidia_drm") if vendor in ("", "nvidia") else os.path.exists(f"/sys/bus/pci/devices/{bdf}/driver")
     gpu = sysfs_gpu(bdf) if (bdf and driver and vendor != "nvidia") else {}
+    # the dock, when the GPU name alone does not say what it is ("RTX 5070 Ti Laptop GPU" is an ASUS XG Mobile)
+    if _DOCK[0] != bdf: _DOCK[:] = [bdf, "ASUS ROG XG Mobile" if bdf and sh(["/usr/local/sbin/egpu-detect", "--dock"])[1].startswith("xg-mobile") else ""]
     if bdf and driver and vendor == "nvidia":
-        rc, out, _ = sh(["timeout", "6", "nvidia-smi", "-i", bdf, f"--query-gpu={FIELDS}", "--format=csv,noheader,nounits"], 8)
-        if rc == 0 and out: gpu = dict(zip(FIELDS.split(","), [v.strip() for v in out.split(",")]))
+        f = FIELDS + (XG_FIELDS if _DOCK[1] else "")
+        rc, out, _ = sh(["timeout", "6", "nvidia-smi", "-i", bdf, f"--query-gpu={f}", "--format=csv,noheader,nounits"], 8)
+        if rc == 0 and out: gpu = dict(zip(f.split(","), [v.strip() for v in out.split(",")]))
     _, bolt, _ = sh(["boltctl", "list"]); tunnel = "authorized" in bolt.lower()
     game_mode = sh(["pgrep", "-x", "gamescope(-wl)?"])[0] == 0
     displays = []
@@ -59,8 +64,6 @@ def status():
                     if c.startswith(card + "-") and read(f"/sys/class/drm/{c}/status") == "connected":
                         displays.append({"name": c.split("-", 1)[1], "enabled": read(f"/sys/class/drm/{c}/enabled") == "enabled"})
     panel = [read(p + "/enabled") for p in __import__("glob").glob("/sys/class/drm/card*-eDP-1")]
-    # the dock, when the GPU name alone does not say what it is ("RTX 5070 Ti Laptop GPU" is an ASUS XG Mobile)
-    if _DOCK[0] != bdf: _DOCK[:] = [bdf, "ASUS ROG XG Mobile" if bdf and sh(["/usr/local/sbin/egpu-detect", "--dock"])[1].startswith("xg-mobile") else ""]
     return {"present": bool(bdf), "bdf": bdf, "vendor": vendor, "dock": _DOCK[1], "driver_loaded": driver, "tunnel": tunnel, "game_mode": game_mode,
             "gpu": gpu, "displays": displays, "panel_enabled": (panel[0] == "enabled") if panel else None,
             "detach": jread(f"{RUN}/safe-detach-status.json"),

@@ -1,8 +1,13 @@
-0.7.133 — desktop app: the dock in the title, no stale Safe Detach message.
+0.7.133 — ASUS XG Mobile: the real power cap and the fan shown, a power and fan check in the support report.
 
 **Fixed**
+- ASUS XG Mobile only (every other eGPU is unchanged): Power reads the draw and the cap, for example "12 / 80 W" ("Power / cap"), instead of "12 / – W": the cap the XG Mobile's laptop GPU actually runs at, read from the GPU. The note under Power says it too, with the most the GPU allows.
+- ASUS XG Mobile only: Fan reads "Auto · run by the XG Mobile": the dock runs its own fan and Linux cannot read it, which used to show as "– %".
 - The desktop app kept showing "SAFE_COMPLETE: The eGPU is off the PCI bus" after the eGPU was attached again. Once the eGPU is back with its driver, it now says so.
-- The desktop app names the dock like the Game Mode plugin does: "ASUS ROG XG Mobile · RTX 5070 Ti Laptop GPU" rather than just the GPU.
+- The desktop app names the XG Mobile like the Game Mode plugin does: "ASUS ROG XG Mobile · RTX 5070 Ti Laptop GPU" rather than just the GPU.
+
+**New**
+- The support report ("Save EGPU Buddy report") has an "ASUS XG Mobile: power and fan" section: the GPU's power readings and limits, NVIDIA's Dynamic Boost service (nvidia-powerd), the dock's USB ID and the ASUS platform settings. NVIDIA's laptop GPUs take their power limit from Dynamic Boost, not from the driver: this tells whether the XG Mobile's can be raised on Linux.
 
 0.7.132 — laptop-class GPUs (ASUS XG Mobile): a clock limit as power control, clearer power and fan.
 
