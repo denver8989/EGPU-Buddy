@@ -1,3 +1,8 @@
+0.7.130 — ROG Ally / XG Mobile: Desktop Safe Detach clears every safe-to-stop holder.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- Desktop Safe Detach now stops anything still holding the eGPU, not only programs from the desktop session, except the parts of the system that must keep running (system services, the login manager, the message bus, device management). If it stops the Decky plugin loader, it starts it again.
+
 0.7.129 — ROG Ally / XG Mobile: Desktop Safe Detach finds what holds the eGPU.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)

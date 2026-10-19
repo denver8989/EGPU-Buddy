@@ -90,14 +90,25 @@ if inuse; then
       head -80 /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null
       echo "--- nvidia_drm users: $(cat /sys/module/nvidia_drm/refcnt 2>/dev/null)"; echo "pid uid shared-buffers nvidia-libs name"; holders; } > $ST/gm-dmabuf.log 2>&1
     dlog "still in use: shared buffers in the kernel: $(grep -cE '^[0-9]{8}' /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null); holders: $(holders | awk '{printf "%s(%s,uid %s,%s bufs,%s) ", $1, $5, $2, $3, $4}')"
+    # Owner's rule: stop anything that holds the eGPU, as long as stopping it does not harm the system. So not only the
+    # user's leftovers: any holder, except the processes the system needs to keep running (init and systemd's own
+    # services, the message bus, the login manager and logind, udev) and this detach with the processes that started
+    # it and EGPU Buddy's own tools. A service stopped here is one systemd can start again; Decky is restarted below.
+    me=$$; anc=" $me "; while [ "$me" -gt 1 ] 2>/dev/null; do me=$(awk '{print $4}' /proc/$me/stat 2>/dev/null); [ -n "$me" ] || break; anc="$anc$me "; done
+    protected(){ local p=$1 c; [ "$p" -le 1 ] 2>/dev/null && return 0; case "$anc" in *" $p "*) return 0 ;; esac
+      c=$(cat /proc/$p/comm 2>/dev/null); [ -n "$c" ] || return 0   # gone, or a kernel thread
+      case "$c" in systemd*|init|dbus-daemon|dbus-broker*|sddm*|polkitd|udevadm|egpu-*|nv-egpu-*|kthreadd) return 0 ;; esac
+      return 1; }
+    decky_was_up=0; systemctl is-active --quiet plugin_loader.service 2>/dev/null && decky_was_up=1
     for sig in TERM KILL; do
-      victims=$(holders | awk -v u=$U '$2==u{print $1}')
+      victims=$(holders | while read -r p _; do protected "$p" || echo "$p"; done)
       [ -n "$victims" ] || break
-      dlog "asking the session's leftover processes that hold the eGPU to quit ($sig): $(for v in $victims; do printf '%s(%s) ' $v "$(cat /proc/$v/comm 2>/dev/null)"; done)"
+      dlog "asking the processes that still hold the eGPU to quit ($sig): $(for v in $victims; do printf '%s(%s) ' $v "$(cat /proc/$v/comm 2>/dev/null)"; done)"
       kill -$sig $victims 2>/dev/null
       for _ in $(seq 1 10); do inuse || break; sleep 1; done
       inuse || break
     done
+    [ "$decky_was_up" = 1 ] && ! systemctl is-active --quiet plugin_loader.service 2>/dev/null && { systemctl start plugin_loader.service >/dev/null 2>&1; dlog "Decky plugin loader started again"; }
     dlog "driver users after that: nvidia_drm=$(cat /sys/module/nvidia_drm/refcnt 2>/dev/null) nvidia_uvm=$(cat /sys/module/nvidia_uvm/refcnt 2>/dev/null)$(inuse && printf '; still held by: %s' "$(holders | awk '{printf "%s(%s,uid %s) ", $1, $5, $2}')")"
   fi
 fi
