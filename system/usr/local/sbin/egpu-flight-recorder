@@ -67,7 +67,11 @@ while :; do
     IFS=, read -r ug um cg cm pw tp vr ps lg lw <<< "${smi:-,,,,,,,,,}"
     ls_=$(sed 's/ PCIe//; s/ //g' "/sys/bus/pci/devices/$gpu/current_link_speed" 2>/dev/null); lw_=$(cat "/sys/bus/pci/devices/$gpu/current_link_width" 2>/dev/null)
     a="c$(aer "$gpu" correctable)/n$(aer "$gpu" nonfatal)/f$(aer "$gpu" fatal)"
-    line="$line gpu=$gpu util=${ug:-?}/${um:-?}% clk=${cg:-?}/${cm:-?}MHz pw=${pw:-?}W t=${tp:-?}C vram=${vr:-?}M ps=${ps:-?} link=${ls_:-?}x${lw_:-?}(gen${lg:-?}x${lw:-?}) aer=$a"
+    # under load: what NVIDIA says limits the clocks (bitmask, nvmlClocksEventReasons; e.g. Reliability seen on the
+    # ROG Xbox Ally X / XG Mobile 2025 laptop GPU stuck in P4 while gaming). A separate call, so an unknown field name on
+    # another driver cannot blank the sample above; only while the GPU is busy, so idle sampling stays as cheap as before.
+    lim=""; case "${ug:-0}" in [3-9][0-9]|100) lim=$(timeout 4 nvidia-smi -i "$gpu" --format=csv,noheader --query-gpu=clocks_event_reasons.active 2>/dev/null | tr -d ' ') ;; esac
+    line="$line gpu=$gpu util=${ug:-?}/${um:-?}% clk=${cg:-?}/${cm:-?}MHz pw=${pw:-?}W t=${tp:-?}C vram=${vr:-?}M ps=${ps:-?} link=${ls_:-?}x${lw_:-?}(gen${lg:-?}x${lw:-?}) aer=$a${lim:+ lim=$lim}"
   fi
   w "$line"
   # events: what changed since the last sample

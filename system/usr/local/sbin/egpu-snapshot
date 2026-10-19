@@ -64,6 +64,14 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   [ -n "$stock" ] && [ -r "$stock" ] && { echo "how $stock starts gamescope:"; grep -nE '(^|[ /"])gamescope( |"|$)|systemd-run|env -i|exec ' "$stock" 2>/dev/null | head -12 | cut -c1-200 | sed 's/^/  /'; }
   pid1(){ local p; p=$(pgrep -x "$1" 2>/dev/null | head -1); echo "${p:-none}"; }
   echo "kwin_wayland: $(pid1 kwin_wayland) · kwin_x11: $(pid1 kwin_x11) · Xorg: $(pid1 Xorg) · steam: $(pid1 steam) · game (reaper): $(pid1 reaper)"
+  # the desktop compositor's GPU routing as it really is: what it was told (environment) and which device nodes it holds,
+  # with the driver behind each. The flight recorder reported "kwin:both" on a ROG Xbox Ally X while the login log said
+  # KWIN_DRM_DEVICES pointed at the eGPU only.
+  for k in $(pgrep -x 'kwin_wayland|kwin_x11' 2>/dev/null); do
+    echo "  $(cat /proc/$k/comm 2>/dev/null) $k environment: $(tr '\0' '\n' </proc/$k/environ 2>/dev/null | grep -E '^(KWIN_DRM_DEVICES|KWIN_RENDER_NODES|__EGL_VENDOR_LIBRARY_FILENAMES|__GLX_VENDOR_LIBRARY_NAME|VK_DRIVER_FILES|DRI_PRIME)=' | tr '\n' ' ')"
+    echo "  $(cat /proc/$k/comm 2>/dev/null) $k GPU device files: $(for fd in /proc/$k/fd/*; do t=$(readlink "$fd" 2>/dev/null); case "$t" in /dev/dri/*|/dev/nvidia*) d=$(basename "$(readlink -f /sys/class/drm/${t##*/}/device/driver 2>/dev/null)" 2>/dev/null); printf '%s(%s) ' "$t" "${d:-nvidia}" ;; esac; done | tr ' ' '\n' | sort | uniq -c | tr -s ' \n' ' ')"
+  done
+  echo "disk: $(df -h --output=target,avail,pcent / /home /var 2>/dev/null | tail -n +2 | tr -s ' ' | tr '\n' ';') · driver builds: $(du -sh /home/.egpu-buddy /home/.egpu-buddy-615 2>/dev/null | tr '\t\n' ' ;')"
   echo "session marker: $(cat /run/user/1000/egpu-session-type 2>/dev/null) · detach marker: $(ls /run/user/1000/egpu-detach-mode /run/nvegpu/gm-detach-pending 2>/dev/null | tr '\n' ' ')"
   echo "login manager: $(grep -h '^Session=' /etc/sddm.conf.d/*.conf /etc/plasmalogin.conf.d/*.conf 2>/dev/null | tr '\n' ' ')"
   echo "hidden NVIDIA userspace: $(ls /usr/lib/*.egpu-off 2>/dev/null | wc -l) renamed, $(cat /run/nvegpu/bind-hidden 2>/dev/null | wc -l) bind-mounted"
