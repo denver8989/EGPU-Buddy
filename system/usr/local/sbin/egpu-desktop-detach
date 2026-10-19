@@ -58,6 +58,10 @@ fi
 # the unload then failed straight away ("nvidia stack still loaded", Ally X on 0.7.120): wait for the users to drop to 0
 inuse(){ cat /sys/module/nvidia_drm/refcnt /sys/module/nvidia_uvm/refcnt 2>/dev/null | grep -qv '^0$'; }
 for _ in $(seq 1 20); do inuse || break; sleep 1; done
+# what each screen shows, for the log: connected = cable in, lit = a picture is being sent to it
+screens(){ for c in /sys/class/drm/card*-*; do [ -e "$c/status" ] || continue; case "${c##*/}" in *Writeback*) continue ;; esac
+  printf '%s=%s%s ' "${c##*/}" "$(cat "$c/status")" "$([ "$(cat "$c/enabled" 2>/dev/null)" = enabled ] && echo ',lit')"; done; }
+log "screens with the session stopped: $(screens)"
 { echo "driver users: $(for m in nvidia_drm nvidia_modeset nvidia_uvm nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)"
   echo "holders before teardown (session stopped):"; for hp in $(fuser $nodes 2>/dev/null | tr -s ' \n' ' '); do echo "  $hp $(cat /proc/$hp/comm 2>/dev/null) cmd=$(tr '\0' ' ' </proc/$hp/cmdline 2>/dev/null | cut -c1-80)"; done; } > $ST/gm-holders.log 2>&1
 $HELPER --teardown-only > $ST/gm-helper.log 2>&1 ||
@@ -68,5 +72,12 @@ DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1
 log "eGPU removed with the session stopped; desktop starting again on the handheld screen"
 lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' && fail "NVIDIA GPU still present after teardown. Do not unplug." 8
 unpin_when_back
-sleep 5   # the user's runtime directory exists again: the desktop app finds its status there
+# not a success while an external screen still shows a picture: only the handheld's own panel (eDP) may be lit now.
+# (A picture frozen on a monitor of the removed eGPU cannot be seen from here; the screens line above shows what was lit.)
+sleep 5; log "screens after: $(screens)"
+ext=$(for c in /sys/class/drm/card*-*; do case "${c##*/}" in *eDP*|*Writeback*) continue ;; esac
+  n=${c##*/}; [ "$(cat "$c/enabled" 2>/dev/null)" = enabled ] && printf '%s ' "${n#*-}"; done)
+[ -z "$ext" ] || { /usr/local/sbin/egpu-snapshot desktop-detach-screen-still-lit >/dev/null 2>&1; log "FAILED: external screen still lit: $ext"
+  status DO_NOT_UNPLUG "Safe Detach did not finish: ${ext% } still shows a picture. Please send a support report."; exit 9; }
+/usr/local/sbin/egpu-snapshot desktop-detach-done >/dev/null 2>&1
 status SAFE_COMPLETE "The eGPU is off the PCI bus. You may unplug it (or Attach again without replugging)."; log "done"; exit 0

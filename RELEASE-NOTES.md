@@ -1,3 +1,8 @@
+0.7.122 — ROG Ally / XG Mobile: Desktop Safe Detach checks the screens.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- Desktop Safe Detach only reports success when the handheld screen is the only one showing a picture; the support log records which screens were on before and after.
+
 0.7.121 — ROG Ally / XG Mobile: Desktop Safe Detach fixes.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
