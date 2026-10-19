@@ -1,10 +1,13 @@
-0.7.134 — ASUS XG Mobile: a power target in watts, fan modes and lights, in the desktop app and the Game Mode plugin.
+0.7.134 — ASUS XG Mobile: everything G-Helper offers for it, in the desktop app and the Game Mode plugin: power target in watts, fan modes and a custom fan curve, lights, clock offsets.
 
 **New** (ASUS XG Mobile only; every other eGPU is unchanged)
 - **Power target (W).** NVIDIA does not let the driver set a laptop GPU's power limit, so the XG Mobile's GPU always ran up to its cap (115 W on the RTX 5070 Ti). Pick a lower target and EGPU Buddy holds the GPU there, checking its power draw every second and limiting its clock as needed. The power reading shows "draw / target W". Reset clocks removes the target. It replaces the "Max GPU clock" slider.
 - **Fan mode:** Auto (the XG Mobile's own), Quiet, Balanced, Performance or Max, sent to the dock over USB the way G-Helper (the open-source Armoury Crate replacement) does it. Every mode reaches full speed by 87 °C. The dock does not report its fan speed, so the app shows the chosen mode.
-- **XG Mobile lights** on or off.
-- The fan mode, lights and power target are re-applied when the XG Mobile is attached again.
+- **Custom fan curve:** eight temperature/speed points, edited in the desktop app ("Custom…") and chosen in either. A curve whose speed falls as the temperature rises, or that ends below 60 %, is refused.
+- **XG Mobile lights:** on or off, effect (static, breathe, color cycle, rainbow, strobe), color, speed and brightness.
+- **GPU clock offsets** (core and memory), like Armoury Crate's "XGM Offset". NVIDIA's own limits apply; the result says when an offset was clamped. Reset clocks clears them.
+- The XG Mobile is told when the handheld shuts down, as G-Helper does.
+- All of these are re-applied when the XG Mobile is attached again.
 - The support report's XG Mobile section shows these settings and the power target's log.
 
 **Fixed**

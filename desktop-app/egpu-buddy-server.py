@@ -51,11 +51,10 @@ def clock_limit(bdf):
         return 0
 
 def xgm_state():
-    """ASUS XG Mobile: the settings egpu-xgm saved (fan mode, lights, power target) and its power target loop's last
+    """ASUS XG Mobile: the settings egpu-xgm saved (fan mode and curve, lights, offsets, power target) and its power target loop's last
     reading ("live", only while it runs: written every second)."""
     s = jread("/var/lib/nvegpu/xgm.json") or {}; live = jread("/run/nvegpu/xgm-powercap.json") or {}
-    return {"fan": s.get("fan", "auto"), "light": s.get("light"), "power_target": s.get("power_target"),
-            "live": live if __import__("time").time() - (live.get("t") or 0) < 5 else {}}
+    return dict(s, fan=s.get("fan", "auto"), live=live if time.time() - (live.get("t") or 0) < 5 else {})
 
 _DOCK = [None, ""]   # [bdf it was looked up for, label]: egpu-detect is a script, not run on every poll
 
@@ -129,7 +128,7 @@ def action(p):
     if a == "clock-limit":   # laptop-class GPUs (ASUS XG Mobile): no power limit from the driver, a clock limit instead
         m = int((p or {}).get("mhz", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-graphics-clock", str(m)], 20)
         return {"ok": rc == 0, "out": (f"GPU clock limited to {m} MHz" if rc == 0 else o or e)}   # not nvidia-smi's persistence-mode warning
-    if a in ("xgm-fan", "xgm-light", "xgm-power"):   # ASUS XG Mobile (the helper refuses any other dock)
+    if a in ("xgm-fan", "xgm-fan-curve", "xgm-light", "xgm-light-effect", "xgm-brightness", "xgm-offset", "xgm-power"):   # ASUS XG Mobile (the helper refuses any other dock)
         arg = str((p or {}).get("value", "")); rc, o, e = sh(["sudo", "-n", PRIV, {"xgm-power": "xgm-power-target"}.get(a, a), arg], 20)
         return {"ok": rc == 0, "out": o or e}
     if a == "reset-clocks":

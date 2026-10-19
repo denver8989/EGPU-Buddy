@@ -1001,8 +1001,7 @@ def _xgm_state():
     """ASUS XG Mobile: the settings egpu-xgm saved (fan mode, lights, power target) and its power target loop's last
     reading ("live", only while it runs: written every second)."""
     s = _json("/var/lib/nvegpu/xgm.json") or {}; live = _json("/run/nvegpu/xgm-powercap.json") or {}
-    return {"fan": s.get("fan", "auto"), "light": s.get("light"), "power_target": s.get("power_target"),
-            "live": live if time.time() - (live.get("t") or 0) < 5 else {}}
+    return dict(s, fan=s.get("fan", "auto"), live=live if time.time() - (live.get("t") or 0) < 5 else {})
 
 
 _dock_cache = {"bdf": None, "label": ""}
@@ -1691,6 +1690,13 @@ class Plugin:
 
     async def xgm_light(self, on: bool):
         rc, out, err = _sh([PRIV, "xgm-light", "on" if on else "off"], 20)
+        return {"ok": rc == 0, "message": (out if rc == 0 else err or out)[-200:]}
+
+    async def xgm(self, action: str, value: str):
+        """ASUS XG Mobile: light effect, brightness, clock offsets (the helper validates the value)."""
+        if action not in ("light-effect", "brightness", "offset", "fan-curve"):
+            return {"ok": False, "message": f"unknown XG Mobile action {action}"}
+        rc, out, err = _sh([PRIV, f"xgm-{action}", str(value)], 30)
         return {"ok": rc == 0, "message": (out if rc == 0 else err or out)[-200:]}
 
     async def xgm_power(self, watts: int):

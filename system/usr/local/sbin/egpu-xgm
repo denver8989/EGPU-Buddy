@@ -2,17 +2,25 @@
 """egpu-xgm — ASUS ROG XG Mobile controls (root). Only for an XG Mobile; every other eGPU never reaches this.
 
   egpu-xgm status                 JSON: the dock's control device, saved settings, the power target's state
-  egpu-xgm fan <auto|quiet|balanced|performance|max>
+  egpu-xgm fan <auto|quiet|balanced|performance|max|custom>
+  egpu-xgm fan-curve <T1,..,T8:D1,..,D8>   a custom curve: 8 temperatures (°C, rising), 8 fan duties (%, not falling)
   egpu-xgm light <on|off>
+  egpu-xgm light-effect <static|breathe|cycle|rainbow|strobe>:<RRGGBB>:<slow|normal|fast>
+  egpu-xgm brightness <0-3>
+  egpu-xgm offset <core MHz>:<memory MHz>   GPU clock offsets (performance state P0), 0:0 = none
   egpu-xgm power-target <watts|off>
-  egpu-xgm restore                re-apply the saved fan, light and power target (after an attach)
+  egpu-xgm restore                re-apply the saved settings (after an attach)
+  egpu-xgm notify-shutdown        tell the dock the host is going away (G-Helper does on exit and shutdown)
   egpu-xgm govern <bdf> <watts>   the power target loop (run as the egpu-xgm-powercap unit, not by hand)
 
 Fan and light: the dock's vendor HID interface (report 0x5E, 300-byte feature reports), the protocol G-Helper uses for
 every XG Mobile including the 2025 GC34 (app/USB/XGM.cs; https://github.com/seerge/g-helper/issues/5008) and Handheld
 Daemon uses from Linux: the "^ASUS Tech.Inc." handshake, E4 02 (host active), then D1 01 + an 8-point curve (8
-temperatures in °C, 8 duties in %) or D1 02 (the dock's own automatic curve); C5 50/00 + BD 00 01/00 for the lights.
-Nothing is read back from the dock (no command for its fan speed is known).
+temperatures in °C, 8 duties in %) or D1 02 (the dock's own automatic curve); C5 50/00 + BD 00 01/00 for the lights;
+B3 00 <mode> R G B <speed> 00 <random> R2 G2 B2, then B4, B5 for a light effect (G-Helper's Aura message: speed E1/EB/F5);
+BA C5 C4 <0-3> for the brightness (Handheld Daemon). Nothing is read back from the dock (no fan speed command is known).
+
+Clock offsets: NVML nvmlDeviceSetClockOffsets for P0, as LACT does, falling back to the older Gpc/MemClkVfOffset calls.
 
 Power: NVIDIA does not let the driver set a laptop GPU's power limit (nvidia-smi -pl: not supported), so the target is
 held by limiting the GPU clock (nvidia-smi -lgc) from its measured power draw, once a second. It stops itself when the
@@ -32,7 +40,9 @@ CURVES = {
     "performance": [30, 45, 55, 60, 65, 70, 75, 80,  30, 40, 50, 60, 70, 80, 90, 100],
     "max":         [30, 40, 50, 60, 70, 80, 90, 95, 100, 100, 100, 100, 100, 100, 100, 100],
 }
-FANS = ["auto"] + list(CURVES)
+FANS = ["auto"] + list(CURVES) + ["custom"]
+EFFECTS = {"static": 0, "breathe": 1, "cycle": 2, "rainbow": 3, "strobe": 10}   # G-Helper's AuraMode values
+SPEEDS = {"slow": 0xE1, "normal": 0xEB, "fast": 0xF5}
 MIN_W = 40   # below this a laptop RTX 50 cannot hold even its lowest clocks under load
 
 
@@ -77,10 +87,80 @@ def send(*cmds):
         os.close(fd)
 
 
+def check_curve(c):
+    """8 temperatures 20-100 °C, rising; 8 duties 0-100 %, not falling, the last at least 60 % (no curve that lets a
+    115 W GPU run hot with a slow fan)."""
+    t, d = c[:8], c[8:]
+    if len(c) != 16 or not all(20 <= x <= 100 for x in t) or not all(0 <= x <= 100 for x in d): return "temperatures 20-100 °C, duties 0-100 %"
+    if any(b <= a for a, b in zip(t, t[1:])): return "the temperatures must rise from point to point"
+    if any(b < a for a, b in zip(d, d[1:])): return "the fan duty must not fall as the temperature rises"
+    if d[-1] < 60: return "the last point must be at least 60 %"
+    return ""
+
+
 def fan(mode):
     if mode not in FANS: die(f"fan mode must be one of {', '.join(FANS)}", 2)
-    send([REPORT, 0xD1, 0x02] if mode == "auto" else [REPORT, 0xD1, 0x01] + CURVES[mode])
+    curve = load().get("curve") if mode == "custom" else CURVES.get(mode)
+    if mode == "custom" and (not curve or check_curve(curve)): die("no custom fan curve saved yet", 2)
+    send([REPORT, 0xD1, 0x02] if mode == "auto" else [REPORT, 0xD1, 0x01] + curve)
     save(fan=mode); print(f"XG Mobile fan: {mode}")
+
+
+def fan_curve(arg):
+    try:
+        t, d = arg.split(":"); c = [int(x) for x in t.split(",")] + [int(x) for x in d.split(",")]
+    except ValueError: die("usage: fan-curve T1,..,T8:D1,..,D8", 2)
+    err = check_curve(c)
+    if err: die(f"custom fan curve refused: {err}", 2)
+    save(curve=c); fan("custom")
+
+
+def light_effect(arg):
+    try:
+        mode, rgb, speed = arg.split(":"); r, g, b = bytes.fromhex(rgb)
+    except ValueError: die("usage: light-effect <effect>:<RRGGBB>:<speed>", 2)
+    if mode not in EFFECTS or speed not in SPEEDS or len(rgb) != 6: die(f"effects: {', '.join(EFFECTS)}; speeds: {', '.join(SPEEDS)}", 2)
+    rand = 0xFF if (r, g, b) == (0, 0, 0) else (0x01 if mode == "breathe" else 0x00)
+    send([REPORT, 0xC5, 0x50], [REPORT, 0xBD, 0x00, 0x01],
+         [REPORT, 0xB3, 0x00, EFFECTS[mode], r, g, b, SPEEDS[speed], 0x00, rand, 0, 0, 0], [REPORT, 0xB4], [REPORT, 0xB5])
+    save(light=True, effect=mode, color=rgb.lower(), speed=speed); print(f"XG Mobile lights: {mode} #{rgb.lower()} {speed}")
+
+
+def brightness(n):
+    send([REPORT, 0xBA, 0xC5, 0xC4, n]); save(brightness=n); print(f"XG Mobile light brightness {n}/3")
+
+
+def offset(arg):
+    import ctypes
+    try: core, mem = (int(x) for x in arg.split(":"))
+    except ValueError: die("usage: offset <core>:<memory>", 2)
+    bdf = egpu_bdf()
+    if not bdf: die("the XG Mobile's GPU is not attached", 3)
+
+    class Off(ctypes.Structure):
+        _fields_ = [("version", ctypes.c_uint), ("type", ctypes.c_int), ("pstate", ctypes.c_int),
+                    ("offset", ctypes.c_int), ("min", ctypes.c_int), ("max", ctypes.c_int)]
+    nv = ctypes.CDLL("libnvidia-ml.so.1"); nv.nvmlErrorString.restype = ctypes.c_char_p
+    err = lambda rc: nv.nvmlErrorString(rc)
+    if nv.nvmlInit_v2(): die("NVML did not start", 4)
+    done = []
+    try:
+        h = ctypes.c_void_p()
+        rc = nv.nvmlDeviceGetHandleByPciBusId_v2(bdf.encode(), ctypes.byref(h))
+        if rc: die(f"NVML: no handle for {bdf}: {err(rc).decode()}", 4)
+        for name, kind, want in (("core", 0, core), ("memory", 2, mem)):   # NVML_CLOCK_GRAPHICS, NVML_CLOCK_MEM; P0
+            o = Off(ctypes.sizeof(Off) | (1 << 24), kind, 0)
+            if hasattr(nv, "nvmlDeviceSetClockOffsets") and nv.nvmlDeviceGetClockOffsets(h, ctypes.byref(o)) == 0:
+                o.offset = max(o.min, min(o.max, want)); rc = nv.nvmlDeviceSetClockOffsets(h, ctypes.byref(o)); got = o.offset
+            else:   # drivers before 555: the older per-domain calls
+                got = want; rc = (nv.nvmlDeviceSetGpcClkVfOffset if kind == 0 else nv.nvmlDeviceSetMemClkVfOffset)(h, ctypes.c_int(want))
+            if rc: die(f"NVML refused the {name} offset {want} MHz: {err(rc).decode()}", 5)
+            done.append(f"{name} {got:+d} MHz" + (f" (clamped from {want:+d})" if got != want else ""))
+            if kind == 0: core = got
+            else: mem = got
+    finally:
+        nv.nvmlShutdown()
+    save(offset=[core, mem]); print("GPU clock offsets: " + ", ".join(done))
 
 
 def light(on):
@@ -155,21 +235,28 @@ def govern(bdf, target):
     except OSError: pass
 
 
+def notify_shutdown():
+    if hidraw(): send([REPORT, 0xE4, 0x01])
+
+
 def status():
     s = load(); live = {}
     try: live = json.load(open(LIVE))
     except (OSError, ValueError): pass
     active = subprocess.run(["systemctl", "is-active", UNIT], capture_output=True, text=True).stdout.strip() == "active"
-    print(json.dumps({"device": hidraw(), "fan": s.get("fan", "auto"), "light": s.get("light"), "power_target": s.get("power_target"),
-                      "governing": active, "live": live if active else {}}))
+    print(json.dumps(dict(s, device=hidraw(), governing=active, live=live if active else {})))
 
 
 def restore():
     s = load()
     if hidraw():
         if s.get("fan", "auto") != "auto": fan(s["fan"])
-        if s.get("light") is not None: light(bool(s["light"]))
-    if s.get("power_target") and egpu_bdf(): power_target(str(s["power_target"]))
+        if s.get("light") and s.get("effect"): light_effect(f"{s['effect']}:{s.get('color', 'ff0000')}:{s.get('speed', 'normal')}")
+        elif s.get("light") is not None: light(bool(s["light"]))
+        if s.get("brightness") is not None: brightness(int(s["brightness"]))
+    if egpu_bdf():
+        if any(s.get("offset") or []): offset(f"{s['offset'][0]}:{s['offset'][1]}")
+        if s.get("power_target"): power_target(str(s["power_target"]))
 
 
 if __name__ == "__main__":
@@ -178,6 +265,11 @@ if __name__ == "__main__":
     if a[:1] == ["status"]: status()
     elif a[:1] == ["fan"] and len(a) == 2: fan(a[1])
     elif a[:1] == ["light"] and len(a) == 2 and a[1] in ("on", "off"): light(a[1] == "on")
+    elif a[:1] == ["fan-curve"] and len(a) == 2: fan_curve(a[1])
+    elif a[:1] == ["light-effect"] and len(a) == 2: light_effect(a[1])
+    elif a[:1] == ["brightness"] and len(a) == 2 and a[1] in ("0", "1", "2", "3"): brightness(int(a[1]))
+    elif a[:1] == ["offset"] and len(a) == 2: offset(a[1])
+    elif a[:1] == ["notify-shutdown"]: notify_shutdown()
     elif a[:1] == ["power-target"] and len(a) == 2 and (a[1] == "off" or a[1].isdigit()): power_target(a[1])
     elif a[:1] == ["restore"]: restore()
     elif a[:1] == ["govern"] and len(a) == 3: govern(a[1], a[2])

@@ -21,6 +21,8 @@ going_down(){
 }
 [ -e /etc/nv-egpu-buddy/skip-shutdown-teardown ] && { log "skip flag present — eGPU left to the kernel"; exit 0; }
 going_down || exit 0
+# an ASUS XG Mobile is told the host is going away, as G-Helper does at shutdown (does nothing without one)
+[ -x /usr/local/sbin/egpu-xgm ] && timeout 5 /usr/local/sbin/egpu-xgm notify-shutdown >/dev/null 2>&1
 lspci -Dn 2>/dev/null | grep -qE ' 0300: 10de:' || exit 0
 
 log "=== shutdown: egpu-safe-detach --teardown-only ==="

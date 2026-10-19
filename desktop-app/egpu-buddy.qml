@@ -35,7 +35,12 @@ ApplicationWindow {
     readonly property var xgLive: (xgm.live || {})
     readonly property bool xgTarget: xg && isNum(xgLive.target)
     readonly property int xgTop: isNum(g["enforced.power.limit"]) ? Math.round(+g["enforced.power.limit"]) : 115
-    readonly property var fanModes: ["auto", "quiet", "balanced", "performance", "max"]
+    readonly property var fanModes: ["auto", "quiet", "balanced", "performance", "max", "custom"]
+    readonly property var effects: ["static", "breathe", "cycle", "rainbow", "strobe"]
+    readonly property var swatches: ["ff0000", "ff6000", "ffd000", "00ff40", "00e0ff", "0040ff", "a000ff", "ffffff"]
+    readonly property var balancedCurve: [30, 50, 60, 65, 70, 75, 80, 85, 15, 25, 35, 45, 55, 65, 80, 100]
+    property bool offTouched: false
+    function lightFx(fx, rgb, speed) { act("xgm-light-effect", { value: (fx || xgm.effect || "static") + ":" + (rgb || xgm.color || "ff0000") + ":" + (speed || xgm.speed || "normal") }) }
     function cap1(x) { x = String(x || ""); return x.charAt(0).toUpperCase() + x.slice(1) }
     property bool ptTouched: false
     readonly property int clkMax: isNum(g["clocks.max.graphics"]) ? Math.round(+g["clocks.max.graphics"]) : 0
@@ -62,6 +67,7 @@ ApplicationWindow {
             showSeq = r.show_seq || 0
             // the applied limit (the helper keeps it; NVIDIA cannot read it back), else no limit: the slider at the top
             if (on && xg && !ptTouched) { pt.to = xgTop; pt.value = +(xgm.power_target || 0) || xgTop }
+            if (on && xg && !offTouched) { coreOff.value = +((xgm.offset || [0, 0])[0]); memOff.value = +((xgm.offset || [0, 0])[1]) }
             if (on && clkMax > 0 && !clkTouched) { clkSl.to = clkMax; clkSl.value = +(g.clock_limit || 0) || clkMax }
             if (on && !sliderTouched) { pl.from = Math.max(100, Math.round(+g["power.min_limit"] || 100)); pl.to = Math.min(320, Math.round(+g["power.max_limit"] || 320)); pl.value = Math.round(+g["power.limit"] || pl.to) }
             var d = r.detach, gm = r.gm, l = r.last
@@ -116,6 +122,26 @@ ApplicationWindow {
         Label { width: parent.width; wrapMode: Text.WordWrap
             text: "The session moves back to the handheld screen and the eGPU is removed from the bus. Do not unplug until the result says it is safe. Continue?" }
         onAccepted: win.act("safe-detach")
+    }
+
+    // XG Mobile custom fan curve: 8 points, checked by egpu-xgm (temperatures rising, duty not falling, the last >= 60 %)
+    Dialog {
+        id: curveDlg
+        title: "XG Mobile custom fan curve"; modal: true; anchors.centerIn: parent; width: Math.min(win.width - 40, 760)
+        standardButtons: Dialog.Apply | Dialog.Cancel
+        property var c: []
+        onAboutToShow: c = (win.xgm.curve && win.xgm.curve.length === 16 ? win.xgm.curve : win.balancedCurve).slice()
+        onApplied: { win.act("xgm-fan-curve", { value: c.slice(0, 8).join(",") + ":" + c.slice(8).join(",") }); close() }
+        ColumnLayout { width: parent.width; spacing: 8
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8
+                text: "Eight points: at each GPU temperature, the fan speed. Temperatures must rise from point to point, the speed must not fall, and the last point must be at least 60 %. The XG Mobile follows the curve itself." }
+            GridLayout { columns: 9; columnSpacing: 6; rowSpacing: 6
+                Label { text: "°C" }
+                Repeater { model: 8; SpinBox { from: 20; to: 100; editable: true; value: curveDlg.c[index] || 0; onValueModified: curveDlg.c[index] = value; Layout.preferredWidth: 76 } }
+                Label { text: "Fan %" }
+                Repeater { model: 8; SpinBox { from: 0; to: 100; stepSize: 5; editable: true; value: curveDlg.c[index + 8] || 0; onValueModified: curveDlg.c[index + 8] = value; Layout.preferredWidth: 76 } }
+            }
+        }
     }
 
     // Update: confirm, then live progress from the updater's status file, then the result (also after the app restarts)
@@ -205,12 +231,38 @@ ApplicationWindow {
                 Label { text: Math.round(pt.value) >= win.xgTop ? "No target" : Math.round(pt.value) + " W"; Layout.preferredWidth: 80; horizontalAlignment: Text.AlignRight }
                 Button { text: "Apply"; onClicked: { win.act("xgm-power", { value: Math.round(pt.value) >= win.xgTop ? "off" : Math.round(pt.value) }); win.ptTouched = false } }
             }
-            RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && win.xg
-                Label { text: "XG Mobile fan" }
+            Label { text: "XG Mobile"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: win.on && win.xg }
+            RowLayout { Layout.fillWidth: true; spacing: 8; visible: win.on && win.xg
+                Label { text: "Fan"; Layout.preferredWidth: 90 }
                 Repeater { model: win.fanModes
-                    Button { text: modelData === "auto" ? "Auto" : win.cap1(modelData); highlighted: (win.xgm.fan || "auto") === modelData
-                             Layout.fillWidth: true; onClicked: win.act("xgm-fan", { value: modelData }) } }
-                Switch { text: "Lights"; checked: win.xgm.light !== false; onToggled: win.act("xgm-light", { value: checked ? "on" : "off" }) }
+                    Button { text: modelData === "custom" ? "Custom…" : win.cap1(modelData); highlighted: (win.xgm.fan || "auto") === modelData
+                             Layout.fillWidth: true; onClicked: modelData === "custom" ? curveDlg.open() : win.act("xgm-fan", { value: modelData }) } }
+            }
+            RowLayout { Layout.fillWidth: true; spacing: 8; visible: win.on && win.xg
+                Label { text: "Lights"; Layout.preferredWidth: 90 }
+                Switch { checked: win.xgm.light !== false; onToggled: win.act("xgm-light", { value: checked ? "on" : "off" }) }
+                ComboBox { model: win.effects.map(win.cap1); currentIndex: Math.max(0, win.effects.indexOf(win.xgm.effect || "static")); enabled: win.xgm.light !== false
+                           onActivated: function(i) { win.lightFx(win.effects[i]) } }
+                Repeater { model: win.swatches
+                    Rectangle { width: 24; height: 24; radius: 12; color: "#" + modelData; opacity: win.xgm.light !== false ? 1 : 0.35
+                                border.width: (win.xgm.color || "ff0000") === modelData ? 3 : 1; border.color: (win.xgm.color || "ff0000") === modelData ? palette.highlight : palette.mid
+                                MouseArea { anchors.fill: parent; enabled: win.xgm.light !== false; onClicked: win.lightFx("", modelData) } } }
+                ComboBox { model: ["Slow", "Normal", "Fast"]; currentIndex: Math.max(0, ["slow", "normal", "fast"].indexOf(win.xgm.speed || "normal")); enabled: win.xgm.light !== false
+                           onActivated: function(i) { win.lightFx("", "", ["slow", "normal", "fast"][i]) } }
+                Item { Layout.fillWidth: true }
+                Label { text: "Brightness" }
+                Slider { from: 0; to: 3; stepSize: 1; snapMode: Slider.SnapAlways; value: win.xgm.brightness === undefined ? 3 : win.xgm.brightness; Layout.preferredWidth: 110
+                         onMoved: win.act("xgm-brightness", { value: Math.round(value) }) }
+            }
+            RowLayout { Layout.fillWidth: true; spacing: 8; visible: win.on && win.xg
+                Label { text: "Clock offsets"; Layout.preferredWidth: 90 }
+                Label { text: "Core" }
+                Slider { id: coreOff; Layout.fillWidth: true; from: -300; to: 300; stepSize: 15; value: 0; onMoved: win.offTouched = true }
+                Label { text: (coreOff.value > 0 ? "+" : "") + Math.round(coreOff.value) + " MHz"; Layout.preferredWidth: 70 }
+                Label { text: "Memory" }
+                Slider { id: memOff; Layout.fillWidth: true; from: -1000; to: 1500; stepSize: 50; value: 0; onMoved: win.offTouched = true }
+                Label { text: (memOff.value > 0 ? "+" : "") + Math.round(memOff.value) + " MHz"; Layout.preferredWidth: 70 }
+                Button { text: "Apply"; onClicked: { win.act("xgm-offset", { value: Math.round(coreOff.value) + ":" + Math.round(memOff.value) }); win.offTouched = false } }
             }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && !win.xg && !win.plOk
                 text: "This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power"
@@ -232,7 +284,7 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true; spacing: 10
                 Button { text: "Safe Detach"; Layout.fillWidth: true; enabled: !!win.s.present; opacity: enabled ? 1 : 0.4; onClicked: confirmDetach.open() }
                 Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); opacity: enabled ? 1 : 0.4; onClicked: win.act("attach") }
-                Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.clkTouched = false; win.ptTouched = false; win.act("reset-clocks") } }
+                Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.clkTouched = false; win.ptTouched = false; win.offTouched = false; win.act("reset-clocks") } }
                 Button { text: win.updRunning ? "Updating…" : "Update"; Layout.fillWidth: true; onClicked: updateDlg.open() }
             }
             Frame { Layout.fillWidth: true

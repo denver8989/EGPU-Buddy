@@ -6,7 +6,7 @@ import qrcode from "qrcode-generator";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
-  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { fan?: string; light?: boolean | null; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
+  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
@@ -22,6 +22,8 @@ const setClockLimit = callable<[number], Result>("set_clock_limit");
 const xgmFan = callable<[string], Result>("xgm_fan");
 const xgmLight = callable<[boolean], Result>("xgm_light");
 const xgmPower = callable<[number], Result>("xgm_power");
+const xgmSet = callable<[string, string], Result>("xgm");   // light-effect, brightness, offset
+const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"], ["ffd000", "Yellow"], ["00ff40", "Green"], ["00e0ff", "Cyan"], ["0040ff", "Blue"], ["a000ff", "Purple"], ["ffffff", "White"]];
 const resetClocks = callable<[], Result>("reset_clocks");
 type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
@@ -311,7 +313,8 @@ function Content() {
   const [pl, setPl] = useState<number | null>(null);
   const [off, setOff] = useState(0);
   const [clk, setClk] = useState<number | null>(null);
-  const [pt, setPt] = useState<number | null>(null);   // ASUS XG Mobile power target (W)   // laptop-class GPUs: a GPU clock limit is their power control
+  const [pt, setPt] = useState<number | null>(null);   // ASUS XG Mobile power target (W)
+  const [xoff, setXoff] = useState<[number, number] | null>(null);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
 
   const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
@@ -338,6 +341,9 @@ function Content() {
   const xgTop = Math.round(Number(tel["enforced.power.limit"])) || 115;
   const xgLive = s?.xgm?.live ?? {};
   const ptNow = pt ?? (s?.xgm?.power_target || xgTop);
+  const xoffNow: [number, number] = xoff ?? [s?.xgm?.offset?.[0] ?? 0, s?.xgm?.offset?.[1] ?? 0];
+  const lightOn = s?.xgm?.light !== false;
+  const lightFx = (fx?: string, rgb?: string, speed?: string) => run(() => xgmSet("light-effect", `${fx || s?.xgm?.effect || "static"}:${rgb || s?.xgm?.color || "ff0000"}:${speed || s?.xgm?.speed || "normal"}`));
   const clkNow = clk ?? (Math.round(Number(tel["clock_limit"])) || clkMax);   // the applied limit (kept by the helper), else none
   const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
   // "mounted" for uninstall purposes: the driver is loaded, so /usr cannot be written and the
@@ -534,10 +540,37 @@ function Content() {
               </>)}
               <PanelSectionRow>
                 <DropdownItem label="Fan mode" selectedOption={s.xgm?.fan ?? "auto"} disabled={busy}
-                  rgOptions={[["auto", "Auto (the XG Mobile's own)"], ["quiet", "Quiet"], ["balanced", "Balanced"], ["performance", "Performance"], ["max", "Max"]].map(([data, label]) => ({ data, label }))}
+                  rgOptions={[["auto", "Auto (the XG Mobile's own)"], ["quiet", "Quiet"], ["balanced", "Balanced"], ["performance", "Performance"], ["max", "Max"],
+                    ...(s.xgm?.curve ? [["custom", "Custom (made in the desktop app)"]] : [])].map(([data, label]) => ({ data, label }))}
                   onChange={(o) => run(() => xgmFan(String(o.data)))} />
               </PanelSectionRow>
-              <PanelSectionRow><ToggleField label="XG Mobile lights" checked={s.xgm?.light !== false} disabled={busy} onChange={(v) => run(() => xgmLight(v))} /></PanelSectionRow>
+              <PanelSectionRow><ToggleField label="Lights" checked={lightOn} disabled={busy} onChange={(v) => run(() => xgmLight(v))} /></PanelSectionRow>
+              {lightOn && (<>
+              <PanelSectionRow>
+                <DropdownItem label="Light effect" selectedOption={s.xgm?.effect ?? "static"} disabled={busy}
+                  rgOptions={[["static", "Static"], ["breathe", "Breathe"], ["cycle", "Color cycle"], ["rainbow", "Rainbow"], ["strobe", "Strobe"]].map(([data, label]) => ({ data, label }))}
+                  onChange={(o) => lightFx(String(o.data))} />
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <DropdownItem label="Light color" selectedOption={s.xgm?.color ?? "ff0000"} disabled={busy}
+                  rgOptions={XGM_COLORS.map(([data, label]) => ({ data, label }))} onChange={(o) => lightFx("", String(o.data))} />
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <DropdownItem label="Light speed" selectedOption={s.xgm?.speed ?? "normal"} disabled={busy}
+                  rgOptions={[["slow", "Slow"], ["normal", "Normal"], ["fast", "Fast"]].map(([data, label]) => ({ data, label }))} onChange={(o) => lightFx("", "", String(o.data))} />
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <SliderField label="Light brightness" value={s.xgm?.brightness ?? 3} min={0} max={3} step={1} notchCount={4} notchTicksVisible showValue disabled={busy}
+                  onChange={(v) => run(() => xgmSet("brightness", String(v)))} />
+              </PanelSectionRow>
+              </>)}
+              <PanelSectionRow>
+                <SliderField label="Core clock offset (MHz)" value={xoffNow[0]} min={-300} max={300} step={15} showValue onChange={(v) => setXoff([v, xoffNow[1]])} />
+              </PanelSectionRow>
+              <PanelSectionRow>
+                <SliderField label="Memory clock offset (MHz)" value={xoffNow[1]} min={-1000} max={1500} step={50} showValue onChange={(v) => setXoff([xoffNow[0], v])} />
+              </PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy || xoff === null} onClick={() => { const [c, m] = xoffNow; setXoff(null); run(() => xgmSet("offset", `${c}:${m}`)); }}>Apply clock offsets</ButtonItem></PanelSectionRow>
               {!controlsOk && msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
             </PanelSection>
           )}
@@ -559,11 +592,13 @@ function Content() {
               </>)}
               </>
               )}
+              {!xg && (<>
               <PanelSectionRow>
                 <SliderField label="Core clock offset (MHz)" value={off} min={-300} max={300} step={15} showValue onChange={setOff} />
               </PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(() => setCoreOffset(off))}>Apply offset</ButtonItem></PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setOff(0); setPl(null); setClk(null); setPt(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
+              </>)}
+              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setOff(0); setPl(null); setClk(null); setPt(null); setXoff(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
               {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
             </PanelSection>
           ) : (
