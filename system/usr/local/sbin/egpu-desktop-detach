@@ -57,9 +57,23 @@ if held; then
   for hp in $(fuser $nodes 2>/dev/null | tr -s ' \n' ' '); do [ "$(stat -c %u /proc/$hp 2>/dev/null)" = $U ] && kill -TERM "$hp" 2>/dev/null; done
   for _ in $(seq 1 10); do held || break; sleep 1; done
 fi
+# processes holding NVIDIA's shared GPU buffers (any dma-buf: nvidia-drm's read "drm", see below) or its libraries
+holders(){ local p
+  for p in /proc/[0-9]*; do
+    n=$(grep -l '^exp_name:' "$p"/fdinfo/* 2>/dev/null | wc -l)
+    nv=$(grep -lE 'libnvidia|libGLX_nvidia|libEGL_nvidia|libcuda|nvidia_drv' "$p/maps" 2>/dev/null)
+    [ "$n" -gt 0 ] || [ -n "$nv" ] || continue
+    printf '%s %s %s %s %s\n' "${p#/proc/}" "$(stat -c %u "$p" 2>/dev/null)" "$n" "$([ -n "$nv" ] && echo nvlib || echo -)" "$(cat "$p/comm" 2>/dev/null)"
+  done; }
+# what must never be stopped (owner's rule: anything else that holds the eGPU may be, if the system is not harmed)
+me=$$; anc=" $me "; while [ "$me" -gt 1 ] 2>/dev/null; do me=$(awk '{print $4}' /proc/$me/stat 2>/dev/null); [ -n "$me" ] || break; anc="$anc$me "; done
+protected(){ local p=$1 c; [ "$p" -le 1 ] 2>/dev/null && return 0; case "$anc" in *" $p "*) return 0 ;; esac
+  c=$(cat /proc/$p/comm 2>/dev/null); [ -n "$c" ] || return 0   # gone, or a kernel thread
+  case "$c" in systemd*|init|dbus-daemon|dbus-broker*|sddm*|polkitd|udevadm|egpu-*|nv-egpu-*|kthreadd) return 0 ;; esac
+  return 1; }
+inuse(){ cat /sys/module/nvidia_drm/refcnt /sys/module/nvidia_uvm/refcnt 2>/dev/null | grep -qv '^0$'; }
 # no process holds the eGPU now, but the driver can stay in use a little longer while the desktop's GPU memory is freed;
 # the unload then failed straight away ("nvidia stack still loaded", Ally X on 0.7.120): wait for the users to drop to 0
-inuse(){ cat /sys/module/nvidia_drm/refcnt /sys/module/nvidia_uvm/refcnt 2>/dev/null | grep -qv '^0$'; }
 for _ in $(seq 1 20); do inuse || break; sleep 1; done
 # still in use with no process on it (Ally X on 0.7.122: nvidia_drm=2): with the session stopped the screen drops to text
 # mode and the text console takes the framebuffers, the eGPU's too. Game Mode never drops to text, so its detach is not
@@ -78,13 +92,6 @@ if inuse; then
   # is asked to quit, then stopped. (The desktop on this hardware ran on both GPUs, sharing buffers between them.)
   if inuse; then
     mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug 2>/dev/null
-    holders(){ local p
-      for p in /proc/[0-9]*; do
-        n=$(grep -l '^exp_name:' "$p"/fdinfo/* 2>/dev/null | wc -l)
-        nv=$(grep -lE 'libnvidia|libGLX_nvidia|libEGL_nvidia|libcuda|nvidia_drv' "$p/maps" 2>/dev/null)
-        [ "$n" -gt 0 ] || [ -n "$nv" ] || continue
-        printf '%s %s %s %s %s\n' "${p#/proc/}" "$(stat -c %u "$p" 2>/dev/null)" "$n" "$([ -n "$nv" ] && echo nvlib || echo -)" "$(cat "$p/comm" 2>/dev/null)"
-      done; }
     # the holder table last: snapshots keep the end of each /run/nvegpu log
     { echo "--- /sys/kernel/debug/dma_buf/bufinfo (exporter names read \"drm\" for nvidia-drm and amdgpu alike)"
       head -80 /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null
@@ -94,11 +101,6 @@ if inuse; then
     # user's leftovers: any holder, except the processes the system needs to keep running (init and systemd's own
     # services, the message bus, the login manager and logind, udev) and this detach with the processes that started
     # it and EGPU Buddy's own tools. A service stopped here is one systemd can start again; Decky is restarted below.
-    me=$$; anc=" $me "; while [ "$me" -gt 1 ] 2>/dev/null; do me=$(awk '{print $4}' /proc/$me/stat 2>/dev/null); [ -n "$me" ] || break; anc="$anc$me "; done
-    protected(){ local p=$1 c; [ "$p" -le 1 ] 2>/dev/null && return 0; case "$anc" in *" $p "*) return 0 ;; esac
-      c=$(cat /proc/$p/comm 2>/dev/null); [ -n "$c" ] || return 0   # gone, or a kernel thread
-      case "$c" in systemd*|init|dbus-daemon|dbus-broker*|sddm*|polkitd|udevadm|egpu-*|nv-egpu-*|kthreadd) return 0 ;; esac
-      return 1; }
     decky_was_up=0; systemctl is-active --quiet plugin_loader.service 2>/dev/null && decky_was_up=1
     for sig in TERM KILL; do
       victims=$(holders | while read -r p _; do protected "$p" || echo "$p"; done)
@@ -118,8 +120,40 @@ screens(){ for c in /sys/class/drm/card*-*; do [ -e "$c/status" ] || continue; c
 log "screens with the session stopped: $(screens)"
 { echo "driver users: $(for m in nvidia_drm nvidia_modeset nvidia_uvm nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)"
   echo "holders before teardown (session stopped):"; for hp in $(fuser $nodes 2>/dev/null | tr -s ' \n' ' '); do echo "  $hp $(cat /proc/$hp/comm 2>/dev/null) cmd=$(tr '\0' ' ' </proc/$hp/cmdline 2>/dev/null | cut -c1-80)"; done; } > $ST/gm-holders.log 2>&1
-$HELPER --teardown-only > $ST/gm-helper.log 2>&1 ||
-  fail "eGPU teardown failed; the GPU is still attached. Do not unplug. ($(grep -oE 'still held by:.*|still loaded:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-120))" 7
+# Owner's rule: Desktop Safe Detach must finish whatever still holds the eGPU, as long as the session can recover. When
+# the orderly teardown cannot unload the driver and no process holds the eGPU any more (everything that could be stopped
+# was), only the kernel does (GPU buffers another driver still references). Then remove the eGPU the way an unplug does:
+# the hot-unplug driver is built for exactly that (controlled PCIe removal sets inRemoval and unplugs the DRM device with
+# its users still attached; nv_pci_remove waits a bounded time for the usage count, then forces the removal), and the
+# same machine already recovered from a real unplug in the middle of a desktop session (Ally X, 2026-10-18 19:29). The
+# login session is stopped, so nothing is drawing on the eGPU. The next Attach takes the after-a-surprise-removal path
+# (surprise-pending: unbind, reset, bind) in case the driver could not be unloaded meanwhile.
+force_remove(){
+  local aud=${gpu%.*}.1 i
+  dlog "forced removal: the orderly teardown could not unload the driver and nothing but the kernel holds the eGPU ($(for m in nvidia_drm nvidia_modeset nvidia_uvm nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)); removing it as an unplug would"
+  /usr/local/sbin/egpu-snapshot desktop-detach-forced-removal >/dev/null 2>&1
+  date +%s > $ST/surprise-pending; date +%s > $ST/deliberate-removal   # ours, not a cable pull: the recovery stays out
+  [ -e "/sys/bus/pci/devices/$aud/remove" ] && echo 1 > "/sys/bus/pci/devices/$aud/remove" 2>/dev/null
+  timeout 150 sh -c "echo 1 > /sys/bus/pci/devices/$gpu/remove" 2>/dev/null
+  for i in $(seq 1 30); do [ -e "/sys/bus/pci/devices/$gpu" ] || break; sleep 1; done
+  rm -f $ST/deliberate-removal
+  [ -e "/sys/bus/pci/devices/$gpu" ] && { dlog "forced removal: the eGPU is still on the bus"; return 1; }
+  for i in $(seq 1 20); do modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia_peermem nvidia 2>/dev/null; lsmod | grep -q '^nvidia' || break; sleep 1; done
+  /usr/local/sbin/nv-egpu-buddy-privileged pin-tunnel-ports auto >/dev/null 2>&1
+  dlog "forced removal: eGPU off the bus; NVIDIA driver $(lsmod | grep -q '^nvidia' && echo "still loaded ($(lsmod | awk '/^nvidia/{printf "%s=%s ", $1, $3}')), the next Attach resets it" || echo unloaded)"
+  return 0; }
+if ! $HELPER --teardown-only > $ST/gm-helper.log 2>&1; then
+  why=$(grep -oE 'still held by:.*|still loaded:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-120)
+  # only when the eGPU is still there, the driver is what blocks, and no process holds it (a process would be on fire)
+  # never with the eGPU's sound card still bound: removing it then hangs in snd_card_free (the documented reboot case)
+  aud_bound=0; [ -L "/sys/bus/pci/devices/${gpu%.*}.1/driver" ] && aud_bound=1
+  if case "$why" in *"still loaded"*) true ;; *) false ;; esac && [ "$aud_bound" = 0 ] &&
+     lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' && lsmod | grep -q '^nvidia' && ! held && [ -z "$(holders 2>/dev/null | awk '{print $1}' | while read -r p; do protected "$p" || echo "$p"; done)" ]; then
+    force_remove || fail "eGPU teardown failed and the forced removal did not take; the GPU is still attached. Do not unplug. ($why)" 7
+  else
+    fail "eGPU teardown failed; the GPU is still attached. Do not unplug. ($why)" 7
+  fi
+fi
 $HELPER --restore >/dev/null 2>&1; fbcon_back
 DM_STOPPED=0; systemctl start display-manager.service >/dev/null 2>&1
 /usr/local/sbin/egpu-panel on >/dev/null 2>&1

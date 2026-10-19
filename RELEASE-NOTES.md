@@ -1,3 +1,8 @@
+0.7.131 — ROG Ally / XG Mobile: Desktop Safe Detach finishes even when the kernel still holds the eGPU.
+
+**Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- When everything that can be stopped has been and only the kernel still holds the NVIDIA driver, Desktop Safe Detach now removes the eGPU the way unplugging it would, which the hot-unplug driver is built to survive. The desktop comes back on the handheld screen; the next Attach resets the eGPU first. It never does this while the eGPU's sound is still in use.
+
 0.7.130 — ROG Ally / XG Mobile: Desktop Safe Detach clears every safe-to-stop holder.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
