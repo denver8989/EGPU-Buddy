@@ -21,6 +21,8 @@ fi
 DESK=plasma; [ "${2:-}" = x11 ] && DESK=plasmax11
 ST=/run/nvegpu; mkdir -p $ST; LOG=/var/log/egpu-gamemode.log; HELPER=/usr/local/sbin/egpu-safe-detach
 log(){ printf '%s desktop-detach: %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
+# full-length copy for support reports (the report shortens lines of the detach log): /run/nvegpu is in every snapshot
+dlog(){ log "$*"; printf '%s\n' "$*" >> $ST/gm-driver.log; }; rm -f $ST/gm-driver.log $ST/gm-dmabuf.log
 as_deck(){ runuser -u deck -- env $RUNENV "$@"; }
 # the desktop app reads the user's status file; it is gone while the session is down, so /run/nvegpu carries it too
 status(){ printf '{"state":"%s","message":"%s"}\n' "$1" "$2" > $ST/gm-status.json
@@ -63,10 +65,16 @@ for _ in $(seq 1 20); do inuse || break; sleep 1; done
 # mode and the text console takes the framebuffers, the eGPU's too. Game Mode never drops to text, so its detach is not
 # affected. Unbind the console for the removal (NVIDIA's way to unload nvidia-drm with fbdev on); bound again after it.
 if inuse; then
-  log "driver still in use with no process on it: $(for m in nvidia_drm nvidia_modeset nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)· consoles: $(for v in /sys/class/vtconsole/vtcon*; do printf '%s(%s,bind=%s) ' "${v##*/}" "$(cat $v/name)" "$(cat $v/bind)"; done)· framebuffers: $(cat /sys/class/graphics/fb*/name 2>/dev/null | tr '\n' ' ')"
+  dlog "driver still in use with no process on it: $(for m in nvidia_drm nvidia_modeset nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)· consoles: $(for v in /sys/class/vtconsole/vtcon*; do printf '%s(%s,bind=%s) ' "${v##*/}" "$(cat $v/name)" "$(cat $v/bind)"; done)· framebuffers: $(cat /sys/class/graphics/fb*/name 2>/dev/null | tr '\n' ' ')"
   for v in /sys/class/vtconsole/vtcon*; do [ "$(cat "$v/bind" 2>/dev/null)" = 1 ] && grep -qi 'frame buffer' "$v/name" && echo 0 > "$v/bind" 2>/dev/null && FBCON="$FBCON $v"; done
   for _ in $(seq 1 5); do inuse || break; sleep 1; done
-  log "text console released (${FBCON:- none was bound}); driver users now: $(cat /sys/module/nvidia_drm/refcnt 2>/dev/null)"
+  dlog "text console released (${FBCON:- none was bound}); driver users now: $(cat /sys/module/nvidia_drm/refcnt 2>/dev/null)"
+  # still held: record the other things that can keep it (GPU buffers shared with another driver or process), for the report
+  if inuse; then
+    mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug 2>/dev/null
+    dlog "still in use. shared GPU buffers: $(grep -ciE 'nvidia' /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null) from the eGPU; held by processes: $(grep -lE 'exp_name:.*nvidia' /proc/[0-9]*/fdinfo/* 2>/dev/null | cut -d/ -f3 | sort -u | while read -r p; do printf '%s(%s) ' "$p" "$(cat /proc/$p/comm 2>/dev/null)"; done)· modules: $(lsmod | awk '/^nvidia/{printf "%s=%s[%s] ", $1, $3, $4}')"
+    grep -iE -A4 'nvidia' /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null | head -40 > $ST/gm-dmabuf.log
+  fi
 fi
 # what each screen shows, for the log: connected = cable in, lit = a picture is being sent to it
 screens(){ for c in /sys/class/drm/card*-*; do [ -e "$c/status" ] || continue; case "${c##*/}" in *Writeback*) continue ;; esac

@@ -1,3 +1,8 @@
+0.7.124 — ROG Ally / XG Mobile: fuller Safe Detach log.
+
+**Changed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
+- If Desktop Safe Detach still cannot unload the NVIDIA driver, the support report now shows what keeps it in use.
+
 0.7.123 — ROG Ally / XG Mobile: Desktop Safe Detach releases the text console.
 
 **Fixed** (ROG Ally, or any handheld with an ASUS XG Mobile; a Legion Go with another dock is unchanged)
