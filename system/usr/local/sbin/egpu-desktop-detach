@@ -137,7 +137,10 @@ force_remove(){
   [ -e "/sys/bus/pci/devices/$aud/remove" ] && echo 1 > "/sys/bus/pci/devices/$aud/remove" 2>/dev/null
   timeout 150 sh -c "echo 1 > /sys/bus/pci/devices/$gpu/remove" 2>/dev/null
   for i in $(seq 1 30); do [ -e "/sys/bus/pci/devices/$gpu" ] || break; sleep 1; done
-  rm -f $ST/deliberate-removal
+  # kept 30 s more: the device leaves sysfs at once, and the cable-pull recovery (started by udev, a few seconds later)
+  # found the marker already gone and ran on this removal as if the cable had been pulled (2026-10-19). A timer unit
+  # clears it, so it cannot outlive a script that is stopped; if that fails, cleared now
+  systemd-run --no-block --collect --quiet --on-active=30 /usr/bin/rm -f $ST/deliberate-removal >/dev/null 2>&1 || rm -f $ST/deliberate-removal
   [ -e "/sys/bus/pci/devices/$gpu" ] && { dlog "forced removal: the eGPU is still on the bus"; return 1; }
   for i in $(seq 1 20); do modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia_peermem nvidia 2>/dev/null; lsmod | grep -q '^nvidia' || break; sleep 1; done
   /usr/local/sbin/nv-egpu-buddy-privileged pin-tunnel-ports auto >/dev/null 2>&1

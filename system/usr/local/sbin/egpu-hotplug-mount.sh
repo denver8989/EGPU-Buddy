@@ -43,6 +43,14 @@ ksd() {
 }
 exec 9>/run/egpu-hotplug-mount.lock 2>/dev/null || true
 flock -n 9 2>/dev/null || { log "another instance running — skip"; exit 0; }
+# A cable-pull recovery still running (egpu-surprise-recover: it unloads the driver and stops whatever holds the dead
+# card) must finish before this attach loads the driver: the two used to overlap when the eGPU was plugged back within a
+# minute, the recovery stopping processes and unloading modules under the new attach (ROG Ally + XG Mobile, 2026-10-19:
+# re-attach failed with Xid 56, then a reboot). The recovery stops early once the eGPU is back on the bus.
+if [ -e /run/egpu-surprise-recover.lock ] && ! flock -n /run/egpu-surprise-recover.lock true 2>/dev/null; then
+  log "a cable-pull recovery is still running: waiting for it before attaching"
+  flock -w 120 /run/egpu-surprise-recover.lock true 2>/dev/null && log "cable-pull recovery finished" || log "cable-pull recovery still running after 120 s: attaching anyway"
+fi
 # read-only state capture for the support report, 45 s in (after the session has moved or failed to)
 systemd-run --no-block --collect --quiet --on-active=45 /usr/local/sbin/egpu-snapshot attach >/dev/null 2>&1 || true
 # booted with the eGPU attached, Game Mode starts on it without a switch: check the NVIDIA picture fix then too (a check;

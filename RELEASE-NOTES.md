@@ -1,3 +1,11 @@
+0.7.136 — plugging the eGPU back in after a cable pull or a forced Safe Detach: the recovery no longer fights the new attach.
+
+**Fixed** (seen on a ROG Xbox Ally X with an XG Mobile; the code is shared by every device)
+- Plugged back in within a minute of a cable pull (or of a Desktop Safe Detach that had to remove the eGPU like an unplug), the attach failed (GPU error Xid 56) and only a reboot helped. The cable-pull recovery was still running: it went on stopping programs that used the NVIDIA driver and unloading it while the new attach was loading it. Now the attach waits for the recovery to finish, and the recovery stops as soon as the eGPU is back.
+- Desktop Safe Detach's forced removal no longer starts the cable-pull recovery as well (it marked the removal as its own for too short a time).
+- The cable-pull recovery now releases the text console when nothing else holds the NVIDIA driver, as Desktop Safe Detach already did, so the driver can unload after a cable pull.
+- When the driver still cannot unload, the recovery records what in the kernel holds it, and the support report includes it.
+
 0.7.135 — ASUS XG Mobile: an intro animation, once.
 
 **New** (ASUS XG Mobile only)

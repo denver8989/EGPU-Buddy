@@ -1216,6 +1216,8 @@ def _support_report():
     for title, path, n in (("Attach log", "/var/log/egpu-hotplug-mount.log", 40), ("Game Mode switch / detach log", "/var/log/egpu-gamemode.log", 25),
                            ("Safe Detach status", "/run/nvegpu/gm-status.json", 2), ("Safe Detach teardown (last run)", "/run/nvegpu/gm-helper.log", 30),
                            ("Safe Detach: what held the GPU", "/run/nvegpu/gm-holders.log", 15),
+                           ("Safe Detach: shared GPU buffers when the driver would not unload", "/run/nvegpu/gm-dmabuf.log", 60),
+                           ("Cable-pull recovery: kernel-side holders of the driver", "/run/nvegpu/recover-dmabuf.log", 120),
                            ("Cable-pull recovery log", "/var/log/egpu-surprise-recover.log", 15)):
         tail = _read(path).splitlines()[-n:]
         if tail:

@@ -121,13 +121,16 @@ log "kwin=$(pgrep -U 1000 -x kwin_wayland | head -1) on $(k=$(pgrep -U 1000 -x k
 # Last check before anything is killed: if the card is back on the bus, the removal was a transient (a reset or re-pin),
 # not a cable pull, and the processes below are using a healthy GPU. Stop here.
 lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' && { rm -f /run/nvegpu/surprise-pending; log "GPU is back on the bus: transient removal, not a cable pull - nothing killed"; exit 0; }
+# Plugged back in while this runs: from then on the NVIDIA users and the driver belong to the new attach (which waits for
+# this script's lock). Checked before every step that stops processes or unloads modules below.
+back(){ lspci -Dn 2>/dev/null | grep -qE '0300: 10de:'; }
 # 3. unload the orphaned nvidia stack (no device behind it) once nothing holds it; retry up to 60s, kill respawners
 systemctl stop nvidia-persistenced 2>/dev/null; systemctl stop lactd 2>/dev/null; systemctl stop egpu-xgm-powercap 2>/dev/null
 # old-session Go Hub (python3 WebKit) survives the session end and keeps dmabufs exported by the removed card -> pins nvidia_drm
 for h in /etc/nv-egpu-buddy/hooks.d/pre-unload/*; do [ -x "$h" ] && "$h" >/dev/null 2>&1; done   # e.g. stop apps holding /dev/nvidia*
 sleep 1
 # pre-removal user processes still holding dmabufs (e.g. a Steam Proton helper) keep NVIDIA-exported buffers -> pin nvidia_drm
-for p in $(pgrep -u 1000); do
+back || for p in $(pgrep -u 1000); do
   # the relaunched Game Mode session (systemd restarts it the instant the old one dies, before this script runs) lives in the
   # session's own cgroup; nothing from the old session can, systemd killed that cgroup. Never touch it.
   [ "$GM" = 1 ] && grep -qE 'gamescope-session\.service|steam-launcher\.service|app-.*steam' /proc/$p/cgroup 2>/dev/null && continue
@@ -146,16 +149,37 @@ if [ "$GM" = 1 ]; then
        log "gamescope-session restart issued (panel, was $st) before the driver unload" ;;
   esac
 fi
-for _ in $(seq 1 20); do
+FBCON=""
+for i in $(seq 1 20); do
+  back && { log "eGPU back on the bus (plugged in again): the driver unload stops here, the attach takes over"; break; }
   modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia_peermem nvidia 2>/dev/null
   lsmod | grep -q '^nvidia' || break
   for p in $(fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm 2>/dev/null | tr -s ' \n' ' '); do
     cmd=$(tr '\0' ' ' </proc/$p/cmdline 2>/dev/null)
     case "$cmd" in *kwin_wayland*|*Xwayland*) ;; *) kill -9 "$p" 2>/dev/null ;; esac
   done
+  # No process left but the driver still in use: the text console holds the framebuffers, the removed eGPU's too
+  # (nvidia-drm fbdev). Unbind it, NVIDIA's documented way to unload nvidia-drm with fbdev on, as Desktop Safe Detach
+  # does; bound again below. The session's compositor owns the screen, so nothing visible changes.
+  if [ "$i" = 3 ] && [ -z "$FBCON" ]; then
+    for v in /sys/class/vtconsole/vtcon*; do [ "$(cat "$v/bind" 2>/dev/null)" = 1 ] && grep -qi 'frame buffer' "$v/name" 2>/dev/null && echo 0 > "$v/bind" 2>/dev/null && FBCON="$FBCON $v"; done
+    log "driver still in use with no process on it ($(for m in nvidia_drm nvidia_modeset nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)): text console released (${FBCON:- none was bound})"
+  fi
   sleep 3
 done
+for v in $FBCON; do echo 1 > "$v/bind" 2>/dev/null; done
 log "nvidia modules left: $(lsmod | grep '^nvidia' | awk '{print $1"="$3}' | tr '\n' ' ')"
+# Still loaded with the eGPU gone: what holds it is in the kernel (GPU buffers another driver still references). Record
+# it for the support report: the exporters and attachments of every shared buffer, and each DRM device's framebuffers.
+if lsmod | grep -q '^nvidia' && ! back; then
+  mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug 2>/dev/null
+  { date '+%F %T'; echo "driver users: $(for m in nvidia_drm nvidia_modeset nvidia_uvm nvidia; do printf '%s=%s ' $m "$(cat /sys/module/$m/refcnt 2>/dev/null)"; done)"
+    echo "--- /sys/kernel/debug/dma_buf/bufinfo"; head -120 /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null
+    for d in /sys/kernel/debug/dri/*/; do [ -e "$d/name" ] || continue; echo "--- ${d%/}: $(cat "$d/name" 2>/dev/null)"
+      echo "clients:"; cat "$d/clients" 2>/dev/null | head -20; echo "framebuffers:"; grep -E 'framebuffer|refcount|allocated by|format=' "$d/framebuffer" 2>/dev/null | head -40; done
+  } > /run/nvegpu/recover-dmabuf.log 2>&1
+  log "driver still loaded with the eGPU gone: kernel-side holders recorded in /run/nvegpu/recover-dmabuf.log"
+fi
 # same as the planned detach: Decky's backend holds /dev/nvidia* and is killed with the other holders
 systemctl is-active plugin_loader.service >/dev/null 2>&1 || { systemctl start plugin_loader.service >/dev/null 2>&1 && log "Decky plugin loader restarted"; }
 [ "$GM" = 1 ] && /usr/local/sbin/egpu-safe-detach --restore >/dev/null 2>&1   # userspace back for the next attach
