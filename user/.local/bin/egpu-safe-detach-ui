@@ -58,6 +58,7 @@ fail(){ status DO_NOT_UNPLUG "$1"; printf '%s\n' "$1" >&2; systemctl --user unma
     systemctl --user restart plasma-kwin_wayland.service >/dev/null 2>&1; sleep 8; sudo -n /usr/local/sbin/egpu-safe-detach --republish >/dev/null 2>&1 || true
     sudo -n /usr/local/sbin/egpu-safe-detach --panel-off >/dev/null 2>&1 || true
   fi
+  [ -n "${HELPERS:-}" ] && systemctl --user start $HELPERS >/dev/null 2>&1
   exit 1; }
 drm_card_for(){
   local vendor=$1 card
@@ -174,6 +175,11 @@ sleep 1
 # TEARDOWN: the root helper's full mode RESTARTS the KWin unit on the iGPU (session kept alive) and then
 # unloads + PCI-removes the GPU. Never `systemctl stop` the KWin unit here: that ends the logind session
 # and plasmalogin (Relogin=true) immediately spawns a fresh NVIDIA KWin into the teardown window (18:15 abort).
+# Plasma's helper services hold a connection to KWin and abort (crash reports) when it restarts on the iGPU: stop the
+# running ones cleanly first and start them again once KWin answers (the same list egpu-reattach starts after its restart)
+HELPERS=""; for u in plasma-kded6 plasma-powerdevil plasma-polkit-agent plasma-xdg-desktop-portal-kde plasma-kaccess plasma-gmenudbusmenuproxy plasma-xembedsniproxy; do
+  systemctl --user is-active --quiet $u.service && HELPERS="$HELPERS $u.service"; done
+[ -n "$HELPERS" ] && systemctl --user stop $HELPERS >/dev/null 2>&1
 status PREFLIGHT_PASS 'Moving the Desktop to the internal panel and removing the GPU (~30s). Do not unplug yet.'
 if ! sudo -n /usr/local/sbin/egpu-safe-detach >"$STATE_DIR/helper.log" 2>&1; then
   fail 'eGPU teardown failed; the GPU is still attached. Do not unplug.'
@@ -183,6 +189,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 kwin_session_ready || fail 'KWin did not become responsive on the iGPU.'
+[ -n "$HELPERS" ] && { systemctl --user reset-failed $HELPERS >/dev/null 2>&1; systemctl --user start $HELPERS >/dev/null 2>&1; }
 sudo -n /usr/local/sbin/egpu-safe-detach --republish >/dev/null 2>&1 || true
 systemctl --user start wireplumber >/dev/null 2>&1 || true
 # The NVIDIA graphics and HDA audio functions must be GONE.

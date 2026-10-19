@@ -1,3 +1,8 @@
+0.7.128 — no crash reports after a desktop Safe Detach.
+
+**Fixed**
+- Desktop Safe Detach closes KDE's background helpers (power management, password prompt, screen sharing and others) before moving the desktop to the handheld, and starts them again after. They used to crash and leave "failed" notifications behind.
+
 0.7.127 — the desktop app restarts itself after an update.
 
 **Fixed**
