@@ -217,6 +217,19 @@ def _gamescope_env(key):
 XG_FIELDS = ",enforced.power.limit,power.default_limit"
 
 
+def _clock_limit(bdf):
+    """The GPU clock limit set-gpu-graphics-clock applied (MHz), or 0. NVIDIA cannot read a clock lock back, so the helper
+    keeps it in /run/nvegpu/clock-limit with the PCI device's birth (monotonic seconds): a GPU added again is a new device,
+    born later, and has lost the lock."""
+    try:
+        b, m, born = open("/run/nvegpu/clock-limit").read().split()[:3]
+        pm = f"/sys/bus/pci/devices/{bdf}/power/runtime_"
+        age = (int(open(pm + "active_time").read()) + int(open(pm + "suspended_time").read())) / 1000
+        return int(m) if b == bdf and abs(time.monotonic() - age - float(born)) < 5 else 0
+    except (OSError, ValueError):
+        return 0
+
+
 def _nvidia_query(bdf, xg=False):
     fields = ("name,driver_version,temperature.gpu,power.draw,power.limit,power.max_limit,power.min_limit,"
               "clocks.gr,clocks.mem,memory.used,memory.total,utilization.gpu,pcie.link.gen.current,"
@@ -226,7 +239,7 @@ def _nvidia_query(bdf, xg=False):
         return {}
     vals = [v.strip() for v in out.split(",")]
     keys = fields.split(",")
-    return dict(zip(keys, vals))
+    return dict(zip(keys, vals), **({"clock_limit": _clock_limit(bdf)} if xg else {}))
 
 
 GAME_SCREEN = "/var/lib/nvegpu/game-screen"   # connector Game Mode goes to first (nv-egpu-gamescope-session)
@@ -1663,6 +1676,7 @@ class Plugin:
     async def set_clock_limit(self, mhz: int):
         """Laptop-class GPUs (ASUS XG Mobile) take no power limit from the driver: a GPU clock limit is their power control."""
         rc, out, err = _sh([PRIV, "set-gpu-graphics-clock", str(int(mhz))], 20)
+        if rc == 0: err = ""   # nvidia-smi's persistence-mode warning, not an error
         return {"ok": rc == 0, "message": (err or out)[-200:] or (f"GPU clock limited to {int(mhz)} MHz" if rc == 0 else "")}
 
     async def set_core_offset(self, mhz: int):

@@ -820,7 +820,12 @@ case "$action" in
       die "invalid graphics clock: $clock (must be between 210 and 3500)" 2
     fi
     require_gpu_alive "set-gpu-graphics-clock"
-    nvidia-smi -lgc "210,$clock"
+    nvidia-smi -lgc "210,$clock" || exit
+    # NVIDIA cannot read a clock lock back: keep it for the apps, with the PCI device's birth (monotonic seconds; the
+    # runtime-PM counters run from when the device was added) so a GPU added again, which lost the lock, does not show it
+    mkdir -p /run/nvegpu && python3 -c 'import sys,time; p="/sys/bus/pci/devices/%s/power/runtime_" % sys.argv[1]
+age = (int(open(p + "active_time").read()) + int(open(p + "suspended_time").read())) / 1000
+print(sys.argv[1], sys.argv[2], "%.1f" % (time.monotonic() - age))' "$GPU" "$clock" > /run/nvegpu/clock-limit 2>/dev/null || rm -f /run/nvegpu/clock-limit
     ;;
   set-gpu-core-offset)
     [ "$#" -eq 1 ] || die "set-gpu-core-offset requires one argument (MHz)"
@@ -839,6 +844,7 @@ case "$action" in
     [ "$#" -eq 0 ] || die "reset-gpu-clocks takes no arguments"
     require_gpu_alive "reset-gpu-clocks"
     nvidia-smi -rgc
+    rm -f /run/nvegpu/clock-limit
     if [ -x /usr/local/bin/nv-egpu-offset-helper ]; then
       /usr/local/bin/nv-egpu-offset-helper 0
     fi

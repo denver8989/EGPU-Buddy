@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """EGPU Buddy desktop app backend: serves the page and a small JSON API over the shipped helpers.
 No LACT, no other project. Runs as the user; privileged steps go through sudo -n (sudoers rule shipped)."""
-import os, re, json, subprocess, http.server
+import os, re, json, subprocess, http.server, time
 HERE = os.path.dirname(os.path.abspath(__file__)); PORT = 8772
 UID = os.getuid(); RUN = f"/run/user/{UID}/nv-egpu-buddy"
 PRIV = "/usr/local/sbin/nv-egpu-buddy-privileged"
@@ -38,6 +38,18 @@ def sysfs_gpu(bdf):
          "utilization.gpu": read(dev + "/gpu_busy_percent"), "fan.speed": num(hw + "/pwm1", 2.55)}
     return {k: v for k, v in g.items() if v}
 
+def clock_limit(bdf):
+    """The GPU clock limit set-gpu-graphics-clock applied (MHz), or 0. NVIDIA cannot read a clock lock back, so the helper
+    keeps it in /run/nvegpu/clock-limit with the PCI device's birth (monotonic seconds): a GPU added again is a new device,
+    born later, and has lost the lock."""
+    try:
+        b, m, born = open("/run/nvegpu/clock-limit").read().split()[:3]
+        pm = f"/sys/bus/pci/devices/{bdf}/power/runtime_"
+        age = (int(open(pm + "active_time").read()) + int(open(pm + "suspended_time").read())) / 1000
+        return int(m) if b == bdf and abs(time.monotonic() - age - float(born)) < 5 else 0
+    except (OSError, ValueError):
+        return 0
+
 _DOCK = [None, ""]   # [bdf it was looked up for, label]: egpu-detect is a script, not run on every poll
 
 def status():
@@ -53,6 +65,7 @@ def status():
         f = FIELDS + (XG_FIELDS if _DOCK[1] else "")
         rc, out, _ = sh(["timeout", "6", "nvidia-smi", "-i", bdf, f"--query-gpu={f}", "--format=csv,noheader,nounits"], 8)
         if rc == 0 and out: gpu = dict(zip(f.split(","), [v.strip() for v in out.split(",")]))
+        if gpu and _DOCK[1]: gpu["clock_limit"] = clock_limit(bdf)
     _, bolt, _ = sh(["boltctl", "list"]); tunnel = "authorized" in bolt.lower()
     game_mode = sh(["pgrep", "-x", "gamescope(-wl)?"])[0] == 0
     displays = []
@@ -106,7 +119,8 @@ def action(p):
     if a == "power-limit":
         w = int((p or {}).get("watts", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-power-limit" if s["vendor"] in ("", "nvidia") else "set-generic-power-cap", str(w)], 20); return {"ok": rc == 0, "out": o or e}
     if a == "clock-limit":   # laptop-class GPUs (ASUS XG Mobile): no power limit from the driver, a clock limit instead
-        m = int((p or {}).get("mhz", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-graphics-clock", str(m)], 20); return {"ok": rc == 0, "out": o or e}
+        m = int((p or {}).get("mhz", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-graphics-clock", str(m)], 20)
+        return {"ok": rc == 0, "out": (f"GPU clock limited to {m} MHz" if rc == 0 else o or e)}   # not nvidia-smi's persistence-mode warning
     if a == "reset-clocks":
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}

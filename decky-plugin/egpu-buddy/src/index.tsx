@@ -330,7 +330,7 @@ function Content() {
   const xgCap = xg && !Number.isFinite(Number(tel["power.limit"])) && Number.isFinite(Number(tel["enforced.power.limit"])) ? Math.round(Number(tel["enforced.power.limit"])) : null;
   // laptop-class GPUs: the clock limit spans 600 MHz to the GPU's own maximum (clocks.max.graphics)
   const clkMax = Math.round(Number(tel["clocks.max.graphics"]) || 0), clkMin = Math.min(600, clkMax);
-  const clkNow = clk ?? clkMax;
+  const clkNow = clk ?? (Math.round(Number(tel["clock_limit"])) || clkMax);   // the applied limit (kept by the helper), else none
   const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
   // "mounted" for uninstall purposes: the driver is loaded, so /usr cannot be written and the
   // extension cannot be unmerged. Detaching is what clears it.

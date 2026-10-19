@@ -52,7 +52,8 @@ ApplicationWindow {
             s = r
             if (showSeq >= 0 && (r.show_seq || 0) !== showSeq) { win.show(); win.raise(); win.requestActivate() }
             showSeq = r.show_seq || 0
-            if (on && clkMax > 0 && !clkTouched) { clkSl.to = clkMax; clkSl.value = clkMax }
+            // the applied limit (the helper keeps it; NVIDIA cannot read it back), else no limit: the slider at the top
+            if (on && clkMax > 0 && !clkTouched) { clkSl.to = clkMax; clkSl.value = +(g.clock_limit || 0) || clkMax }
             if (on && !sliderTouched) { pl.from = Math.max(100, Math.round(+g["power.min_limit"] || 100)); pl.to = Math.min(320, Math.round(+g["power.max_limit"] || 320)); pl.value = Math.round(+g["power.limit"] || pl.to) }
             var d = r.detach, gm = r.gm, l = r.last
             // a finished Safe Detach stays in its status file: once the eGPU is back with its driver it no longer applies
@@ -191,7 +192,7 @@ ApplicationWindow {
             RowLayout { Layout.fillWidth: true; spacing: 10; visible: win.on && !win.plOk && win.clkMax > 0
                 Label { text: "Max GPU clock" }
                 Slider { id: clkSl; Layout.fillWidth: true; from: 600; to: 3000; stepSize: 15; value: 3000; onMoved: win.clkTouched = true }
-                Label { text: Math.round(clkSl.value) + " MHz"; Layout.preferredWidth: 80; horizontalAlignment: Text.AlignRight }
+                Label { text: Math.round(clkSl.value) + " MHz" + (+(win.g.clock_limit || 0) && !win.clkTouched ? " (on)" : ""); Layout.preferredWidth: 110; horizontalAlignment: Text.AlignRight }
                 Button { text: "Apply"; onClicked: { win.act("clock-limit", { mhz: Math.round(clkSl.value) }); win.clkTouched = false } }
             }
             RowLayout { Layout.fillWidth: true; spacing: 10; visible: !win.on || win.plOk
