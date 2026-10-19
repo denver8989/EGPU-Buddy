@@ -63,7 +63,8 @@ def status():
     if _DOCK[0] != bdf: _DOCK[:] = [bdf, "ASUS ROG XG Mobile" if bdf and sh(["/usr/local/sbin/egpu-detect", "--dock"])[1].startswith("xg-mobile") else ""]
     return {"present": bool(bdf), "bdf": bdf, "vendor": vendor, "dock": _DOCK[1], "driver_loaded": driver, "tunnel": tunnel, "game_mode": game_mode,
             "gpu": gpu, "displays": displays, "panel_enabled": (panel[0] == "enabled") if panel else None,
-            "detach": jread(f"{RUN}/safe-detach-status.json"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0]}
+            "detach": jread(f"{RUN}/safe-detach-status.json"),
+            "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0]}
 
 # Long actions run in the background, but their RESULT is kept and shown by the page: a button that fails must say so
 # (Re-attach used to discard all output, so a refused attach looked like a dead button).
@@ -95,6 +96,10 @@ def action(p):
     if a == "attach":
         if s["present"] and s["driver_loaded"]: return {"ok": False, "error": "already attached"}
         run_bg("attach", ["sudo", "-n", "/usr/local/sbin/egpu-reattach"]); return {"ok": True, "started": "attach"}
+    if a == "update":   # system integration + Decky plugin to the latest release; its own unit: it restarts this app at the end
+        if (jread("/run/nvegpu/update-status.json") or {}).get("state") == "running": return {"ok": True, "started": "update"}
+        subprocess.Popen(OWN_UNIT + ["--unit=egpu-buddy-update", "sudo", "-n", "/usr/local/sbin/egpu-buddy-update"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return {"ok": True, "started": "update"}
     if a == "power-limit":
         w = int((p or {}).get("watts", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-power-limit" if s["vendor"] in ("", "nvidia") else "set-generic-power-cap", str(w)], 20); return {"ok": rc == 0, "out": o or e}
     if a == "reset-clocks":

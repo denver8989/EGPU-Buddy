@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# egpu-buddy-update [VERSION] — update the system integration and the Decky plugin to the latest GitHub release (or VERSION),
+# from the desktop app's tray menu. The same steps as the plugin's own updater (main.py: _update_plugin_files, _setup_worker):
+# checksum-verified downloads, the plugin folder swapped with its backup kept outside homebrew/plugins, the release extracted
+# where the plugin keeps it (driver caches kept), install.sh with the plugin's components. The NVIDIA driver is NOT touched:
+# it is only changed from the plugin's driver controls (a beta driver must never be rolled back by an app update).
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+REPO=denver8989/SteamOS-EGPU-Buddy
+U=$(id -nu 1000); H=$(getent passwd "$U" | cut -d: -f6)
+SYSDIR=$H/.local/share/steamos-egpu-buddy; PLUGIN=$H/homebrew/plugins/EGPU-Buddy; BAK=$H/homebrew/egpu-buddy-plugin-backup
+LOG=/var/log/egpu-buddy-update.log; exec > >(tee -a "$LOG") 2>&1
+say(){ printf '%s %s\n' "$(date '+%F %T')" "$*"; }
+# progress for the desktop app's update window (and the result, which the restarted app shows once)
+ST=/run/nvegpu/update-status.json; mkdir -p /run/nvegpu
+FINAL=0; st(){ [ "$1" = running ] || FINAL=1; printf '{"state":"%s","pct":%s,"step":"%s","version":"%s","t":%s}\n' "$1" "$2" "${3//\"/}" "${VER:-}" "$(date +%s)" > "$ST.tmp"; chmod 644 "$ST.tmp"; mv "$ST.tmp" "$ST"; }
+trap 'rc=$?; [ "$FINAL" = 1 ] || st failed 100 "Update stopped (rc $rc). See /var/log/egpu-buddy-update.log."' EXIT
+cur=$(cat /etc/nv-egpu-buddy/version 2>/dev/null || echo none)
+VER=${1:-$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -1)}
+[ -n "$VER" ] || { say "could not look up the latest release"; st failed 100 "Could not reach GitHub to look up the latest release."; exit 2; }
+[ "$cur" = "$VER" ] && [ "${EGPU_UPDATE_FORCE:-0}" != 1 ] && { say "already on $VER"; st ok 100 "Already up to date ($VER)."; exit 0; }
+say "updating $cur -> $VER"; st running 5 "Downloading $VER"
+T=$(mktemp -d); B=https://github.com/$REPO/releases/download/v$VER
+TGZ=SteamOS-EGPU-Buddy-$VER.tar.gz; ZIP=EGPU-Buddy-Decky-$VER.zip
+curl -fsSL -o "$T/SHA256SUMS" "$B/SHA256SUMS"; curl -fsSL -o "$T/$TGZ" "$B/$TGZ"
+[ -d "$PLUGIN" ] && curl -fsSL -o "$T/$ZIP" "$B/$ZIP"
+(cd "$T" && for f in "$TGZ" $([ -f "$ZIP" ] && echo "$ZIP"); do
+  want=$(awk -v n="$f" '$2 ~ ("(^|/)" n "$") {print $1; exit}' SHA256SUMS); [ -n "$want" ] && [ "$want" = "$(sha256sum "$f" | cut -d' ' -f1)" ] || { echo "checksum mismatch on $f"; exit 3; }
+done) || { say "checksum mismatch; nothing was changed"; st failed 100 "The download did not match its checksum; nothing was changed."; rm -rf "$T"; exit 3; }
+say "checksums ok"; st running 20 "Download verified; installing the system files"
+# system integration first (the plugin restart below would end a plugin-driven run, not this one)
+for n in pkgcache modcache; do [ -d "$SYSDIR/$n" ] && { rm -rf "$SYSDIR.$n-keep"; mv "$SYSDIR/$n" "$SYSDIR.$n-keep"; }; done
+rm -rf "$SYSDIR"; mkdir -p "$SYSDIR"; tar -xzf "$T/$TGZ" -C "$SYSDIR" --strip-components=1
+for n in pkgcache modcache; do [ -d "$SYSDIR.$n-keep" ] && { rm -rf "$SYSDIR/$n"; mv "$SYSDIR.$n-keep" "$SYSDIR/$n"; }; done
+chown -R "$U": "$SYSDIR"
+RO=$(command -v steamos-readonly || true); [ -n "$RO" ] && "$RO" disable
+# each "== stage" line of the installer moves the progress bar on (about 15 of them)
+rc=1; pct=20
+while IFS= read -r line; do printf '%s\n' "$line"
+  case "$line" in __rc=*) rc=${line#__rc=} ;; *"== "*) [ $pct -lt 85 ] && pct=$((pct + 4)); st running $pct "${line#*== }" ;; esac
+done < <(cd "$SYSDIR" && env EGPU_TARGET_USER="$U" HOME="$H" EGPU_AUTO_YES=1 EGPU_COMPONENTS=core,session,gamescope,bootpolicy,desktopapp \
+  EGPU_PREBUILT_GAMESCOPE="$SYSDIR/prebuilt/gamescope-gbm" bash install.sh 2>&1 | sed -u 's/\x1b\[[0-9;]*m//g'; echo "__rc=${PIPESTATUS[0]}")
+[ -n "$RO" ] && "$RO" enable
+say "system integration: install.sh rc=$rc"
+if [ -d "$PLUGIN" ] && [ -f "$T/$ZIP" ]; then
+  st running 90 "Installing the Decky plugin"; mkdir -p "$T/p"; (cd "$T/p" && python3 -c 'import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall(".")' "$T/$ZIP")
+  rm -rf "$BAK"; cp -a "$PLUGIN" "$BAK"; find "$PLUGIN" -mindepth 1 -delete; cp -a "$T/p/EGPU-Buddy/." "$PLUGIN/"; chown -R "$U": "$PLUGIN"
+  systemctl try-restart plugin_loader.service || true; say "Decky plugin $VER installed (backup: $BAK)"
+fi
+rm -rf "$T"
+case "$rc" in 0) say "done: $VER"; st ok 100 "Updated to $VER." ;;
+  21) say "staged: $VER finishes on the next reboot"; st ok 100 "Updated to $VER; it finishes on the next reboot." ;;
+  *) say "the system files reported rc=$rc; see $LOG"; st failed 100 "The system files update failed (rc $rc). See /var/log/egpu-buddy-update.log." ;; esac
+# the running desktop app is the old version: restart it (its window shows the result once), a few seconds after the
+# window has shown 100 %
+( sleep 4; pkill -u "$U" -f 'egpu-buddy-server[.]py' || true
+  runuser -u "$U" -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user try-restart egpu-buddy-tray.service ) >/dev/null 2>&1 &
+[ "$rc" = 21 ] && exit 0; exit "$rc"

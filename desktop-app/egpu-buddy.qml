@@ -25,6 +25,9 @@ ApplicationWindow {
     property bool sliderTouched: false
     property string msg: "Ready."
     property bool msgErr: false
+    property bool updSeen: false
+    readonly property var upd: (s.update || {})
+    readonly property bool updRunning: upd.state === "running"
 
     function num(v, d) { var x = parseFloat(v); return isNaN(x) ? "–" : x.toFixed(d || 0) }
     function call(method, path, body, cb) {
@@ -46,6 +49,10 @@ ApplicationWindow {
             else if (gm && gm.state && gm.state !== "ATTACHED") { msgErr = false; msg = gm.state + ": " + (gm.message || "") }
             else if (l && l.action) { msgErr = l.state === "failed"
                 msg = l.state === "running" ? l.action + ": working…" : l.state === "ok" ? l.action + ": done." + (l.out ? "\n" + l.out : "") : l.action + " failed (rc " + l.rc + ")\n" + (l.out || "no output") }
+            // an update just finished (this app was restarted by it): show its result once
+            var u = r.update || {}
+            if (!updSeen && u.state && u.state !== "running" && Date.now() / 1000 - (u.t || 0) < 120) { win.show(); win.raise(); updateDlg.open() }
+            updSeen = true
             if (shot.length) shotTimer.start()
         })
     }
@@ -73,6 +80,8 @@ ApplicationWindow {
             Platform.MenuItem { text: "Safe Detach…"; enabled: !!win.s.present; onTriggered: { win.show(); win.raise(); confirmDetach.open() } }
             Platform.MenuItem { text: "Re-attach"; enabled: !(win.s.present && win.s.driver_loaded); onTriggered: win.act("attach") }
             Platform.MenuSeparator {}
+            Platform.MenuItem { text: win.updRunning ? "Updating… (show progress)" : "Update EGPU Buddy…"; onTriggered: { win.show(); win.raise(); win.requestActivate(); updateDlg.open() } }
+            Platform.MenuSeparator {}
             Platform.MenuItem { text: "Quit"; onTriggered: Qt.quit() }
         }
     }
@@ -84,6 +93,32 @@ ApplicationWindow {
         Label { width: parent.width; wrapMode: Text.WordWrap
             text: "The session moves back to the handheld screen and the eGPU is removed from the bus. Do not unplug until the result says it is safe. Continue?" }
         onAccepted: win.act("safe-detach")
+    }
+
+    // Update: confirm, then live progress from the updater's status file, then the result (also after the app restarts)
+    Dialog {
+        id: updateDlg
+        property real askedAt: 0                // seconds; 0 = not started from this dialog
+        // confirm -> starting -> running (live progress) -> result; a result up to 2 minutes old is shown after the app restarts
+        readonly property string phase: win.updRunning ? "running"
+            : (win.upd.state && (win.upd.t || 0) >= (askedAt || Date.now() / 1000 - 120)) ? "result"
+            : askedAt ? "starting" : "confirm"
+        title: "Update EGPU Buddy"; modal: true; anchors.centerIn: parent; width: Math.min(win.width - 80, 560)
+        closePolicy: phase === "running" ? Popup.NoAutoClose : Popup.CloseOnEscape
+        onOpened: askedAt = 0
+        ColumnLayout { width: parent.width; spacing: 10
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap
+                text: updateDlg.phase === "confirm" ? "Installed: " + (win.s.installed || "unknown") + ".\nDownload the latest release and update the system integration and the Game Mode plugin? The NVIDIA driver is not changed. The eGPU can stay attached; this window shows the progress."
+                    : updateDlg.phase === "starting" ? "Starting…" : (win.upd.step || "")
+                color: updateDlg.phase === "result" && win.upd.state === "failed" ? "#e05555" : palette.windowText }
+            ProgressBar { Layout.fillWidth: true; visible: updateDlg.phase === "running" || updateDlg.phase === "starting"; from: 0; to: 100
+                value: win.upd.pct || 0; indeterminate: updateDlg.phase === "starting" }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: updateDlg.phase === "running"
+                text: "EGPU Buddy restarts itself when the update is done." }
+            RowLayout { Layout.alignment: Qt.AlignRight
+                Button { text: "Update"; visible: updateDlg.phase === "confirm"; onClicked: { updateDlg.askedAt = Date.now() / 1000 - 2; win.act("update") } }
+                Button { text: updateDlg.phase === "running" || updateDlg.phase === "starting" ? "Hide" : "Close"; onClicked: updateDlg.close() } }
+        }
     }
 
     component Badge: Rectangle {
@@ -144,6 +179,7 @@ ApplicationWindow {
                 Button { text: "Safe Detach"; Layout.fillWidth: true; enabled: !!win.s.present; opacity: enabled ? 1 : 0.4; onClicked: confirmDetach.open() }
                 Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); opacity: enabled ? 1 : 0.4; onClicked: win.act("attach") }
                 Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: win.act("reset-clocks") }
+                Button { text: win.updRunning ? "Updating…" : "Update"; Layout.fillWidth: true; onClicked: updateDlg.open() }
             }
             Frame { Layout.fillWidth: true
                 Label { width: parent.width; wrapMode: Text.WordWrap; text: win.msg; color: win.msgErr ? "#e05555" : palette.windowText } }

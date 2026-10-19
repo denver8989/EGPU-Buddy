@@ -11,3 +11,4 @@ deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-gamemode-detach
 deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-desktop-detach
 deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-rearm
 deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-report
+deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-buddy-update

@@ -1,3 +1,8 @@
+0.7.126 — update from the desktop app.
+
+**New**
+- Update EGPU Buddy from the desktop app: an Update button in the window and "Update EGPU Buddy…" in the tray icon's right-click menu. It updates the system integration and the Game Mode plugin with a progress window, then restarts the app and shows the result. The NVIDIA driver is not changed.
+
 0.7.125 — Legion Go 2: Safe Detach no longer refuses over the microphone.
 
 **Fixed**
