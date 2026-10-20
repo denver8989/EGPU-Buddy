@@ -89,6 +89,15 @@ ApplicationWindow {
             if (shot.length) shotTimer.start()
         })
     }
+    // GitHub release notes (backend /api/notes): every release newer than the installed one, or the installed one's own
+    property string notesText: "Loading the release notes from GitHub…"
+    function loadNotes() {
+        call("GET", "/api/notes", null, function(r) {
+            if (!r) { notesText = "The release notes could not be loaded."; return }
+            if (r.error || !(r.notes || []).length) { notesText = r.error || "No release notes found."; return }
+            notesText = "### " + r.title + "\n\n" + r.notes.map(function(n) { return "#### " + n.version + " · " + n.date + "\n\n" + n.body }).join("\n\n---\n\n")
+        })
+    }
     function act(action, extra) {
         var b = { action: action }; for (var k in (extra || {})) b[k] = extra[k]
         call("POST", "/api/action", b, function(r) {
@@ -158,12 +167,17 @@ ApplicationWindow {
             : askedAt ? "starting" : "confirm"
         title: "Update EGPU Buddy"; modal: true; anchors.centerIn: parent; width: Math.min(win.width - 80, 560)
         closePolicy: phase === "running" ? Popup.NoAutoClose : Popup.CloseOnEscape
-        onOpened: askedAt = 0
+        onOpened: { askedAt = 0; win.loadNotes() }
         ColumnLayout { width: parent.width; spacing: 10
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap
                 text: updateDlg.phase === "confirm" ? "Installed: " + (win.s.installed || "unknown") + ".\nDownload the latest release and update the system integration and the Game Mode plugin? The NVIDIA driver is not changed. The eGPU can stay attached; this window shows the progress."
                     : updateDlg.phase === "starting" ? "Starting…" : (win.upd.step || "")
                 color: updateDlg.phase === "result" && win.upd.state === "failed" ? "#e05555" : palette.windowText }
+            // release notes from GitHub: what the update brings (before it), the installed version's notes (after it)
+            Frame { Layout.fillWidth: true; Layout.preferredHeight: 260; visible: updateDlg.phase === "confirm" || updateDlg.phase === "result"; padding: 8
+                ScrollView { anchors.fill: parent; clip: true; contentWidth: availableWidth
+                    Label { width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.MarkdownText; text: win.notesText
+                            onLinkActivated: function(link) { Qt.openUrlExternally(link) } } } }
             ProgressBar { Layout.fillWidth: true; visible: updateDlg.phase === "running" || updateDlg.phase === "starting"; from: 0; to: 100
                 value: win.upd.pct || 0; indeterminate: updateDlg.phase === "starting" }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: updateDlg.phase === "running"

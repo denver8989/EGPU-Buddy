@@ -137,6 +137,27 @@ def action(p):
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}
 
+REPO = "denver8989/SteamOS-EGPU-Buddy"
+_NOTES = {"t": 0.0, "rels": []}
+def vt(v): return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3]) or (0,)
+def release_notes():
+    """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first;
+    with nothing newer, the installed release's own notes. Each GitHub release carries only its own changes. Cached 10 min."""
+    installed = read("/etc/nv-egpu-buddy/version")
+    try:
+        if time.time() - _NOTES["t"] > 600:
+            import urllib.request
+            req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases?per_page=30", headers={"User-Agent": "EGPU-Buddy"})
+            data = json.load(urllib.request.urlopen(req, timeout=20))
+            _NOTES.update(t=time.time(), rels=[{"version": r.get("tag_name", "").lstrip("v"), "date": (r.get("published_at") or "")[:10],
+                                                "body": r.get("body") or "", "url": r.get("html_url", "")}
+                                               for r in data if not r.get("draft") and not r.get("prerelease")])
+    except Exception as ex:
+        if not _NOTES["rels"]: return {"title": "Release notes", "notes": [], "error": f"Could not reach GitHub: {ex}"}
+    newer = [r for r in _NOTES["rels"] if vt(r["version"]) > vt(installed)]
+    if newer: return {"title": f"What's new since {installed}" if installed else "Release notes", "notes": newer}
+    return {"title": f"What's new in {installed}", "notes": [r for r in _NOTES["rels"] if r["version"] == installed][:1]}
+
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k): super().__init__(*a, directory=HERE, **k)
     def _json(self, o):
@@ -145,6 +166,7 @@ class H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         p = self.path.split("?")[0]
         if p == "/api/status": return self._json(status())
+        if p == "/api/notes": return self._json(release_notes())
         return super().do_GET()
     def do_POST(self):
         p = self.path.split("?")[0]; n = int(self.headers.get("content-length", 0)); b = json.loads(self.rfile.read(n) or b"{}")

@@ -98,6 +98,22 @@ def _settings():
 def _save_settings(d):
     os.makedirs(os.path.dirname(SETTINGS), exist_ok=True); json.dump(d, open(SETTINGS, "w")); subprocess.run(["chown", "-R", USER, os.path.dirname(SETTINGS)], env=_clean_env())
 def _vt(v): return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3]) or (0,)
+_notes_cache = {"t": 0.0, "rels": []}
+def _release_notes(installed):
+    """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first;
+    with nothing newer, the installed release's own notes. Each GitHub release carries only its own changes. Cached 10 min."""
+    if time.time() - _notes_cache["t"] > 600:
+        data = json.loads(_get(f"https://api.github.com/repos/{REPO}/releases?per_page=30", 20).decode())
+        _notes_cache.update(t=time.time(), rels=[{"version": r.get("tag_name", "").lstrip("v"), "date": (r.get("published_at") or "")[:10],
+                                                  "body": r.get("body") or "", "url": r.get("html_url", "")}
+                                                 for r in data if not r.get("draft") and not r.get("prerelease")])
+    rels = _notes_cache["rels"]
+    newer = [r for r in rels if _vt(r["version"]) > _vt(installed)]
+    if newer:
+        return {"title": f"What's new since {installed}" if installed else "Release notes", "notes": newer}
+    return {"title": f"What's new in {installed}", "notes": [r for r in rels if r["version"] == installed][:1]}
+
+
 def _latest_release():
     data = json.loads(_get(f"https://api.github.com/repos/{REPO}/releases/latest", 20).decode())
     return data.get("tag_name", "").lstrip("v")
@@ -1289,6 +1305,12 @@ class Plugin:
         return {"auto_update": d.get("auto_update", False), "available": _update["available"], "state": _update["state"],
                 "checked": _update["checked"], "last_error": _update["last_error"], "installed": _read(VERSION_FILE),
                 "needs_detach": _update_needs_detach()}
+
+    async def get_release_notes(self):
+        try:
+            return _release_notes(_read(VERSION_FILE) or PAYLOAD_VERSION)
+        except Exception as ex:  # noqa: BLE001
+            return {"title": "Release notes", "notes": [], "error": f"Could not reach GitHub: {ex}"}
 
     async def set_auto_update(self, enabled: bool):
         d = _settings(); d["auto_update"] = bool(enabled); _save_settings(d); return {"ok": True, "message": "saved"}

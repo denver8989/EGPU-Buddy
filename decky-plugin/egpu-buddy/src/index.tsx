@@ -23,6 +23,30 @@ const xgmFan = callable<[string], Result>("xgm_fan");
 const xgmLight = callable<[boolean], Result>("xgm_light");
 const xgmPower = callable<[number], Result>("xgm_power");
 const xgmSet = callable<[string, string], Result>("xgm");
+type Notes = { title: string; notes: { version: string; date: string; body: string; url: string }[]; error?: string };
+const getReleaseNotes = callable<[], Notes>("get_release_notes");
+// GitHub release notes, as written in RELEASE-NOTES.md: a title line, **Section** labels, "- " bullets, **bold**, [links](…)
+const mdInline = (s: string) => s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/`([^`]*)`/g, "$1").split(/(\*\*[^*]+\*\*)/)
+  .map((p, i) => p.startsWith("**") && p.endsWith("**") ? <b key={i}>{p.slice(2, -2)}</b> : p);
+const NotesBody = ({ body }: { body: string }) => (<>{body.split("\n").map((l, i) => {
+  const t = l.trim(); if (!t) return null;
+  if (/^[-*] /.test(t)) return <div key={i} style={{ display: "flex", gap: "6px", margin: "3px 0" }}><span>•</span><span>{mdInline(t.slice(2))}</span></div>;
+  if (/^\*\*[^*]+\*\*/.test(t)) return <div key={i} style={{ marginTop: "8px", fontWeight: 700 }}>{mdInline(t)}</div>;
+  return <div key={i} style={{ margin: "3px 0" }}>{mdInline(t)}</div>;
+})}</>);
+// "What's new": loaded from GitHub when opened (what an update brings, or the installed version's notes)
+function ReleaseNotes({ label }: { label: string }) {
+  const [n, setN] = useState<Notes | null>(null); const [open, setOpen] = useState(false);
+  const toggle = () => { setOpen(!open); if (!open && !n) getReleaseNotes().then(setN).catch((e) => setN({ title: "Release notes", notes: [], error: `${e}` })); };
+  return (<>
+    <PanelSectionRow><ButtonItem layout="below" onClick={toggle}>{open ? "Hide release notes" : label}</ButtonItem></PanelSectionRow>
+    {open && <PanelSectionRow><div style={{ fontSize: "12px", lineHeight: 1.4 }}>
+      {!n ? "Loading the release notes from GitHub…" : n.error ? n.error : !n.notes.length ? "No release notes found." : (<>
+        <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "4px" }}>{n.title}</div>
+        {n.notes.map((r) => <div key={r.version} style={{ marginBottom: "12px" }}><div style={{ opacity: 0.7 }}>{r.version} · {r.date}</div><NotesBody body={r.body} /></div>)}
+      </>)}</div></PanelSectionRow>}
+  </>);
+}
 const xgmIntro = callable<[], string>("xgm_intro");   // the XG Mobile intro animation (data URI, or "" once shown)
 const xgmIntroDone = callable<[], boolean>("xgm_intro_done");   // light-effect, brightness, offset
 const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"], ["ffd000", "Yellow"], ["00ff40", "Green"], ["00e0ff", "Cyan"], ["0040ff", "Blue"], ["a000ff", "Purple"], ["ffffff", "White"]];
@@ -429,6 +453,7 @@ function Content() {
             </>
           )}
           {updateReady && !su?.busy && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Version {up!.available} is available.</div></PanelSectionRow>}
+          {updateReady && !su?.busy && <ReleaseNotes label={`What's new in ${up!.available}`} />}
           {updateReady && !su?.busy && <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp} onClick={() => up?.needs_detach ? confirmInstall(`Update to ${up!.available}`, () => updateInPlace(up!.available), () => updateDetached(up!.available)) : run(() => updateInPlace(up!.available))}>Update to {up!.available}</ButtonItem></PanelSectionRow>}
           {up?.state && <PanelSectionRow><div style={{ fontSize: "12px", color: up.state.includes("failed") ? "#ff6b6b" : undefined, opacity: up.state.includes("failed") ? 1 : 0.8 }}>{up.state}</div></PanelSectionRow>}
           {su?.busy && <PanelSectionRow><Progress pct={su.progress} title={(su.step.startsWith("update") || up?.state.startsWith("installing")) ? "Updating" : "Installing"} step={su.step} started={su.started} expect={su.expect} /></PanelSectionRow>}
@@ -751,6 +776,7 @@ function Content() {
         <PanelSection title="Updates">
           <PanelSectionRow><ToggleField label="Automatic updates" description="Off (default): a new release is only announced here and you decide when to install it. On: it installs by itself when no game is running." checked={!!up?.auto_update} onChange={(v) => run(() => setAutoUpdate(v))} /></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => run(() => checkUpdate(false))}>Check for updates now</ButtonItem></PanelSectionRow>
+          <ReleaseNotes label={up?.available ? `What's new in ${up.available}` : "Release notes"} />
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{up ? (up.available ? `Available: ${up.available}` : (up.checked ? "Up to date." : "Not checked yet.")) + (up.last_error ? ` ${up.last_error}` : "") : "…"}</div></PanelSectionRow>
         </PanelSection>
       )}

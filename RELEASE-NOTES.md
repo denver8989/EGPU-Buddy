@@ -1,4 +1,7 @@
-0.7.138 — the XG Mobile controls in the desktop app's fallback window; the full GPU name in the Game Mode plugin.
+0.7.138 — release notes when updating, in Game Mode and on the desktop; the XG Mobile controls in the desktop app's fallback window; the full GPU name in the Game Mode plugin.
+
+**New**
+- Release notes when updating, straight from GitHub: in the Game Mode plugin, "What's new in <version>" next to the update (and "Release notes" under Setup & updates → Updates); in the desktop app, the Update window lists what the update brings before you start it, and what changed after it. Every version between the installed one and the update is shown.
 
 **New** (ASUS XG Mobile only)
 - The desktop app's fallback window (used where Qt 6 is not available; SteamOS always has the full window) has the XG Mobile controls too: power target, fan modes and the custom fan curve, lights (on/off, effect, color, speed, brightness) and clock offsets, with the same readings as the main window.
