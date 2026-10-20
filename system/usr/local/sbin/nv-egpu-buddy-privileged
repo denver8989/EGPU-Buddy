@@ -515,13 +515,14 @@ case "$action" in
     # had the problem because its default was already plasma.
     # Called by the session scripts themselves (not just the attach hook), so switching to the
     # desktop BY HAND is covered too.
-    [ "$#" -eq 1 ] || die "session-fallback takes desktop or game"
+    [ "$#" -eq 1 ] || die "session-fallback takes desktop, game or release-stale"
     case "$1" in
+      release-stale) /usr/local/sbin/egpu-dm-session release-stale ;;   # no eGPU left to lose: a leftover pin only blocks Game Mode
       desktop) /usr/local/sbin/egpu-dm-session pin plasma >/dev/null 2>&1 &&
                  printf 'login fallback -> plasma\n' ;;
       game)    /usr/local/sbin/egpu-dm-session unpin >/dev/null 2>&1 &&
                  printf 'login fallback -> system default (Game Mode)\n' ;;
-      *) die "session-fallback takes desktop or game" 2 ;;
+      *) die "session-fallback takes desktop, game or release-stale" 2 ;;
     esac
     ;;
   resize)

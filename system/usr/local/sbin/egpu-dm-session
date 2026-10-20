@@ -6,6 +6,7 @@
 # without this, a desktop Safe Detach on SteamOS comes back in Game Mode and the detach cannot finish.
 #   egpu-dm-session pin plasma|plasmax11|gamescope|bigpicture   write our drop-in (sorts last, wins)
 #   egpu-dm-session unpin                             remove it again (system default is back)
+#   egpu-dm-session release-stale                     remove it if nothing needs it any more (see there)
 #   egpu-dm-session show                              directory + session currently pinned
 set -u
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
@@ -53,6 +54,19 @@ case "${1:-show}" in
   unpin)
     d=$(dm_dir) || exit 0
     rm -f "$d/$DROP"; echo "unpinned (system default restored in $d)"
+    ;;
+  release-stale)
+    # Our pin only has a job while an eGPU is attached to a desktop session (losing it then must come back to the desktop)
+    # or for the one relogin of a Safe Detach. With no NVIDIA eGPU on the bus and no detach running it only outranks the
+    # system's own choice: "Return to Gaming Mode" then logs straight back into the desktop (ROG Xbox Ally X after a cable
+    # pull, 0.7.136). The boot policy's own desktop pin (opt-in /etc/nv-egpu-buddy/boot-desktop) is the user's choice: kept.
+    d=$(dm_dir) || exit 0
+    [ -f "$d/$DROP" ] || { echo "not pinned"; exit 0; }
+    [ -e /etc/nv-egpu-buddy/boot-desktop ] && { echo "kept: the boot policy pins the desktop (boot-desktop)"; exit 0; }
+    lspci -Dn 2>/dev/null | grep -qE ' 03(00|02|80): 10de:' && { echo "kept: an NVIDIA eGPU is attached"; exit 0; }
+    { [ -e /run/nvegpu/gm-detach-pending ] || pgrep -f '/usr/local/sbin/egpu-(safe|desktop)-detach' >/dev/null 2>&1; } && { echo "kept: a Safe Detach is running"; exit 0; }
+    s=$(sed -n 's/^Session=//p' "$d/$DROP" 2>/dev/null)
+    rm -f "$d/$DROP"; echo "released a leftover pin (${s:-?}): the system's own session choice applies again"
     ;;
   show)
     d=$(dm_dir) || { echo "none"; exit 0; }

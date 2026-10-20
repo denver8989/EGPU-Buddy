@@ -206,6 +206,12 @@ _egpu_stage_desktop_kwin() {
       done
       unset PROTON_ENABLE_NVAPI DXVK_ENABLE_NVAPI PROTON_HIDE_NVIDIA_GPU
       _egpu_emlog "Plasma pre-compositor: NVIDIA card absent -> KWin pinned to iGPU only ($_ab_card), render stack = mesa"
+      # ROG Ally / XG Mobile: with no eGPU left to lose, a desktop login pin still in place (left by a cable pull, an
+      # interrupted detach, an older version) only sends "Return to Gaming Mode" back here. Release it now; the helper
+      # keeps it while a Safe Detach runs or when the user chose to boot into the desktop.
+      if { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
+        _egpu_emlog "Plasma pre-compositor: login pin check: $(sudo -n /usr/local/sbin/nv-egpu-buddy-privileged session-fallback release-stale 2>&1 | head -1)"
+      fi
     else
       _egpu_emlog "Plasma pre-compositor: NVIDIA card absent and no iGPU card resolved; leaving KWin default"
     fi

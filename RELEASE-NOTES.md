@@ -2,6 +2,7 @@
 
 **Fixed** (ROG Ally or ASUS XG Mobile hardware only; every other device is unchanged)
 - After pulling the cable on the desktop with the eGPU attached there, every "Return to Gaming Mode" blacked out and came back to the desktop until a reboot. The desktop attach tells the login manager to come back to the desktop if the eGPU is lost (so a cable pull does not drop you into Game Mode); the cable-pull recovery now releases that once the desktop is back, as Safe Detach already did.
+- A machine already stuck that way is fixed by installing this update (no reboot needed): the leftover setting is removed whenever no eGPU is attached. Every desktop login without the eGPU now checks for it too, whatever left it behind. A desktop chosen on purpose as the boot session is kept.
 
 0.7.136 — plugging the eGPU back in after a cable pull or a forced Safe Detach: the recovery no longer fights the new attach.
 

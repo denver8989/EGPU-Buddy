@@ -233,6 +233,11 @@ rm -rf "$SYS_TMP"
 userctl daemon-reload >/dev/null 2>&1 || true   # no user session bus (install at boot, chroot): the next login picks the units up
 # helpers already running keep their old code until restarted; this does not touch Game Mode itself
 userctl try-restart egpu-wake-guard.service egpu-screen-watch.service egpu-display-failover.service >/dev/null 2>&1 || true
+# ROG Ally / XG Mobile: a desktop login pin left behind by an older version (a cable pull on the desktop did not release it,
+# 0.7.136) sent every "Return to Gaming Mode" back to the desktop. Released now if nothing needs it (no eGPU attached, no
+# Safe Detach running, no boot-desktop opt-in), so the update itself fixes a machine already in that state.
+want core && sudo bash -c '{ [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } &&
+  [ -x /usr/local/sbin/egpu-dm-session ] && /usr/local/sbin/egpu-dm-session release-stale' 2>/dev/null | sed 's/^/login session pin: /' || true
 want core && { userctl enable egpu-display-failover.service; userctl enable --now egpu-wake-guard.service; userctl enable --now egpu-screen-watch.service; } >/dev/null 2>&1 || true
 
 # ---- gamescope with GBM scan-out (NVIDIA scan-out corruption fix) --------------------------------
