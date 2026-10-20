@@ -50,10 +50,13 @@ are supported in beta.
 <p align="center"><em>Main page (switch between the handheld, XR glasses, TV and monitor; Safe Detach), details (GPU, link, screens, telemetry) and setup (game screen, best resolution, updates, extras).</em></p>
 
 <p align="center">
-  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="100%">
+  <img src="docs/assets/screenshot-xg-mobile.png" alt="EGPU Buddy plugin in Game Mode with an ASUS XG Mobile: details with the 115 W cap and the fan mode, then the XG Mobile section with power target, fan mode, lights and clock offsets" width="260" valign="top">
+  &nbsp;
+  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="560" valign="top">
 </p>
-<p align="center"><em>The desktop app with an ASUS XG Mobile (RTX 5070 Ti Laptop GPU) on a ROG Xbox Ally X: power and its 115 W cap,
-power target, the XG Mobile's fan mode and custom curve, lights and clock offsets. Readings from SilverplayerX's device.</em></p>
+<p align="center"><em>ASUS XG Mobile (RTX 5070 Ti Laptop GPU) on a ROG Xbox Ally X, in the Game Mode plugin (left) and the desktop app (right):
+power and its 115 W cap, a power target, the XG Mobile's fan mode and custom curve, its lights and clock offsets.
+Readings from SilverplayerX's device.</em></p>
 
 <p align="center">
   <img src="docs/assets/nvidia-before-after.png" alt="Before: Steam Game Mode interface corrupted on an NVIDIA GPU. After: clean Game Mode." width="100%">
