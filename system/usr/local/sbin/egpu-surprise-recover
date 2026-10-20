@@ -205,6 +205,13 @@ if [ "$GM" = 0 ]; then
     fi
     sleep 2
   done
+  # The desktop pin (egpu-dm-session, armed by the desktop attach so that this very cable pull came back to the desktop)
+  # has done its job now that the desktop is back. Left in place it outranks the system's own choice, and every "Return
+  # to Gaming Mode" logged straight back into the desktop until a reboot (ROG Xbox Ally X + XG Mobile, 0.7.136). Safe
+  # Detach already releases it the same way. ROG Ally / XG Mobile hardware only, like the other additions here.
+  if [ "$XGA" = 1 ] && pgrep -U $U -x 'kwin_wayland|kwin_x11' >/dev/null 2>&1; then
+    /usr/local/sbin/egpu-dm-session unpin >/dev/null 2>&1 && log "desktop pin released: Return to Gaming Mode works again"
+  fi
 fi
 # 5. internal panel back on + failover watcher promotes eDP-1; audio to internal
 /usr/local/sbin/egpu-panel on >/dev/null 2>&1 || true

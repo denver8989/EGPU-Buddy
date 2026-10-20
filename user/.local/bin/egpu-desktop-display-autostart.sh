@@ -22,7 +22,7 @@ printf desktop > "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-session-type" 2>/d
 # Arm the login manager's fallback for THIS session. Doing it here rather than only in the attach
 # hook means switching to the desktop by hand is covered too - mount the eGPU in Game Mode, switch
 # to the desktop, pull the cable, and you still come back to the desktop.
-sudo -n /usr/local/sbin/nv-egpu-buddy-privileged session-fallback desktop >/dev/null 2>&1 || true-recover
+sudo -n /usr/local/sbin/nv-egpu-buddy-privileged session-fallback desktop >/dev/null 2>&1 || true
 set -u
 # Session-type marker for egpu-surprise-recover: written at EVERY Plasma login, before any early exit below
 # (the Game Mode session wrapper writes "gamemode"; whichever session started last owns the marker).
