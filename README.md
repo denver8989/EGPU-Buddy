@@ -36,6 +36,8 @@ are supported in beta.
   dock's lights, and core and memory clock offsets.
 - **Beta driver button:** try NVIDIA's newest driver, with an automatic return to the tested one if it fails.
 - **Keeps itself working:** Decky restarts if it stops, and the setup repairs itself after OS updates.
+- **Release notes when updating:** "What's new" in the plugin and in the desktop app's Update window, straight from
+  GitHub: every version between the one you have and the update.
 - **Desktop app** with the same controls for the docked desktop.
 
 ## Screenshots
@@ -94,8 +96,9 @@ after a reboot.
    curl -fsSL https://raw.githubusercontent.com/denver8989/SteamOS-EGPU-Buddy/master/get-egpu-buddy.sh | bash
    ```
 
-After the reboot, plug the eGPU in. Updates are offered in the plugin; automatic updates are off unless you turn
-them on. Every release stays available on the Releases page.
+After the reboot, plug the eGPU in. Updates are offered in the plugin and the desktop app, each with its release notes
+("What's new in …"); automatic updates are off unless you turn them on. Every release stays available on the
+Releases page.
 
 ## Reporting problems
 
