@@ -2,7 +2,7 @@
 <style>
 :root{--bg:#0A0E13;--surface:#121821;--surface2:#0F141C;--border:#28313E;--text:#fff;--dim:#ffffff99;--accent:#57b7ff;--danger:#ff5a5a}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,"Segoe UI",Roboto,sans-serif;padding:22px 28px}
-.hd{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}.hd .t{font-size:26px;font-weight:700}.hd .n{color:var(--dim);font-weight:600}
+.hd{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}.hd .t{font-size:26px;font-weight:700;white-space:nowrap}.hd .n{color:var(--dim);font-weight:600}
 .badges{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}.bdg{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 10px;border-radius:99px;border:1px solid var(--border);color:var(--dim)}
 .bdg.on{color:var(--accent);border-color:#57b7ff66;background:#57b7ff14}.bdg.warn{color:#ffb340;border-color:#ffb34066}
 .tele{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface2);margin-bottom:12px}
@@ -15,6 +15,10 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 .acts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .msg{margin-top:14px;padding:10px 14px;border-left:3px solid var(--accent);background:#101720;font-size:13px;min-height:20px;border-radius:4px}.msg.err{border-left-color:var(--danger)}
 .foot{margin-top:18px;font-size:11px;color:var(--dim)}
+.btn.sel{border-color:var(--accent);color:var(--accent);background:#57b7ff14}.fans{display:flex;gap:8px;flex:1}.fans .btn{flex:1;padding:8px}
+.sw{width:24px;height:24px;border-radius:50%;border:1px solid var(--border);cursor:pointer;padding:0}.sw.sel{outline:3px solid var(--accent);outline-offset:1px}
+select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;font:inherit}
+.curve{display:grid;grid-template-columns:auto repeat(8,1fr);gap:6px;align-items:center;margin:10px 0}.curve input{width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px;font:inherit;text-align:center}
 </style></head><body>
 <div class="hd"><span class="t">EGPU Buddy</span><span class="n" id="name">—</span>
  <span class="badges"><span class="bdg" id="b-gpu">No eGPU</span><span class="bdg" id="b-tun">No tunnel</span><span class="bdg" id="b-drv">Driver unloaded</span><span class="bdg" id="b-mode">Desktop</span></span></div>
@@ -31,7 +35,19 @@ input[type=range]{flex:1;accent-color:var(--accent)}
 <div class="info"><span class="chip">Driver <b id="i-drv">—</b></span><span class="chip">Bus <b id="i-bdf">—</b></span><span class="chip">VRAM <b id="i-vt">—</b></span><span class="chip">Displays <b id="i-disp">—</b></span><span class="chip">Handheld panel <b id="i-panel">—</b></span></div>
 <div class="st">Power</div>
 <div class="msg" id="pl-note" style="display:none">This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power.</div>
+<div class="row" id="pt-row" style="display:none"><div class="lab">Power target</div><input type="range" id="pt" min="40" max="115" step="5" value="115"><div class="val" id="pt-v">No target</div><button class="btn" id="pt-apply">Apply</button></div>
 <div class="row" id="pl-row"><div class="lab">Power limit</div><input type="range" id="pl" min="100" max="320" step="5" value="320"><div class="val" id="pl-v">– W</div><button class="btn" id="pl-apply">Apply</button></div>
+<div id="xg" style="display:none">
+<div class="st">XG Mobile</div>
+<div class="row"><div class="lab">Fan</div><div class="fans" id="fans"></div></div>
+<div class="row" id="curve-box" style="display:none;flex-direction:column;align-items:stretch">
+ <div style="font-size:13px;color:var(--dim)">Custom fan curve: at each GPU temperature, the fan speed. Temperatures must rise from point to point, the speed must not fall, and the last point must be at least 60 %. The XG Mobile follows the curve itself.</div>
+ <div class="curve" id="curve"></div>
+ <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" id="curve-cancel">Cancel</button><button class="btn" id="curve-apply">Apply</button></div></div>
+<div class="row"><div class="lab">Lights</div><input type="checkbox" id="lt-on"><select id="lt-fx"></select><span id="lt-sw" style="display:flex;gap:6px"></span><select id="lt-sp"><option value="slow">Slow</option><option value="normal">Normal</option><option value="fast">Fast</option></select>
+ <span style="margin-left:auto;color:var(--dim)">Brightness</span><input type="range" id="lt-br" min="0" max="3" step="1" style="flex:0 0 110px"></div>
+<div class="row"><div class="lab">Clock offsets</div>Core<input type="range" id="of-c" min="-300" max="300" step="15" value="0"><div class="val" id="of-cv">0 MHz</div>Memory<input type="range" id="of-m" min="-1000" max="1500" step="50" value="0"><div class="val" id="of-mv">0 MHz</div><button class="btn" id="of-apply">Apply</button></div>
+</div>
 <div class="st">Lifecycle</div>
 <div class="acts"><button class="btn danger" id="a-detach">Safe Detach</button><button class="btn" id="a-attach">Re-attach</button><button class="btn" id="a-reset">Reset clocks</button></div>
 <div class="msg" id="msg">Ready.</div>
@@ -44,7 +60,32 @@ async function post(action,extra){const r=await fetch("/api/action",{method:"POS
  const m=$("msg"); m.className="msg"+(r.ok?"":" err"); m.textContent=r.ok?(r.started?("Started: "+r.started):(r.out||"Done.")):("Failed: "+(r.error||r.out||"?")); return r;}
 $("pl-apply").onclick=()=>post("power-limit",{watts:+$("pl").value}).then(()=>{userTouched=false});
 $("a-detach").onclick=()=>{if(confirm("Safe Detach: the session moves back to the handheld and the eGPU is removed from the bus. Continue?")) post("safe-detach")};
-$("a-attach").onclick=()=>post("attach"); $("a-reset").onclick=()=>post("reset-clocks");
+$("a-attach").onclick=()=>post("attach"); $("a-reset").onclick=()=>post("reset-clocks").then(()=>{ptTouched=false;offTouched=false});
+// ASUS XG Mobile controls (egpu-xgm through the backend): power target, fan mode and custom curve, lights, clock offsets
+const FANS=["auto","quiet","balanced","performance","max","custom"], FX=["static","breathe","cycle","rainbow","strobe"];
+const SWATCH=["ff0000","ff6000","ffd000","00ff40","00e0ff","0040ff","a000ff","ffffff"], BAL=[30,50,60,65,70,75,80,85,15,25,35,45,55,65,80,100];
+const cap1=x=>String(x||"").charAt(0).toUpperCase()+String(x||"").slice(1);
+let xgm={}, xgTop=115, ptTouched=false, offTouched=false;
+$("fans").innerHTML=FANS.map(f=>`<button class="btn" data-f="${f}">${f==="custom"?"Custom…":cap1(f)}</button>`).join("");
+$("fans").onclick=e=>{const f=e.target.dataset.f; if(!f) return; if(f==="custom") openCurve(); else post("xgm-fan",{value:f})};
+$("lt-fx").innerHTML=FX.map(f=>`<option value="${f}">${cap1(f)}</option>`).join("");
+$("lt-sw").innerHTML=SWATCH.map(c=>`<button class="sw" data-c="${c}" style="background:#${c}"></button>`).join("");
+const fx=(e,c,sp)=>post("xgm-light-effect",{value:(e||xgm.effect||"static")+":"+(c||xgm.color||"ff0000")+":"+(sp||xgm.speed||"normal")});
+$("lt-on").onchange=()=>post("xgm-light",{value:$("lt-on").checked?"on":"off"});
+$("lt-fx").onchange=()=>fx($("lt-fx").value); $("lt-sp").onchange=()=>fx("","",$("lt-sp").value);
+$("lt-sw").onclick=e=>{const c=e.target.dataset.c; if(c) fx("",c)};
+$("lt-br").onchange=()=>post("xgm-brightness",{value:$("lt-br").value});
+$("pt").oninput=()=>{ptTouched=true; S("pt-v",+$("pt").value>=xgTop?"No target":$("pt").value+" W")};
+$("pt-apply").onclick=()=>post("xgm-power",{value:+$("pt").value>=xgTop?"off":$("pt").value}).then(()=>{ptTouched=false});
+const offLab=v=>(v>0?"+":"")+v+" MHz";
+$("of-c").oninput=()=>{offTouched=true;S("of-cv",offLab(+$("of-c").value))}; $("of-m").oninput=()=>{offTouched=true;S("of-mv",offLab(+$("of-m").value))};
+$("of-apply").onclick=()=>post("xgm-offset",{value:$("of-c").value+":"+$("of-m").value}).then(()=>{offTouched=false});
+function openCurve(){const c=(xgm.curve&&xgm.curve.length===16?xgm.curve:BAL);
+ $("curve").innerHTML="<span>°C</span>"+c.slice(0,8).map(v=>`<input type="number" min="20" max="100" value="${v}">`).join("")+"<span>Fan %</span>"+c.slice(8).map(v=>`<input type="number" min="0" max="100" step="5" value="${v}">`).join("");
+ $("curve-box").style.display="flex"}
+$("curve-cancel").onclick=()=>{$("curve-box").style.display="none"};
+$("curve-apply").onclick=()=>{const v=[...$("curve").querySelectorAll("input")].map(i=>Math.round(+i.value)); $("curve-box").style.display="none";
+ post("xgm-fan-curve",{value:v.slice(0,8).join(",")+":"+v.slice(8).join(",")})};
 async function refresh(){let s; try{s=await(await fetch("/api/status")).json()}catch(e){return}
  const g=s.gpu||{}, on=s.present&&s.driver_loaded&&g.name;
  S("name",g.name?(s.dock?(s.dock+" · "+g.name.replace(/^NVIDIA\s+(GeForce\s+)?/i,"")):g.name):(s.present?"eGPU (driver not loaded)":"not detected"));
@@ -55,18 +96,35 @@ async function refresh(){let s; try{s=await(await fetch("/api/status")).json()}c
  $("b-tun").textContent=s.tunnel?"Tunnel up":"No tunnel"; $("b-tun").className="bdg"+(s.tunnel?" on":"");
  $("b-drv").textContent=s.driver_loaded?"Driver loaded":"Driver unloaded"; $("b-drv").className="bdg"+(s.driver_loaded?" on":"");
  $("b-mode").textContent=s.game_mode?"Game Mode":"Desktop"; $("b-mode").className="bdg on";
- S("t-temp",n(g["temperature.gpu"])); S("t-pow",n(g["power.draw"])); S("t-cap",num(g["power.limit"])?("/"+n(g["power.limit"])+"W"):"W");
+ // ASUS XG Mobile: the cap the GPU really runs at, a power target while one runs, the fan mode set in the dock
+ const xg=on&&String(s.dock||"").includes("XG Mobile"); xgm=s.xgm||{}; const live=xgm.live||{}, tgt=xg&&num(live.target);
+ xgTop=num(g["enforced.power.limit"])?Math.round(+g["enforced.power.limit"]):115;
+ S("t-temp",n(g["temperature.gpu"])); S("t-pow",n(g["power.draw"]));
+ S("t-cap",tgt?("/"+n(live.target)+"W target"):num(g["power.limit"])?("/"+n(g["power.limit"])+"W"):(xg&&num(g["enforced.power.limit"]))?("/"+n(g["enforced.power.limit"])+"W cap"):"W");
  S("t-util",n(g["utilization.gpu"])); S("t-vram",g["memory.used"]?(n(g["memory.used"]/1024,1)+"G"):"–");
- S("t-clk",n(g["clocks.gr"])); S("t-mclk",n(g["clocks.mem"])); S("t-fan",n(g["fan.speed"])); const fanDock=on&&!num(g["fan.speed"])&&!!s.dock; S("t-fanu",fanDock?"":"%"); S("l-fan",fanDock?"Fan (set by the dock)":"Fan");
+ S("t-clk",n(g["clocks.gr"])); S("t-mclk",n(g["clocks.mem"])); const fanDock=on&&!num(g["fan.speed"])&&!!s.dock;
+ S("t-fan",fanDock&&xg?cap1(xgm.fan||"auto"):n(g["fan.speed"])); S("t-fanu",fanDock?"":"%"); S("l-fan",fanDock?(xg?"XG Mobile fan mode":"Fan (set by the dock)"):"Fan");
+ $("xg").style.display=xg?"":"none"; $("pt-row").style.display=(xg&&!plOk)?"":"none";
+ if(xg){
+  $("pl-note").textContent="NVIDIA does not let the driver set this GPU's power limit (its cap is "+xgTop+" W). A power target below it makes EGPU Buddy hold the GPU there by limiting its clock"+(tgt&&+live.cap?" (clock now held at "+live.cap+" MHz)":"")+". The fan mode is set in the XG Mobile itself.";
+  if(!ptTouched){$("pt").max=xgTop; $("pt").value=+(xgm.power_target||0)||xgTop; S("pt-v",+$("pt").value>=xgTop?"No target":$("pt").value+" W")}
+  for(const b of $("fans").children) b.classList.toggle("sel",(xgm.fan||"auto")===b.dataset.f);
+  const lit=xgm.light!==false; $("lt-on").checked=lit; for(const id of ["lt-fx","lt-sp","lt-br"]) $(id).disabled=!lit;
+  $("lt-fx").value=xgm.effect||"static"; $("lt-sp").value=xgm.speed||"normal"; $("lt-br").value=xgm.brightness==null?3:xgm.brightness;
+  for(const b of $("lt-sw").children){b.classList.toggle("sel",(xgm.color||"ff0000")===b.dataset.c); b.disabled=!lit; b.style.opacity=lit?1:.35}
+  if(!offTouched){const o=xgm.offset||[0,0]; $("of-c").value=o[0]; $("of-m").value=o[1]; S("of-cv",offLab(+o[0])); S("of-mv",offLab(+o[1]))}
+ }
  S("t-pcie",g["pcie.link.gen.current"]?("Gen"+g["pcie.link.gen.current"]+" x"+g["pcie.link.width.current"]):"–");
  S("i-drv",g.driver_version||"—"); S("i-bdf",s.bdf||"—"); S("i-vt",g["memory.total"]?(n(g["memory.total"]/1024,0)+" GB"):"—");
  S("i-disp",(s.displays||[]).map(d=>d.name+(d.enabled?"":" (off)")).join(", ")||"none"); S("i-panel",s.panel_enabled==null?"—":(s.panel_enabled?"on":"off"));
  if(on&&plOk&&!userTouched){const mn=Math.round(+g["power.min_limit"]||100), mx=Math.round(+g["power.max_limit"]||320), cur=Math.round(+g["power.limit"]||mx);
   $("pl").min=Math.max(100,mn); $("pl").max=Math.min(320,mx); $("pl").value=cur; S("pl-v",cur+" W");}
  $("pl-apply").disabled=!(on&&plOk); $("a-reset").disabled=!on; $("a-detach").disabled=!s.present; $("a-attach").disabled=!!(s.present&&s.driver_loaded);
- const d=s.detach, gm=s.gm; if(d&&d.state&&d.state!=="IDLE"){$("msg").className="msg"+(/FAIL|DO_NOT|INCOMPLETE/.test(d.state)?" err":""); $("msg").textContent=d.state+": "+(d.message||"")}
+ const d=s.detach, gm=s.gm, stale=!!(d&&d.state==="SAFE_COMPLETE"&&s.present&&s.driver_loaded);   // a finished Safe Detach no longer applies once the eGPU is back
+ if(d&&d.state&&d.state!=="IDLE"&&!stale){$("msg").className="msg"+(/FAIL|DO_NOT|INCOMPLETE/.test(d.state)?" err":""); $("msg").textContent=d.state+": "+(d.message||"")}
  else if(gm&&gm.state&&gm.state!=="ATTACHED"){$("msg").textContent=gm.state+": "+(gm.message||"")}
  else if(s.last&&s.last.action){const l=s.last; $("msg").className="msg"+(l.state==="failed"?" err":""); $("msg").style.whiteSpace="pre-wrap";
-  $("msg").textContent=l.state==="running"?(l.action+": working…"):l.state==="ok"?(l.action+": done."+(l.out?"\n"+l.out:"")):(l.action+" failed (rc "+l.rc+")\n"+(l.out||"no output"))}}
+  $("msg").textContent=l.state==="running"?(l.action+": working…"):l.state==="ok"?(l.action+": done."+(l.out?"\n"+l.out:"")):(l.action+" failed (rc "+l.rc+")\n"+(l.out||"no output"))}
+ else if(stale){$("msg").className="msg"; $("msg").textContent="The eGPU is attached again."}}
 refresh(); setInterval(refresh,2000);
 </script></body></html>

@@ -514,7 +514,9 @@ function Content() {
               </>
             ) : (
             <>
-              <Row k="GPU" v={(gpuName(tel["name"]) && s.dock ? `${s.dock} · ${gpuName(tel["name"])}` : gpuName(tel["name"])) || (s.present ? s.bdf : "absent")} />
+              {/* the dock on its own row: "ASUS ROG XG Mobile · RTX 5070 Ti Laptop GPU" on one row was cut off on the panel */}
+              {s.dock && <Row k="Dock" v={s.dock} />}
+              <Row k="GPU" v={gpuName(tel["name"]) || (s.present ? s.bdf : "absent")} />
               <Row k="Driver" v={s.driver_loaded ? `nvidia ${tel["driver_version"] ?? ""}` : "not loaded"} />
               <Row k="PCIe" v={s.present ? `${s.link.speed} x${s.link.width}` : ""} />
               {ad?.usb4 && usb4.total !== undefined && (

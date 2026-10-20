@@ -197,7 +197,7 @@ ApplicationWindow {
             width: win.width - 32; x: 16; y: 12; spacing: 12
             RowLayout { Layout.fillWidth: true; spacing: 10
                 Label { text: "EGPU Buddy"; font.pixelSize: 22; font.bold: true }
-                Label { text: (win.g.name && win.s.dock ? win.s.dock + " · " + win.g.name.replace(/^NVIDIA\s+(GeForce\s+)?/i, "") : win.g.name) || (win.s.present ? "NVIDIA GPU (driver not loaded)" : "not detected"); opacity: 0.75; Layout.fillWidth: true; elide: Text.ElideRight }
+                Label { text: (win.g.name && win.s.dock ? win.s.dock + " · " + win.g.name.replace(/^NVIDIA\s+(GeForce\s+)?/i, "") : win.g.name) || (win.s.present ? "NVIDIA GPU (driver not loaded)" : "not detected"); opacity: 0.75; Layout.fillWidth: true; Layout.preferredWidth: 120; wrapMode: Text.WordWrap; maximumLineCount: 2 }   // wraps: the dock + full GPU name was cut off in a narrow window
                 Badge { text: win.s.present ? "On the bus" : "No eGPU"; lit: !!win.s.present }
                 Badge { text: win.s.tunnel ? "Tunnel up" : "No tunnel"; lit: !!win.s.tunnel }
                 Badge { text: win.s.driver_loaded ? "Driver loaded" : "Driver unloaded"; lit: !!win.s.driver_loaded }

@@ -1,3 +1,12 @@
+0.7.138 — the XG Mobile controls in the desktop app's fallback window; the full GPU name in the Game Mode plugin.
+
+**New** (ASUS XG Mobile only)
+- The desktop app's fallback window (used where Qt 6 is not available; SteamOS always has the full window) has the XG Mobile controls too: power target, fan modes and the custom fan curve, lights (on/off, effect, color, speed, brightness) and clock offsets, with the same readings as the main window.
+
+**Fixed**
+- Game Mode plugin: "ASUS ROG XG Mobile · RTX 5070 Ti Laptop G…" was cut off in the details. The XG Mobile now has its own Dock row, and the GPU row shows the full name.
+- Desktop app: the GPU name in the title wraps instead of being cut off in a narrow window. The fallback window also stops showing "SAFE_COMPLETE" once the eGPU is attached again, as the main window does since 0.7.133.
+
 0.7.137 — after a cable pull on the desktop, "Return to Gaming Mode" works again.
 
 **Fixed** (ROG Ally or ASUS XG Mobile hardware only; every other device is unchanged)
