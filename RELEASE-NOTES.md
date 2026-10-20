@@ -1,3 +1,8 @@
+0.7.139 — no "kwin_wayland closed unexpectedly" notification after a cable pull on the desktop.
+
+**Fixed** (ROG Ally or ASUS XG Mobile hardware only; every other device is unchanged)
+- Pulling the cable on the desktop worked, but KDE then showed a crash notification for the desktop's compositor (KWin), sometimes again after the next login. KWin runs on the eGPU and stops when it disappears; Plasma restarts it on the handheld at once, so nothing is wrong. The cable-pull recovery now tells KDE's crash reporter that those crashes are handled. Any other crash is still reported as before.
+
 0.7.138 — release notes when updating, in Game Mode and on the desktop; the XG Mobile controls in the desktop app's fallback window; the full GPU name in the Game Mode plugin.
 
 **New**

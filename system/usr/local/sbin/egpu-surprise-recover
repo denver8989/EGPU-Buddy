@@ -7,6 +7,29 @@
 set -u; U=1000; RUNENV="XDG_RUNTIME_DIR=/run/user/$U DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$U/bus"
 LOG=/var/log/egpu-surprise-recover.log; log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
 
+# --quiet-crashes <since>: the desktop's compositor (KWin) dies with the eGPU it ran on, by design, and Plasma starts it
+# again on the built-in GPU; programs connected to it (the tray) can go down with it. KDE's crash reporter (DrKonqi) then
+# shows "kwin_wayland closed unexpectedly", at once or after the next login (it scans the journal for crashes it has
+# not handled). Mark the user's crashes from the cable pull (coredumps since <since>) as handled, the way DrKonqi records
+# its own: ~/.cache/drkonqi/crashes/<program>.<boot id>.<pid>.<COREDUMP_TIMESTAMP>.ini = {"drkonqi":{"PickedUp":true}}
+# (drkonqi src/core/metadata.cpp, launcher/main.cpp: a PickedUp crash is neither shown nor notified). Crash reporting
+# itself is untouched: any other crash is reported as before.
+if [ "${1:-}" = --quiet-crashes ]; then
+  since=${2:-$(( $(date +%s) - 120 ))}
+  journalctl -o json --no-pager --since "@$since" SYSLOG_IDENTIFIER=systemd-coredump COREDUMP_UID=$U 2>/dev/null |
+    runuser -u deck -- python3 -c '
+import json, os, sys
+d = os.path.expanduser("~/.cache/drkonqi/crashes"); os.makedirs(d, exist_ok=True); n = []
+for line in sys.stdin:
+    try: e = json.loads(line)
+    except ValueError: continue
+    exe, boot, pid, ts = (e.get(k) for k in ("COREDUMP_EXE", "_BOOT_ID", "COREDUMP_PID", "COREDUMP_TIMESTAMP"))
+    if not (exe and boot and pid and ts): continue
+    f = os.path.join(d, "%s.%s.%s.%s.ini" % (os.path.basename(exe), boot, pid, ts))
+    if not os.path.exists(f): open(f, "w").write(json.dumps({"drkonqi": {"PickedUp": True}})); n.append("%s(%s)" % (os.path.basename(exe), pid))
+print(" ".join(n))' 2>/dev/null | { read -r q; [ -n "$q" ] && log "crash reports from the cable pull marked as handled (no crash notification): $q"; }
+  exit 0
+fi
 # --steam-watch: the delayed Steam repair, run as its own transient unit (see where it is armed).
 if [ "${1:-}" = --steam-watch ]; then
   # Order matters. Steam is NOT relaunched in the main run any more, because doing it while the
@@ -255,5 +278,12 @@ if [ "$GM" = 0 ]; then
   systemd-run --no-block --collect --quiet --unit="egpu-steam-watch-$(date +%s)" \
     /usr/local/sbin/egpu-surprise-recover --steam-watch >/dev/null 2>&1 &&
     log "steam-watch armed (separate unit, survives this run)"
+fi
+# The crashes the cable pull caused (KWin losing its GPU, and what was connected to it) are expected: keep KDE's crash
+# reporter quiet about them, now and once more before its login-time scan (~60 s after Plasma starts). ROG Ally / XG
+# Mobile hardware only, like the other additions here.
+if [ "$XGA" = 1 ]; then
+  "$0" --quiet-crashes "$(( T0 - 60 ))"
+  systemd-run --no-block --collect --quiet --on-active=30 --unit="egpu-quiet-crashes-$(date +%s)" "$0" --quiet-crashes "$(( T0 - 60 ))" >/dev/null 2>&1 || true
 fi
 log "DONE"
