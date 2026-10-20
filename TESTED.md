@@ -3,6 +3,27 @@
 Everything below was verified on the machines described in the README. "Verified" means it was exercised
 repeatedly and behaved as described.
 
+## 2026-10-19 — third machine: ROG Xbox Ally X + ASUS XG Mobile 2025 (0.7.131–0.7.137)
+
+ROG Xbox Ally X (RC73XA, Ryzen AI Z2 Extreme), **SteamOS 3.8** (beta channel), kernel 7.2.7-valve2, **ASUS XG Mobile
+2025** (GC34, USB4 2 x 20 Gb/s, USB ID 0b05:1c29) with an **RTX 5070 Ti Laptop GPU** (GB205M), patched NVIDIA
+615.78.08, a TV over HDMI. Tested on the device by **SilverplayerX**; read from that device's support reports.
+
+| Verified on the device | Result |
+|---|---|
+| Attach in Game Mode (plug in) | Game Mode on the TV, ~20 s; BAR1 16 GB, link pinned Gen3 x4 |
+| Attach on the desktop | NVIDIA-only desktop relogin, the TV primary, the handheld panel off |
+| Safe Detach in Game Mode | done, Game Mode back on the handheld screen |
+| Safe Detach on the desktop | done (the eGPU is removed like an unplug: one GPU buffer stays referenced in the kernel, so the driver stays loaded until the next attach) |
+| Cable pull in Game Mode | back in Game Mode on the handheld screen |
+| Cable pull on the desktop (0.7.136) | desktop back on the handheld screen in ~6 s, driver unloaded |
+| Re-plug after a cable pull (0.7.136) | attached again without a reboot |
+| Power reading with the laptop GPU's cap; fan shown as the XG Mobile's | 12 / 115 W, fan run by the XG Mobile |
+
+Awaiting confirmation on the device: the XG Mobile controls of 0.7.134 (power target, fan modes and custom curve,
+lights, clock offsets), "Return to Gaming Mode" after a desktop cable pull (0.7.137) and the one-time intro (0.7.135).
+NVIDIA does not let the driver set a laptop GPU's power limit; the power target holds it with a clock limit instead.
+
 ## 2026-09-20 — second machine, second GPU family (0.7.68)
 
 Legion Go 1 (AMD Phoenix) + **SteamOS 3.8**, kernel 6.16.12-valve24.5, AOOSTAR AG03 enclosure (Intel JHL9480 TB5),

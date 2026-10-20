@@ -5,7 +5,10 @@ say where it came from.
 
 ## On-device testing
 
-- **SilverplayerX** (Discord) — on-device testing, ROG Xbox Ally X with an ASUS XG Mobile 2025.
+- **SilverplayerX** (Discord) — on-device testing and development on the ROG Xbox Ally X (RC73XA) with an ASUS XG Mobile
+  2025 (GC34, RTX 5070 Ti Laptop GPU): the XG Mobile releases were run on that device, and the support reports from it
+  found the desktop Safe Detach, cable-pull, re-attach, power and fan, and Return to Gaming Mode issues
+  fixed here. The screenshot of the desktop app uses that device's readings.
 
 ## ASUS XG Mobile
 
@@ -18,6 +21,15 @@ say where it came from.
   `egpu-detect`; no code was copied from the GPL projects. xgm-egpu's FINDINGS.md also traced, in the driver source,
   why XG Mobile links died ~10 s after init: the RM allows Gen3 only with `NVreg_EnablePCIeGen3=1` and otherwise
   retrains the link down. `egpu-hw-repair` sets that option on a ROG Ally or with an XG Mobile (written here, not copied).
+
+- **seerge — [G-Helper](https://github.com/seerge/g-helper)** (GPL-3.0), with the initial XG Mobile payload discovery by
+  **RomanYazvinsky** (credited in G-Helper's `app/USB/XGM.cs`) — the XG Mobile's USB control protocol: 300-byte feature
+  reports on report 0x5E, the `^ASUS Tech.Inc.` handshake, fan curve (`D1 01` + 8 temperatures and 8 duties) and auto
+  (`D1 02`), lights (`C5`, `BD`, the `B3`/`B4`/`B5` effect messages and their speed bytes), and the 2025 GC34's USB ID
+  0x1C29 ([issue #5008](https://github.com/seerge/g-helper/issues/5008)). Reimplemented in `egpu-xgm`; no code copied.
+- **[Handheld Daemon](https://github.com/hhd-dev/hhd)** (antheas) — the same protocol driven from Linux userspace
+  through hidraw, and the XG Mobile light brightness message (`BA C5 C4 <0-3>`).
+- The XG Mobile's clock offsets use NVML's `nvmlDeviceSetClockOffsets` for P0, as LACT does (see LACT below).
 
 ## The scan-out corruption fix (Game Mode UI on NVIDIA)
 

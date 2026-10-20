@@ -16,7 +16,7 @@ NVIDIA eGPUs are fully supported, including the fix for NVIDIA's Game Mode displ
 are supported in beta.
 
 > **Use at your own risk.** This changes the NVIDIA driver, boot settings and the Game Mode session. It has been
-> tested on two machines (below) and nothing else. Read [TESTED.md](TESTED.md) first, and keep a way to boot without
+> tested on three machines (below) and nothing else. Read [TESTED.md](TESTED.md) first, and keep a way to boot without
 > the eGPU. Claude (Anthropic) and Codex (OpenAI) were used as development assistants.
 
 ## Features
@@ -31,6 +31,9 @@ are supported in beta.
 - **Best picture by default:** each screen's native resolution at its highest refresh rate.
 - **Screens wake and switch input** where they support it (DDC/CI or HDMI-CEC).
 - **GPU details and controls:** temperature, power, clocks, VRAM, power limit and clock offset.
+- **ASUS XG Mobile support** (ROG Xbox Ally X tested): attach, Safe Detach and cable pulls in both modes, plus
+  XG Mobile controls in the plugin and the desktop app: a power target in watts, fan modes and a custom fan curve, the
+  dock's lights, and core and memory clock offsets.
 - **Beta driver button:** try NVIDIA's newest driver, with an automatic return to the tested one if it fails.
 - **Keeps itself working:** Decky restarts if it stops, and the setup repairs itself after OS updates.
 - **Desktop app** with the same controls for the docked desktop.
@@ -47,6 +50,12 @@ are supported in beta.
 <p align="center"><em>Main page (switch between the handheld, XR glasses, TV and monitor; Safe Detach), details (GPU, link, screens, telemetry) and setup (game screen, best resolution, updates, extras).</em></p>
 
 <p align="center">
+  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="100%">
+</p>
+<p align="center"><em>The desktop app with an ASUS XG Mobile (RTX 5070 Ti Laptop GPU) on a ROG Xbox Ally X: power and its 115 W cap,
+power target, the XG Mobile's fan mode and custom curve, lights and clock offsets. Readings from SilverplayerX's device.</em></p>
+
+<p align="center">
   <img src="docs/assets/nvidia-before-after.png" alt="Before: Steam Game Mode interface corrupted on an NVIDIA GPU. After: clean Game Mode." width="100%">
 </p>
 <p align="center"><em>The NVIDIA Game Mode bug EGPU Buddy fixes. Before: photo by bernhard.berger,
@@ -61,9 +70,9 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 | OS | CachyOS (Deckify) | SteamOS 3.8 | SteamOS 3.8 |
 | eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU |
 | Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) |
-| Status | Tested | Tested | Testing in progress (on-device testing: SilverplayerX) |
+| Status | Tested | Tested | Tested (on-device testing and development: SilverplayerX) |
 
-**NVIDIA:** RTX 30 and RTX 50 tested here; RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**
+**NVIDIA:** RTX 30 and RTX 50 tested here (desktop cards, and a laptop RTX 50 in an XG Mobile); RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**
 beta, not yet tested on real hardware. Reports are welcome. Details: [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Install
@@ -95,6 +104,9 @@ attaching are listed in [docs/TECHNICAL.md](docs/TECHNICAL.md#reporting-problems
 
 This builds on other people's work. Full details, with links and licenses: [CREDITS.md](CREDITS.md).
 
+- **SilverplayerX** (Discord): on-device testing and development on the ROG Xbox Ally X with the ASUS XG Mobile.
+- **seerge ([G-Helper](https://github.com/seerge/g-helper)), RomanYazvinsky** and
+  **[Handheld Daemon](https://github.com/hhd-dev/hhd):** the XG Mobile's USB control protocol (fan, lights).
 - **matt-schwartz:** found the root cause of the NVIDIA Game Mode corruption.
 - **NightHammer1000** and **antheas:** the gamescope fix this project builds.
 - **NickNill, bdandy, roger-pmta:** the hot-unplug-safe NVIDIA driver patches.
