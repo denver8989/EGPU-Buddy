@@ -241,9 +241,14 @@ def _is_bazzite():
 IS_BAZZITE = _is_bazzite()
 
 
+# OpenGamepadUI's process: the "opengamepadui" launcher script execs opengamepad-ui.<arch> (Bazzite: opengamepad-ui.x86_64,
+# shown by the kernel as "opengamepad-ui." - 15 characters). Both spellings, whole-name match.
+OGUI_RE = r"opengamepad-?ui(\..*)?"
+
+
 def _ogui_running():
     """OpenGamepadUI (Bazzite's Game Mode overlay) is running. Bazzite only."""
-    return IS_BAZZITE and bool(_pids("opengamepadui"))
+    return IS_BAZZITE and bool(_pids(OGUI_RE))
 
 
 def _game_running():
@@ -252,7 +257,7 @@ def _game_running():
     if not IS_BAZZITE:
         return _proc_running("reaper")   # every other OS: exactly as always
     reapers = _pids("reaper")
-    ogui = _pids("opengamepadui")
+    ogui = _pids(OGUI_RE)
     if not ogui:
         return bool(reapers)
     # Bazzite: OpenGamepadUI keeps a reaper of its own alive all session ("A game is running" after every reboot).

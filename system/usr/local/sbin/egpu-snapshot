@@ -67,7 +67,7 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   stock=/usr/lib/steamos/gamescope-session; [ -r "$stock" ] || stock=$(command -v gamescope-session-plus 2>/dev/null)
   [ -n "$stock" ] && [ -r "$stock" ] && { echo "how $stock starts gamescope:"; grep -nE '(^|[ /"])gamescope( |"|$)|systemd-run|env -i|exec ' "$stock" 2>/dev/null | head -12 | cut -c1-200 | sed 's/^/  /'; }
   pid1(){ local p; p=$(pgrep -x "$1" 2>/dev/null | head -1); echo "${p:-none}"; }
-  echo "kwin_wayland: $(pid1 kwin_wayland) · kwin_x11: $(pid1 kwin_x11) · Xorg: $(pid1 Xorg) · steam: $(pid1 steam) · game (reaper): $(pid1 reaper) · launched game: $(/usr/local/sbin/egpu-game-running --pid || echo none) · OpenGamepadUI: $(pid1 opengamepadui)"
+  echo "kwin_wayland: $(pid1 kwin_wayland) · kwin_x11: $(pid1 kwin_x11) · Xorg: $(pid1 Xorg) · steam: $(pid1 steam) · game (reaper): $(pid1 reaper) · launched game: $(/usr/local/sbin/egpu-game-running --pid || echo none) · OpenGamepadUI: $(pgrep -x 'opengamepad-?ui(\..*)?' | head -1 | grep . || echo none)"
   # the desktop compositor's GPU routing as it really is: what it was told (environment) and which device nodes it holds,
   # with the driver behind each. The flight recorder reported "kwin:both" on a ROG Xbox Ally X while the login log said
   # KWIN_DRM_DEVICES pointed at the eGPU only.

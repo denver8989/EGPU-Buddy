@@ -7,7 +7,8 @@
 # Bazzite only (from /etc/os-release); every other OS: any reaper, exactly as before
 . /etc/os-release 2>/dev/null
 case "${ID:-} ${NAME:-}" in *[Bb]azzite*) ;; *) if [ "${1:-}" = --pid ]; then pgrep -n -x reaper; else pgrep -x reaper >/dev/null; fi; exit ;; esac
-ogui=$(pgrep -x opengamepadui 2>/dev/null)
+# opengamepad-ui.<arch> (shown as "opengamepad-ui." - 15 characters), started by the "opengamepadui" launcher script
+ogui=$(pgrep -x 'opengamepad-?ui(\..*)?' 2>/dev/null)
 best=""
 for p in $(pgrep -x reaper 2>/dev/null); do
   if [ -n "$ogui" ]; then

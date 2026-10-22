@@ -1,3 +1,8 @@
+0.7.147 — Bazzite: "A game is running" no longer shows all the time.
+
+**Fixed** (Bazzite only)
+- "A game is running" stayed on, which also kept Attach, Safe Detach and screen switching locked. OpenGamepadUI runs as "opengamepad-ui.x86_64" (not "opengamepadui", the name of its start script), so it was not recognised and its own helper process looked like a game. Only a game Steam launched counts now.
+
 0.7.146 — Bazzite: the install from the Game Mode plugin actually runs.
 
 **Fixed** (Bazzite only)
