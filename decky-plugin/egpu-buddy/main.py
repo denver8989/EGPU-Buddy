@@ -590,6 +590,14 @@ def _spawn_root_job(name, cmd):
     restart cannot kill it half-way, and with Decky's library path stripped."""
     unit = f"egpu-buddy-{name}-{int(time.time())}"
     if not _sysrun_ok():
+        # Bazzite: the installed job runner (egpu-buddy-jobs.path) starts it as the real unit <unit>, so `systemctl
+        # is-active <unit>` and a Decky restart behave exactly as with systemd-run
+        if os.path.isdir("/run/nvegpu/jobs") and os.path.exists("/etc/systemd/system/egpu-buddy-jobs.path"):
+            tmp = f"/run/nvegpu/.{unit}.job.tmp"   # written OUTSIDE the watched directory, then moved in whole
+            with open(tmp, "w") as f:
+                json.dump({"unit": unit, "log": f"/tmp/egpu-buddy-{name}.log", "cmd": cmd}, f)
+            os.rename(tmp, f"/run/nvegpu/jobs/{unit}.job")
+            return unit
         subprocess.Popen(cmd, env=_clean_env(), stdout=open("/tmp/egpu-buddy-" + name + ".log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
         return unit
     subprocess.Popen(["systemd-run", "--collect", "--quiet", "--unit", unit, "-p", "StandardOutput=append:/tmp/egpu-buddy-" + name + ".log",

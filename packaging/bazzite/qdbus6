@@ -1,0 +1,14 @@
+#!/bin/bash
+# SteamOS EGPU Buddy (installed on Bazzite only, as /usr/local/bin/qdbus6 and, where it is missing, qdbus): Fedora has no
+# "qdbus6" (Qt 6's is qdbus-qt6 in qt6-qttools). Use Qt's own when it is there; otherwise do the same call with gdbus
+# (glib2, always present). This project only calls "<service> <path> <Interface.Method>" without arguments, or nothing
+# (a bus check); a string reply is printed plain, the way qdbus prints it.
+for q in /usr/bin/qdbus-qt6 /usr/lib64/qt6/bin/qdbus; do [ -x "$q" ] && exec "$q" "$@"; done
+if [ $# -eq 0 ]; then exec gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ListNames; fi
+[ $# -eq 3 ] || { echo "qdbus6 (gdbus fallback): only <service> <path> <Interface.Method> is supported" >&2; exit 2; }
+r=$(gdbus call --session --dest "$1" --object-path "$2" --method "$3") || exit 1
+case "$r" in
+  "('"*"',)") r=${r#"('"}; r=${r%"',)"}; printf '%b\n' "$r" ;;   # a single string reply
+  "()") ;;                                                         # no reply value
+  *) printf '%s\n' "$r" ;;
+esac

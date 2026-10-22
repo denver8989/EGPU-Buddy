@@ -1,0 +1,11 @@
+# SteamOS EGPU Buddy (Bazzite only): the Game Mode plugin's jobs, started as systemd units (see egpu-buddy-jobs)
+[Unit]
+Description=EGPU Buddy: jobs from the Game Mode plugin
+
+[Path]
+DirectoryNotEmpty=/run/nvegpu/jobs
+MakeDirectory=yes
+DirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target

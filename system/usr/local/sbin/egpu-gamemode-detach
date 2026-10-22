@@ -24,6 +24,9 @@ EGPU_NODES=${EGPU_NODES:-nvidia-egpu-not-found|}
 # 3.8.28) gamescope is started without the session wrapper's environment, so OUTPUT_CONNECTOR is never in it (every switch
 # log line says OUTPUT_CONNECTOR=?) and the check below failed every time (rc 6), even with Game Mode back on the handheld.
 ALLY_XGM=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && ALLY_XGM=1
+# Bazzite: gamescope is started by Bazzite's own gamescope-session-plus, never by our wrapper, so its environment has no
+# OUTPUT_CONNECTOR=*,... either: the same check by open cards (and the same fallback) applies there.
+grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && ALLY_XGM=1
 # the handheld panel's own card (card0 on an ROG Ally X); looked up, never a literal (it is card1 on a Legion Go 2)
 PANEL_CARD=$(basename "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)" 2>/dev/null); PANEL_CARD=${PANEL_CARD%%-*}
 gs_on_panel(){ local g; g=$(gs); [ -n "$g" ] || return 1

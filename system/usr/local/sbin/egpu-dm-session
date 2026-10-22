@@ -14,6 +14,13 @@ set -u
 # /etc/sddm.conf.d/zz-steamos-autologin.conf, and "zz-egpu..." sorts BEFORE "zz-steamos...", so the
 # old name was silently outranked and the pin did nothing on SteamOS.
 DROP=zzz-egpu-buddy-session.conf
+# Bazzite (sddm + steamos-manager): the system's default is zz-holo-autologin.conf and a one-off "Switch to Game Mode /
+# Desktop" is zzt-holo-temp-login.conf (deleted again at the next login). Our pin must sort between the two: after the
+# default (so a relogin after a cable pull or Safe Detach follows it), before the one-off switch (so the user's explicit
+# switch still wins). Every other system keeps the name above.
+BZ=0; (. /etc/os-release 2>/dev/null; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) exit 0 ;; esac; exit 1) && BZ=1
+[ $BZ = 1 ] && DROP=zzs-egpu-buddy-session.conf
+old_drop(){ [ $BZ = 1 ] && rm -f "$1/zzz-egpu-buddy-session.conf"; return 0; }   # Bazzite: the name before 0.7.144
 
 dm_dir(){
   local dm d=""
@@ -36,6 +43,13 @@ session_file(){   # $1 = plasma|gamescope|bigpicture -> the .desktop this system
     bigpicture) want="egpu-bigpicture.desktop gamescope-session.desktop gamescope-wayland.desktop" ;;
     *) return 1 ;;
   esac
+  # Bazzite: Game Mode is gamescope-session-ogui-steam or gamescope-session-steam, whichever the system boots into
+  if [ $BZ = 1 ] && { [ "$1" = gamescope ] || [ "$1" = bigpicture ]; }; then
+    n=$(sed -n 's/^Session=//p' /etc/sddm.conf.d/zz-holo-autologin.conf 2>/dev/null | tail -1)
+    case "$n" in gamescope-*) ;; *) n=$(sed -n 's/^Session=//p' /usr/lib/sddm/sddm.conf.d/holo.conf 2>/dev/null | tail -1) ;; esac
+    case "$n" in gamescope-*) want="$n $want" ;; esac
+    want="$want gamescope-session-ogui-steam.desktop gamescope-session-steam.desktop"
+  fi
   for n in $want; do
     for c in /usr/local/share/wayland-sessions /usr/share/wayland-sessions /usr/local/share/xsessions /usr/share/xsessions; do
       [ -f "$c/$n" ] && { printf '%s\n' "$n"; return 0; }
@@ -48,12 +62,12 @@ case "${1:-show}" in
   pin)
     d=$(dm_dir) || { echo "no login manager configuration directory found" >&2; exit 2; }
     f=$(session_file "${2:?pin needs plasma|gamescope|bigpicture}") || { echo "no session file for '$2' on this system" >&2; exit 3; }
-    printf '[Autologin]\nRelogin=true\nSession=%s\n' "$f" > "$d/$DROP"
+    old_drop "$d"; printf '[Autologin]\nRelogin=true\nSession=%s\n' "$f" > "$d/$DROP"
     echo "pinned $f in $d"
     ;;
   unpin)
     d=$(dm_dir) || exit 0
-    rm -f "$d/$DROP"; echo "unpinned (system default restored in $d)"
+    old_drop "$d"; rm -f "$d/$DROP"; echo "unpinned (system default restored in $d)"
     ;;
   release-stale)
     # Our pin only has a job while an eGPU is attached to a desktop session (losing it then must come back to the desktop)
@@ -61,7 +75,7 @@ case "${1:-show}" in
     # system's own choice: "Return to Gaming Mode" then logs straight back into the desktop (ROG Xbox Ally X after a cable
     # pull, 0.7.136). The boot policy's own desktop pin (opt-in /etc/nv-egpu-buddy/boot-desktop) is the user's choice: kept.
     d=$(dm_dir) || exit 0
-    [ -f "$d/$DROP" ] || { echo "not pinned"; exit 0; }
+    old_drop "$d"; [ -f "$d/$DROP" ] || { echo "not pinned"; exit 0; }
     [ -e /etc/nv-egpu-buddy/boot-desktop ] && { echo "kept: the boot policy pins the desktop (boot-desktop)"; exit 0; }
     lspci -Dn 2>/dev/null | grep -qE ' 03(00|02|80): 10de:' && { echo "kept: an NVIDIA eGPU is attached"; exit 0; }
     { [ -e /run/nvegpu/gm-detach-pending ] || pgrep -f '/usr/local/sbin/egpu-(safe|desktop)-detach' >/dev/null 2>&1; } && { echo "kept: a Safe Detach is running"; exit 0; }

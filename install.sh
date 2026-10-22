@@ -259,6 +259,22 @@ want core && sudo bash -c '{ [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/nu
 want core && { userctl enable egpu-display-failover.service; userctl enable --now egpu-wake-guard.service; userctl enable --now egpu-screen-watch.service; } >/dev/null 2>&1 || true
 
 # ---- gamescope with GBM scan-out (NVIDIA scan-out corruption fix) --------------------------------
+# Bazzite only: Fedora names Qt 6's qdbus qdbus-qt6; the scripts call qdbus6 (and qdbus as a fallback)
+if [ "$IS_BAZZITE" = 1 ] && want core; then
+  sudo install -m755 "$ROOT/packaging/bazzite/qdbus6" /usr/local/bin/qdbus6
+  command -v qdbus >/dev/null 2>&1 || sudo ln -sf qdbus6 /usr/local/bin/qdbus
+  # Decky cannot start systemd units on Bazzite: its long jobs (detach, switch, attach) go through this runner instead
+  sudo install -m755 "$ROOT/packaging/bazzite/egpu-buddy-jobs" /usr/local/sbin/egpu-buddy-jobs
+  sudo install -m644 "$ROOT/packaging/bazzite/egpu-buddy-jobs.path" "$ROOT/packaging/bazzite/egpu-buddy-jobs.service" /etc/systemd/system/
+  sudo bash -c 'command -v restorecon >/dev/null && restorecon /usr/local/bin/qdbus6 /usr/local/sbin/egpu-buddy-jobs /etc/systemd/system/egpu-buddy-jobs.* 2>/dev/null
+    systemctl daemon-reload; systemctl enable --now egpu-buddy-jobs.path' >/dev/null 2>&1 || true
+fi
+# Bazzite only: Fedora ships Qt's qml tool only in a -devel package; the desktop app gets a QML runner of its own
+if [ "$IS_BAZZITE" = 1 ] && want desktopapp; then
+  QR="$ROOT/prebuilt/bazzite-qml-runner/egpu-buddy-qml"
+  if [ -x "$QR" ] && ! ldd "$QR" 2>/dev/null | grep -q 'not found'; then sudo install -D -m755 "$QR" /usr/local/lib/egpu-buddy/egpu-buddy-qml
+  else echo "note: no QML runner for this Bazzite release; the desktop app opens in the browser instead (no tray icon)"; fi
+fi
 if want gamescope && [ "$IS_BAZZITE" = 1 ]; then
   # Bazzite only. Its Game Mode is gamescope-session-plus, not SteamOS's gamescope-session: our session wrapper and
   # drop-ins never run there. The NVIDIA picture fix goes in through the session's own per-client config instead.

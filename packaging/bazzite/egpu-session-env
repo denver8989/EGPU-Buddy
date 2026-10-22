@@ -4,7 +4,13 @@
 # nvidia driver and drives a connected screen; then Game Mode starts on that screen with the NVIDIA picture fix.
 # @GAMESCOPE@ is filled in by install.sh: our GBM-scanout gamescope, or Bazzite's own when it already has GBM scan-out.
 _egpu_bz(){
-  local d bdf="" card="" c out=""
+  local d bdf="" card="" c out="" rt=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+  # what the SteamOS session wrapper does at every Game Mode start: the session-type marker the cable-pull recovery
+  # reads (not while a desktop is on screen), and the login fallback back to the system's own default (Game Mode)
+  pgrep -u "$(id -u)" -x kwin_wayland >/dev/null 2>&1 || printf gamemode > "$rt/egpu-session-type" 2>/dev/null
+  sudo -n /usr/local/sbin/nv-egpu-buddy-privileged session-fallback game >/dev/null 2>&1
+  # a Safe Detach restarts Game Mode on purpose for the handheld screen: never back onto the eGPU then
+  { [ -e "$rt/egpu-detach-mode" ] || [ -e /run/nvegpu/gm-detach-pending ]; } && return 0
   for d in /sys/bus/pci/devices/*; do
     [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
     case "$(cat "$d/class" 2>/dev/null)" in 0x0300*|0x0302*) ;; *) continue ;; esac

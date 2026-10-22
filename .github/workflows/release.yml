@@ -59,6 +59,15 @@ jobs:
             else echo "::warning::the Bazzite gamescope build failed; this release ships $(cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null || echo none)"; fi
           fi
           cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null || true
+          # the desktop app's QML runner for Bazzite (Fedora has Qt's qml tool only in a -devel package): small, same rules
+          QWANT="fedora-$FED $(cat packaging/bazzite/qml-runner/main.cpp packaging/bazzite/qml-runner/build.sh | sha256sum | cut -c1-16)"
+          if [ "$(cat prebuilt/bazzite-qml-runner/BUILD-ID 2>/dev/null)" != "$QWANT" ]; then
+            mkdir -p /tmp/qr
+            if docker run --rm -v "$PWD/packaging/bazzite/qml-runner":/q:ro -v /tmp/qr:/out fedora:$FED bash /q/build.sh /out; then
+              sudo rm -rf prebuilt/bazzite-qml-runner; sudo cp -a /tmp/qr prebuilt/bazzite-qml-runner; echo "$QWANT" | sudo tee prebuilt/bazzite-qml-runner/BUILD-ID >/dev/null
+              sudo chown -R "$(id -u):$(id -g)" prebuilt
+            else echo "::warning::the Bazzite QML runner build failed; this release ships $(cat prebuilt/bazzite-qml-runner/BUILD-ID 2>/dev/null || echo none)"; fi
+          fi
 
       - name: Build
         run: ./build-release.sh

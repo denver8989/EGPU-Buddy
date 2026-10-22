@@ -88,6 +88,11 @@ if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then   # Bazzite: back to Bazzite
     /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf \
     /etc/modprobe.d/egpu-bazzite-no-nouveau.conf
 fi
+if [ -e /etc/systemd/system/egpu-buddy-jobs.path ]; then   # Bazzite: the plugin's job runner and the qdbus6 shim
+  sudo systemctl disable --now egpu-buddy-jobs.path >/dev/null 2>&1
+  sudo rm -f /etc/systemd/system/egpu-buddy-jobs.path /etc/systemd/system/egpu-buddy-jobs.service /usr/local/sbin/egpu-buddy-jobs /usr/local/bin/qdbus6
+  [ "$(readlink /usr/local/bin/qdbus 2>/dev/null)" = qdbus6 ] && sudo rm -f /usr/local/bin/qdbus
+fi
 [ -d /usr/local/lib/egpu-buddy ] && sudo rm -rf /usr/local/lib/egpu-buddy
 # SteamOS: the driver extension and build root on /home, the OS-update keep-list, the GRUB drop-in (+ regenerate GRUB)
 if [ -d /home/.egpu-buddy ] || [ -L /etc/extensions/egpu-nvidia ] || [ -L /etc/extensions/egpu-nvidia.raw ]; then

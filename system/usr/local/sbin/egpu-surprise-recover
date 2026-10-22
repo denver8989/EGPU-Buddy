@@ -156,10 +156,13 @@ systemctl stop nvidia-persistenced 2>/dev/null; systemctl stop lactd 2>/dev/null
 for h in /etc/nv-egpu-buddy/hooks.d/pre-unload/*; do [ -x "$h" ] && "$h" >/dev/null 2>&1; done   # e.g. stop apps holding /dev/nvidia*
 sleep 1
 # pre-removal user processes still holding dmabufs (e.g. a Steam Proton helper) keep NVIDIA-exported buffers -> pin nvidia_drm
+# Bazzite: its Game Mode (gamescope, Steam, OpenGamepadUI) runs in gamescope-session-plus@<client>.service
+GM_CGROUPS='gamescope-session\.service|steam-launcher\.service|app-.*steam'
+BZ=0; grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && { BZ=1; GM_CGROUPS="$GM_CGROUPS|gamescope-session-plus@[^/]*\.service"; }
 back || for p in $(pgrep -u 1000); do
   # the relaunched Game Mode session (systemd restarts it the instant the old one dies, before this script runs) lives in the
   # session's own cgroup; nothing from the old session can, systemd killed that cgroup. Never touch it.
-  [ "$GM" = 1 ] && grep -qE 'gamescope-session\.service|steam-launcher\.service|app-.*steam' /proc/$p/cgroup 2>/dev/null && continue
+  [ "$GM" = 1 ] && grep -qE "$GM_CGROUPS" /proc/$p/cgroup 2>/dev/null && continue
   ls -l /proc/$p/fd 2>/dev/null | grep -qE 'dmabuf|sync_file' || continue
   case "$(cat /proc/$p/comm 2>/dev/null)" in kwin_wayland|Xwayland|plasmashell|pipewire*|wireplumber|systemd*) ;; *) kill -9 "$p" 2>/dev/null; log "killed pre-removal dmabuf holder $p ($(cat /proc/$p/comm 2>/dev/null))";; esac
 done
@@ -168,6 +171,8 @@ done
 # modules, then restart the session on the panel. Was after the unload loop (up to 60 s of dark screen; 20 s on 2026-09-11).
 if [ "$GM" = 1 ]; then
   st=$(runuser -u deck -- env $RUNENV systemctl --user show gamescope-session.service -p ActiveState --value 2>/dev/null)
+  # Bazzite: the session unit is gamescope-session-plus@<client>.service (its login manager relaunches it by itself)
+  [ "$BZ" = 1 ] && st=$(runuser -u deck -- env $RUNENV systemctl --user list-units --all --no-legend --plain 'gamescope-session-plus@*.service' 2>/dev/null | awk 'NR==1{print $3}')
   case "$st" in
     active|activating) log "gamescope-session is relaunching by itself ($st); not restarting it" ;;
     *) runuser -u deck -- env $RUNENV systemctl --user reset-failed gamescope-session.service gamescope-session.target 2>/dev/null

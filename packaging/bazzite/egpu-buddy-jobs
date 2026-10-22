@@ -1,0 +1,42 @@
+#!/usr/bin/python3 -I
+"""SteamOS EGPU Buddy (Bazzite only): start the Game Mode plugin's long-running jobs as real systemd units.
+Bazzite does not let Decky start transient units itself ("Failed to start transient service unit: Connection reset by
+peer"). The plugin writes /run/nvegpu/jobs/<unit>.job (root-only directory) instead; egpu-buddy-jobs.path starts this,
+and every job becomes the transient unit <unit> - exactly what systemd-run gives the plugin everywhere else, so the
+plugin's own checks (systemctl is-active <unit>) and Decky restarts behave the same.
+A job may only run this project's own helpers (/usr/local/sbin/egpu-*, nv-egpu-*), directly or as "bash -c" commands
+that start with one."""
+import json, os, re, subprocess
+
+D = "/run/nvegpu/jobs"
+OK = re.compile(r"^/usr/local/sbin/(egpu-[a-z0-9.-]+|nv-egpu-[a-z0-9.-]+)$")
+
+
+def allowed(cmd):
+    if not cmd or not isinstance(cmd, list) or not all(isinstance(c, str) for c in cmd):
+        return False
+    if OK.match(cmd[0]):
+        return True
+    return cmd[0] in ("/bin/bash", "/usr/bin/bash") and len(cmd) == 3 and cmd[1] == "-c" and \
+        not re.search(r"[&|$`<>(){}\\\n]", cmd[2]) and \
+        all(OK.match(part.split()[0]) for part in cmd[2].split(";") if part.strip())
+
+
+for name in sorted(os.listdir(D)) if os.path.isdir(D) else []:
+    p = os.path.join(D, name)
+    if not name.endswith(".job"):
+        os.unlink(p)        # anything else in here would keep the path unit firing
+        continue
+    try:
+        with open(p) as f:
+            job = json.load(f)
+    except (OSError, ValueError):
+        job = {}
+    os.unlink(p)
+    unit, log, cmd = job.get("unit", ""), job.get("log", ""), job.get("cmd")
+    if not re.match(r"^egpu-buddy-[a-z0-9-]+$", unit) or not re.match(r"^/tmp/egpu-buddy-[a-z0-9-]+\.log$", log) or not allowed(cmd):
+        print(f"refused job {name}: {job}")
+        continue
+    subprocess.run(["systemd-run", "--no-block", "--collect", "--quiet", "--unit", unit, "-p", f"StandardOutput=append:{log}",
+                    "-p", "StandardError=inherit", *cmd])
+    print(f"started {unit}: {cmd}")

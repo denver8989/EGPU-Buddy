@@ -1,0 +1,6 @@
+[Unit]
+Description=EGPU Buddy: start the Game Mode plugin's jobs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/egpu-buddy-jobs
