@@ -210,6 +210,17 @@ def _gamescope_running():
     return _sh(["pgrep", "-x", "gamescope(-wl)?"], 3)[0] == 0
 
 
+def _bazzite_driver_hint():
+    """Bazzite only: what the driver step is waiting for, in one line (from the driver tool's own log)."""
+    last = (_read("/var/log/egpu-bazzite-driver.log").splitlines() or [""])[-3:]
+    log = "\n".join(last)
+    if "has no NVIDIA driver" in log:
+        return "Bazzite: switch to Bazzite's NVIDIA handheld image first (Setup log has the command), then install again."
+    if "Enroll MOK" in log:
+        return "Reboot: on the blue screen choose Enroll MOK, password egpubuddy. Keep the eGPU unplugged until then."
+    return "The NVIDIA driver is not in place yet. Keep the eGPU unplugged and open EGPU Buddy."
+
+
 def _rpm_q(pkg):
     return _sh(["rpm", "-q", pkg], 10)[1] or f"{pkg}: ?"
 
@@ -819,7 +830,7 @@ def _setup_worker(action, with_driver=False, version=None, vendor="nvidia"):
             for n, k in keep.items():
                 shutil.rmtree(f"{SYSDIR}/{n}", ignore_errors=True); os.rename(k, f"{SYSDIR}/{n}")
             subprocess.run(["chown", "-R", USER, SYSDIR], env=_clean_env())
-            comps = SETUP_COMPONENTS + (",driver" if shutil.which("pacman") and "driver" not in SETUP_COMPONENTS and os.environ.get("EGPU_SETUP_NO_DRIVER") != "1" else "")
+            comps = SETUP_COMPONENTS + (",driver" if (shutil.which("pacman") or IS_BAZZITE) and "driver" not in SETUP_COMPONENTS and os.environ.get("EGPU_SETUP_NO_DRIVER") != "1" else "")
             env.update(EGPU_COMPONENTS=comps, EGPU_PREBUILT_GAMESCOPE=f"{SYSDIR}/prebuilt/gamescope-gbm")
             if ro: subprocess.run([ro, "disable"], env=_clean_env())
             _slog("running install.sh", 6)
@@ -845,6 +856,7 @@ def _setup_worker(action, with_driver=False, version=None, vendor="nvidia"):
         if action == "install":
             _notify(("Installed. Plug the eGPU in when you like." if not _cmdline_reboot_needed()
                      else "Installed. One reboot activates the kernel parameters — the eGPU can stay plugged in.") if rc == 0 else
+                    _bazzite_driver_hint() if rc == RC_NO_DRIVER and IS_BAZZITE else
                     "The NVIDIA driver was not built. Keep the eGPU unplugged and open EGPU Buddy." if rc == RC_NO_DRIVER else
                     "Update staged: it finishes by itself on the next reboot. Nothing to unplug." if rc == RC_STAGED else
                     f"Install failed (rc {rc}). Open EGPU Buddy for details.")
@@ -1260,6 +1272,9 @@ def _support_report():
             for f in sorted(glob.glob(d + "/*")):
                 keep = [l.strip()[:200] for l in _read(f).splitlines() if re.search(r"GAMESCOPE|OUTPUT_CONNECTOR|VULKAN|EGPU Buddy|^\.", l)]
                 lines.append(f"{f}: " + (" | ".join(keep[:8]) or "(nothing gamescope-related)"))
+        lines += ["", "## Bazzite NVIDIA driver"] + (_sh(["/usr/local/sbin/egpu-bazzite-driver", "--status"], 20)[1].splitlines()
+                                                   if os.path.exists("/usr/local/sbin/egpu-bazzite-driver") else ["(not installed)"])
+        lines += [l[:300] for l in _read("/var/log/egpu-bazzite-driver.log").splitlines()[-25:]]
         bz = f"/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope"
         lines.append(f"our Bazzite gamescope: {'installed' if os.path.exists(bz) else 'not installed'} · Bazzite's own has GBM scan-out: "
                      + ("yes" if _sh(["grep", "-qa", "drm_gbm_scanout", "/usr/bin/gamescope"], 10)[0] == 0 else "no"))

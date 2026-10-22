@@ -45,6 +45,8 @@ say(){ printf '\033[1m%s\033[0m\n' "$*"; }
 # ---- preflight -----------------------------------------------------------------------------------
 say "== preflight ($COMPONENTS)"
 . /etc/os-release 2>/dev/null || true
+# Bazzite gets its own branches below (gamescope, driver); every other system never enters them
+IS_BAZZITE=0; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) IS_BAZZITE=1 ;; esac
 if [ "${ID:-}" = steamos ] && [ "$MODE" = install ]; then
   echo "note: SteamOS (experimental): OS updates replace /usr; the self-heal service re-applies this integration at the next boot"
   echo "      from the copy kept in your home, restores cached packages and kernel modules, and rebuilds the driver if headers exist."
@@ -246,7 +248,6 @@ want core && sudo bash -c '{ [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/nu
 want core && { userctl enable egpu-display-failover.service; userctl enable --now egpu-wake-guard.service; userctl enable --now egpu-screen-watch.service; } >/dev/null 2>&1 || true
 
 # ---- gamescope with GBM scan-out (NVIDIA scan-out corruption fix) --------------------------------
-IS_BAZZITE=0; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) IS_BAZZITE=1 ;; esac   # from /etc/os-release (preflight)
 if want gamescope && [ "$IS_BAZZITE" = 1 ]; then
   # Bazzite only. Its Game Mode is gamescope-session-plus, not SteamOS's gamescope-session: our session wrapper and
   # drop-ins never run there. The NVIDIA picture fix goes in through the session's own per-client config instead.
@@ -358,7 +359,25 @@ fi
 DRVDIR="$ROOT/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu)"; [ -f "$DRVDIR/PKGBUILD" ] || DRVDIR="$ROOT/packaging/nvidia-open-egpu"
 if want driver; then
   PKGV="$(sed -n 's/^pkgver=//p' "$DRVDIR/PKGBUILD")-$(sed -n 's/^pkgrel=//p' "$DRVDIR/PKGBUILD")"
-  if command -v pacman >/dev/null && [ "${EGPU_DRIVER_FORCE:-0}" != 1 ] && pacman -Q nvidia-open-egpu-dkms 2>/dev/null | grep -q "$PKGV\$"; then say "== patched driver package $PKGV already installed (EGPU_DRIVER_FORCE=1 to rebuild)"
+  if [ "$IS_BAZZITE" = 1 ]; then
+    # Bazzite: Bazzite's own NVIDIA image (bazzite-deck-nvidia) provides the driver; only the kernel modules are swapped
+    # for the patched build of the same version, through a system extension (packaging/bazzite/egpu-bazzite-driver)
+    BZ=$ROOT/packaging/bazzite
+    sudo bash -c 'set -e; L=/usr/local/lib/egpu-buddy/bazzite; mkdir -p "$L/nvidia-open-egpu-615"
+      install -m755 "$1/egpu-bazzite-driver" /usr/local/sbin/egpu-bazzite-driver
+      install -m644 "$1/fetch-kernel-devel.py" "$1/build-modules.sh" "$L/"
+      install -m644 "$2"/PKGBUILD "$2"/*.patch "$L/nvidia-open-egpu-615/"
+      install -m644 "$1/egpu-bazzite-driver-guard.service" /etc/systemd/system/; systemctl daemon-reload' _ "$BZ" "$ROOT/packaging/nvidia-open-egpu-615"
+    say "== Bazzite: building the patched NVIDIA kernel modules for Bazzite's NVIDIA driver (several minutes the first time)"
+    sudo /usr/local/sbin/egpu-bazzite-driver --build; brc=$?
+    case $brc in
+      0) ;;
+      10) echo "note: Secure Boot is on. At the next reboot a blue screen (MokManager) appears: choose \"Enroll MOK\" -> Continue -> Yes,"
+          echo "      type the password egpubuddy, then Reboot. The patched driver is used from then on."; DRIVER_FAILED=1 ;;
+      3) echo "warning: Bazzite's NVIDIA driver version has no patched build yet; Bazzite's own driver is used (safe detach works, a cable pull may hang)" ;;
+      *) DRIVER_FAILED=1; echo "warning: the patched driver is not in place on Bazzite (see above). Do NOT connect the eGPU until it is." ;;
+    esac
+  elif command -v pacman >/dev/null && [ "${EGPU_DRIVER_FORCE:-0}" != 1 ] && pacman -Q nvidia-open-egpu-dkms 2>/dev/null | grep -q "$PKGV\$"; then say "== patched driver package $PKGV already installed (EGPU_DRIVER_FORCE=1 to rebuild)"
   elif command -v steamos-readonly >/dev/null 2>&1; then
     # SteamOS: the system partition has ~870 MB free (measured on Valve's 3.8.14 image) and an update replaces it, so the
     # driver goes into a system extension on /home, built in a SteamOS build root there. Nothing is written to /usr.

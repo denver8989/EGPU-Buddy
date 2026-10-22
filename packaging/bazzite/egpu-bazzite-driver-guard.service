@@ -1,0 +1,16 @@
+# SteamOS EGPU Buddy (Bazzite only): before systemd-sysext merges extensions at boot, drop the link to the patched
+# NVIDIA modules when they do not match this boot (another kernel, another NVIDIA version, or Secure Boot without our
+# key). Bazzite's own driver is then used, exactly as without this project.
+[Unit]
+Description=EGPU Buddy: check the patched NVIDIA modules before system extensions are merged
+DefaultDependencies=no
+After=local-fs.target
+Before=systemd-sysext.service sysinit.target
+ConditionPathIsSymbolicLink=/etc/extensions/egpu-nvidia
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/egpu-bazzite-driver --guard
+
+[Install]
+WantedBy=sysinit.target

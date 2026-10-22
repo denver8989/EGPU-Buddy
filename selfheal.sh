@@ -88,6 +88,8 @@ fi
 if [ -n "$ro" ] && [ -x /usr/local/sbin/egpu-gamescope-repair ] && /usr/local/sbin/egpu-gamescope-repair --needed >>$SLOG 2>&1; then
   systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 && log "GBM-scanout gamescope needs a rebuild for this OS: started in the background"
 fi
+# Bazzite only (the tool exists only there): patched NVIDIA modules for a new kernel, a staged build taking over
+[ -x /usr/local/sbin/egpu-bazzite-driver ] && /usr/local/sbin/egpu-bazzite-driver --boot 2>&1 | while read -r l; do log "bazzite driver: $l"; done
 # kernel parameters (bootloader config may have been regenerated)
 /usr/local/sbin/egpu-kernel-cmdline --repair 2>&1 | while read -r l; do log "kernel parameters: $l"; done
 if ! /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then

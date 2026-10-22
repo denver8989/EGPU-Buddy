@@ -82,7 +82,11 @@ sudo bash -c "$(declare -f restore_or_remove); systemctl disable egpu-mount.serv
 # Bazzite: the Game Mode hook (only our own sessions.d files) and the Bazzite gamescope build
 for f in "$USER_HOME"/.config/gamescope-session-plus/sessions.d/steam "$USER_HOME"/.config/gamescope-session-plus/sessions.d/ogui-steam; do
   grep -q 'SteamOS EGPU Buddy' "$f" 2>/dev/null && rm -f "$f"; done
-rm -f "$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"; [ -d /usr/local/lib/egpu-buddy ] && sudo rm -rf /usr/local/lib/egpu-buddy
+rm -f "$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"
+if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then   # Bazzite: back to Bazzite's own NVIDIA modules
+  sudo /usr/local/sbin/egpu-bazzite-driver --remove; sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service
+fi
+[ -d /usr/local/lib/egpu-buddy ] && sudo rm -rf /usr/local/lib/egpu-buddy
 # SteamOS: the driver extension and build root on /home, the OS-update keep-list, the GRUB drop-in (+ regenerate GRUB)
 if [ -d /home/.egpu-buddy ] || [ -L /etc/extensions/egpu-nvidia ] || [ -L /etc/extensions/egpu-nvidia.raw ]; then
   echo "removing the NVIDIA driver extension (SteamOS)"

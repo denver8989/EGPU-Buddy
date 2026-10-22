@@ -15,6 +15,18 @@ jobs:
           cat /tmp/bz/BUILD-ID; /tmp/bz/usr/bin/gamescope --version 2>&1 | head -3 || true
           grep -c drm_gbm_scanout /tmp/bz/usr/bin/gamescope
           sudo tar -C /tmp/bz -czf /tmp/bazzite-gamescope-gbm.tar.gz .
+      - name: Check it runs on the real Bazzite image (every library resolves, it starts)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || true   # room for the image
+          docker pull -q ghcr.io/ublue-os/bazzite-deck:stable
+          docker run --rm -v /tmp/bz:/bz:ro ghcr.io/ublue-os/bazzite-deck:stable bash -c '
+            grep -E "^(NAME|VERSION)=" /usr/lib/os-release
+            echo "Bazzite gamescope: $(rpm -q gamescope) GBM scan-out convar: $(grep -ac drm_gbm_scanout /usr/bin/gamescope)"
+            mkdir -p /usr/local/lib/egpu-buddy/gamescope-gbm && cp -a /bz/usr /usr/local/lib/egpu-buddy/gamescope-gbm/
+            G=/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope
+            if ldd $G | grep "not found"; then echo "UNRESOLVED on Bazzite"; exit 1; fi
+            $G --version 2>&1 | head -2'
+
       - uses: actions/upload-artifact@v4
         with:
           name: bazzite-gamescope-gbm
