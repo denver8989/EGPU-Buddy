@@ -52,6 +52,15 @@ jobs:
         # packaging/gamescope-gbm/build-bazzite.sh <out> <OGC tag>.
         run: |
           FED=44
+          # Bazzite gamescope with the fix, for the version the current Bazzite ships (BASE-TAG): built here only when the
+          # previous release did not carry it; any other version is built on the device. A failure never blocks a release.
+          BT=$(cat packaging/gamescope-gbm/bazzite/BASE-TAG)
+          if [ "$(cat prebuilt/bazzite-gamescope-gbm/BUILT-FROM 2>/dev/null)" != "$BT" ]; then
+            mkdir -p /tmp/bz
+            if docker run --rm -v "$PWD/packaging/gamescope-gbm":/gs:ro -v /tmp/bz:/out fedora:$FED bash /gs/build-bazzite.sh /out "$BT"; then
+              sudo rm -rf prebuilt/bazzite-gamescope-gbm; sudo cp -a /tmp/bz prebuilt/bazzite-gamescope-gbm; sudo chown -R "$(id -u):$(id -g)" prebuilt
+            else echo "::warning::the Bazzite gamescope build failed; devices build it on install"; fi
+          fi
           cat prebuilt/bazzite-gamescope-gbm/BUILT-FROM 2>/dev/null || true
           # the desktop app's QML runner for Bazzite (Fedora has Qt's qml tool only in a -devel package): small, same rules
           QWANT="fedora-$FED $(cat packaging/bazzite/qml-runner/main.cpp packaging/bazzite/qml-runner/build.sh | sha256sum | cut -c1-16)"
