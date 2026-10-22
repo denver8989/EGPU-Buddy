@@ -1,5 +1,5 @@
 #!/bin/bash
-# egpu-kernel-cmdline --check | --written | --pending | --apply [--dry-run]
+# egpu-kernel-cmdline --check | --written | --pending | --repair | --apply [--dry-run]
 # The kernel parameters the eGPU path needs (README "Kernel command line"), and how to persist them per bootloader.
 # --check prints the parameters missing from the RUNNING kernel (exit 1 if any). --apply writes them into the
 # bootloader config (backup kept) and regenerates it; a reboot is needed afterwards.
@@ -54,6 +54,14 @@ written(){ local cfg
 # --written: exit 0 when the bootloader CONFIGURATION carries all parameters (they survive the next kernel update).
 # A running kernel can have them from hand-edited boot entries while the configuration they are regenerated from
 # does not (found on the development machine, 2026-09-19): then --check passes and the next kernel update drops them.
+# --repair: 0.7.141 could leave Limine entries with no root= (see the Limine branch). Run at every boot by selfheal:
+# when our marked line is there and an entry lacks root=, rebuild it (as root, from the command line this boot used).
+if [ "$MODE" = --repair ]; then
+  [ -f /etc/default/limine ] && grep -q 'SteamOS EGPU Buddy' /etc/default/limine || exit 0
+  c=$(find /boot /efi /boot/efi -maxdepth 4 -iname limine.conf 2>/dev/null | head -1); [ -n "$c" ] || exit 0
+  grep -iE '^[[:space:]]*(kernel_)?cmdline:' "$c" | grep -qv 'root=' || exit 0
+  echo "Limine entries without root= found: rebuilding"; exec bash "$0" --apply
+fi
 if [ "$MODE" = --written ]; then written && { echo "kernel parameters persisted"; exit 0; }; echo "kernel parameters are NOT in the bootloader configuration"; exit 1; fi
 if [ "$MODE" = --pending ]; then [ -n "$(missing)" ] && written && { echo "kernel parameters written; reboot to activate"; exit 0; }; exit 1; fi
 if [ "$MODE" = --check ]; then m=$(missing); [ -z "$m" ] && { echo "kernel command line: ok"; exit 0; }; echo "missing kernel parameters: $m"; exit 1; fi
@@ -73,10 +81,15 @@ if command -v rpm-ostree >/dev/null 2>&1; then                       # Bazzite /
   if [ $DRY = 1 ]; then echo "would run: rpm-ostree kargs ${args[*]}"; else rpm-ostree kargs "${args[@]}" && did=1; fi
 elif [ -f /etc/default/limine ]; then                                 # CachyOS Limine (limine-entry-tool regenerates limine.conf)
   # CachyOS writes its line as KERNEL_CMDLINE[default]+="..." (an append), which a plain = match never sees.
-  # So ours is a separate, marked append line of our own: replaced on every apply, the user's line untouched.
+  # So ours is a separate, marked line of our own: replaced on every apply, the user's line untouched.
+  # BUT when the file has NO [default] line of its own, limine-entry-tool builds the whole command line itself
+  # (root=, rootflags=...), and ANY KERNEL_CMDLINE[default] we add REPLACES that: 0.7.141 booted a CachyOS Legion
+  # Go 2 with no root= ("Timed out waiting for device /dev/gpt-auto-root"). Then ours must be a FULL line, built
+  # from the command line this system booted with, and the regenerated limine.conf is checked: any entry without
+  # root= puts the backup back.
   L=/etc/default/limine; MARK='# SteamOS EGPU Buddy: eGPU kernel parameters'
-  if [ $DRY = 1 ]; then echo "would append to $L: KERNEL_CMDLINE[default]+=\" $WANT\""
-  else cp -a "$L" "$L.bak-egpu-buddy-$TS"
+  if [ $DRY = 1 ]; then echo "would add our parameters to $L"
+  else B="$L.bak-egpu-buddy-$TS"; cp -a "$L" "$B"
     # take our tokens out of the user's lines (an older apply put them there), then drop our old marked line
     awk -v mark="$MARK" '
       $0==mark {skip=1; next}
@@ -85,14 +98,27 @@ elif [ -f /etc/default/limine ]; then                                 # CachyOS 
           if (t ~ /^(pci|nvidia-drm\.modeset|pcie_aspm|thunderbolt\.host_reset|thunderbolt\.clx|iommu|pcie_ports)=/ && k>1) { if (a[k] ~ /"$/) o=o "\""; continue }
           o = o (o=="" ? "" : " ") a[k] }
         gsub(/ "$/,"\"",o); print o; next }
-      {print}' "$L.bak-egpu-buddy-$TS" > "$L"
-    printf '%s\nKERNEL_CMDLINE[default]+=" %s"\n' "$MARK" "$WANT" >> "$L"; echo "wrote our parameters to $L (backup $L.bak-egpu-buddy-$TS)"
-    regen=""; for c in limine-update limine-mkinitcpio; do command -v $c >/dev/null 2>&1 && $c >/dev/null 2>&1 && { regen=$c; break; }; done
-    esp=$(sed -n 's/^ESP_PATH="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$L" | tail -1)
-    conf=$(find ${esp:-} /boot /efi /boot/efi -maxdepth 4 -iname limine.conf 2>/dev/null | head -1)
-    if [ -n "$conf" ] && grep -q 'hpmemprefsize' "$conf"; then echo "Limine entries regenerated (${regen:-?}): $conf"; did=1
-    elif [ -n "$regen" ]; then echo "$regen ran but ${conf:-limine.conf} does not carry the parameters yet"; did=1
-    else echo "could not regenerate Limine entries: run limine-update (or limine-mkinitcpio) by hand"; fi
+      {print}' "$B" > "$L"
+    ok=1
+    if grep -qE '^KERNEL_CMDLINE\[default\]\+?=.*root=' "$L"; then
+      printf '%s\nKERNEL_CMDLINE[default]+=" %s"\n' "$MARK" "$WANT" >> "$L"
+    else
+      base=$(merge "$(tr ' ' '\n' </proc/cmdline | grep -vE '^(BOOT_IMAGE|initrd)=' | tr '\n' ' ')")
+      case " $base " in *" root="*) printf '%s\nKERNEL_CMDLINE[default]="%s"\n' "$MARK" "$base" >> "$L" ;;
+        *) ok=0; cp -a "$B" "$L"; echo "the running kernel has no root= to build a Limine line from: Limine left as it was" ;; esac
+    fi
+    if [ $ok = 1 ]; then
+      echo "wrote our parameters to $L (backup $B)"
+      regen(){ regen=""; for c in limine-update limine-mkinitcpio; do command -v $c >/dev/null 2>&1 && $c >/dev/null 2>&1 && { regen=$c; break; }; done; }
+      regen
+      esp=$(sed -n 's/^ESP_PATH="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$L" | tail -1)
+      conf=$(find ${esp:-} /boot /efi /boot/efi -maxdepth 4 -iname limine.conf 2>/dev/null | head -1)
+      if [ -n "$conf" ] && grep -iE '^[[:space:]]*(kernel_)?cmdline:' "$conf" | grep -qv 'root='; then
+        cp -a "$B" "$L"; regen; regen=""; echo "a regenerated Limine entry had no root=: put $L back and regenerated"
+      elif [ -n "$conf" ] && grep -q 'hpmemprefsize' "$conf"; then echo "Limine entries regenerated (${regen:-?}): $conf"; did=1
+      elif [ -n "$regen" ]; then echo "$regen ran but ${conf:-limine.conf} does not carry the parameters yet"; did=1
+      else echo "could not regenerate Limine entries: run limine-update (or limine-mkinitcpio) by hand"; fi
+    else regen=""; fi
   fi
 elif [ -f /etc/default/grub ] && command -v steamos-readonly >/dev/null 2>&1; then   # SteamOS: GRUB drop-in
   # An OS update replaces /etc/default/grub, but grub-mkconfig also reads /etc/default/grub.d/*.cfg and SteamOS keeps

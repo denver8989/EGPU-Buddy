@@ -1,3 +1,9 @@
+0.7.142 — fixes a CachyOS (Limine) boot failure caused by 0.7.140/0.7.141.
+
+**Fixed** (CachyOS with the Limine bootloader only; SteamOS and every other setup are unchanged)
+- On a CachyOS install whose /etc/default/limine has no kernel line of its own, 0.7.140/0.7.141 replaced the whole kernel command line with only the eGPU parameters, so the system stopped at "Timed out waiting for device /dev/gpt-auto-root". The parameters are now added to the full command line the system booted with, and every regenerated Limine entry is checked for the root partition; if one is missing it, the original configuration is restored.
+- A system already affected is repaired automatically on the next boot that gets through (see the recovery steps on Discord/GitHub).
+
 0.7.141 — works for any user name and user ID.
 
 **Fixed** (SteamOS is unchanged)

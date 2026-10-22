@@ -89,6 +89,7 @@ if [ -n "$ro" ] && [ -x /usr/local/sbin/egpu-gamescope-repair ] && /usr/local/sb
   systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 && log "GBM-scanout gamescope needs a rebuild for this OS: started in the background"
 fi
 # kernel parameters (bootloader config may have been regenerated)
+/usr/local/sbin/egpu-kernel-cmdline --repair 2>&1 | while read -r l; do log "kernel parameters: $l"; done
 if ! /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then
   /usr/local/sbin/egpu-kernel-cmdline --apply >/dev/null 2>&1 && log "kernel parameters re-applied; reboot needed" || log "kernel parameters missing and could not be written"
 fi
