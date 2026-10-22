@@ -22,16 +22,22 @@ if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then
   BZ=1; PRIV=/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope
   BUILD=$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/build-bazzite.sh
 fi
+# the gamescope version Bazzite ships right now (its Open Gaming Collective tag, e.g. 3.16.31-ogc2) and the one ours was
+# built from: the fix is always built INTO the version Bazzite has, so a different one means "rebuild"
+bz_tag(){ /usr/bin/gamescope --version 2>&1 | grep -oE 'gamescope version [^ ]+' | head -1 | awk '{print $3}' | sed 's/+$//'; }
+bz_built_from(){ cat /usr/local/lib/egpu-buddy/gamescope-gbm/BUILT-FROM 2>/dev/null; }
 OS=$(os_id)
 # (the crash mark keeps the shim's own id format; only "rebuilt once for this OS build" also carries Bazzite's image version)
-[ "$BZ" = 1 ] && OS="$OS-$( . /etc/os-release 2>/dev/null; printf '%s' "${VERSION:-}" | tr ' ' _ )"
+[ "$BZ" = 1 ] && OS="$OS-$( . /etc/os-release 2>/dev/null; printf '%s' "${VERSION:-}" | tr ' ' _ )-gamescope-$(bz_tag)"
 
 reason(){
   if [ "$BZ" = 1 ]; then                                              # Bazzite: a Fedora container builds it
     command -v podman >/dev/null 2>&1 && [ -f "$BUILD" ] || return 1
     [ "$(cat "$DONE" 2>/dev/null)" = "$OS" ] && return 1
     [ -e /etc/nv-egpu-buddy/gamescope-wanted ] || return 1            # the installer chose ours (Bazzite's own lacks the fix)
-    [ -x "$PRIV" ] || { echo "not built for this Bazzite yet"; return 0; }
+    [ -n "$(bz_tag)" ] || return 1
+    [ -x "$PRIV" ] || { echo "not built for this Bazzite yet (gamescope $(bz_tag))"; return 0; }
+    [ "$(bz_built_from)" = "$(bz_tag)" ] || { echo "Bazzite's gamescope is now $(bz_tag) (ours was built into $(bz_built_from))"; return 0; }
   else
   command -v steamos-readonly >/dev/null 2>&1 || return 1            # SteamOS only; other systems build it with the installer
   [ -x "$BR/usr/bin/makepkg" ] && [ -f "$BUILD" ] || return 1         # no build root / payload: nothing this can do
@@ -145,18 +151,26 @@ done
 for _ in $(seq 1 240); do
   systemctl is-active --quiet egpu-buddy-driver-build.service egpu-buddy-driver-repack.service || break; sleep 30
 done
-for _ in $(seq 1 40); do curl -sI -o /dev/null --max-time 8 https://steamdeck-packages.steamos.cloud/ 2>/dev/null && break; sleep 30; done
+NETCHK=https://steamdeck-packages.steamos.cloud/; [ "$BZ" = 1 ] && NETCHK=https://github.com/   # where the build fetches from
+for _ in $(seq 1 40); do curl -sI -o /dev/null --max-time 8 "$NETCHK" 2>/dev/null && break; sleep 30; done
 
 echo "$OS" > "$DONE"    # recorded BEFORE building: a build that hangs or fails is not retried in a loop on this OS build
 bz_build(){ # Bazzite: build in fedora:<this Bazzite's Fedora version>, then swap it in atomically (a running gamescope keeps
             # the old binary busy, so it is never copied over in place)
-  local T=/var/lib/nvegpu/gamescope-build V; V=$( . /etc/os-release; echo "${VERSION_ID:-44}" )
+  local T=/var/lib/nvegpu/gamescope-build V tag rc; V=$( . /etc/os-release; echo "${VERSION_ID:-44}" ); tag=$(bz_tag)
   rm -rf "${T:?}"; mkdir -p "$T"
   podman run --rm --network host --security-opt label=disable -v "$(dirname "$BUILD"):/gs:ro" -v "$T:/out" \
-    "registry.fedoraproject.org/fedora:$V" bash /gs/build-bazzite.sh /out || return 1
+    "registry.fedoraproject.org/fedora:$V" bash /gs/build-bazzite.sh /out "$tag"; rc=$?
+  if [ "$rc" != 0 ]; then
+    # the fix could not be built into THIS version: Game Mode must not keep an older gamescope of ours; it uses Bazzite's own
+    rm -rf "${T:?}" /usr/local/lib/egpu-buddy/gamescope-gbm/usr /usr/local/lib/egpu-buddy/gamescope-gbm/BUILT-FROM
+    [ "$rc" = 3 ] && log "the NVIDIA picture fix does not apply to Bazzite's gamescope $tag yet: Game Mode uses Bazzite's own gamescope (needs an EGPU Buddy update)"
+    return 1
+  fi
   [ -x "$T/usr/bin/gamescope" ] && ! ldd "$T/usr/bin/gamescope" 2>/dev/null | grep -q 'not found' || return 1
   local D=/usr/local/lib/egpu-buddy/gamescope-gbm; mkdir -p "$D"; rm -rf "${D:?}/usr.new" "${D:?}/usr.old"; cp -a "$T/usr" "$D/usr.new"
-  [ -d "$D/usr" ] && mv "$D/usr" "$D/usr.old"; mv "$D/usr.new" "$D/usr"; rm -rf "${D:?}/usr.old" "${T:?}"
+  [ -d "$D/usr" ] && mv "$D/usr" "$D/usr.old"; mv "$D/usr.new" "$D/usr"; cp "$T/BUILT-FROM" "$T/BUILD-ID" "$D/" 2>/dev/null
+  rm -rf "${D:?}/usr.old" "${T:?}"
   command -v restorecon >/dev/null && restorecon -R "$D" 2>/dev/null; rm -f "$BAD"; return 0; }
 if [ "$BZ" = 1 ]; then bz_build >> "$LOG" 2>&1; brc=$?; else bash "$BUILD" "$(stat -c %U "$UH")" >> "$LOG" 2>&1; brc=$?; fi
 if [ "$brc" != 0 ]; then
@@ -167,7 +181,11 @@ rm -f "$BAD"; log "rebuilt: $("$PRIV" --version 2>&1 | grep -o 'gamescope versio
 # reload Game Mode onto it - only when Game Mode is on the eGPU and fell back to Valve's gamescope, and no game runs
 for _ in $(seq 1 720); do
   g=$(pgrep -n -x 'gamescope(-wl)?') || { log "Game Mode is not running; the rebuilt gamescope is used next time it starts"; exit 0; }
+  if [ "$BZ" = 1 ]; then   # Bazzite: our hook set the variable (eGPU screen); it named Bazzite's own while ours was not built yet
+    tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -q '^NV_EGPU_BUDDY_GAMESCOPE_BIN=' || { log "Game Mode is not on the eGPU; nothing to reload"; exit 0; }
+  else
   tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -qxF "NV_EGPU_BUDDY_GAMESCOPE_BIN=$PRIV" || { log "Game Mode is not on the eGPU; nothing to reload"; exit 0; }
+  fi
   [ "$(readlink -f /proc/$g/exe)" = "$(readlink -f "$PRIV")" ] && { log "already running the rebuilt gamescope"; exit 0; }
   if ! /usr/local/sbin/egpu-game-running && [ ! -e /run/nvegpu/gm-attach-pending ] && ! grep -qE '"state":"(SWITCHING|DETACHING)"' /run/nvegpu/gm-status.json 2>/dev/null; then
     log "no game running: reloading Game Mode onto the rebuilt gamescope"

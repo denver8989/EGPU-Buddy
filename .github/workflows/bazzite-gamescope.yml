@@ -11,7 +11,7 @@ jobs:
       - name: Build in Fedora 44
         run: |
           mkdir -p /tmp/bz
-          docker run --rm -v "$PWD/packaging/gamescope-gbm":/gs:ro -v /tmp/bz:/out fedora:44 bash -c 'bash /gs/build-bazzite.sh /out || { grep -iE "error|not found|NO " /tmp/gamescope-src/build/meson-logs/meson-log.txt | tail -40; exit 1; }'
+          docker run --rm -v "$PWD/packaging/gamescope-gbm":/gs:ro -v /tmp/bz:/out fedora:44 bash -c 'bash /gs/build-bazzite.sh /out 3.16.31-ogc2 || { grep -iE "error|not found|NO " /tmp/gamescope-src/build/meson-logs/meson-log.txt | tail -40; exit 1; }'
           cat /tmp/bz/BUILD-ID; /tmp/bz/usr/bin/gamescope --version 2>&1 | head -3 || true
           grep -c drm_gbm_scanout /tmp/bz/usr/bin/gamescope
           sudo tar -C /tmp/bz -czf /tmp/bazzite-gamescope-gbm.tar.gz .

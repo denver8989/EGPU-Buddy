@@ -46,19 +46,13 @@ jobs:
           cp -a /tmp/prev/SteamOS-EGPU-Buddy-*/prebuilt .
           test -x prebuilt/gamescope-gbm/usr/bin/gamescope
 
-      - name: Bazzite gamescope (built once in a Fedora container, then carried forward like the others)
-        # Bazzite only uses it. Rebuilt when the pinned source/patches change or Bazzite's Fedora base moves. A failed
-        # build never blocks a release: the previous build (or none) ships, and Bazzite then uses its own gamescope.
+      - name: Bazzite QML runner (built once in a Fedora container, then carried forward like the others)
+        # The Bazzite gamescope is NOT built here: the fix is built into whatever gamescope version the device has, on the
+        # device (egpu-gamescope-repair); the release carries the build for the current Bazzite, made with
+        # packaging/gamescope-gbm/build-bazzite.sh <out> <OGC tag>.
         run: |
           FED=44
-          WANT="fedora-$FED $(cat packaging/gamescope-gbm/build.sh packaging/gamescope-gbm/0*.patch | sha256sum | cut -c1-16)"
-          if [ "$(cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null)" != "$WANT" ]; then
-            mkdir -p /tmp/bz
-            if docker run --rm -v "$PWD/packaging/gamescope-gbm":/gs:ro -v /tmp/bz:/out fedora:$FED bash /gs/build-bazzite.sh /out; then
-              sudo rm -rf prebuilt/bazzite-gamescope-gbm; sudo cp -a /tmp/bz prebuilt/bazzite-gamescope-gbm; sudo chown -R "$(id -u):$(id -g)" prebuilt
-            else echo "::warning::the Bazzite gamescope build failed; this release ships $(cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null || echo none)"; fi
-          fi
-          cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null || true
+          cat prebuilt/bazzite-gamescope-gbm/BUILT-FROM 2>/dev/null || true
           # the desktop app's QML runner for Bazzite (Fedora has Qt's qml tool only in a -devel package): small, same rules
           QWANT="fedora-$FED $(cat packaging/bazzite/qml-runner/main.cpp packaging/bazzite/qml-runner/build.sh | sha256sum | cut -c1-16)"
           if [ "$(cat prebuilt/bazzite-qml-runner/BUILD-ID 2>/dev/null)" != "$QWANT" ]; then

@@ -288,14 +288,22 @@ if want gamescope && [ "$IS_BAZZITE" = 1 ]; then
     # for this Bazzite in a Fedora container (after a Bazzite update too)
     sudo bash -c 'mkdir -p /etc/nv-egpu-buddy && touch /etc/nv-egpu-buddy/gamescope-wanted'
   fi
+  BZ_TAG=$(/usr/bin/gamescope --version 2>&1 | grep -oE 'gamescope version [^ ]+' | head -1 | awk '{print $3}' | sed 's/+$//')
   if [ "$BZ_GS" = /usr/bin/gamescope ]; then :
-  elif [ -x "$ROOT/prebuilt/bazzite-gamescope-gbm/usr/bin/gamescope" ] && ! ldd "$ROOT/prebuilt/bazzite-gamescope-gbm/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
+  elif [ "$(cat /usr/local/lib/egpu-buddy/gamescope-gbm/BUILT-FROM 2>/dev/null)" = "$BZ_TAG" ] && [ -x "$BZ_GS" ]; then
+    say "== the NVIDIA picture fix is already built into this Bazzite's gamescope ($BZ_TAG)"
+  elif [ -n "$BZ_TAG" ] && [ "$(cat "$ROOT/prebuilt/bazzite-gamescope-gbm/BUILT-FROM" 2>/dev/null)" = "$BZ_TAG" ] && [ -x "$ROOT/prebuilt/bazzite-gamescope-gbm/usr/bin/gamescope" ] && ! ldd "$ROOT/prebuilt/bazzite-gamescope-gbm/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
     say "== installing the GBM-scanout gamescope built for Bazzite ($(cat "$ROOT/prebuilt/bazzite-gamescope-gbm/BUILD-ID" 2>/dev/null))"
     # atomic swap: a running gamescope keeps the old binary busy (ETXTBSY), so never copy over it in place
     sudo bash -c 'D=/usr/local/lib/egpu-buddy/gamescope-gbm; mkdir -p "$D"; rm -rf "$D/usr.new" "$D/usr.old"; cp -a "$1" "$D/usr.new"
-      [ -d "$D/usr" ] && mv "$D/usr" "$D/usr.old"; mv "$D/usr.new" "$D/usr"; rm -rf "$D/usr.old"' _ "$ROOT/prebuilt/bazzite-gamescope-gbm/usr"
+      [ -d "$D/usr" ] && mv "$D/usr" "$D/usr.old"; mv "$D/usr.new" "$D/usr"; rm -rf "$D/usr.old"; cp "$1/../BUILT-FROM" "$1/../BUILD-ID" "$D/"' _ "$ROOT/prebuilt/bazzite-gamescope-gbm/usr"
   else
-    echo "note: the shipped gamescope build does not fit this Bazzite; it is built for it in the background after the next reboot (until then Game Mode on the eGPU uses Bazzite's gamescope)"
+    # build the fix into THIS Bazzite's gamescope now, in the background (a Fedora container; about 10 minutes); Game Mode
+    # uses Bazzite's own gamescope until it is done, then reloads onto it when no game runs
+    echo "note: building the NVIDIA picture fix into this Bazzite's gamescope (${BZ_TAG:-?}) in the background"
+    sudo bash -c 'mkdir -p /run/nvegpu; j=/run/nvegpu/.egpu-buddy-gamescope-repair.job.tmp
+      printf "{\"unit\": \"egpu-buddy-gamescope-repair-%s\", \"log\": \"/tmp/egpu-buddy-gamescope-repair.log\", \"cmd\": [\"/usr/local/sbin/egpu-gamescope-repair\"]}" "$(date +%s)" > "$j"
+      systemctl start --no-block egpu-buddy-gamescope-repair.service 2>/dev/null && rm -f "$j" || { mkdir -p /run/nvegpu/jobs; mv "$j" /run/nvegpu/jobs/egpu-buddy-gamescope-repair.job; }' >/dev/null 2>&1 || true
   fi
   # hook: one line per Game Mode client (Bazzite: steam, ogui-steam). A file the user wrote themselves is left alone.
   HK="$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"; umkdir "$(dirname "$HK")"

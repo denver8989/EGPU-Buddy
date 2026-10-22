@@ -34,6 +34,12 @@ _egpu_bz(){
   # not been crash-looping on this OS build, otherwise Bazzite's own gamescope (and it marks a crashing build, which
   # egpu-buddy-gamescope-repair.path rebuilds for the new Bazzite in a Fedora container).
   NV_EGPU_BUDDY_GAMESCOPE_BIN=@GAMESCOPE@
+  # ours carries the fix built INTO the gamescope version Bazzite ships; after a Bazzite update that changed it, Bazzite's
+  # own is used until the repair service has built the fix into the new version (never an older gamescope of ours)
+  if [ "$NV_EGPU_BUDDY_GAMESCOPE_BIN" != /usr/bin/gamescope ]; then
+    local tag; tag=$(/usr/bin/gamescope --version 2>&1 | grep -oE 'gamescope version [^ ]+' | head -1 | awk '{print $3}' | sed 's/+$//')
+    [ -n "$tag" ] && [ "$(cat /usr/local/lib/egpu-buddy/gamescope-gbm/BUILT-FROM 2>/dev/null)" = "$tag" ] || NV_EGPU_BUDDY_GAMESCOPE_BIN=/usr/bin/gamescope
+  fi
   GAMESCOPE_BIN="$HOME/.local/lib/nv-egpu-buddy/gamescope-shim/gamescope"
   [ -x "$GAMESCOPE_BIN" ] || { GAMESCOPE_BIN=$NV_EGPU_BUDDY_GAMESCOPE_BIN; [ -x "$GAMESCOPE_BIN" ] || GAMESCOPE_BIN=/usr/bin/gamescope; }
   gamescope_drm_gbm_scanout=1                      # gamescope turns gamescope_<convar> into a convar override
