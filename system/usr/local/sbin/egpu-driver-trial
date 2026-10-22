@@ -17,7 +17,7 @@
 set -u
 STATE=/var/lib/nvegpu/driver-trial; LOG=/var/log/egpu-driver-trial.log; SEL=/etc/nv-egpu-buddy/driver-dir
 PAY=/home/deck/.local/share/steamos-egpu-buddy/packaging; OLD=$PAY/nvidia-open-egpu; NEW=$PAY/nvidia-open-egpu-615
-PERSIST=/home/deck/.local/share/steamos-egpu-buddy; U=deck
+PERSIST=/home/deck/.local/share/steamos-egpu-buddy; U=$(stat -c %U "$PERSIST" 2>/dev/null || echo deck)
 DETACH=/usr/local/sbin/egpu-gamemode-detach; REATTACH=/usr/local/sbin/egpu-reattach
 PKGS="nvidia-utils lib32-nvidia-utils nvidia-open-egpu-dkms"
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }

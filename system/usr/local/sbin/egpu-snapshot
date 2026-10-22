@@ -17,6 +17,10 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   echo "EGPU Buddy snapshot: $reason · $(date '+%F %T') · uptime $(cut -d' ' -f1 /proc/uptime)s · version $(cat /etc/nv-egpu-buddy/version 2>/dev/null)"
   echo "device $(cat /sys/class/dmi/id/product_name 2>/dev/null) · profile $(/usr/local/sbin/egpu-detect --device 2>/dev/null) · dock $(/usr/local/sbin/egpu-detect --dock 2>/dev/null) · XG Mobile seen $(cat /var/lib/nvegpu/xg-mobile-seen 2>/dev/null || echo no)"
   echo "kernel $(uname -r) · cmdline $(cat /proc/cmdline)"
+  # which bootloader carries the kernel parameters (CachyOS ships Limine, systemd-boot or GRUB) and whether ours are in it
+  bl=$( { [ -f /etc/default/limine ] && echo limine; command -v sdboot-manage >/dev/null && echo sdboot-manage; ls -d /boot/loader/entries /efi/loader/entries /boot/efi/loader/entries 2>/dev/null | sed 's/^/systemd-boot:/'; [ -f /etc/default/grub ] && echo grub; } | tr '\n' ' ')
+  echo "bootloader: ${bl:-unknown} · $(/usr/local/sbin/egpu-kernel-cmdline --written 2>/dev/null | head -1)"
+  [ -f /etc/default/limine ] && grep -nE '^(KERNEL_CMDLINE|ESP_PATH)|EGPU Buddy' /etc/default/limine 2>/dev/null | sed -E 's/root=UUID=[^ "]*/root=UUID=[removed]/; s/^/  limine: /' | cut -c1-260 || true
   sec "PCI tree"; t lspci -tv
   if [ -n "$gpu" ]; then
     br=$(basename "$(dirname "$(readlink -f "/sys/bus/pci/devices/$gpu")")")

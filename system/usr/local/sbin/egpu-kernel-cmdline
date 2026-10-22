@@ -46,7 +46,9 @@ merge(){ # $1 = existing cmdline string -> string with our params (replacing any
 # have them yet (= a reboot is all that is missing). The plugin shows "reboot" then, not another "apply".
 written(){ local cfg
   if command -v rpm-ostree >/dev/null 2>&1; then cfg=$(rpm-ostree kargs 2>/dev/null)
-  elif [ -f /etc/default/limine ]; then cfg=$(cat /etc/default/limine 2>/dev/null)
+  elif [ -f /etc/default/limine ]; then   # the generated entries, when found: /etc/default/limine alone is only the source
+    cfg=""; c=$(find /boot /efi /boot/efi -maxdepth 4 -iname limine.conf 2>/dev/null | head -1); [ -n "$c" ] && cfg=$(cat "$c" 2>/dev/null)
+    [ -n "$cfg" ] || cfg=$(cat /etc/default/limine 2>/dev/null)
   else cfg=$(cat /etc/default/grub /etc/default/grub.d/*.cfg /boot/loader/entries/*.conf 2>/dev/null); fi
   for p in $WANT; do case "$cfg" in *"$p"*) ;; *) return 1;; esac; done; return 0; }
 # --written: exit 0 when the bootloader CONFIGURATION carries all parameters (they survive the next kernel update).
@@ -61,15 +63,37 @@ TS=$(date +%Y%m%d-%H%M%S); did=0
 edit(){ # $1 file, $2 sed script
   [ -f "$1" ] || return 1
   if [ $DRY = 1 ]; then echo "would edit $1:"; sed -E "$2" "$1" | diff "$1" - | grep '^>' | cut -c1-200; return 0; fi
-  cp -a "$1" "$1.bak-egpu-buddy-$TS"; sed -E -i "$2" "$1"; echo "edited $1 (backup $1.bak-egpu-buddy-$TS)"; }
+  cp -a "$1" "$1.bak-egpu-buddy-$TS"; sed -E -i "$2" "$1"
+  # a pattern that matched nothing is not a success: say so instead of "reboot needed" on every boot
+  if cmp -s "$1" "$1.bak-egpu-buddy-$TS"; then rm -f "$1.bak-egpu-buddy-$TS"; echo "$1: no change (no matching line, or already up to date)"; return 1; fi
+  echo "edited $1 (backup $1.bak-egpu-buddy-$TS)"; }
 if command -v rpm-ostree >/dev/null 2>&1; then                       # Bazzite / rpm-ostree images
   args=(); for p in $WANT; do args+=(--append-if-missing="$p"); done
   cur=$(rpm-ostree kargs 2>/dev/null); case "$cur" in *pci=*) args+=(--delete-if-present="$(echo "$cur" | tr ' ' '\n' | grep '^pci=' | head -1)");; esac
   if [ $DRY = 1 ]; then echo "would run: rpm-ostree kargs ${args[*]}"; else rpm-ostree kargs "${args[@]}" && did=1; fi
-elif [ -f /etc/default/limine ]; then                                 # CachyOS Limine (limine-update regenerates limine.conf)
-  cur=$(sed -n 's/^KERNEL_CMDLINE\[default\]="\(.*\)"$/\1/p' /etc/default/limine | head -1); new=$(merge "$cur")
-  edit /etc/default/limine "s|^KERNEL_CMDLINE\[default\]=\".*\"|KERNEL_CMDLINE[default]=\"$new\"|" && did=1
-  [ $DRY = 1 ] || { command -v limine-update >/dev/null && limine-update >/dev/null 2>&1 && echo "limine-update done" || echo "run limine-update (or regenerate your Limine entries) to apply"; }
+elif [ -f /etc/default/limine ]; then                                 # CachyOS Limine (limine-entry-tool regenerates limine.conf)
+  # CachyOS writes its line as KERNEL_CMDLINE[default]+="..." (an append), which a plain = match never sees.
+  # So ours is a separate, marked append line of our own: replaced on every apply, the user's line untouched.
+  L=/etc/default/limine; MARK='# SteamOS EGPU Buddy: eGPU kernel parameters'
+  if [ $DRY = 1 ]; then echo "would append to $L: KERNEL_CMDLINE[default]+=\" $WANT\""
+  else cp -a "$L" "$L.bak-egpu-buddy-$TS"
+    # take our tokens out of the user's lines (an older apply put them there), then drop our old marked line
+    awk -v mark="$MARK" '
+      $0==mark {skip=1; next}
+      skip {skip=0; next}
+      /^KERNEL_CMDLINE\[default\]\+?="/ { n=split($0,a," "); o=""; for(k=1;k<=n;k++){t=a[k]; sub(/^"/,"",t); sub(/"$/,"",t)
+          if (t ~ /^(pci|nvidia-drm\.modeset|pcie_aspm|thunderbolt\.host_reset|thunderbolt\.clx|iommu|pcie_ports)=/ && k>1) { if (a[k] ~ /"$/) o=o "\""; continue }
+          o = o (o=="" ? "" : " ") a[k] }
+        gsub(/ "$/,"\"",o); print o; next }
+      {print}' "$L.bak-egpu-buddy-$TS" > "$L"
+    printf '%s\nKERNEL_CMDLINE[default]+=" %s"\n' "$MARK" "$WANT" >> "$L"; echo "wrote our parameters to $L (backup $L.bak-egpu-buddy-$TS)"
+    regen=""; for c in limine-update limine-mkinitcpio; do command -v $c >/dev/null 2>&1 && $c >/dev/null 2>&1 && { regen=$c; break; }; done
+    esp=$(sed -n 's/^ESP_PATH="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$L" | tail -1)
+    conf=$(find ${esp:-} /boot /efi /boot/efi -maxdepth 4 -iname limine.conf 2>/dev/null | head -1)
+    if [ -n "$conf" ] && grep -q 'hpmemprefsize' "$conf"; then echo "Limine entries regenerated (${regen:-?}): $conf"; did=1
+    elif [ -n "$regen" ]; then echo "$regen ran but ${conf:-limine.conf} does not carry the parameters yet"; did=1
+    else echo "could not regenerate Limine entries: run limine-update (or limine-mkinitcpio) by hand"; fi
+  fi
 elif [ -f /etc/default/grub ] && command -v steamos-readonly >/dev/null 2>&1; then   # SteamOS: GRUB drop-in
   # An OS update replaces /etc/default/grub, but grub-mkconfig also reads /etc/default/grub.d/*.cfg and SteamOS keeps
   # files listed in /etc/atomic-update.conf.d across updates (install.sh lists this one). Verified on the 3.8.14 image.
@@ -142,9 +166,17 @@ elif [ -f /etc/default/grub ]; then                                   # GRUB (Ar
   edit /etc/default/grub "s|^GRUB_CMDLINE_LINUX_DEFAULT=\".*\"|GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"|" && did=1
   cfg=$(ls /boot/grub/grub.cfg /boot/efi/EFI/*/grub.cfg /boot/grub2/grub.cfg 2>/dev/null | head -1)
   [ $DRY = 1 ] || { [ -n "$cfg" ] && grub-mkconfig -o "$cfg" >/dev/null 2>&1 && echo "grub config regenerated: $cfg" || echo "regenerate your GRUB config (grub-mkconfig -o <grub.cfg>) to apply"; }
-elif ls /boot/loader/entries/*.conf >/dev/null 2>&1; then           # systemd-boot
-  for f in /boot/loader/entries/*.conf; do cur=$(sed -n 's/^options[[:space:]]*//p' "$f" | head -1); new=$(merge "$cur"); edit "$f" "s|^options[[:space:]].*|options $new|" && did=1; done
+elif ls /boot/loader/entries/*.conf /efi/loader/entries/*.conf /boot/efi/loader/entries/*.conf >/dev/null 2>&1; then   # systemd-boot
+  # CachyOS regenerates its entries from /etc/sdboot-manage.conf on every kernel update, and kernel-install from
+  # /etc/kernel/cmdline: write those too, or the next kernel update drops the parameters again
+  if [ -f /etc/sdboot-manage.conf ]; then cur=$(sed -n 's/^LINUX_OPTIONS="\(.*\)"$/\1/p' /etc/sdboot-manage.conf | head -1); new=$(merge "$cur")
+    edit /etc/sdboot-manage.conf "s|^LINUX_OPTIONS=\".*\"|LINUX_OPTIONS=\"$new\"|" || true; fi
+  if [ -f /etc/kernel/cmdline ]; then new=$(merge "$(head -1 /etc/kernel/cmdline)"); edit /etc/kernel/cmdline "1s|.*|$new|" || true; fi
+  for f in /boot/loader/entries/*.conf /efi/loader/entries/*.conf /boot/efi/loader/entries/*.conf; do [ -f "$f" ] || continue
+    cur=$(sed -n 's/^options[[:space:]]*//p' "$f" | head -1); new=$(merge "$cur"); edit "$f" "s|^options[[:space:]].*|options $new|" && did=1; done
 else
   echo "no supported bootloader config found (rpm-ostree, /etc/default/limine, /etc/default/grub, /boot/loader/entries). Add these parameters by hand:"; echo "  $WANT"; exit 3
 fi
-[ $DRY = 1 ] || [ $did = 0 ] || echo "reboot to activate the new kernel parameters"
+[ $DRY = 1 ] && exit 0
+[ $did = 1 ] || { [ "${regen-x}" != "" ] && written; } || { echo "the kernel parameters could not be written; add them by hand: $WANT"; exit 1; }
+echo "reboot to activate the new kernel parameters"

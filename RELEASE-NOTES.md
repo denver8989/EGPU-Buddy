@@ -1,3 +1,11 @@
+0.7.140 — CachyOS and other systems whose user is not called "deck": Game Mode switches onto the eGPU display, and the kernel parameters are written to Limine.
+
+**Fixed** (systems whose login user is not "deck", and CachyOS with Limine; SteamOS is unchanged)
+- "Restarting Game Mode onto the eGPU display" never finished on a system whose user has another name (CachyOS, for example). The switch, Safe Detach, the cable-pull recovery, audio and a few other helpers ran their steps as the SteamOS user "deck", which does not exist there, so Game Mode was never restarted. The installer now writes the real user name into them.
+- "Setup is incomplete" on CachyOS with the Limine bootloader: CachyOS writes its kernel line as `KERNEL_CMDLINE[default]+="..."`, which the kernel parameter step did not recognise, so nothing was written while every boot reported "re-applied; reboot needed". The parameters are now added as a line of their own in /etc/default/limine, the Limine entries are regenerated, and the result is checked in limine.conf. Reboot once after updating.
+- The kernel parameter step no longer reports success when it changed nothing. On CachyOS with systemd-boot, the parameters also go into /etc/sdboot-manage.conf (and /etc/kernel/cmdline), so a kernel update keeps them.
+- The support report shows which bootloader is in use and whether the parameters are in its configuration.
+
 0.7.139 — no "kwin_wayland closed unexpectedly" notification after a cable pull on the desktop.
 
 **Fixed** (ROG Ally or ASUS XG Mobile hardware only; every other device is unchanged)
