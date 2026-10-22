@@ -50,7 +50,7 @@ while :; do
     out=$(tr '\0' '\n' < "/proc/$gs/environ" 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p' | cut -d, -f1); out=${out:-?}
   fi
   # the running game (Steam starts every game under "reaper ... AppId=N") and whether it renders on the eGPU
-  game=-; rp=$(pgrep -n -x reaper || true)
+  game=-; rp=$(/usr/local/sbin/egpu-game-running --pid || true)
   if [ -n "$rp" ]; then
     app=$(tr '\0' ' ' < "/proc/$rp/cmdline" 2>/dev/null | grep -oE 'AppId=[0-9]+' | head -1 | cut -d= -f2)
     on=igpu; name=?

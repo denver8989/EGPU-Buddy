@@ -210,9 +210,43 @@ def _gamescope_running():
     return _sh(["pgrep", "-x", "gamescope(-wl)?"], 3)[0] == 0
 
 
+def _pids(name):
+    rc, out, _ = _sh(["pgrep", "-x", name], 3)
+    return [int(x) for x in out.split()] if rc == 0 else []
+
+
+def _ogui_running():
+    """OpenGamepadUI (Bazzite's Game Mode overlay) is running."""
+    return bool(_pids("opengamepadui"))
+
+
 def _game_running():
     # exact names only: a -f pattern also matches shells whose command line quotes these words
-    return _proc_running("reaper")   # reaper wraps every launched game; pv-adverb/srt-bwrap also host steamwebhelper
+    # reaper wraps every launched game; pv-adverb/srt-bwrap also host steamwebhelper
+    reapers = _pids("reaper")
+    ogui = _pids("opengamepadui")
+    if not ogui:
+        return bool(reapers)   # SteamOS, CachyOS...: any reaper, as always
+    # Bazzite: OpenGamepadUI keeps a reaper of its own alive all session ("A game is running" after every reboot).
+    # Count only a reaper Steam started for a game (argv: reaper SteamLaunch AppId=...) with no OpenGamepadUI under it.
+    def ppid(p):
+        try: return int(open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split()[1])
+        except Exception: return 0
+    for r in reapers:
+        try: argv = open(f"/proc/{r}/cmdline", "rb").read().split(b"\0")
+        except OSError: continue
+        if len(argv) < 2 or argv[1] != b"SteamLaunch":
+            continue
+        under = False
+        for o in ogui:
+            q = o
+            for _ in range(8):
+                q = ppid(q)
+                if q <= 1: break
+                if q == r: under = True; break
+        if not under:
+            return True
+    return False
 
 
 def _gamescope_env(key):
@@ -512,10 +546,22 @@ def _download(url, dst):
     with urllib.request.urlopen(url, timeout=120, context=_ssl_ctx()) as r, open(dst, "wb") as f: shutil.copyfileobj(r, f)
 
 
+_SYSRUN = {}
+def _sysrun_ok():
+    """systemd-run can start a transient unit from here. Bazzite refuses it from Decky ("Failed to start transient
+    service unit: Connection reset by peer"); there the helpers run as Decky's own children instead."""
+    if "ok" not in _SYSRUN:
+        _SYSRUN["ok"] = bool(shutil.which("systemd-run")) and _sh(["systemd-run", "--quiet", "--wait", "--collect", "true"], 20)[0] == 0
+    return _SYSRUN["ok"]
+
+
 def _spawn_root_job(name, cmd):
     """Run a privileged, long-running helper as a transient system service: outside Decky's cgroup, so a Decky
     restart cannot kill it half-way, and with Decky's library path stripped."""
     unit = f"egpu-buddy-{name}-{int(time.time())}"
+    if not _sysrun_ok():
+        subprocess.Popen(cmd, env=_clean_env(), stdout=open("/tmp/egpu-buddy-" + name + ".log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
+        return unit
     subprocess.Popen(["systemd-run", "--collect", "--quiet", "--unit", unit, "-p", "StandardOutput=append:/tmp/egpu-buddy-" + name + ".log",
                       "-p", "StandardError=inherit", *cmd], env=_clean_env(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return unit
@@ -673,7 +719,9 @@ def _run_logged(cmd, env, cwd):
     """Run the installer, stream its output into the log, and turn its stage lines into progress."""
     # Run the installer in its OWN transient systemd unit: on SteamOS the driver build takes 10-20 minutes, and as a child
     # of Decky it would die with any Decky/Steam restart. --pipe keeps the output streaming back for the progress bar.
-    if shutil.which("systemd-run"):
+    # Bazzite refuses that from Decky ("Failed to start transient service unit: Connection reset by peer", SELinux):
+    # nothing was installed at all. Probe it first; where it cannot start a unit, run the installer directly.
+    if _sysrun_ok():
         keep = [f"--setenv={k}={v}" for k, v in env.items() if k.startswith("EGPU_") or k in ("HOME", "PATH", "STOCK_GAMESCOPE_SESSION")]
         cmd = ["systemd-run", "--quiet", "--wait", "--pipe", "--collect", f"--unit=egpu-buddy-setup-{int(time.time())}",
                f"--working-directory={cwd}", "--property=TimeoutStartSec=7200", *keep, *cmd]
@@ -861,7 +909,10 @@ def _update_plugin_files(version):
         shutil.copytree(sp, dp) if os.path.isdir(sp) else shutil.copy2(sp, dp)
     subprocess.run(["chown", "-R", USER, PLUGIN_LIVE], env=_clean_env())
     if os.environ.get("EGPU_NO_DECKY_RESTART") != "1":   # test hook
-        subprocess.Popen(["systemd-run", "--on-active=5", "--collect", "--quiet", "systemctl", "try-restart", "plugin_loader.service"], env=_clean_env())
+        if _sysrun_ok():
+            subprocess.Popen(["systemd-run", "--on-active=5", "--collect", "--quiet", "systemctl", "try-restart", "plugin_loader.service"], env=_clean_env())
+        else:
+            subprocess.Popen(["sh", "-c", "sleep 5; systemctl try-restart plugin_loader.service"], env=_clean_env(), start_new_session=True)
 
 
 def _update_worker(version):
@@ -1433,7 +1484,7 @@ class Plugin:
         output = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] if game_mode else ""
         status = {
             "present": bool(bdf), "bdf": bdf, "driver_loaded": driver,
-            "game_mode": game_mode, "game_running": _game_running() if game_mode else False,
+            "game_mode": game_mode, "game_running": _game_running() if game_mode else False, "ogui": _ogui_running(),
             "attach_pending": os.path.exists(GM_PENDING), "dock_present": _dock_present(),
             # Game Mode on the handheld screen (or a USB-C screen on it) with the games on the eGPU
             "dock": _dock_label(bdf),

@@ -9,7 +9,7 @@ ST=/run/nvegpu; mkdir -p $ST; LOG=/var/log/egpu-gamemode.log; log(){ printf '%s 
 force=0; [ "${1:-}" = "--force" ] && force=1
 as_deck(){ runuser -u deck -- env $RUNENV "$@"; }
 # exact process names only: a -f pattern also matches any shell whose command line quotes these words
-game_running(){ pgrep -x reaper >/dev/null 2>&1; }   # reaper wraps every launched game; pv-adverb/srt-bwrap also host steamwebhelper
+game_running(){ /usr/local/sbin/egpu-game-running; }   # reaper wraps every launched game; pv-adverb/srt-bwrap also host steamwebhelper
 pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1 || { log "Game Mode is not running"; exit 2; }
 if game_running && [ "$force" = 0 ]; then
   date +%s > $ST/gm-attach-pending; log "a game is running -> attach deferred (close the game, then Attach)"; exit 3

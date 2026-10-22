@@ -42,7 +42,7 @@ usd(){ runuser -u "$(stat -c %U "$UH")" -- env XDG_RUNTIME_DIR=/run/user/$(stat 
 reload_when_idle(){   # the same rules as the reload after a rebuild below: never while a game, attach or detach runs
   for _ in $(seq 1 720); do
     pgrep -n -x 'gamescope(-wl)?' >/dev/null || { log "verify: Game Mode is not running; the repair applies at its next start"; return 0; }
-    if ! pgrep -x reaper >/dev/null && [ ! -e /run/nvegpu/gm-attach-pending ] && ! grep -qE '"state":"(SWITCHING|DETACHING)"' /run/nvegpu/gm-status.json 2>/dev/null; then
+    if ! /usr/local/sbin/egpu-game-running && [ ! -e /run/nvegpu/gm-attach-pending ] && ! grep -qE '"state":"(SWITCHING|DETACHING)"' /run/nvegpu/gm-status.json 2>/dev/null; then
       log "verify: no game running: reloading Game Mode"; /usr/local/sbin/egpu-gamemode-switch >> "$LOG" 2>&1 && log "verify: reloaded" || log "verify: reload did not complete (rc $?)"; return 0
     fi
     sleep 30
@@ -142,7 +142,7 @@ for _ in $(seq 1 720); do
   g=$(pgrep -n -x 'gamescope(-wl)?') || { log "Game Mode is not running; the rebuilt gamescope is used next time it starts"; exit 0; }
   tr '\0' '\n' </proc/$g/environ 2>/dev/null | grep -qxF "NV_EGPU_BUDDY_GAMESCOPE_BIN=$PRIV" || { log "Game Mode is not on the eGPU; nothing to reload"; exit 0; }
   [ "$(readlink -f /proc/$g/exe)" = "$(readlink -f "$PRIV")" ] && { log "already running the rebuilt gamescope"; exit 0; }
-  if ! pgrep -x reaper >/dev/null && [ ! -e /run/nvegpu/gm-attach-pending ] && ! grep -qE '"state":"(SWITCHING|DETACHING)"' /run/nvegpu/gm-status.json 2>/dev/null; then
+  if ! /usr/local/sbin/egpu-game-running && [ ! -e /run/nvegpu/gm-attach-pending ] && ! grep -qE '"state":"(SWITCHING|DETACHING)"' /run/nvegpu/gm-status.json 2>/dev/null; then
     log "no game running: reloading Game Mode onto the rebuilt gamescope"
     /usr/local/sbin/egpu-gamemode-switch >> "$LOG" 2>&1 && log "reloaded" || log "reload did not complete (rc $?)"
     exit 0

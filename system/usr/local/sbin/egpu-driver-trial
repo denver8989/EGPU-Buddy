@@ -130,7 +130,7 @@ case "${1:-status}" in
     [ -n "$TPV" ] && [ -n "$OPV" ] || { echo "the beta driver files are not installed"; exit 2; }
     [ "$(modver)" = "$TPV" ] && [ "$(get state)" = kept ] && { echo "the beta driver $TPV is already in use"; exit 0; }
     gamescope >/dev/null || { echo "start it from Game Mode"; exit 2; }
-    pgrep -x reaper >/dev/null && { echo "close the running game first"; exit 2; }
+    /usr/local/sbin/egpu-game-running && { echo "close the running game first"; exit 2; }
     gpu_on_bus || [ -d /sys/module/nvidia ] || { echo "connect the eGPU first: the trial attaches it to test the driver"; exit 2; }
     free=$(df -Pm /home | awk 'NR==2{print $4}'); [ "${free:-0}" -ge 6000 ] || { echo "not enough space on /home: ${free} MB free, 6000 MB needed while building"; exit 2; }
     : > "$STATE"; echo "started=$(date +%s)" >> "$STATE"
@@ -159,7 +159,7 @@ case "${1:-status}" in
   revert)
     [ "$(modver)" = "$OPV" ] && [ ! -e "$SEL" ] && { echo "already on the tested driver $OPV"; exit 0; }
     gamescope >/dev/null || { echo "start it from Game Mode"; exit 2; }
-    pgrep -x reaper >/dev/null && { echo "close the running game first"; exit 2; }
+    /usr/local/sbin/egpu-game-running && { echo "close the running game first"; exit 2; }
     sed -i '/^started=/d' "$STATE" 2>/dev/null; echo "started=$(date +%s)" >> "$STATE"   # a new operation: the plugin shows its result once
     revert_and_attach "Return to the tested driver requested."; finish; exit 0 ;;
 

@@ -5,7 +5,7 @@ import { FaPlug } from "react-icons/fa";
 import qrcode from "qrcode-generator";
 
 type Status = {
-  present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean;
+  present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean; ogui?: boolean;
   attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { intro_seen_plugin?: boolean; fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
@@ -352,7 +352,8 @@ function Content() {
   useEffect(() => { if (visible && tab === "details") getScreens().then(setScr).catch(() => setScr(null)); }, [visible, tab]);
   useEffect(() => { if (!visible) return; refresh(); const t = setInterval(refresh, su?.busy ? 1000 : 3000); return () => clearInterval(t); }, [visible, su?.busy]);
 
-  const gameUp = !!(s?.game_running || Router.MainRunningApp);
+  // Bazzite: with OpenGamepadUI running, Steam's running-app entry can be OpenGamepadUI itself; there the backend's check decides
+  const gameUp = !!(s?.game_running || (!s?.ogui && Router.MainRunningApp));
   const run = async (fn: () => Promise<Result>) => { setBusy(true); try { const r = await fn(); setMsg(r.message); } catch (e) { setMsg(`${e}`); } finally { setBusy(false); refresh(); } };
 
   const tel = s?.telemetry ?? {};

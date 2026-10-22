@@ -1,3 +1,12 @@
+0.7.143 — first Bazzite fixes: the install runs, and "A game is running" no longer shows all the time.
+
+**Fixed** (Bazzite; SteamOS and CachyOS are unchanged)
+- Installing from the Game Mode plugin did nothing on Bazzite ("Failed to start transient service unit"): Bazzite does not let Decky start the background job the installer normally runs in. The installer now runs directly where that is refused.
+- "A game is running" showed all the time, even after a reboot. Bazzite's Game Mode also runs OpenGamepadUI, which looked like a running game. Where OpenGamepadUI runs, only a game Steam launched counts now.
+- The support report shows the launched game and OpenGamepadUI separately.
+
+**Not yet on Bazzite:** the NVIDIA driver step. Bazzite's handheld image has no NVIDIA driver, and the patched driver this project builds is not packaged for Bazzite yet, so the eGPU does not attach there yet.
+
 0.7.142 — fixes a CachyOS (Limine) boot failure caused by 0.7.140/0.7.141.
 
 **Fixed** (CachyOS with the Limine bootloader only; SteamOS and every other setup are unchanged)
