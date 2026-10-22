@@ -371,13 +371,18 @@ DRVDIR="$ROOT/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo 
 if want driver; then
   PKGV="$(sed -n 's/^pkgver=//p' "$DRVDIR/PKGBUILD")-$(sed -n 's/^pkgrel=//p' "$DRVDIR/PKGBUILD")"
   if [ "$IS_BAZZITE" = 1 ]; then
-    # Bazzite: Bazzite's own NVIDIA image (bazzite-deck-nvidia) provides the driver; only the kernel modules are swapped
-    # for the patched build of the same version, through a system extension (packaging/bazzite/egpu-bazzite-driver)
+    # Bazzite: this project's patched driver (modules + NVIDIA's userspace from the same recipes as everywhere else) is
+    # built on the device in a Fedora container and merged over the read-only /usr as a system extension
+    # (packaging/bazzite/egpu-bazzite-driver). Bazzite's handheld image has no NVIDIA driver of its own.
     BZ=$ROOT/packaging/bazzite
     sudo bash -c 'set -e; L=/usr/local/lib/egpu-buddy/bazzite; mkdir -p "$L/nvidia-open-egpu-615"
       install -m755 "$1/egpu-bazzite-driver" /usr/local/sbin/egpu-bazzite-driver
-      install -m644 "$1/fetch-kernel-devel.py" "$1/build-modules.sh" "$L/"
+      install -m644 "$1/fetch-kernel-devel.py" "$1/build-modules.sh" "$1/build-userspace.sh" "$L/"
       install -m644 "$2"/PKGBUILD "$2"/*.patch "$L/nvidia-open-egpu-615/"
+      rm -rf "$L/nvidia-open-egpu-615/userspace"; cp -r "$2/userspace" "$L/nvidia-open-egpu-615/userspace"
+      # nouveau must never take the eGPU before the patched driver (the driver extension blacklists it once merged;
+      # this covers the boot before that, and the kernel parameter the initramfs)
+      printf "blacklist nouveau\nblacklist nova_core\nblacklist nova_drm\n" > /etc/modprobe.d/egpu-bazzite-no-nouveau.conf
       install -m644 "$1/egpu-bazzite-driver-guard.service" /etc/systemd/system/; systemctl daemon-reload
       # what the driver package brings on every other system (SteamOS gets it inside its extension): the eGPU hot-plug
       # udev rule + handler and the open-module option. Here in /etc and /usr/local, which udev and modprobe always read.
@@ -386,13 +391,13 @@ if want driver; then
       printf "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1\n" > /etc/modprobe.d/egpu-nvidia-open.conf
       command -v restorecon >/dev/null && restorecon /usr/local/sbin/egpu-bazzite-driver /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf /etc/systemd/system/egpu-bazzite-driver-guard.service 2>/dev/null || true
       udevadm control --reload 2>/dev/null || true' _ "$BZ" "$ROOT/packaging/nvidia-open-egpu-615"
-    say "== Bazzite: building the patched NVIDIA kernel modules for Bazzite's NVIDIA driver (several minutes the first time)"
+    say "== Bazzite: building the patched NVIDIA driver (10-20 minutes the first time: about 1 GB of downloads)"
     sudo /usr/local/sbin/egpu-bazzite-driver --build; brc=$?
     case $brc in
       0) ;;
-      10) echo "note: Secure Boot is on. At the next reboot a blue screen (MokManager) appears: choose \"Enroll MOK\" -> Continue -> Yes,"
+      11) echo "note: Secure Boot is on. At the next reboot a blue screen (MokManager) appears: choose \"Enroll MOK\" -> Continue -> Yes,"
           echo "      type the password egpubuddy, then Reboot. The patched driver is used from then on."; DRIVER_FAILED=1 ;;
-      3) echo "warning: Bazzite's NVIDIA driver version has no patched build yet; Bazzite's own driver is used (safe detach works, a cable pull may hang)" ;;
+      3) DRIVER_FAILED=1; echo "warning: this Bazzite image carries NVIDIA's driver in another version; use Bazzite's handheld image without NVIDIA (bazzite-deck)." ;;
       *) DRIVER_FAILED=1; echo "warning: the patched driver is not in place on Bazzite (see above). Do NOT connect the eGPU until it is." ;;
     esac
   elif command -v pacman >/dev/null && [ "${EGPU_DRIVER_FORCE:-0}" != 1 ] && pacman -Q nvidia-open-egpu-dkms 2>/dev/null | grep -q "$PKGV\$"; then say "== patched driver package $PKGV already installed (EGPU_DRIVER_FORCE=1 to rebuild)"

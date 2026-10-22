@@ -34,6 +34,11 @@ _intel_gpu_present(){
 if _intel_gpu_present; then
   WANT="$WANT xe.max_vfs=0"
 fi
+# Bazzite only: its handheld image has no NVIDIA driver, so nouveau (in the initramfs too) would take an eGPU that is
+# connected at boot before this project's patched driver can. Every other system keeps exactly its parameters.
+if (. /etc/os-release 2>/dev/null; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) exit 0 ;; esac; exit 1); then
+  WANT="$WANT rd.driver.blacklist=nouveau modprobe.blacklist=nouveau"
+fi
 # The boot-verbosity parameters SteamOS's own configuration carries. Regenerating the GRUB config
 # puts them where steamenv_boot strips them, so we re-add them somewhere it does not touch.
 QUIET="loglevel=3 quiet splash plymouth.ignore-serial-consoles"

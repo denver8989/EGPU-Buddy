@@ -1,40 +1,42 @@
 #!/usr/bin/env bash
-# SteamOS EGPU Buddy - the patched NVIDIA kernel modules on Bazzite (Bazzite only; exits on anything else).
+# SteamOS EGPU Buddy - this project's patched NVIDIA driver on Bazzite (Bazzite only; exits on anything else).
 #
-# Bazzite's NVIDIA handheld image (bazzite-deck-nvidia) ships NVIDIA's driver 615.78.08 (negativo17 userspace + ublue
-# kmods, signed). The eGPU hot-plug/surprise-removal fixes of this project are KERNEL MODULE patches for exactly that
-# version (packaging/nvidia-open-egpu-615, tested on 615.78.08). So on Bazzite nothing but the .ko files changes:
-#   1. kernel-devel for EXACTLY the running kernel comes from the kernel's own package registry (fetch-kernel-devel.py),
-#   2. the modules are built from NVIDIA's source + the same patches inside a Fedora container (podman; Bazzite has no
-#      compiler and a read-only /usr), signed with this machine's own key when Secure Boot is on,
-#   3. they are laid over Bazzite's own modules at the SAME paths through a systemd system extension, so module
-#      dependency data, userspace, firmware and everything else stay Bazzite's. The extension tree lives in a private
-#      store (/var/lib/nvegpu/bazzite/ext); only the link /etc/extensions/egpu-nvidia makes systemd merge it, and that
-#      link exists only while the modules can load and match the image (--guard re-checks it at every boot BEFORE
-#      systemd-sysext merges anything: an OS update with another NVIDIA version or kernel drops it).
-# Safety: the extension is only activated when its modules will load (Secure Boot off, or our key enrolled), when the
-# image's NVIDIA version equals the patched version, and only for the kernel it was built for. In every other case
-# Bazzite's own driver is used, exactly as without this project.
+# Bazzite's handheld image (bazzite-deck) has no NVIDIA driver, and /usr is read-only with no compiler. So the driver is
+# built on the device inside a Fedora container (podman) and laid over /usr as a systemd system extension:
+#   - kernel modules: NVIDIA's open module source + this project's patches (packaging/nvidia-open-egpu-615, the same
+#     patch set, in the same order, as everywhere else), built against kernel-devel for EXACTLY the running kernel
+#     (fetch-kernel-devel.py: the kernel's own package registry), signed with this machine's key when Secure Boot is on;
+#   - userspace: NVIDIA's own installer, unpacked by the same vendored recipes every other system uses
+#     (build-userspace.sh), laid out the Fedora way; plus Fedora's open-source EGL platform libraries the recipe
+#     depends on (egl-wayland, egl-wayland2, egl-gbm, egl-x11) where Bazzite does not have them;
+#   - the module index (modules.dep ...) regenerated for Bazzite's modules plus ours.
+# If Bazzite's NVIDIA image (bazzite-deck-nvidia) is installed instead and its driver is the patched version, only the
+# kernel modules are replaced (userspace identical); with any other NVIDIA version nothing is done.
+# The extension tree lives in /var/lib/nvegpu/bazzite/ext; only the link /etc/extensions/egpu-nvidia makes systemd merge
+# it, and that link exists only while the build matches this boot and can load (--guard checks it at every boot BEFORE
+# systemd-sysext merges anything). In every other case the system runs exactly as without the driver.
 #   egpu-bazzite-driver --status | --build | --boot | --guard | --enroll | --remove
 set -u
 . /etc/os-release 2>/dev/null; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) ;; *) echo "not Bazzite"; exit 0 ;; esac
 LIB=/usr/local/lib/egpu-buddy/bazzite; PKG=$LIB/nvidia-open-egpu-615
 W=/var/lib/nvegpu/bazzite; KEYD=/var/lib/nvegpu/mok; NAME=egpu-nvidia; EXT=/var/lib/nvegpu/bazzite/ext; LINK=/etc/extensions/egpu-nvidia
-LOG=/var/log/egpu-bazzite-driver.log; MOKPW=egpubuddy
+LOG=/var/log/egpu-bazzite-driver.log; MOKPW=egpubuddy; IMG="registry.fedoraproject.org/fedora:${VERSION_ID:-44}"
+EGL_PKGS="egl-wayland egl-wayland2 egl-gbm egl-x11"
 K=$(uname -r); PV=$(sed -n 's/^pkgver=//p' "$PKG/PKGBUILD" 2>/dev/null)
 say(){ printf '%s\n' "$*"; printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; }
-nv_version(){ rpm -q --qf '%{VERSION}\n' nvidia-driver 2>/dev/null | grep -E '^[0-9]' | head -1; }
-stock_module(){ rpm -q --whatprovides "kmod-nvidia-$K" >/dev/null 2>&1; }   # package kmod-nvidia provides kmod-nvidia-<kernel>
+host_nv(){ rpm -q --qf '%{VERSION}\n' nvidia-driver 2>/dev/null | grep -E '^[0-9]' | head -1; }   # Bazzite's own NVIDIA driver, if any
+# full = no NVIDIA driver in the image (bazzite-deck); modules = the image's driver is our version; conflict = another
+mode_now(){ local v; v=$(host_nv); if [ -z "$v" ]; then echo full; elif [ "$v" = "$PV" ]; then echo modules; else echo conflict; fi; }
 sb_on(){ mokutil --sb-state 2>/dev/null | grep -qi 'SecureBoot enabled'; }
 key_enrolled(){ [ -s "$KEYD/egpu-buddy.der" ] && mokutil --test-key "$KEYD/egpu-buddy.der" 2>/dev/null | grep -qi 'already enrolled'; }
 key_pending(){ [ -s "$KEYD/egpu-buddy.der" ] && [ -e "$KEYD/queued" ] && ! key_enrolled; }
-# built for this kernel and version; with Secure Boot on, also signed (Secure Boot switched on after an unsigned build
-# makes it "not built": the guard drops it at boot and --boot builds it again, signed)
-built(){ [ -s "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" ] && [ "$(cat "$EXT/.egpu-version" 2>/dev/null)" = "$PV $K" ] \
+# built for this kernel, this version and this image's driver situation; with Secure Boot on, also signed (Secure Boot
+# switched on after an unsigned build makes it "not built": the guard drops it and --boot builds it again, signed)
+built(){ [ -s "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" ] && [ "$(cat "$EXT/.egpu-version" 2>/dev/null)" = "$PV $K $(mode_now)" ] \
          && { ! sb_on || [ -e "$EXT/.signed" ]; }; }
 can_load(){ ! sb_on || key_enrolled; }
 merged(){ [ -L "$LINK" ] && systemd-sysext status 2>/dev/null | grep -qw "$NAME"; }
-refresh(){ local i; for i in 1 2 3; do systemd-sysext refresh >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
+refresh(){ local i; for i in 1 2 3; do systemd-sysext refresh >/dev/null 2>&1 && { ldconfig 2>/dev/null; return 0; }; sleep 2; done; return 1; }
 nv_loaded(){ [ -d /sys/module/nvidia ]; }
 # every removal below goes through this: a fixed prefix, never an empty or unrelated path
 drop(){ local p; for p in "$@"; do case "$p" in /var/lib/nvegpu/bazzite*) rm -rf -- "${p:?}" ;; esac; done; }
@@ -71,37 +73,47 @@ enroll(){ # ask the firmware to trust our key at the next boot (the MokManager b
     || { key_pending && say "the signing key is waiting for enrollment: reboot, choose \"Enroll MOK\", password: $MOKPW" || say "mokutil could not queue the signing key"; }
 }
 
-label(){ # SELinux: the files get exactly the labels of the Bazzite files they stand in for
-  command -v chcon >/dev/null || return 0
-  chcon -R --reference="/usr/lib/modules/$K/extra/nvidia" "$1/usr/lib/modules" 2>/dev/null
-  local f; for f in "$1"/usr/lib/modules/"$K"/extra/nvidia/*.ko.xz; do chcon --reference="/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" "$f" 2>/dev/null; done
-  chcon -R --reference=/usr/lib/os-release "$1/usr/lib/extension-release.d" 2>/dev/null
-  chcon --reference=/usr/lib "$1/usr" "$1/usr/lib" 2>/dev/null; return 0
+label(){ # SELinux: every file gets the label the policy gives the same path under / (as the Fedora sysexts project does)
+  local fc=/etc/selinux/targeted/contexts/files/file_contexts
+  if command -v setfiles >/dev/null && [ -r "$fc" ]; then setfiles -r "$1" "$fc" "$1/usr" >/dev/null 2>&1 && return 0; fi
+  command -v chcon >/dev/null || return 0      # fallback: the labels of the Bazzite directories they stand in for
+  chcon -R --reference=/usr/lib/modules "$1/usr/lib/modules" 2>/dev/null; chcon -R --reference=/usr/lib64 "$1/usr/lib64" 2>/dev/null
+  chcon -R --reference=/usr/bin "$1/usr/bin" 2>/dev/null; chcon -R --reference=/usr/share "$1/usr/share" 2>/dev/null; return 0
+}
+
+module_index(){ # <extension tree>: modules.dep & co for Bazzite's modules + ours (the extension's copy shadows the image's)
+  local N=$1 T="$W/depmod"; drop "$T"; mkdir -p "$T/usr/lib/modules/$K"; ln -s usr/lib "$T/lib"
+  cp -as "/usr/lib/modules/$K/." "$T/usr/lib/modules/$K/" 2>/dev/null
+  rm -rf "${T:?}/usr/lib/modules/$K/extra/nvidia"; mkdir -p "$T/usr/lib/modules/$K/extra/nvidia"
+  cp "$N/usr/lib/modules/$K/extra/nvidia/"*.ko.xz "$T/usr/lib/modules/$K/extra/nvidia/"
+  rm -f "$T/usr/lib/modules/$K"/modules.{dep,dep.bin,alias,alias.bin,softdep,symbols,symbols.bin,builtin.bin,builtin.alias.bin,devname,weakdep}
+  depmod -b "$T" "$K" 2>>"$LOG" || { drop "$T"; return 1; }
+  local f; for f in "$T/usr/lib/modules/$K"/modules.*; do [ -f "$f" ] && [ ! -L "$f" ] && cp "$f" "$N/usr/lib/modules/$K/"; done
+  drop "$T"; grep -q 'extra/nvidia/nvidia.ko.xz' "$N/usr/lib/modules/$K/modules.dep"
 }
 
 deactivate(){ [ -L "$LINK" ] || return 0; rm -f "$LINK"; nv_loaded || refresh; return 0; }
 
 activate(){
-  built || { say "no patched modules for kernel $K"; return 1; }
-  [ "$(nv_version)" = "$PV" ] || { say "Bazzite's NVIDIA driver is $(nv_version), the patched modules are $PV: Bazzite's own driver stays"; deactivate; return 1; }
-  can_load || { say "Secure Boot is on and the signing key is not enrolled yet: Bazzite's own driver stays until it is"; return 1; }
+  built || { say "no patched driver built for kernel $K"; return 1; }
+  can_load || { say "Secure Boot is on and the signing key is not enrolled yet: the driver stays off until it is"; return 1; }
   systemctl enable systemd-sysext.service egpu-bazzite-driver-guard.service >/dev/null 2>&1
   mkdir -p /etc/extensions; ln -sfn "$EXT" "$LINK"            # from now on systemd merges it at every boot
   merged && return 0
-  if nv_loaded; then say "the NVIDIA driver is in use: the patched modules take over at the next boot"; return 0; fi
-  refresh || { say "systemd-sysext could not merge the extension"; return 1; }
+  if nv_loaded; then say "the NVIDIA driver is in use: the new build takes over at the next boot"; return 0; fi
+  refresh || { say "systemd-sysext could not merge the driver extension"; rm -f "$LINK"; return 1; }
   local p; p=$(modinfo -k "$K" -n nvidia 2>/dev/null)
   # (modinfo prints /lib/modules/... on Fedora: /lib is a link to usr/lib, so the CONTENT is what is compared)
-  if [ "$(modinfo -k "$K" -F version nvidia 2>/dev/null)" = "$PV" ] && [ -n "$p" ] && cmp -s "$p" "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz"; then say "patched NVIDIA modules active for $K"; return 0; fi
-  say "the extension merged but modprobe does not see the patched modules: removed it, Bazzite's own driver stays"; deactivate; return 1
+  if [ "$(modinfo -k "$K" -F version nvidia 2>/dev/null)" = "$PV" ] && [ -n "$p" ] && cmp -s "$p" "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" \
+     && { [ "$(mode_now)" = modules ] || command -v nvidia-smi >/dev/null; }; then say "patched NVIDIA driver $PV active for $K"; return 0; fi
+  say "the extension merged but the system does not see the patched driver: removed it"; deactivate; return 1
 }
 
 build(){
-  local v; v=$(nv_version)
-  { [ -n "$v" ] && stock_module; } || { say "this Bazzite image has no NVIDIA driver: switch to Bazzite's NVIDIA handheld image first (rpm-ostree rebase ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-deck-nvidia:stable)"; return 2; }
-  [ "$v" = "$PV" ] || { say "Bazzite's NVIDIA driver is $v; the patched modules exist for $PV only: Bazzite's own driver stays"; return 3; }
+  local mode; mode=$(mode_now)
+  [ "$mode" = conflict ] && { say "this Bazzite image has NVIDIA's driver $(host_nv); the patched driver is $PV. Use Bazzite's handheld image without NVIDIA (bazzite-deck): this project installs its own driver there"; return 3; }
   command -v podman >/dev/null || { say "podman is missing"; return 4; }
-  if built; then say "patched modules for $K already built"; return 0; fi
+  if built; then say "patched driver for $K already built"; return 0; fi
   mkdir -p "$W"; local src="NVIDIA-kernel-module-source-$PV.tar.xz" sum
   sum=$(sed -n "s/^sha256sums=('\([0-9a-f]*\)'.*/\1/p" "$PKG/PKGBUILD")
   if ! { [ -s "$W/$src" ] && [ "$(sha256sum "$W/$src" | cut -d' ' -f1)" = "$sum" ]; }; then
@@ -116,27 +128,41 @@ build(){
     python3 -I "$LIB/fetch-kernel-devel.py" "$K" "$W/kernel-devel-$K.rpm" >>"$LOG" 2>&1 || { say "kernel-devel for $K is not available (see $LOG)"; return 6; }
   fi
   local keyarg=(); if sb_on; then make_key || return 7; keyarg=(-v "$KEYD:/k:ro"); fi
-  say "building the patched NVIDIA modules for $K in a Fedora container (several minutes)"
+  # what the container does: the modules always; the userspace once per driver version (full mode only); the EGL
+  # platform libraries Bazzite lacks
+  local steps="bash /b/build-modules.sh $K $PV" egl="" p
+  if [ "$mode" = full ]; then
+    [ "$(cat "$W/userspace/.version" 2>/dev/null)" = "$PV" ] || steps="$steps && bash /b/build-userspace.sh $PV"
+    for p in $EGL_PKGS; do rpm -q "$p" >/dev/null 2>&1 || egl="$egl $p.x86_64"; rpm -q "$p.i686" >/dev/null 2>&1 || egl="$egl $p.i686"; done
+    [ -n "$egl" ] && steps="$steps && bash /b/build-userspace.sh --egl$egl"
+  fi
+  say "building the patched NVIDIA driver $PV for $K in a Fedora container ($mode; several minutes, the first time ~1 GB of downloads)"
   podman run --rm --network host --security-opt label=disable -v "$W:/w" -v "$PKG:/p:ro" -v "$LIB:/b:ro" "${keyarg[@]}" \
-    "registry.fedoraproject.org/fedora:${VERSION_ID:-44}" bash /b/build-modules.sh "$K" "$PV" >>"$LOG" 2>&1 \
-    || { say "the module build failed (see $LOG); Bazzite's own driver stays"; return 8; }
+    "$IMG" bash -c "set -e; $steps" >>"$LOG" 2>&1 || { say "the driver build failed (see $LOG); nothing was changed"; return 8; }
+  if [ -d "$W/out/userspace/usr" ]; then drop "$W/userspace"; mv "$W/out/userspace" "$W/userspace"; fi
   local N="$EXT.new"; drop "$N"; mkdir -p "$N/usr/lib/modules/$K/extra/nvidia" "$N/usr/lib/extension-release.d"
+  if [ "$mode" = full ]; then
+    [ -d "$W/userspace/usr" ] || { say "no NVIDIA userspace was built"; drop "$N"; return 9; }
+    cp -a --reflink=auto "$W/userspace/usr/." "$N/usr/"
+    [ -d "$W/out/egl/usr" ] && cp -a --reflink=auto "$W/out/egl/usr/." "$N/usr/"
+  fi
   cp "$W/out/$K"/*.ko.xz "$N/usr/lib/modules/$K/extra/nvidia/"
+  module_index "$N" || { say "could not build the module index"; drop "$N"; return 10; }
   printf 'ID=_any\nARCHITECTURE=x86-64\n' > "$N/usr/lib/extension-release.d/extension-release.$NAME"
-  echo "$PV $K" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"; label "$N"
+  echo "$PV $K $mode" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"; label "$N"
   if merged && nv_loaded; then drop "$EXT.staged"; mv "$N" "$EXT.staged"; say "built; takes over at the next boot (the driver is in use now)"; return 0; fi
   drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$N" "$EXT"; drop "$EXT.old"
-  drop "$W/kernel-devel-$K.rpm" "$W/out"; say "built the patched modules for $K"
+  drop "$W/kernel-devel-$K.rpm" "$W/out"; say "built the patched NVIDIA driver $PV for $K ($mode)"
   return 0
 }
 
 status(){
-  echo "kernel: $K · Bazzite NVIDIA driver: $(nv_version || true) · patched modules: ${PV:-?}"
+  echo "kernel: $K · patched driver: ${PV:-?} · Bazzite's own NVIDIA driver: $(host_nv | grep . || echo none) · mode: $(mode_now)"
   local s="off"; if sb_on; then s="on"; if key_enrolled; then s="$s · signing key enrolled"; elif key_pending; then s="$s · signing key waiting for enrollment (reboot)"; else s="$s · signing key NOT enrolled"; fi; fi
   echo "Secure Boot: $s"
   echo "built for this kernel: $(built && echo yes || echo no) · extension active: $(merged && echo yes || echo no)"
-  echo "nvidia module modprobe loads: $(modinfo -k "$K" -n nvidia 2>/dev/null || echo none) (signer: $(modinfo -k "$K" -F signer nvidia 2>/dev/null || echo -))"
-  built && merged && [ "$(nv_version)" = "$PV" ]
+  echo "nvidia module modprobe loads: $(modinfo -k "$K" -n nvidia 2>/dev/null || echo none) (signer: $(modinfo -k "$K" -F signer nvidia 2>/dev/null || echo -)) · nvidia-smi: $(command -v nvidia-smi || echo none)"
+  built && merged
 }
 
 case "${1:---status}" in
@@ -144,21 +170,21 @@ case "${1:---status}" in
   --build)
     [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
     build; rc=$?; [ $rc = 0 ] || exit $rc
-    if sb_on && ! key_enrolled; then enroll; exit 10; fi
+    if sb_on && ! key_enrolled; then enroll; exit 11; fi
     activate ;;
-  --boot)   # at every boot: a staged build takes over, a new kernel gets its modules (network permitting), never blocks
+  --boot)   # at every boot: a staged build takes over, a new kernel gets its driver (network permitting), never blocks
     [ "$(id -u)" = 0 ] || exit 1
     if [ -d "$EXT.staged" ] && ! nv_loaded; then drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"; [ -L "$LINK" ] && refresh; fi
-    built || deactivate                                         # modules of another kernel: never merge them
-    [ "$(nv_version)" = "$PV" ] || { deactivate; exit 0; }
+    built || deactivate                                         # built for another kernel / version / image: never merge it
+    [ "$(mode_now)" = conflict ] && exit 0
     built || build || exit 0
     activate || true ;;
   --enroll) enroll ;;
-  --guard)  # early boot, before systemd-sysext merges: keep the link only if the modules match this image and can load
-    if [ -L "$LINK" ] && ! { built && [ "$(nv_version)" = "$PV" ] && can_load; }; then rm -f "$LINK"; say "boot guard: patched modules do not match this boot (kernel $K, NVIDIA $(nv_version)): Bazzite's own driver is used"; fi
+  --guard)  # early boot, before systemd-sysext merges: keep the link only if the build matches this boot and can load
+    if [ -L "$LINK" ] && ! { built && can_load; }; then rm -f "$LINK"; say "boot guard: the patched driver does not match this boot (kernel $K, Bazzite NVIDIA $(host_nv | grep . || echo none)): left off"; fi
     exit 0 ;;
   --remove)
     rm -f "$LINK"; nv_loaded || refresh; drop "$W"; systemctl disable egpu-bazzite-driver-guard.service >/dev/null 2>&1
-    say "patched modules removed; Bazzite's own driver is used" ;;
+    say "patched driver removed" ;;
   *) echo "usage: $0 --status | --build | --boot | --guard | --enroll | --remove"; exit 2 ;;
 esac

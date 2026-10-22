@@ -214,8 +214,8 @@ def _bazzite_driver_hint():
     """Bazzite only: what the driver step is waiting for, in one line (from the driver tool's own log)."""
     last = (_read("/var/log/egpu-bazzite-driver.log").splitlines() or [""])[-3:]
     log = "\n".join(last)
-    if "has no NVIDIA driver" in log:
-        return "Bazzite: switch to Bazzite's NVIDIA handheld image first (Setup log has the command), then install again."
+    if "carries NVIDIA's driver in another version" in log or "has NVIDIA's driver" in log:
+        return "This Bazzite image has its own NVIDIA driver in another version: use Bazzite's handheld image without NVIDIA."
     if "Enroll MOK" in log:
         return "Reboot: on the blue screen choose Enroll MOK, password egpubuddy. Keep the eGPU unplugged until then."
     return "The NVIDIA driver is not in place yet. Keep the eGPU unplugged and open EGPU Buddy."
