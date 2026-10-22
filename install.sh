@@ -133,7 +133,15 @@ UIDX=(); [ "$USER_UID" = 1000 ] || UIDX=(-e "s|/run/user/1000|/run/user/$USER_UI
   -e "s|pgrep -\\([uU]\\) 1000\\b|pgrep -\\1 $USER_UID|g" -e "s|getent passwd 1000\\b|getent passwd $USER_UID|g" -e "s|id -nu 1000\\b|id -nu $USER_UID|g")
 # ...and on Bazzite only: its Game Mode is gamescope-session-plus@<client>.service (client steam or ogui-steam), started
 # and supervised like SteamOS's gamescope-session.target. The systemctl commands get that unit (a pattern, quoted).
-BZX=(); [ "$IS_BAZZITE" = 1 ] && BZX=(-e "s#\\(systemctl --user [a-z-]* [^|;&>]*\\)gamescope-session\\.target#\\1'gamescope-session-plus@*.service'#g")
+# Bazzite is Fedora: NVIDIA's 64-bit libraries are in /usr/lib64 (32-bit in /usr/lib, Arch's /usr/lib32), and the Vulkan
+# driver files are per architecture (nvidia_icd.x86_64.json / .i686.json; Mesa's radeon_icd.x86_64.json likewise).
+ICD=/usr/share/vulkan/icd.d
+BZX=(); [ "$IS_BAZZITE" = 1 ] && BZX=(-e "s#\\(systemctl --user [a-z-]* [^|;&>]*\\)gamescope-session\\.target#\\1'gamescope-session-plus@*.service'#g"
+  -e "s#\\(VK_[A-Z_]*=\\)$ICD/nvidia_icd\\.json#\\1$ICD/nvidia_icd.x86_64.json:$ICD/nvidia_icd.i686.json#g"
+  -e "/^HIDE_LIST=/s#$ICD/nvidia_icd\\.json#$ICD/nvidia_icd.x86_64.json $ICD/nvidia_icd.i686.json#"
+  -e "s#$ICD/nvidia_icd\\.json#$ICD/nvidia_icd.x86_64.json#g" -e "/radeon_icd\\.\\(\\*\\|x86_64\\)/!s#$ICD/radeon_icd\\.json#$ICD/radeon_icd.x86_64.json#g"
+  -e "s#/usr/lib/libnvidia-ml#/usr/lib64/libnvidia-ml#g" -e "s#/usr/lib32/libnvidia-ml#/usr/lib/libnvidia-ml#g"
+  -e "s#/usr/lib/gbm/nvidia-drm_gbm\\.so#/usr/lib64/gbm/nvidia-drm_gbm.so#g")
 templ(){ sed "${UIDX[@]}" "${BZX[@]}" -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -e "s|runuser -u deck |runuser -u $USER_NAME |g" -e "s|chown \\(-R \\)\\{0,1\\}deck:deck |chown \\1$USER_NAME:$USER_GROUP |g" -e "s|chown -R deck: |chown -R $USER_NAME: |g" -e "s|^Environment=STOCK_GAMESCOPE_SESSION=.*|Environment=STOCK_GAMESCOPE_SESSION=${STOCK:-/usr/lib/steamos/gamescope-session}|"; }
 differs(){ [ -f "$2" ] || return 0; ! cmp -s <(templ < "$ROOT/$1") "$2"; }
 
