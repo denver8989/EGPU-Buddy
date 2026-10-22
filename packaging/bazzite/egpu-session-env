@@ -30,8 +30,12 @@ _egpu_bz(){
   # BEFORE anything is set: without NVIDIA's Vulkan driver Game Mode is left exactly as it is.
   local icd; icd=$(ls /usr/share/vulkan/icd.d/nvidia_icd*.json 2>/dev/null | paste -sd: -)
   [ -n "$icd" ] || return 0
-  GAMESCOPE_BIN=@GAMESCOPE@
-  [ -x "$GAMESCOPE_BIN" ] || GAMESCOPE_BIN=/usr/bin/gamescope
+  # Started through EGPU Buddy's gamescope shim, as on SteamOS: it runs the GBM-scanout build when that can start and has
+  # not been crash-looping on this OS build, otherwise Bazzite's own gamescope (and it marks a crashing build, which
+  # egpu-buddy-gamescope-repair.path rebuilds for the new Bazzite in a Fedora container).
+  NV_EGPU_BUDDY_GAMESCOPE_BIN=@GAMESCOPE@
+  GAMESCOPE_BIN="$HOME/.local/lib/nv-egpu-buddy/gamescope-shim/gamescope"
+  [ -x "$GAMESCOPE_BIN" ] || { GAMESCOPE_BIN=$NV_EGPU_BUDDY_GAMESCOPE_BIN; [ -x "$GAMESCOPE_BIN" ] || GAMESCOPE_BIN=/usr/bin/gamescope; }
   gamescope_drm_gbm_scanout=1                      # gamescope turns gamescope_<convar> into a convar override
   OUTPUT_CONNECTOR="$out,eDP-1"                    # back to the built-in screen if the external one goes
   VULKAN_ADAPTER="$(cut -c3- /sys/bus/pci/devices/$bdf/vendor):$(cut -c3- /sys/bus/pci/devices/$bdf/device)"

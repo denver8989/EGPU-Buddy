@@ -85,7 +85,8 @@ fi
 # SteamOS: the GBM-scanout gamescope (the NVIDIA picture-corruption fix) must still run on this OS. If it cannot, or it
 # kept crashing on this OS build, rebuild it in the background: egpu-gamescope-repair decides, builds at most once per OS
 # build, and reloads Game Mode onto it when no game is running. Never in the boot path: the build takes 10-15 minutes.
-if [ -n "$ro" ] && [ -x /usr/local/sbin/egpu-gamescope-repair ] && /usr/local/sbin/egpu-gamescope-repair --needed >>$SLOG 2>&1; then
+# (Bazzite too: there it is rebuilt in a Fedora container after a Bazzite update it no longer fits)
+if { [ -n "$ro" ] || grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; } && [ -x /usr/local/sbin/egpu-gamescope-repair ] && /usr/local/sbin/egpu-gamescope-repair --needed >>$SLOG 2>&1; then
   systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 && log "GBM-scanout gamescope needs a rebuild for this OS: started in the background"
 fi
 # Bazzite only (the tool exists only there): patched NVIDIA modules for a new kernel, a staged build taking over

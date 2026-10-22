@@ -15,15 +15,31 @@ BUILD=$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/build-steamos.
 BR=/home/.egpu-buddy/buildroot
 log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; echo "$*"; }
 os_id(){ ( . /etc/os-release 2>/dev/null; printf '%s' "${BUILD_ID:-${VERSION_ID:-}}" ); printf -- '-%s' "$(uname -r)"; }
+# Bazzite: the build lives in /usr/local (system-wide, user-independent) and is rebuilt in a Fedora container matching
+# the running Bazzite (podman; the device has no compiler).
+BZ=0
+if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then
+  BZ=1; PRIV=/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope
+  BUILD=$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/build-bazzite.sh
+fi
 OS=$(os_id)
+# (the crash mark keeps the shim's own id format; only "rebuilt once for this OS build" also carries Bazzite's image version)
+[ "$BZ" = 1 ] && OS="$OS-$( . /etc/os-release 2>/dev/null; printf '%s' "${VERSION:-}" | tr ' ' _ )"
 
 reason(){
+  if [ "$BZ" = 1 ]; then                                              # Bazzite: a Fedora container builds it
+    command -v podman >/dev/null 2>&1 && [ -f "$BUILD" ] || return 1
+    [ "$(cat "$DONE" 2>/dev/null)" = "$OS" ] && return 1
+    [ -e /etc/nv-egpu-buddy/gamescope-wanted ] || return 1            # the installer chose ours (Bazzite's own lacks the fix)
+    [ -x "$PRIV" ] || { echo "not built for this Bazzite yet"; return 0; }
+  else
   command -v steamos-readonly >/dev/null 2>&1 || return 1            # SteamOS only; other systems build it with the installer
   [ -x "$BR/usr/bin/makepkg" ] && [ -f "$BUILD" ] || return 1         # no build root / payload: nothing this can do
   [ "$(cat "$DONE" 2>/dev/null)" = "$OS" ] && return 1                # already rebuilt for this OS build
   [ -x "$PRIV" ] || return 1                                          # never installed (e.g. --no-gamescope, AMD): not ours to add
+  fi
   if ldd "$PRIV" 2>/dev/null | grep -q 'not found'; then echo "cannot start on this OS (missing libraries)"; return 0; fi
-  case "$(cat "$BAD" 2>/dev/null)" in "$OS "*) echo "kept crashing on this OS build"; return 0 ;; esac
+  case "$(cat "$BAD" 2>/dev/null)" in "$(os_id) "*) echo "kept crashing on this OS build"; return 0 ;; esac
   return 1
 }
 if [ "${1:-}" = --needed ]; then r=$(reason) || exit 1; echo "gamescope repair needed: $r"; exit 0; fi
@@ -132,7 +148,18 @@ done
 for _ in $(seq 1 40); do curl -sI -o /dev/null --max-time 8 https://steamdeck-packages.steamos.cloud/ 2>/dev/null && break; sleep 30; done
 
 echo "$OS" > "$DONE"    # recorded BEFORE building: a build that hangs or fails is not retried in a loop on this OS build
-if ! bash "$BUILD" "$(stat -c %U "$UH")" >> "$LOG" 2>&1; then
+bz_build(){ # Bazzite: build in fedora:<this Bazzite's Fedora version>, then swap it in atomically (a running gamescope keeps
+            # the old binary busy, so it is never copied over in place)
+  local T=/var/lib/nvegpu/gamescope-build V; V=$( . /etc/os-release; echo "${VERSION_ID:-44}" )
+  rm -rf "${T:?}"; mkdir -p "$T"
+  podman run --rm --network host --security-opt label=disable -v "$(dirname "$BUILD"):/gs:ro" -v "$T:/out" \
+    "registry.fedoraproject.org/fedora:$V" bash /gs/build-bazzite.sh /out || return 1
+  [ -x "$T/usr/bin/gamescope" ] && ! ldd "$T/usr/bin/gamescope" 2>/dev/null | grep -q 'not found' || return 1
+  local D=/usr/local/lib/egpu-buddy/gamescope-gbm; mkdir -p "$D"; rm -rf "${D:?}/usr.new" "${D:?}/usr.old"; cp -a "$T/usr" "$D/usr.new"
+  [ -d "$D/usr" ] && mv "$D/usr" "$D/usr.old"; mv "$D/usr.new" "$D/usr"; rm -rf "${D:?}/usr.old" "${T:?}"
+  command -v restorecon >/dev/null && restorecon -R "$D" 2>/dev/null; rm -f "$BAD"; return 0; }
+if [ "$BZ" = 1 ]; then bz_build >> "$LOG" 2>&1; brc=$?; else bash "$BUILD" "$(stat -c %U "$UH")" >> "$LOG" 2>&1; brc=$?; fi
+if [ "$brc" != 0 ]; then
   log "rebuild failed: Game Mode keeps using Valve's gamescope on this OS build (NVIDIA picture corruption above ~2560 px)"; exit 0
 fi
 rm -f "$BAD"; log "rebuilt: $("$PRIV" --version 2>&1 | grep -o 'gamescope version [^ ]*' | head -1)"
