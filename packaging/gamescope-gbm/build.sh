@@ -8,12 +8,20 @@
 set -euo pipefail
 REPO=${GAMESCOPE_GBM_REPO:-https://github.com/NightHammer1000/gamescope.git}
 BRANCH=${GAMESCOPE_GBM_BRANCH:-poc/gamescope-gbm-route}
-COMMIT=${GAMESCOPE_GBM_COMMIT:-2bfc18c}          # 2026-08-20 "drm, rendervulkan: apply final review findings"
+COMMIT=${GAMESCOPE_GBM_COMMIT:-2bfc18c736520b7d4f9756977213ea439daa1c63}   # 2026-08-20 "drm, rendervulkan: apply final review findings"
+# The fork went private/away (2026-10: clone asks for credentials). GitHub keeps fork commits reachable through the
+# parent repository's network, so the SAME commit is fetched from Valve's repository by its full hash when needed.
+FALLBACK_REPO=https://github.com/ValveSoftware/gamescope.git
 SRC=${GAMESCOPE_GBM_SRC:-$HOME/build/gamescope-gbm}
 PREFIX=${GAMESCOPE_GBM_PREFIX:-$HOME/.local/gamescope-gbm/usr}   # SCRIPT_DIR is compiled in: prefix must be real
 if [ ! -d "$SRC/.git" ]; then
-  git clone --recursive --shallow-submodules --depth 100 -b "$BRANCH" "$REPO" "$SRC"
+  if ! GIT_TERMINAL_PROMPT=0 git clone --recursive --shallow-submodules --depth 100 -b "$BRANCH" "$REPO" "$SRC"; then
+    echo "$REPO is not reachable; fetching commit $COMMIT through $FALLBACK_REPO"
+    rm -rf "$SRC"; git init -q "$SRC"; git -C "$SRC" remote add origin "$FALLBACK_REPO"
+    GIT_TERMINAL_PROMPT=0 git -C "$SRC" fetch -q --depth 1 origin "$COMMIT"
+  fi
 fi
+git -C "$SRC" cat-file -e "$COMMIT^{commit}" 2>/dev/null || GIT_TERMINAL_PROMPT=0 git -C "$SRC" fetch -q --depth 1 origin "$COMMIT"
 git -C "$SRC" checkout -q "$COMMIT"
 git -C "$SRC" submodule update --init --recursive --depth 1 >/dev/null 2>&1 || git -C "$SRC" submodule update --init --recursive
 # local patches (always composite when GBM scanout is active; Steam's GAMESCOPE_COMPOSITE_FORCE=0 must not
