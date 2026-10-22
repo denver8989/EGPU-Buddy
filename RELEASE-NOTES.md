@@ -1,3 +1,8 @@
+0.7.144 — the Bazzite fixes from 0.7.143 now run on Bazzite only.
+
+**Changed** (no change in behaviour anywhere)
+- The two Bazzite fixes (the install launcher and the "A game is running" check) are now switched on only when the system reports itself as Bazzite. Every other system runs exactly the code it ran before 0.7.143.
+
 0.7.143 — first Bazzite fixes: the install runs, and "A game is running" no longer shows all the time.
 
 **Fixed** (Bazzite; SteamOS and CachyOS are unchanged)

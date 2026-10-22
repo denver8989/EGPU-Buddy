@@ -2,8 +2,11 @@
 # egpu-game-running [--pid]: exit 0 (and with --pid print the newest one) when a launched game is running.
 # Steam wraps every launched game in "reaper". Bazzite's Game Mode also runs OpenGamepadUI, which keeps a
 # reaper of its own alive the whole session ("A game is running" all the time, Legion Go 2, 2026-10-22).
-# Only where OpenGamepadUI runs: a reaper counts when Steam started it for a game (argv: reaper SteamLaunch
+# On Bazzite, where OpenGamepadUI runs: a reaper counts when Steam started it for a game (argv: reaper SteamLaunch
 # AppId=...) and no OpenGamepadUI runs under it. Everywhere else: any reaper, as before.
+# Bazzite only (from /etc/os-release); every other OS: any reaper, exactly as before
+. /etc/os-release 2>/dev/null
+case "${ID:-} ${NAME:-}" in *[Bb]azzite*) ;; *) if [ "${1:-}" = --pid ]; then pgrep -n -x reaper; else pgrep -x reaper >/dev/null; fi; exit ;; esac
 ogui=$(pgrep -x opengamepadui 2>/dev/null)
 best=""
 for p in $(pgrep -x reaper 2>/dev/null); do

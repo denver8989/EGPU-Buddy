@@ -215,18 +215,31 @@ def _pids(name):
     return [int(x) for x in out.split()] if rc == 0 else []
 
 
+def _is_bazzite():
+    """Bazzite, from /etc/os-release. Every Bazzite-specific path below is gated on this alone, so no other OS
+    (SteamOS, CachyOS...) ever runs it."""
+    try:
+        osr = dict(l.split("=", 1) for l in open("/etc/os-release").read().splitlines() if "=" in l)
+    except OSError:
+        return False
+    return osr.get("ID", "").strip('"').lower() == "bazzite" or "bazzite" in osr.get("NAME", "").lower()
+IS_BAZZITE = _is_bazzite()
+
+
 def _ogui_running():
-    """OpenGamepadUI (Bazzite's Game Mode overlay) is running."""
-    return bool(_pids("opengamepadui"))
+    """OpenGamepadUI (Bazzite's Game Mode overlay) is running. Bazzite only."""
+    return IS_BAZZITE and bool(_pids("opengamepadui"))
 
 
 def _game_running():
     # exact names only: a -f pattern also matches shells whose command line quotes these words
     # reaper wraps every launched game; pv-adverb/srt-bwrap also host steamwebhelper
+    if not IS_BAZZITE:
+        return _proc_running("reaper")   # every other OS: exactly as always
     reapers = _pids("reaper")
     ogui = _pids("opengamepadui")
     if not ogui:
-        return bool(reapers)   # SteamOS, CachyOS...: any reaper, as always
+        return bool(reapers)
     # Bazzite: OpenGamepadUI keeps a reaper of its own alive all session ("A game is running" after every reboot).
     # Count only a reaper Steam started for a game (argv: reaper SteamLaunch AppId=...) with no OpenGamepadUI under it.
     def ppid(p):
@@ -550,6 +563,8 @@ _SYSRUN = {}
 def _sysrun_ok():
     """systemd-run can start a transient unit from here. Bazzite refuses it from Decky ("Failed to start transient
     service unit: Connection reset by peer"); there the helpers run as Decky's own children instead."""
+    if not IS_BAZZITE:
+        return True   # every other OS: systemd-run as always, no probe
     if "ok" not in _SYSRUN:
         _SYSRUN["ok"] = bool(shutil.which("systemd-run")) and _sh(["systemd-run", "--quiet", "--wait", "--collect", "true"], 20)[0] == 0
     return _SYSRUN["ok"]
@@ -721,7 +736,7 @@ def _run_logged(cmd, env, cwd):
     # of Decky it would die with any Decky/Steam restart. --pipe keeps the output streaming back for the progress bar.
     # Bazzite refuses that from Decky ("Failed to start transient service unit: Connection reset by peer", SELinux):
     # nothing was installed at all. Probe it first; where it cannot start a unit, run the installer directly.
-    if _sysrun_ok():
+    if shutil.which("systemd-run") and _sysrun_ok():
         keep = [f"--setenv={k}={v}" for k, v in env.items() if k.startswith("EGPU_") or k in ("HOME", "PATH", "STOCK_GAMESCOPE_SESSION")]
         cmd = ["systemd-run", "--quiet", "--wait", "--pipe", "--collect", f"--unit=egpu-buddy-setup-{int(time.time())}",
                f"--working-directory={cwd}", "--property=TimeoutStartSec=7200", *keep, *cmd]
