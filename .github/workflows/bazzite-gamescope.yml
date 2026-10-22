@@ -16,17 +16,25 @@ jobs:
           grep -c drm_gbm_scanout /tmp/bz/usr/bin/gamescope
           sudo tar -C /tmp/bz -czf /tmp/bazzite-gamescope-gbm.tar.gz .
       - name: Check it runs on the real Bazzite image (every library resolves, it starts)
+        # Docker cannot load Bazzite's image (more layers than its overlay storage allows: "max depth exceeded"), so the
+        # image is copied with skopeo and its layers are unpacked in order into a plain directory, then checked by chroot
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || true   # room for the image
-          docker pull -q ghcr.io/ublue-os/bazzite-deck:stable
-          docker run --rm -v /tmp/bz:/bz:ro ghcr.io/ublue-os/bazzite-deck:stable bash -c '
-            grep -E "^(NAME|VERSION)=" /usr/lib/os-release
-            echo "Bazzite gamescope: $(rpm -q gamescope) GBM scan-out convar: $(grep -ac drm_gbm_scanout /usr/bin/gamescope)"
-            mkdir -p /usr/local/lib/egpu-buddy/gamescope-gbm && cp -a /bz/usr /usr/local/lib/egpu-buddy/gamescope-gbm/
-            G=/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope
-            if ldd $G | grep "not found"; then echo "UNRESOLVED on Bazzite"; exit 1; fi
-            $G --version 2>&1 | head -2'
-
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache || true   # disk room
+          skopeo copy -q docker://ghcr.io/ublue-os/bazzite-deck:stable oci:/tmp/bzimg:stable
+          R=/tmp/bzroot; sudo mkdir -p $R
+          for d in $(jq -r '.layers[].digest' /tmp/bzimg/blobs/sha256/$(jq -r '.manifests[0].digest' /tmp/bzimg/index.json | cut -d: -f2)); do
+            L=/tmp/bzimg/blobs/sha256/${d#sha256:}
+            # whiteouts: a ".wh.<name>" entry deletes <name> from the layers below
+            for w in $(tar -tf $L 2>/dev/null | grep '/\.wh\.\|^\.wh\.' | grep -v '\.wh\.\.wh\.\.opq'); do sudo rm -rf "$R/$(dirname $w)/$(basename $w | sed 's/^\.wh\.//')"; done
+            sudo tar -xf $L -C $R --exclude='*.wh.*' 2>/dev/null || true
+          done
+          grep -E '^(NAME|VERSION)=' $R/usr/lib/os-release
+          echo "Bazzite's gamescope GBM scan-out convar: $(sudo grep -ac drm_gbm_scanout $R/usr/bin/gamescope)"
+          sudo mkdir -p $R/usr/local/lib/egpu-buddy/gamescope-gbm; sudo cp -a /tmp/bz/usr $R/usr/local/lib/egpu-buddy/gamescope-gbm/
+          G=/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope
+          sudo chroot $R ldd $G | tee /tmp/ldd.txt | grep -c '=>'
+          if grep 'not found' /tmp/ldd.txt; then echo "UNRESOLVED on Bazzite"; exit 1; fi
+          sudo chroot $R $G --version 2>&1 | head -2
       - uses: actions/upload-artifact@v4
         with:
           name: bazzite-gamescope-gbm
