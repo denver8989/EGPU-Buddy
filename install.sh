@@ -126,7 +126,10 @@ FILES=(); for f in "${ALL[@]}"; do in_scope "$f" && FILES+=("$f"); done
 
 USER_GROUP=$(id -gn "$USER_NAME" 2>/dev/null || echo "$USER_NAME")
 # the scripts are written for the SteamOS user "deck"; other distros (CachyOS, Bazzite...) name it differently
-templ(){ sed -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -e "s|runuser -u deck |runuser -u $USER_NAME |g" -e "s|chown \\(-R \\)\\{0,1\\}deck:deck |chown \\1$USER_NAME:$USER_GROUP |g" -e "s|chown -R deck: |chown -R $USER_NAME: |g" -e "s|^Environment=STOCK_GAMESCOPE_SESSION=.*|Environment=STOCK_GAMESCOPE_SESSION=${STOCK:-/usr/lib/steamos/gamescope-session}|"; }
+# ...and for its UID 1000 (the first user on every handheld distro; only rewritten when this user's differs)
+UIDX=(); [ "$USER_UID" = 1000 ] || UIDX=(-e "s|/run/user/1000|/run/user/$USER_UID|g" -e "s|user@1000|user@$USER_UID|g" -e "s|\\bU=1000\\b|U=$USER_UID|g" -e "s|\\buid=1000\\b|uid=$USER_UID|g" \
+  -e "s|pgrep -\\([uU]\\) 1000\\b|pgrep -\\1 $USER_UID|g" -e "s|getent passwd 1000\\b|getent passwd $USER_UID|g" -e "s|id -nu 1000\\b|id -nu $USER_UID|g")
+templ(){ sed "${UIDX[@]}" -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -e "s|runuser -u deck |runuser -u $USER_NAME |g" -e "s|chown \\(-R \\)\\{0,1\\}deck:deck |chown \\1$USER_NAME:$USER_GROUP |g" -e "s|chown -R deck: |chown -R $USER_NAME: |g" -e "s|^Environment=STOCK_GAMESCOPE_SESSION=.*|Environment=STOCK_GAMESCOPE_SESSION=${STOCK:-/usr/lib/steamos/gamescope-session}|"; }
 differs(){ [ -f "$2" ] || return 0; ! cmp -s <(templ < "$ROOT/$1") "$2"; }
 
 if [ "$MODE" = check ]; then
