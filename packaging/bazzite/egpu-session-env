@@ -1,0 +1,35 @@
+# SteamOS EGPU Buddy - Bazzite Game Mode hook. Installed on Bazzite only (install.sh), sourced by Bazzite's
+# gamescope-session-plus through ~/.config/gamescope-session-plus/sessions.d/<client> (it sources that file with
+# set -a, before it builds the gamescope command line). It changes NOTHING unless the NVIDIA eGPU is bound to the
+# nvidia driver and drives a connected screen; then Game Mode starts on that screen with the NVIDIA picture fix.
+# @GAMESCOPE@ is filled in by install.sh: our GBM-scanout gamescope, or Bazzite's own when it already has GBM scan-out.
+_egpu_bz(){
+  local d bdf="" card="" c out=""
+  for d in /sys/bus/pci/devices/*; do
+    [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
+    case "$(cat "$d/class" 2>/dev/null)" in 0x0300*|0x0302*) ;; *) continue ;; esac
+    [ "$(basename "$(readlink -f "$d/driver" 2>/dev/null)")" = nvidia ] || continue
+    bdf=${d##*/}; break
+  done
+  [ -n "$bdf" ] || return 0
+  for c in /sys/bus/pci/devices/$bdf/drm/card[0-9]*; do [ -e "$c" ] && { card=${c##*/}; break; }; done
+  [ -n "$card" ] || return 0
+  for c in /sys/class/drm/$card-*; do
+    [ "$(cat "$c/status" 2>/dev/null)" = connected ] || continue
+    case "${c##*/}" in *-eDP-*|*-Writeback-*) continue ;; esac
+    out=${c##*/$card-}; break
+  done
+  [ -n "$out" ] || return 0
+  GAMESCOPE_BIN=@GAMESCOPE@
+  [ -x "$GAMESCOPE_BIN" ] || GAMESCOPE_BIN=/usr/bin/gamescope
+  gamescope_drm_gbm_scanout=1                      # gamescope turns gamescope_<convar> into a convar override
+  OUTPUT_CONNECTOR="$out,eDP-1"                    # back to the built-in screen if the external one goes
+  VULKAN_ADAPTER="$(cat /sys/bus/pci/devices/$bdf/vendor | cut -c3-):$(cat /sys/bus/pci/devices/$bdf/device | cut -c3-)"
+  VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json; VK_ICD_FILENAMES=$VK_DRIVER_FILES
+  __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json; __GLX_VENDOR_LIBRARY_NAME=nvidia
+  PROTON_ENABLE_NVAPI=1; DXVK_ENABLE_NVAPI=1; PROTON_HIDE_NVIDIA_GPU=0
+  mkdir -p "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nv-egpu-buddy" 2>/dev/null
+  printf 'pid=%s time=%s bazzite=1 egpu=%s card=%s output=%s gamescope=%s\n' "$$" "$(date '+%F %T')" "$bdf" "$card" "$out" "$GAMESCOPE_BIN" \
+    > "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/nv-egpu-buddy/session-wrapper" 2>/dev/null
+}
+_egpu_bz; unset -f _egpu_bz

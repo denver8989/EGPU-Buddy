@@ -1,0 +1,21 @@
+# Test build of the Bazzite GBM-scanout gamescope (the same step the release runs), without publishing anything.
+# Actions tab -> "Bazzite gamescope build" -> Run workflow. The result is attached to the run as an artifact.
+name: Bazzite gamescope build
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build in Fedora 44
+        run: |
+          mkdir -p /tmp/bz
+          docker run --rm -v "$PWD/packaging/gamescope-gbm":/gs:ro -v /tmp/bz:/out fedora:44 bash /gs/build-bazzite.sh /out
+          cat /tmp/bz/BUILD-ID; /tmp/bz/usr/bin/gamescope --version 2>&1 | head -3 || true
+          grep -c drm_gbm_scanout /tmp/bz/usr/bin/gamescope
+          sudo tar -C /tmp/bz -czf /tmp/bazzite-gamescope-gbm.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bazzite-gamescope-gbm
+          path: /tmp/bazzite-gamescope-gbm.tar.gz

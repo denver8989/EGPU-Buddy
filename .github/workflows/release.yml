@@ -46,6 +46,20 @@ jobs:
           cp -a /tmp/prev/SteamOS-EGPU-Buddy-*/prebuilt .
           test -x prebuilt/gamescope-gbm/usr/bin/gamescope
 
+      - name: Bazzite gamescope (built once in a Fedora container, then carried forward like the others)
+        # Bazzite only uses it. Rebuilt when the pinned source/patches change or Bazzite's Fedora base moves. A failed
+        # build never blocks a release: the previous build (or none) ships, and Bazzite then uses its own gamescope.
+        run: |
+          FED=44
+          WANT="fedora-$FED $(cat packaging/gamescope-gbm/build.sh packaging/gamescope-gbm/0*.patch | sha256sum | cut -c1-16)"
+          if [ "$(cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null)" != "$WANT" ]; then
+            mkdir -p /tmp/bz
+            if docker run --rm -v "$PWD/packaging/gamescope-gbm":/gs:ro -v /tmp/bz:/out fedora:$FED bash /gs/build-bazzite.sh /out; then
+              sudo rm -rf prebuilt/bazzite-gamescope-gbm; sudo cp -a /tmp/bz prebuilt/bazzite-gamescope-gbm; sudo chown -R "$(id -u):$(id -g)" prebuilt
+            else echo "::warning::the Bazzite gamescope build failed; this release ships $(cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null || echo none)"; fi
+          fi
+          cat prebuilt/bazzite-gamescope-gbm/BUILD-ID 2>/dev/null || true
+
       - name: Build
         run: ./build-release.sh
 

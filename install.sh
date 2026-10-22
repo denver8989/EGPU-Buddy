@@ -246,7 +246,36 @@ want core && sudo bash -c '{ [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/nu
 want core && { userctl enable egpu-display-failover.service; userctl enable --now egpu-wake-guard.service; userctl enable --now egpu-screen-watch.service; } >/dev/null 2>&1 || true
 
 # ---- gamescope with GBM scan-out (NVIDIA scan-out corruption fix) --------------------------------
-if want gamescope; then
+IS_BAZZITE=0; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) IS_BAZZITE=1 ;; esac   # from /etc/os-release (preflight)
+if want gamescope && [ "$IS_BAZZITE" = 1 ]; then
+  # Bazzite only. Its Game Mode is gamescope-session-plus, not SteamOS's gamescope-session: our session wrapper and
+  # drop-ins never run there. The NVIDIA picture fix goes in through the session's own per-client config instead.
+  # Bazzite's gamescope counts as fixed only if it has the GBM scan-out route itself (its RMDisableNoncontigAlloc
+  # driver key is not a verified fix: unproven on a stock driver, and reported to crash games); otherwise ours.
+  BZ_GS=/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope
+  if grep -qa 'drm_gbm_scanout' /usr/bin/gamescope 2>/dev/null; then
+    say "== Bazzite's gamescope has the GBM scan-out fix: using it"; BZ_GS=/usr/bin/gamescope
+  elif [ -x "$ROOT/prebuilt/bazzite-gamescope-gbm/usr/bin/gamescope" ] && ! ldd "$ROOT/prebuilt/bazzite-gamescope-gbm/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
+    say "== installing the GBM-scanout gamescope built for Bazzite ($(cat "$ROOT/prebuilt/bazzite-gamescope-gbm/BUILD-ID" 2>/dev/null))"
+    # atomic swap: a running gamescope keeps the old binary busy (ETXTBSY), so never copy over it in place
+    sudo bash -c 'D=/usr/local/lib/egpu-buddy/gamescope-gbm; mkdir -p "$D"; rm -rf "$D/usr.new" "$D/usr.old"; cp -a "$1" "$D/usr.new"
+      [ -d "$D/usr" ] && mv "$D/usr" "$D/usr.old"; mv "$D/usr.new" "$D/usr"; rm -rf "$D/usr.old"' _ "$ROOT/prebuilt/bazzite-gamescope-gbm/usr"
+  else
+    echo "warning: no gamescope build for this Bazzite release runs here; Game Mode on the eGPU uses Bazzite's gamescope (no NVIDIA picture fix)"
+    BZ_GS=/usr/bin/gamescope
+  fi
+  # hook: one line per Game Mode client (Bazzite: steam, ogui-steam). A file the user wrote themselves is left alone.
+  HK="$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"; umkdir "$(dirname "$HK")"
+  sed "s|@GAMESCOPE@|$BZ_GS|" "$ROOT/packaging/bazzite/egpu-session-env" > "$HK"; uown "$HK"
+  SD="$USER_HOME/.config/gamescope-session-plus/sessions.d"; umkdir "$SD"
+  for c in steam ogui-steam; do
+    if [ ! -e "$SD/$c" ] || grep -q 'SteamOS EGPU Buddy' "$SD/$c"; then
+      printf '# SteamOS EGPU Buddy: Game Mode on the NVIDIA eGPU screen (changes nothing without one)\n. "%s"\n' "$HK" > "$SD/$c"; uown "$SD/$c"
+    elif ! grep -qF "$HK" "$SD/$c"; then
+      echo "note: $SD/$c is your own file; add this line to it for Game Mode on the eGPU: . \"$HK\""
+    fi
+  done
+elif want gamescope; then
   PRE=${EGPU_PREBUILT_GAMESCOPE:-$ROOT/prebuilt/gamescope-gbm}
   if [ "$AS_ROOT" = 0 ] && command -v meson >/dev/null && command -v ninja >/dev/null && command -v cc >/dev/null && command -v cmake >/dev/null; then
     say "== building GBM-scanout gamescope from source (a few minutes)"

@@ -79,6 +79,10 @@ cd "$ROOT"; find user -type f | while read -r f; do restore_or_remove "$(map_des
 sudo bash -c "$(declare -f restore_or_remove); systemctl disable egpu-mount.service egpu-boot-enumerate.service egpu-conditional-session.service egpu-buddy-selfheal.service egpu-buddy-resume.service egpu-buddy-shutdown.service egpu-driver-trial-boot.service egpu-decky-guard.service egpu-flight-recorder.service egpu-buddy-gamescope-repair.path egpu-buddy-gamescope-repair.service egpu-driver-prebuild.timer egpu-driver-prebuild.service 2>/dev/null; $(cd "$ROOT" && find system -type f | while read -r f; do printf 'restore_or_remove %q\n' "$(map_dest "$f")"; done); udevadm control --reload; systemctl daemon-reload"
 [ "${EGPU_KEEP_PLUGIN:-0}" = 1 ] || sudo rm -rf "$USER_HOME/homebrew/plugins/EGPU-Buddy"
 [ "${EGPU_KEEP_PLUGIN:-0}" = 1 ] || rm -rf "$USER_HOME/.local/share/steamos-egpu-buddy"; rm -f "$USER_HOME/.local/share/applications/egpu-safe-detach.desktop" "$USER_HOME/.local/share/applications/egpu-buddy-report.desktop" "$USER_HOME/Desktop/egpu-buddy-report.desktop" "$USER_HOME/.config/autostart/egpu-buddy-tray.desktop" "$USER_HOME/Desktop/egpu-buddy.desktop" "$USER_HOME/Desktop/egpu-safe-detach.desktop"; rm -rf "$USER_HOME/.local/share/egpu-buddy" "$USER_HOME/.local/bin/egpu-buddy" "$USER_HOME/.local/share/applications/egpu-buddy.desktop"
+# Bazzite: the Game Mode hook (only our own sessions.d files) and the Bazzite gamescope build
+for f in "$USER_HOME"/.config/gamescope-session-plus/sessions.d/steam "$USER_HOME"/.config/gamescope-session-plus/sessions.d/ogui-steam; do
+  grep -q 'SteamOS EGPU Buddy' "$f" 2>/dev/null && rm -f "$f"; done
+rm -f "$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"; [ -d /usr/local/lib/egpu-buddy ] && sudo rm -rf /usr/local/lib/egpu-buddy
 # SteamOS: the driver extension and build root on /home, the OS-update keep-list, the GRUB drop-in (+ regenerate GRUB)
 if [ -d /home/.egpu-buddy ] || [ -L /etc/extensions/egpu-nvidia ] || [ -L /etc/extensions/egpu-nvidia.raw ]; then
   echo "removing the NVIDIA driver extension (SteamOS)"
