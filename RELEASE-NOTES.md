@@ -1,3 +1,8 @@
+0.7.141 — works for any user name and user ID.
+
+**Fixed** (SteamOS is unchanged)
+- On systems whose first user does not have user ID 1000, the eGPU steps failed quietly, as they did for user names other than "deck" before 0.7.140. The installer now sets them up for the actual user.
+
 0.7.140 — CachyOS and other systems whose user is not called "deck": Game Mode switches onto the eGPU display, and the kernel parameters are written to Limine.
 
 **Fixed** (systems whose login user is not "deck", and CachyOS with Limine; SteamOS is unchanged)
