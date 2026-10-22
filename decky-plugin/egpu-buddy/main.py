@@ -210,6 +210,10 @@ def _gamescope_running():
     return _sh(["pgrep", "-x", "gamescope(-wl)?"], 3)[0] == 0
 
 
+def _rpm_q(pkg):
+    return _sh(["rpm", "-q", pkg], 10)[1] or f"{pkg}: ?"
+
+
 def _pids(name):
     rc, out, _ = _sh(["pgrep", "-x", name], 3)
     return [int(x) for x in out.split()] if rc == 0 else []
@@ -1247,6 +1251,18 @@ def _support_report():
     sj = _user_cmd(["journalctl", "--user", "-b", "--no-pager", "-o", "short-monotonic", "-u", "gamescope-session.service",
                     "-u", "steam-launcher.service", "--grep", "nv-egpu|egpu|Gamescope Session|rror|Failed|Started|Stopped|exited"], 20).splitlines()
     lines += ["", "## Game Mode session log, this boot (last 80)"] + [l[:300] for l in sj[-80:]]
+    if IS_BAZZITE:
+        # Bazzite's Game Mode is gamescope-session-plus@<client>: its unit, the per-client config files it sources (ours
+        # hook in there) and whether one of them sets the whole gamescope command (then GAMESCOPE_BIN is not used)
+        lines += ["", "## Bazzite Game Mode session", _rpm_q("gamescope"), _rpm_q("gamescope-session-plus")]
+        lines += [l[:300] for l in _user_cmd(["systemctl", "--user", "list-units", "--all", "--no-legend", "gamescope-session-plus@*"], 10).splitlines()[:5]]
+        for d in ("/usr/share/gamescope-session-plus/sessions.d", "/etc/gamescope-session-plus/sessions.d", f"{USER_HOME}/.config/gamescope-session-plus/sessions.d"):
+            for f in sorted(glob.glob(d + "/*")):
+                keep = [l.strip()[:200] for l in _read(f).splitlines() if re.search(r"GAMESCOPE|OUTPUT_CONNECTOR|VULKAN|EGPU Buddy|^\.", l)]
+                lines.append(f"{f}: " + (" | ".join(keep[:8]) or "(nothing gamescope-related)"))
+        bz = f"/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope"
+        lines.append(f"our Bazzite gamescope: {'installed' if os.path.exists(bz) else 'not installed'} · Bazzite's own has GBM scan-out: "
+                     + ("yes" if _sh(["grep", "-qa", "drm_gbm_scanout", "/usr/bin/gamescope"], 10)[0] == 0 else "no"))
     # Steam sign-in events (a user reported being signed out during the beta driver attempt); account numbers removed
     con = [l for l in _read(f"{USER_HOME}/.local/share/Steam/logs/connection_log.txt").splitlines()
            if re.search(r"(?i)log(ged)?\s*(on|off)|logon|logoff|disconnect|relogin|expired", l)]
