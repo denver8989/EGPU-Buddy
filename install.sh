@@ -131,7 +131,10 @@ USER_GROUP=$(id -gn "$USER_NAME" 2>/dev/null || echo "$USER_NAME")
 # ...and for its UID 1000 (the first user on every handheld distro; only rewritten when this user's differs)
 UIDX=(); [ "$USER_UID" = 1000 ] || UIDX=(-e "s|/run/user/1000|/run/user/$USER_UID|g" -e "s|user@1000|user@$USER_UID|g" -e "s|\\bU=1000\\b|U=$USER_UID|g" -e "s|\\buid=1000\\b|uid=$USER_UID|g" \
   -e "s|pgrep -\\([uU]\\) 1000\\b|pgrep -\\1 $USER_UID|g" -e "s|getent passwd 1000\\b|getent passwd $USER_UID|g" -e "s|id -nu 1000\\b|id -nu $USER_UID|g")
-templ(){ sed "${UIDX[@]}" -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -e "s|runuser -u deck |runuser -u $USER_NAME |g" -e "s|chown \\(-R \\)\\{0,1\\}deck:deck |chown \\1$USER_NAME:$USER_GROUP |g" -e "s|chown -R deck: |chown -R $USER_NAME: |g" -e "s|^Environment=STOCK_GAMESCOPE_SESSION=.*|Environment=STOCK_GAMESCOPE_SESSION=${STOCK:-/usr/lib/steamos/gamescope-session}|"; }
+# ...and on Bazzite only: its Game Mode is gamescope-session-plus@<client>.service (client steam or ogui-steam), started
+# and supervised like SteamOS's gamescope-session.target. The systemctl commands get that unit (a pattern, quoted).
+BZX=(); [ "$IS_BAZZITE" = 1 ] && BZX=(-e "s#\\(systemctl --user [a-z-]* [^|;&>]*\\)gamescope-session\\.target#\\1'gamescope-session-plus@*.service'#g")
+templ(){ sed "${UIDX[@]}" "${BZX[@]}" -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -e "s|runuser -u deck |runuser -u $USER_NAME |g" -e "s|chown \\(-R \\)\\{0,1\\}deck:deck |chown \\1$USER_NAME:$USER_GROUP |g" -e "s|chown -R deck: |chown -R $USER_NAME: |g" -e "s|^Environment=STOCK_GAMESCOPE_SESSION=.*|Environment=STOCK_GAMESCOPE_SESSION=${STOCK:-/usr/lib/steamos/gamescope-session}|"; }
 differs(){ [ -f "$2" ] || return 0; ! cmp -s <(templ < "$ROOT/$1") "$2"; }
 
 if [ "$MODE" = check ]; then
@@ -367,7 +370,14 @@ if want driver; then
       install -m755 "$1/egpu-bazzite-driver" /usr/local/sbin/egpu-bazzite-driver
       install -m644 "$1/fetch-kernel-devel.py" "$1/build-modules.sh" "$L/"
       install -m644 "$2"/PKGBUILD "$2"/*.patch "$L/nvidia-open-egpu-615/"
-      install -m644 "$1/egpu-bazzite-driver-guard.service" /etc/systemd/system/; systemctl daemon-reload' _ "$BZ" "$ROOT/packaging/nvidia-open-egpu-615"
+      install -m644 "$1/egpu-bazzite-driver-guard.service" /etc/systemd/system/; systemctl daemon-reload
+      # what the driver package brings on every other system (SteamOS gets it inside its extension): the eGPU hot-plug
+      # udev rule + handler and the open-module option. Here in /etc and /usr/local, which udev and modprobe always read.
+      install -m755 "$2/nvidia-egpu-hotplug.sh" /usr/local/sbin/nvidia-egpu-hotplug.sh
+      sed "s|/usr/lib/nvidia-egpu/nvidia-egpu-hotplug.sh|/usr/local/sbin/nvidia-egpu-hotplug.sh|g" "$2/nvidia-egpu-hotplug.rules" > /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules
+      printf "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1\n" > /etc/modprobe.d/egpu-nvidia-open.conf
+      command -v restorecon >/dev/null && restorecon /usr/local/sbin/egpu-bazzite-driver /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf /etc/systemd/system/egpu-bazzite-driver-guard.service 2>/dev/null || true
+      udevadm control --reload 2>/dev/null || true' _ "$BZ" "$ROOT/packaging/nvidia-open-egpu-615"
     say "== Bazzite: building the patched NVIDIA kernel modules for Bazzite's NVIDIA driver (several minutes the first time)"
     sudo /usr/local/sbin/egpu-bazzite-driver --build; brc=$?
     case $brc in

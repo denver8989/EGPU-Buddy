@@ -84,7 +84,8 @@ for f in "$USER_HOME"/.config/gamescope-session-plus/sessions.d/steam "$USER_HOM
   grep -q 'SteamOS EGPU Buddy' "$f" 2>/dev/null && rm -f "$f"; done
 rm -f "$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"
 if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then   # Bazzite: back to Bazzite's own NVIDIA modules
-  sudo /usr/local/sbin/egpu-bazzite-driver --remove; sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service
+  sudo /usr/local/sbin/egpu-bazzite-driver --remove; sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service \
+    /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf
 fi
 [ -d /usr/local/lib/egpu-buddy ] && sudo rm -rf /usr/local/lib/egpu-buddy
 # SteamOS: the driver extension and build root on /home, the OS-update keep-list, the GRUB drop-in (+ regenerate GRUB)
