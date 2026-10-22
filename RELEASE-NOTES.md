@@ -1,3 +1,17 @@
+0.7.145 — Bazzite support (handheld image): this project's patched NVIDIA driver, the Game Mode picture fix, and the desktop, login and detach paths adapted. SteamOS and CachyOS are unchanged.
+
+**New** (Bazzite only)
+- The patched NVIDIA driver on Bazzite's handheld image (which has no NVIDIA driver): the same patched kernel modules and the same NVIDIA userspace recipe as on the other systems, built on the device for its exact kernel and added to the read-only system as a system extension. Built again by itself after a Bazzite update with a new kernel. With Secure Boot on, the modules are signed with a key of this machine: at the next reboot a blue screen asks to enroll it (Enroll MOK, password egpubuddy). The first install takes 10–20 minutes (about 1 GB of downloads). If anything does not match (another kernel, Secure Boot without the key), the driver is simply not used — the system runs as before.
+- Game Mode on the eGPU screen with the NVIDIA picture fix (the GBM-scanout gamescope, built for Bazzite), through Bazzite's own Game Mode session. Bazzite's gamescope is used instead if it already has the fix.
+- The desktop app and its tray icon on Bazzite.
+
+**Fixed** (Bazzite only)
+- After a desktop attach, Bazzite could keep booting into the desktop and "Return to Gaming Mode" came back to the desktop. Bazzite's own session choice applies again; a switch you make always wins.
+- Game Mode Safe Detach, cable-pull recovery in Game Mode, and the plugin's detach/switch/attach jobs work with Bazzite's session and services.
+
+**Fixed** (everywhere)
+- The source of the GBM-scanout gamescope moved; the build fetches the same pinned version from its new place (on-device rebuilds on SteamOS would have failed).
+
 0.7.144 — the Bazzite fixes from 0.7.143 now run on Bazzite only.
 
 **Changed** (no change in behaviour anywhere)
