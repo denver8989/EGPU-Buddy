@@ -1,3 +1,8 @@
+0.7.146 — Bazzite: the install from the Game Mode plugin actually runs.
+
+**Fixed** (Bazzite only)
+- Installing from the Game Mode plugin still stopped at once on Bazzite ("Failed to start transient service unit: Connection reset by peer"), so nothing of 0.7.145 was installed. Bazzite lets the plugin start the installer as a background job but not stream its output back; the installer now writes its output to a file that the plugin follows (progress and the setup log work as before), and runs directly if even that is refused.
+
 0.7.145 — Bazzite support (handheld image): this project's patched NVIDIA driver, the Game Mode picture fix, and the desktop, login and detach paths adapted. SteamOS and CachyOS are unchanged.
 
 **New** (Bazzite only)

@@ -757,16 +757,10 @@ def _run_logged(cmd, env, cwd):
     """Run the installer, stream its output into the log, and turn its stage lines into progress."""
     # Run the installer in its OWN transient systemd unit: on SteamOS the driver build takes 10-20 minutes, and as a child
     # of Decky it would die with any Decky/Steam restart. --pipe keeps the output streaming back for the progress bar.
-    # Bazzite refuses that from Decky ("Failed to start transient service unit: Connection reset by peer", SELinux):
-    # nothing was installed at all. Probe it first; where it cannot start a unit, run the installer directly.
-    if shutil.which("systemd-run") and _sysrun_ok():
-        keep = [f"--setenv={k}={v}" for k, v in env.items() if k.startswith("EGPU_") or k in ("HOME", "PATH", "STOCK_GAMESCOPE_SESSION")]
-        cmd = ["systemd-run", "--quiet", "--wait", "--pipe", "--collect", f"--unit=egpu-buddy-setup-{int(time.time())}",
-               f"--working-directory={cwd}", "--property=TimeoutStartSec=7200", *keep, *cmd]
+    span = None; base = 0; n = 0
     with open(SETUP_LOG, "a") as log:
-        pr = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=cwd, text=True)
-        span = None; base = 0; n = 0
-        for line in pr.stdout:
+        def feed(line):
+            nonlocal span, base, n
             clean = ANSI.sub("", line.rstrip())
             log.write(clean + "\n"); log.flush()
             for marker, pct, label in STAGES:
@@ -777,6 +771,41 @@ def _run_logged(cmd, env, cwd):
             else:
                 if span:   # real progress inside the compile: lines seen / lines expected
                     n += 1; _setup["progress"] = max(_setup["progress"], base + (span[1] - base) * min(n / span[0], 1.0))
+        keep = [f"--setenv={k}={v}" for k, v in env.items() if k.startswith("EGPU_") or k in ("HOME", "PATH", "STOCK_GAMESCOPE_SESSION")]
+        unit = f"egpu-buddy-setup-{int(time.time())}"
+        if IS_BAZZITE and shutil.which("systemd-run"):
+            # Bazzite: Decky may start a unit but not hand it its own stdin/stdout (--pipe: "Failed to start transient
+            # service unit: Connection reset by peer", nothing was installed). The unit writes to a file instead, read
+            # back here as it grows; the installer still runs outside Decky (a Decky restart cannot cut the driver build).
+            os.makedirs("/run/nvegpu", exist_ok=True); out = f"/run/nvegpu/{unit}.log"; open(out, "w").close()   # not /tmp: Decky may have its own
+            pr = subprocess.Popen(["systemd-run", "--quiet", "--wait", "--collect", f"--unit={unit}", f"--working-directory={cwd}",
+                                   "--property=TimeoutStartSec=7200", f"--property=StandardOutput=append:{out}",
+                                   "--property=StandardError=inherit", *keep, *cmd],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env, cwd=cwd, text=True)
+            with open(out) as f:
+                buf = ""
+                while True:
+                    chunk = f.read()
+                    if chunk:
+                        buf += chunk; *lines, buf = buf.split("\n")
+                        for line in lines: feed(line)
+                    elif pr.poll() is not None:
+                        break
+                    else:
+                        time.sleep(0.5)
+                if buf: feed(buf)
+            rc = pr.wait(); err = (pr.stderr.read() or "").strip()
+            try: os.unlink(out)
+            except OSError: pass
+            if not ("Failed to start transient" in err or "Connection reset" in err):
+                return rc
+            feed(f"(systemd-run refused: {err}; running the installer directly)")
+        elif shutil.which("systemd-run") and _sysrun_ok():
+            cmd = ["systemd-run", "--quiet", "--wait", "--pipe", "--collect", f"--unit={unit}",
+                   f"--working-directory={cwd}", "--property=TimeoutStartSec=7200", *keep, *cmd]
+        pr = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, cwd=cwd, text=True)
+        for line in pr.stdout:
+            feed(line)
         return pr.wait()
 
 
