@@ -15,7 +15,7 @@
 # The extension tree lives in /var/lib/nvegpu/bazzite/ext; only the link /etc/extensions/egpu-nvidia makes systemd merge
 # it, and that link exists only while the build matches this boot and can load (--guard checks it at every boot BEFORE
 # systemd-sysext merges anything). In every other case the system runs exactly as without the driver.
-#   egpu-bazzite-driver --status | --build | --boot | --guard | --enroll | --remove
+#   egpu-bazzite-driver --status | --build | --boot | --guard | --boot-ok | --enroll | --remove
 set -u
 . /etc/os-release 2>/dev/null; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) ;; *) echo "not Bazzite"; exit 0 ;; esac
 LIB=/usr/local/lib/egpu-buddy/bazzite; PKG=$LIB/nvidia-open-egpu-615
@@ -36,7 +36,6 @@ built(){ [ -s "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" ] && [ "$(cat 
          && { ! sb_on || [ -e "$EXT/.signed" ]; }; }
 can_load(){ ! sb_on || key_enrolled; }
 merged(){ [ -L "$LINK" ] && systemd-sysext status 2>/dev/null | grep -qw "$NAME"; }
-refresh(){ local i; for i in 1 2 3; do systemd-sysext refresh >/dev/null 2>&1 && { ldconfig 2>/dev/null; return 0; }; sleep 2; done; return 1; }
 nv_loaded(){ [ -d /sys/module/nvidia ]; }
 # every removal below goes through this: a fixed prefix, never an empty or unrelated path
 drop(){ local p; for p in "$@"; do case "$p" in /var/lib/nvegpu/bazzite*) rm -rf -- "${p:?}" ;; esac; done; }
@@ -92,21 +91,25 @@ module_index(){ # <extension tree>: modules.dep & co for Bazzite's modules + our
   drop "$T"; grep -q 'extra/nvidia/nvidia.ko.xz' "$N/usr/lib/modules/$K/modules.dep"
 }
 
-deactivate(){ [ -L "$LINK" ] || return 0; rm -f "$LINK"; nv_loaded || refresh; return 0; }
+# The extension is only ever merged or taken away by systemd-sysext AT BOOT, never under a running session: on Bazzite's
+# read-only /usr a live refresh remounts /usr under Game Mode (0.7.146: the screen went dark right after the install).
+deactivate(){ [ -L "$LINK" ] || return 0; rm -f "$LINK"; say "the patched driver is switched off from the next boot"; return 0; }
 
 activate(){
   built || { say "no patched driver built for kernel $K"; return 1; }
   can_load || { say "Secure Boot is on and the signing key is not enrolled yet: the driver stays off until it is"; return 1; }
-  systemctl enable systemd-sysext.service egpu-bazzite-driver-guard.service >/dev/null 2>&1
-  mkdir -p /etc/extensions; ln -sfn "$EXT" "$LINK"            # from now on systemd merges it at every boot
-  merged && return 0
-  if nv_loaded; then say "the NVIDIA driver is in use: the new build takes over at the next boot"; return 0; fi
-  refresh || { say "systemd-sysext could not merge the driver extension"; rm -f "$LINK"; return 1; }
+  systemctl enable systemd-sysext.service egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1
+  [ -L "$LINK" ] || { mkdir -p /etc/extensions; ln -sfn "$EXT" "$LINK"; }   # systemd merges it from the next boot on
+  merged || { say "patched NVIDIA driver $PV ready for $K: active after the next reboot"; return 0; }
+  verify
+}
+
+verify(){ # merged by systemd at this boot: is what modprobe and the libraries see really the patched driver?
   local p; p=$(modinfo -k "$K" -n nvidia 2>/dev/null)
   # (modinfo prints /lib/modules/... on Fedora: /lib is a link to usr/lib, so the CONTENT is what is compared)
   if [ "$(modinfo -k "$K" -F version nvidia 2>/dev/null)" = "$PV" ] && [ -n "$p" ] && cmp -s "$p" "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" \
      && { [ "$(mode_now)" = modules ] || command -v nvidia-smi >/dev/null; }; then say "patched NVIDIA driver $PV active for $K"; return 0; fi
-  say "the extension merged but the system does not see the patched driver: removed it"; deactivate; return 1
+  say "the extension is merged but the system does not see the patched driver: switched off from the next boot"; deactivate; return 1
 }
 
 build(){
@@ -150,7 +153,7 @@ build(){
   module_index "$N" || { say "could not build the module index"; drop "$N"; return 10; }
   printf 'ID=_any\nARCHITECTURE=x86-64\n' > "$N/usr/lib/extension-release.d/extension-release.$NAME"
   echo "$PV $K $mode" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"; label "$N"
-  if merged && nv_loaded; then drop "$EXT.staged"; mv "$N" "$EXT.staged"; say "built; takes over at the next boot (the driver is in use now)"; return 0; fi
+  if merged; then drop "$EXT.staged"; mv "$N" "$EXT.staged"; say "built; takes over at the next boot"; return 0; fi
   drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$N" "$EXT"; drop "$EXT.old"
   drop "$W/kernel-devel-$K.rpm" "$W/out"; say "built the patched NVIDIA driver $PV for $K ($mode)"
   return 0
@@ -160,7 +163,7 @@ status(){
   echo "kernel: $K · patched driver: ${PV:-?} · Bazzite's own NVIDIA driver: $(host_nv | grep . || echo none) · mode: $(mode_now)"
   local s="off"; if sb_on; then s="on"; if key_enrolled; then s="$s · signing key enrolled"; elif key_pending; then s="$s · signing key waiting for enrollment (reboot)"; else s="$s · signing key NOT enrolled"; fi; fi
   echo "Secure Boot: $s"
-  echo "built for this kernel: $(built && echo yes || echo no) · extension active: $(merged && echo yes || echo no)"
+  echo "built for this kernel: $(built && echo yes || echo no) · extension active: $(merged && echo yes || echo no)$([ -e "$W/auto-off" ] && echo " · SWITCHED OFF after boots that hung ($(cat "$W/auto-off"))")"
   echo "nvidia module modprobe loads: $(modinfo -k "$K" -n nvidia 2>/dev/null || echo none) (signer: $(modinfo -k "$K" -F signer nvidia 2>/dev/null || echo -)) · nvidia-smi: $(command -v nvidia-smi || echo none)"
   built && merged
 }
@@ -169,22 +172,34 @@ case "${1:---status}" in
   --status) status ;;
   --build)
     [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
-    build; rc=$?; [ $rc = 0 ] || exit $rc
+    rm -f "$W/auto-off"; build; rc=$?; [ $rc = 0 ] || exit $rc
     if sb_on && ! key_enrolled; then enroll; exit 11; fi
     activate ;;
   --boot)   # at every boot: a staged build takes over, a new kernel gets its driver (network permitting), never blocks
     [ "$(id -u)" = 0 ] || exit 1
-    if [ -d "$EXT.staged" ] && ! nv_loaded; then drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"; [ -L "$LINK" ] && refresh; fi
+    # a staged build is swapped in while NOT merged (the guard took the link away at this boot for it, see --guard)
+    if [ -d "$EXT.staged" ] && ! merged; then drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"; fi
     built || deactivate                                         # built for another kernel / version / image: never merge it
     [ "$(mode_now)" = conflict ] && exit 0
     built || build || exit 0
-    activate || true ;;
+    can_load || exit 0
+    [ -e "$W/auto-off" ] && { say "the patched driver was switched off after boots that hung ($(cat "$W/auto-off")); reinstall from the plugin to try it again"; exit 0; }
+    if merged; then verify || true; elif [ ! -L "$LINK" ]; then activate || true; fi ;;
   --enroll) enroll ;;
   --guard)  # early boot, before systemd-sysext merges: keep the link only if the build matches this boot and can load
-    if [ -L "$LINK" ] && ! { built && can_load; }; then rm -f "$LINK"; say "boot guard: the patched driver does not match this boot (kernel $K, Bazzite NVIDIA $(host_nv | grep . || echo none)): left off"; fi
-    exit 0 ;;
-  --remove)
-    rm -f "$LINK"; nv_loaded || refresh; drop "$W"; systemctl disable egpu-bazzite-driver-guard.service >/dev/null 2>&1
-    say "patched driver removed" ;;
-  *) echo "usage: $0 --status | --build | --boot | --guard | --enroll | --remove"; exit 2 ;;
+    [ -L "$LINK" ] || exit 0
+    # safety net: two boots in a row with the driver merged that never reached the login screen -> switch it off
+    n=$(cat "$W/boot-attempts" 2>/dev/null || echo 0); case "$n" in ''|*[!0-9]*) n=0 ;; esac
+    if [ "$n" -ge 2 ]; then rm -f "$LINK"; echo 0 > "$W/boot-attempts"; date '+%F %T' > "$W/auto-off"   # stays off until the next install (--build)
+      say "boot guard: the last $n boots with the patched driver did not reach the login screen: switched it off (Bazzite runs as without it)"; exit 0; fi
+    if [ -d "$EXT.staged" ]; then rm -f "$LINK"; exit 0; fi   # a new build waits: --boot swaps it in unmerged, the next boot merges it
+    if ! { built && can_load; }; then rm -f "$LINK"; say "boot guard: the patched driver does not match this boot (kernel $K, Bazzite NVIDIA $(host_nv | grep . || echo none)): left off"; exit 0; fi
+    echo $((n + 1)) > "$W/boot-attempts"; exit 0 ;;
+  --boot-ok)  # the login screen started: the boot with the driver worked
+    [ -L "$LINK" ] && echo 0 > "$W/boot-attempts"; exit 0 ;;
+  --remove)   # the merged copy (if any) goes with the next boot; nothing is unmounted under the running session
+    rm -f "$LINK"; systemctl disable egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1
+    merged || drop "$W"
+    say "patched driver removed (fully gone after the next reboot)" ;;
+  *) echo "usage: $0 --status | --build | --boot | --guard | --boot-ok | --enroll | --remove"; exit 2 ;;
 esac

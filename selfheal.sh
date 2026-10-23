@@ -90,10 +90,19 @@ if { [ -n "$ro" ] || grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; } && [ -
   systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 && log "GBM-scanout gamescope needs a rebuild for this OS: started in the background"
 fi
 # Bazzite only (the tool exists only there): patched NVIDIA modules for a new kernel, a staged build taking over
-[ -x /usr/local/sbin/egpu-bazzite-driver ] && /usr/local/sbin/egpu-bazzite-driver --boot 2>&1 | while read -r l; do log "bazzite driver: $l"; done
+# In the BACKGROUND: this service runs before the login screen, and a build takes 10-20 minutes (0.7.146 ran it here and
+# held the boot at the logo). The boot guard already decided before the merge whether the build matches this boot.
+[ -x /usr/local/sbin/egpu-bazzite-driver ] && { systemd-run --no-block --collect --quiet --unit=egpu-buddy-bazzite-driver-boot \
+  /usr/local/sbin/egpu-bazzite-driver --boot >/dev/null 2>&1 && log "bazzite driver: boot check started in the background"; }
 # kernel parameters (bootloader config may have been regenerated)
 /usr/local/sbin/egpu-kernel-cmdline --repair 2>&1 | while read -r l; do log "kernel parameters: $l"; done
-if ! /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then
+if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then
+  # Bazzite: rpm-ostree writes a whole new deployment and waits on its daemon (which may be busy updating at boot), so it
+  # never runs in the boot path, and not at all when the parameters are already written and only wait for a reboot
+  /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1 || /usr/local/sbin/egpu-kernel-cmdline --pending >/dev/null 2>&1 \
+    || { systemd-run --no-block --collect --quiet --unit=egpu-buddy-kargs-boot /usr/local/sbin/egpu-kernel-cmdline --apply >/dev/null 2>&1 \
+         && log "kernel parameters missing: being written in the background; reboot needed"; }
+elif ! /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then
   /usr/local/sbin/egpu-kernel-cmdline --apply >/dev/null 2>&1 && log "kernel parameters re-applied; reboot needed" || log "kernel parameters missing and could not be written"
 fi
 exit 0

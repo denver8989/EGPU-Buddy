@@ -1,0 +1,13 @@
+# SteamOS EGPU Buddy (Bazzite only): the boot with the patched NVIDIA driver merged reached the login screen and stayed
+# up for a minute: reset the boot guard's counter. Two boots in a row without this switch the driver off (see --guard).
+[Unit]
+Description=EGPU Buddy: the boot with the patched NVIDIA driver worked
+After=display-manager.service graphical.target
+ConditionPathIsSymbolicLink=/etc/extensions/egpu-nvidia
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'sleep 60; exec /usr/local/sbin/egpu-bazzite-driver --boot-ok'
+
+[Install]
+WantedBy=graphical.target

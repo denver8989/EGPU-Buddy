@@ -412,13 +412,15 @@ if want driver; then
       # nouveau must never take the eGPU before the patched driver (the driver extension blacklists it once merged;
       # this covers the boot before that, and the kernel parameter the initramfs)
       printf "blacklist nouveau\nblacklist nova_core\nblacklist nova_drm\n" > /etc/modprobe.d/egpu-bazzite-no-nouveau.conf
-      install -m644 "$1/egpu-bazzite-driver-guard.service" /etc/systemd/system/; systemctl daemon-reload
+      install -m644 "$1/egpu-bazzite-driver-guard.service" "$1/egpu-bazzite-boot-ok.service" /etc/systemd/system/; systemctl daemon-reload
       # what the driver package brings on every other system (SteamOS gets it inside its extension): the eGPU hot-plug
       # udev rule + handler and the open-module option. Here in /etc and /usr/local, which udev and modprobe always read.
       install -m755 "$2/nvidia-egpu-hotplug.sh" /usr/local/sbin/nvidia-egpu-hotplug.sh
       sed "s|/usr/lib/nvidia-egpu/nvidia-egpu-hotplug.sh|/usr/local/sbin/nvidia-egpu-hotplug.sh|g" "$2/nvidia-egpu-hotplug.rules" > /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules
       printf "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1\n" > /etc/modprobe.d/egpu-nvidia-open.conf
-      command -v restorecon >/dev/null && restorecon /usr/local/sbin/egpu-bazzite-driver /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf /etc/systemd/system/egpu-bazzite-driver-guard.service 2>/dev/null || true
+      command -v restorecon >/dev/null && restorecon /usr/local/sbin/egpu-bazzite-driver /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service 2>/dev/null || true
+      # a link left by 0.7.146 (merged LIVE under the session) is kept; the counter starts clean
+      [ -L /etc/extensions/egpu-nvidia ] && { systemctl enable egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1; mkdir -p /var/lib/nvegpu/bazzite; echo 0 > /var/lib/nvegpu/bazzite/boot-attempts; } || true
       udevadm control --reload 2>/dev/null || true' _ "$BZ" "$ROOT/packaging/nvidia-open-egpu-615"
     say "== Bazzite: building the patched NVIDIA driver (10-20 minutes the first time: about 1 GB of downloads)"
     sudo /usr/local/sbin/egpu-bazzite-driver --build; brc=$?

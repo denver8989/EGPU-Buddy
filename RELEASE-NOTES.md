@@ -1,3 +1,9 @@
+0.7.148 — Bazzite: the install can no longer hold the boot at the logo.
+
+**Fixed** (Bazzite only)
+- After the install the screen could go dark, and later boots stayed on the logo, even without the eGPU. The driver build (10–20 minutes) could run in the boot path before the login screen, and the driver was switched on under the running session. Now the build and the kernel parameters run in the background at boot, and the driver only ever switches on or off at a reboot.
+- Safety net: if two boots in a row with the patched driver never reach the login screen, it switches itself off and Bazzite boots as without it (reinstall from the plugin to try again).
+
 0.7.147 — Bazzite: "A game is running" no longer shows all the time.
 
 **Fixed** (Bazzite only)
