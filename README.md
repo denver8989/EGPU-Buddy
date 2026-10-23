@@ -70,12 +70,12 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 
 ## Tested hardware
 
-| | Legion Go 2 | Legion Go 1 | ROG Xbox Ally X | Legion Go 2 (Ryzen Z2) |
+| | Legion Go 2 | Legion Go 2 (Ryzen Z2) | Legion Go 1 | ROG Xbox Ally X |
 |---|---|---|---|---|
-| OS | CachyOS (Deckify) | SteamOS 3.8 | SteamOS 3.8 | Bazzite 44 (handheld image, bazzite-deck) |
-| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | Gigabyte AORUS AI Box, RTX 5060 Ti |
-| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) |
-| Status | Tested | Tested | Tested (on-device testing and development: SilverplayerX) | **Testing in progress** (on-device testing: 1khanfusion): Game Mode and desktop attach work, the rest is being tested ([TESTED.md](TESTED.md)) |
+| OS | CachyOS (Deckify) | Bazzite 44 (handheld image, bazzite-deck) | SteamOS 3.8 | SteamOS 3.8 |
+| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU |
+| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) |
+| Status | Tested | **Testing in progress** (on-device testing: 1khanfusion): Game Mode and desktop attach work, the rest is being tested ([TESTED.md](TESTED.md)) | Tested | Tested (on-device testing and development: SilverplayerX) |
 
 **Operating systems:** SteamOS 3.8 and CachyOS (Deckify) tested; **Bazzite** (handheld image, bazzite-deck) supported
 since 0.7.145, testing in progress. On Bazzite the patched NVIDIA driver is built on the device for its kernel (no
