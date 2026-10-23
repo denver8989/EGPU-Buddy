@@ -1,3 +1,9 @@
+0.7.154 — Bazzite: a problem with the patched driver is caught while the system runs, never at a boot.
+
+**Changed** (Bazzite only)
+- If adding the patched driver to the running system goes wrong, it is taken out again at once and switched OFF, and what the system reported goes into the support report, so it can always be sent. It is no longer left for the next boot, where the same problem would stop the system from starting.
+- A driver rebuilt after a Bazzite update now replaces the old one right away when the eGPU is not in use (as on SteamOS), instead of waiting for a reboot.
+
 0.7.153 — Bazzite: no reboot needed to switch the patched driver on.
 
 **Changed** (Bazzite only)

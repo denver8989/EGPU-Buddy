@@ -114,8 +114,11 @@ activate(){
   systemctl enable systemd-sysext.service egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1
   [ -L "$LINK" ] || { mkdir -p /etc/extensions; ln -sfn "$EXT" "$LINK"; }   # systemd merges it from the next boot on
   if ! merged; then
-    live_merge || { say "patched NVIDIA driver $PV ready for $K: active after the next reboot"; return 0; }
+    live_merge; local r=$?
+    [ $r = 2 ] && return 1
+    [ $r = 0 ] || { say "patched NVIDIA driver $PV ready for $K: active after the next reboot"; return 0; }
     verify && return 0
+    capture "the driver was added but the system does not see it"
     live_unmerge; rm -f "$LINK"; return 1     # added live but not the driver it should be: out again, and off
   fi
   verify
@@ -129,10 +132,20 @@ live_merge(){ # as on SteamOS: merge now, no reboot. Only while no NVIDIA driver
   [ $ok = 0 ] && merged || { say "could not add the driver to the running system: active after the next reboot"; return 1; }
   ldconfig 2>/dev/null
   busctl --system status >/dev/null 2>&1 && return 0
-  say "the system message bus did not answer after adding the driver: taken out again; active after the next reboot"
-  live_unmerge; return 1
+  # a failure seen LIVE is reported live: the details go into the log (and the support report) while the system still
+  # runs, and the driver stays OFF - never left for a boot that could fail the same way with nobody able to report it
+  capture "the system message bus did not answer after adding the driver"
+  live_unmerge; rm -f "$LINK"; date '+%F %T' > "$W/auto-off2"
+  say "the patched driver was taken out again and switched off (details in the support report)"; return 2
 }
 live_unmerge(){ rm -f "$LINK"; systemd-sysext refresh >>"$LOG" 2>&1; ldconfig 2>/dev/null; ln -sfn "$EXT" "$LINK"; }
+capture(){ # <what failed>: what the system said in the last two minutes, into the driver log
+  { echo "==== $(date '+%F %T') $1: system state ===="
+    systemctl list-units --failed --no-legend --no-pager 2>&1 | head -20
+    journalctl --no-pager -o short-monotonic --since "-2min" --grep 'avc:\s+denied' 2>&1 | tail -20
+    journalctl --no-pager -o short-monotonic --since "-2min" -p warning 2>&1 | tail -60
+    echo "==== end ===="; } >> "$LOG" 2>&1
+}
 
 relabel(){ # a build from 0.7.151 or older carries the container's labels: fix them in place (never while merged)
   labeled && return 0
@@ -190,7 +203,13 @@ build(){
   printf 'ID=_any\nARCHITECTURE=x86-64\n' > "$N/usr/lib/extension-release.d/extension-release.$NAME"
   echo "$PV $K $mode" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"
   label "$N" || { drop "$N"; return 12; }
-  if merged; then drop "$EXT.staged"; mv "$N" "$EXT.staged"; say "built; takes over at the next boot"; return 0; fi
+  if merged && ! nv_loaded; then   # the eGPU is not in use: take the old build out live and put the new one in
+    rm -f "$LINK"; systemd-sysext refresh >>"$LOG" 2>&1
+    if ! merged; then drop "$EXT.old"; mv "$EXT" "$EXT.old"; mv "$N" "$EXT"; drop "$EXT.old" "$W/kernel-devel-$K.rpm" "$W/out"
+      say "built the patched NVIDIA driver $PV for $K ($mode)"; return 0; fi    # (the caller switches it on: activate)
+    ln -sfn "$EXT" "$LINK"
+  fi
+  if merged; then drop "$EXT.staged"; mv "$N" "$EXT.staged"; say "built; takes over at the next boot (the driver is in use now)"; return 0; fi
   drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$N" "$EXT"; drop "$EXT.old"
   drop "$W/kernel-devel-$K.rpm" "$W/out"; say "built the patched NVIDIA driver $PV for $K ($mode)"
   return 0
@@ -214,8 +233,12 @@ case "${1:---status}" in
     activate ;;
   --boot)   # at every boot: a staged build takes over, a new kernel gets its driver (network permitting), never blocks
     [ "$(id -u)" = 0 ] || exit 1
-    # a staged build is swapped in while NOT merged (the guard took the link away at this boot for it, see --guard)
-    if [ -d "$EXT.staged" ] && ! merged; then drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"; fi
+    # a staged build (made while the eGPU was in use) is swapped in while no NVIDIA module is loaded, as on SteamOS
+    # (apply_staged in install-steamos-sysext.sh): un-merge, swap, and activate below merges it again live
+    if [ -d "$EXT.staged" ] && ! nv_loaded; then
+      merged && { rm -f "$LINK"; systemd-sysext refresh >>"$LOG" 2>&1; }
+      merged || { drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"; }
+    fi
     built || deactivate                                         # built for another kernel / version / image: never merge it
     [ "$(mode_now)" = conflict ] && exit 0
     built || build || exit 0
