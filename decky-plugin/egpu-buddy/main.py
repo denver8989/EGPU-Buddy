@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.150"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.151"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/SteamOS-EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1419,6 +1419,10 @@ def _support_report():
             pk.append(l[:300])
     if pk:
         lines += ["", "## eGPU log lines from the previous boot (last 100)"] + pk[-100:]
+    try:
+        lines += _system_report()
+    except Exception as ex:  # noqa: BLE001  (the report itself must never fail over one section)
+        lines += ["", f"## System and boot history: could not be read ({ex})"]
     # snapshots egpu-snapshot took at the moment something failed (Safe Detach, driver trial, GPU lost) or after an attach
     snaps = sorted(glob.glob("/var/log/egpu-buddy/snap-*.txt"), key=os.path.getmtime, reverse=True)
     lines += ["", f"## Snapshots ({len(snaps)} kept, newest 3 in full)"] + [os.path.basename(p) for p in snaps]
@@ -1437,6 +1441,55 @@ def _support_report():
         if tail:
             lines += ["", f"## {p} (last 30)"] + [t[:300] for t in tail]
     return _redact("\n".join(lines))
+
+
+def _system_report():
+    """Distro-agnostic: what this system is and how its recent boots went, without assuming a cause. On a system the
+    project was not built on (Bazzite: a boot that shut itself down 12 s in) the answer was in none of the eGPU lines."""
+    L = []
+    def j(*args, t=20):   # journalctl lines, without its "-- No entries --"
+        return [l for l in _sh(["journalctl", "--no-pager", "-o", "short-monotonic", *args], t)[1].splitlines() if l.strip() != "-- No entries --"]
+    osr = dict(l.split("=", 1) for l in _read("/etc/os-release").splitlines() if "=" in l)
+    L += ["", "## System", " · ".join(f"{k}={osr[k].strip(chr(34))}" for k in ("ID", "ID_LIKE", "VERSION", "VARIANT_ID", "BUILD_ID", "IMAGE_ID")
+                                     if k in osr), f"kernel cmdline: {_read('/proc/cmdline')[:600]}"]
+    imm = []
+    if os.path.exists("/run/ostree-booted"): imm.append("ostree (read-only /usr)")
+    if shutil.which("steamos-readonly"): imm.append("steamos-readonly: " + (_sh(["steamos-readonly", "status"], 5)[1] or "?"))
+    if os.path.exists("/sys/fs/selinux/enforce"): imm.append("SELinux " + ("enforcing" if _read("/sys/fs/selinux/enforce") == "1" else "permissive"))
+    if os.path.isdir("/sys/kernel/security/apparmor"): imm.append("AppArmor on")
+    imm.append("Secure Boot: " + (_sh(["mokutil", "--sb-state"], 5)[1].replace("\n", " ") if shutil.which("mokutil") else "?"))
+    L.append(" · ".join(imm))
+    L.append("init: " + (_sh(["systemctl", "--version"], 5)[1].splitlines() or ["?"])[0] + " · default target: " + _sh(["systemctl", "get-default"], 5)[1])
+    sx = _sh(["systemd-sysext", "status", "--no-pager"], 10)[1].splitlines() if shutil.which("systemd-sysext") else []
+    if sx: L += ["system extensions (systemd-sysext):"] + ["  " + l[:200] for l in sx[:12]]
+    if shutil.which("rpm-ostree"):
+        L += ["rpm-ostree deployments:"] + ["  " + l[:200] for l in _sh(["rpm-ostree", "status", "--booted"], 20)[1].splitlines()[:14]]
+    # every recent boot: how long it ran and how it ended (power key, reboot asked for by whom, crash = no clean end)
+    boots = _sh(["journalctl", "--list-boots", "--no-pager"], 20)[1].splitlines()
+    L += ["", "## Boot history (last 8)"] + [l[:200] for l in boots[-8:]]
+    end_re = (r"(?i)power key|lid (closed|opened)|system is (rebooting|powering off|halting)|reboot(ing)?\b|poweroff|"
+              r"Reached target .*(Reboot|Power-Off|Shutdown|Halt)|Shutting down|kernel panic|watchdog|soft-reboot|kexec|"
+              r"emergency|rescue|session-.*scope.*(Deactivated|Failed)|segfault|dumped core")
+    for n in range(1, min(5, max(len(boots) - 1, 0)) + 1):
+        ends = j("-b", f"-{n}", "--grep", end_re)
+        last = j("-b", f"-{n}", "-n", "4")
+        L += ["", f"## Boot -{n}: how it ended (key lines, last 12; then its last 4 lines)"] + [l[:300] for l in ends[-12:]] + ["  ..."] + [l[:300] for l in last]
+    # the previous boot in full detail at warning level and above: whatever went wrong there, on any distro
+    pw = j("-b", "-1", "-p", "warning", t=30)
+    if pw: L += ["", "## Previous boot: warnings and errors (last 120)"] + [l[:300] for l in pw[-120:]]
+    ce = j("-b", "-p", "err", t=30)
+    if ce: L += ["", "## This boot: errors (last 60)"] + [l[:300] for l in ce[-60:]]
+    fu = _sh(["systemctl", "list-units", "--failed", "--no-legend", "--no-pager"], 10)[1].splitlines()
+    L += ["", "## Failed system units"] + ([l[:200] for l in fu] or ["(none)"])
+    if os.path.exists("/sys/fs/selinux") or os.path.isdir("/sys/kernel/security/apparmor"):
+        den = []
+        for b in ("-1", "0"):
+            den += j("-b", b, "--grep", r'avc:\s+denied|apparmor="DENIED"')
+        L += ["", "## Security denials (SELinux / AppArmor), last 30"] + ([l[:300] for l in den[-30:]] or ["(none)"])
+    if shutil.which("coredumpctl"):
+        cd = _sh(["coredumpctl", "list", "--no-pager", "--since", "-3d"], 15)[1].splitlines()
+        if cd: L += ["", "## Crashed programs, last 3 days (last 15)"] + [l[:200] for l in cd[-15:]]
+    return L
 
 
 def _save_report():

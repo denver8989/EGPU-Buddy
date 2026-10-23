@@ -1,3 +1,8 @@
+0.7.151 — Support reports cover the whole system, on any distribution.
+
+**Changed**
+- The support report now has a system and boot history section that assumes nothing about the cause: the OS and its build, the kernel command line, a read-only system, SELinux/AppArmor and Secure Boot state, system extensions, the last 8 boots and how each of the last 5 ended (power key, reboot, crash), warnings and errors from the previous boot, errors from this boot, failed services, security denials and crashed programs. Nothing is changed on the system; the report only reads.
+
 0.7.150 — Bazzite: the support report shows how the last boot with the patched driver ended.
 
 **Changed** (Bazzite only)
