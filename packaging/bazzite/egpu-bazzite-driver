@@ -72,12 +72,24 @@ enroll(){ # ask the firmware to trust our key at the next boot (the MokManager b
     || { key_pending && say "the signing key is waiting for enrollment: reboot, choose \"Enroll MOK\", password: $MOKPW" || say "mokutil could not queue the signing key"; }
 }
 
+selinux_on(){ [ -e /sys/fs/selinux/enforce ]; }
+LABELV=2   # .labeled holds this once every file carries its policy label (0.7.151 and older: see label)
+labeled(){ ! selinux_on || [ "$(cat "$EXT/.labeled" 2>/dev/null)" = "$LABELV" ]; }
+bad_labels(){ find "$1/usr" -printf '%Z %p\n' 2>/dev/null | grep -E '(container_file_t|unlabeled_t|var_lib_t|default_t)' | head -3; }
 label(){ # SELinux: every file gets the label the policy gives the same path under / (as the Fedora sysexts project does)
+  # -F: the build comes out of the container labeled container_file_t, a "customizable" type that setfiles otherwise
+  # leaves alone (0.7.151 and older: dbus-broker could not read nvidia-dbus.conf, D-Bus failed, greenboot rebooted)
+  selinux_on || return 0
+  rm -f "$1/.labeled"; drop "$1/usr/share/dbus-1"   # nvidia-powerd's D-Bus policy: not needed for an eGPU, and D-Bus fails on any unreadable one
   local fc=/etc/selinux/targeted/contexts/files/file_contexts
-  if command -v setfiles >/dev/null && [ -r "$fc" ]; then setfiles -r "$1" "$fc" "$1/usr" >/dev/null 2>&1 && return 0; fi
-  command -v chcon >/dev/null || return 0      # fallback: the labels of the Bazzite directories they stand in for
-  chcon -R --reference=/usr/lib/modules "$1/usr/lib/modules" 2>/dev/null; chcon -R --reference=/usr/lib64 "$1/usr/lib64" 2>/dev/null
-  chcon -R --reference=/usr/bin "$1/usr/bin" 2>/dev/null; chcon -R --reference=/usr/share "$1/usr/share" 2>/dev/null; return 0
+  if command -v setfiles >/dev/null && [ -r "$fc" ]; then setfiles -F -r "$1" "$fc" "$1/usr" >>"$LOG" 2>&1; fi
+  if [ -n "$(bad_labels "$1")" ] && command -v chcon >/dev/null; then   # fallback: the labels of the directories they stand in for
+    local d; for d in lib/modules lib64 lib bin share; do [ -e "$1/usr/$d" ] && chcon -R -h --reference="/usr/$d" "$1/usr/$d" 2>>"$LOG"; done
+    [ -d "$1/usr/lib/firmware" ] && chcon -R -h --reference=/usr/lib/firmware "$1/usr/lib/firmware" 2>>"$LOG"
+  fi
+  local b; b=$(bad_labels "$1")
+  if [ -n "$b" ]; then say "could not give the driver files their SELinux labels (e.g. $(echo "$b" | head -1)): not switched on"; return 1; fi
+  echo "$LABELV" > "$1/.labeled"
 }
 
 module_index(){ # <extension tree>: modules.dep & co for Bazzite's modules + ours (the extension's copy shadows the image's)
@@ -98,10 +110,17 @@ deactivate(){ [ -L "$LINK" ] || return 0; rm -f "$LINK"; say "the patched driver
 activate(){
   built || { say "no patched driver built for kernel $K"; return 1; }
   can_load || { say "Secure Boot is on and the signing key is not enrolled yet: the driver stays off until it is"; return 1; }
+  relabel || return 1
   systemctl enable systemd-sysext.service egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1
   [ -L "$LINK" ] || { mkdir -p /etc/extensions; ln -sfn "$EXT" "$LINK"; }   # systemd merges it from the next boot on
   merged || { say "patched NVIDIA driver $PV ready for $K: active after the next reboot"; return 0; }
   verify
+}
+
+relabel(){ # a build from 0.7.151 or older carries the container's labels: fix them in place (never while merged)
+  labeled && return 0
+  merged && { say "the driver files need new SELinux labels: done at the next boot"; return 1; }
+  say "giving the driver files their SELinux labels"; label "$EXT"
 }
 
 verify(){ # merged by systemd at this boot: is what modprobe and the libraries see really the patched driver?
@@ -152,7 +171,8 @@ build(){
   cp "$W/out/$K"/*.ko.xz "$N/usr/lib/modules/$K/extra/nvidia/"
   module_index "$N" || { say "could not build the module index"; drop "$N"; return 10; }
   printf 'ID=_any\nARCHITECTURE=x86-64\n' > "$N/usr/lib/extension-release.d/extension-release.$NAME"
-  echo "$PV $K $mode" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"; label "$N"
+  echo "$PV $K $mode" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"
+  label "$N" || { drop "$N"; return 12; }
   if merged; then drop "$EXT.staged"; mv "$N" "$EXT.staged"; say "built; takes over at the next boot"; return 0; fi
   drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$N" "$EXT"; drop "$EXT.old"
   drop "$W/kernel-devel-$K.rpm" "$W/out"; say "built the patched NVIDIA driver $PV for $K ($mode)"
@@ -163,7 +183,7 @@ status(){
   echo "kernel: $K · patched driver: ${PV:-?} · Bazzite's own NVIDIA driver: $(host_nv | grep . || echo none) · mode: $(mode_now)"
   local s="off"; if sb_on; then s="on"; if key_enrolled; then s="$s · signing key enrolled"; elif key_pending; then s="$s · signing key waiting for enrollment (reboot)"; else s="$s · signing key NOT enrolled"; fi; fi
   echo "Secure Boot: $s"
-  echo "built for this kernel: $(built && echo yes || echo no) · extension active: $(merged && echo yes || echo no)$([ -e "$W/auto-off2" ] && echo " · SWITCHED OFF after boots that hung ($(cat "$W/auto-off2"))")"
+  echo "built for this kernel: $(built && echo yes || echo no) · SELinux labels: $(selinux_on || { echo "n/a"; false; } && { labeled && echo ok || echo "NOT set ($(bad_labels "$EXT" | head -1))"; }) · extension active: $(merged && echo yes || echo no)$([ -e "$W/auto-off2" ] && echo " · SWITCHED OFF after boots that hung ($(cat "$W/auto-off2"))")"
   echo "nvidia module modprobe loads: $(modinfo -k "$K" -n nvidia 2>/dev/null || echo none) (signer: $(modinfo -k "$K" -F signer nvidia 2>/dev/null || echo -)) · nvidia-smi: $(command -v nvidia-smi || echo none)"
   built && merged
 }
@@ -185,6 +205,9 @@ case "${1:---status}" in
     can_load || exit 0
     # (0.7.148's "auto-off" came from a miscount, not from hung boots: it is dropped, the driver goes back on)
     [ -e "$W/auto-off" ] && { rm -f "$W/auto-off"; echo 0 > "$W/boot-attempts"; say "0.7.148 switched the driver off by mistake (a boot was counted twice): switched back on"; }
+    # boots that failed with a build whose files had the container's SELinux labels (0.7.151 and older): that was the
+    # cause (D-Bus could not start, greenboot rebooted), fixed by relabel below: the driver goes back on
+    [ -e "$W/auto-off2" ] && built && ! labeled && { rm -f "$W/auto-off2"; echo 0 > "$W/boot-attempts"; say "the earlier failed boots came from wrong SELinux labels on the driver files: relabelling and switching it back on"; }
     [ -e "$W/auto-off2" ] && { say "the patched driver was switched off after boots that hung ($(cat "$W/auto-off2")); reinstall from the plugin to try it again"; exit 0; }
     if merged; then verify || true; elif [ ! -L "$LINK" ]; then activate || true; fi ;;
   --enroll) enroll ;;
@@ -198,6 +221,7 @@ case "${1:---status}" in
     if [ "$n" -ge 2 ]; then rm -f "$LINK"; echo 0 > "$W/boot-attempts"; date '+%F %T' > "$W/auto-off2"   # stays off until the next install (--build)
       say "boot guard: the last $n boots with the patched driver did not reach the login screen: switched it off (Bazzite runs as without it)"; exit 0; fi
     if [ -d "$EXT.staged" ]; then rm -f "$LINK"; exit 0; fi   # a new build waits: --boot swaps it in unmerged, the next boot merges it
+    if built && ! labeled; then rm -f "$LINK"; echo 0 > "$W/boot-attempts"; say "boot guard: the driver files do not have their SELinux labels yet: left off (relabelled after this boot)"; exit 0; fi
     if ! { built && can_load; }; then rm -f "$LINK"; say "boot guard: the patched driver does not match this boot (kernel $K, Bazzite NVIDIA $(host_nv | grep . || echo none)): left off"; exit 0; fi
     echo $((n + 1)) > "$W/boot-attempts"; echo "$bid" > "$W/boot-counted"
     { tail -n 4 "$W/merged-boots" 2>/dev/null; echo "$bid"; } > "$W/merged-boots.new"; mv -f "$W/merged-boots.new" "$W/merged-boots"   # for the support report

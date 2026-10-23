@@ -1,3 +1,8 @@
+0.7.152 — Bazzite: the patched driver no longer stops the system from starting.
+
+**Fixed** (Bazzite only)
+- With the patched NVIDIA driver switched on, Bazzite restarted by itself about 10 seconds into every boot. The driver files kept the SELinux label of the container they were built in, so the system's message bus (D-Bus) could not read one of them and did not start; login, power and other services failed with it, and Bazzite's boot health check (greenboot) restarted the machine. The files now get their proper labels (an existing build is fixed in place, no rebuild), the label of every file is checked before the driver is switched on, and the D-Bus file (for NVIDIA's laptop power daemon, not used with an eGPU) is no longer included. A driver the safety net switched off because of this is switched back on by itself: active after one more reboot.
+
 0.7.151 — Support reports cover the whole system, on any distribution.
 
 **Changed**
