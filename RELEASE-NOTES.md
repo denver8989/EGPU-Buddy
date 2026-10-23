@@ -1,3 +1,9 @@
+0.7.149 — Bazzite: the patched driver is no longer switched off by mistake; Safe Detach works when the driver is not loaded.
+
+**Fixed**
+- Bazzite: 0.7.148's boot safety net counted one boot twice and switched a working driver off ("SWITCHED OFF after boots that hung"). Each boot now counts once. A driver it switched off is switched back on by itself, and is active after the next reboot.
+- Safe Detach stopped with "still held by: exist." when the NVIDIA driver was not loaded at all. It now detaches.
+
 0.7.148 — Bazzite: the install can no longer hold the boot at the logo.
 
 **Fixed** (Bazzite only)

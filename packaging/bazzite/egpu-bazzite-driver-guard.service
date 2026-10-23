@@ -10,6 +10,8 @@ ConditionPathIsSymbolicLink=/etc/extensions/egpu-nvidia
 
 [Service]
 Type=oneshot
+# once per boot: without this systemd may start it again later in the same boot
+RemainAfterExit=yes
 ExecStart=/usr/local/sbin/egpu-bazzite-driver --guard
 
 [Install]
