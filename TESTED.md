@@ -3,6 +3,31 @@
 Everything below was verified on the machines described in the README. "Verified" means it was exercised
 repeatedly and behaved as described.
 
+## 2026-10-23 — fourth machine, first non-Valve, non-Arch OS: Legion Go 2 on Bazzite (0.7.145–0.7.156)
+
+Lenovo Legion Go 2 (83N1, AMD Ryzen Z2), **Bazzite 44** handheld image (bazzite-deck, Fedora Atomic, read-only /usr,
+SELinux enforcing; no NVIDIA driver of its own), kernel 7.2.9-ogc3.1, gamescope 3.16.31-ogc2 (Open Gaming Collective),
+OpenGamepadUI + Steam, **Gigabyte AORUS RTX 5060 Ti AI Box** (USB4 2 x 20 Gb/s), Samsung Odyssey G95SC over HDMI. Tested
+on the device by a community tester; read from that device's support reports. On Bazzite this project builds its
+patched NVIDIA driver 615.78.08 on the device (Fedora container) as a system extension, and builds the NVIDIA picture
+fix into the gamescope version Bazzite ships.
+
+| Verified on the device (0.7.154) | Result |
+|---|---|
+| Install from the Game Mode plugin, driver build | driver built for the running kernel and switched on without a reboot (0.7.153+) |
+| Attach in Game Mode (plug in, automatic) | Game Mode on the ultrawide, ~20 s; BAR1 16 GB, link pinned Gen3 x4, NVML health gate OK |
+| NVIDIA picture fix in Game Mode | the GBM-scanout build of Bazzite's own gamescope 3.16.31-ogc2; picture correct on the ultrawide |
+| Steam, Xwayland, OpenGamepadUI on the eGPU | yes |
+
+Found and fixed on the way (all Bazzite only): an install that built the driver in the boot path (0.7.148), the driver
+files keeping the build container's SELinux label so D-Bus could not start and Bazzite's greenboot restarted the
+machine (0.7.152), and support-report checks that looked in SteamOS's paths (0.7.156).
+
+Awaiting confirmation on the device: Safe Detach and cable pull in Game Mode with the driver loaded, attach, Safe
+Detach and cable pull on the desktop (KDE), re-plug after a cable pull, switching between screens, sleep/resume, games
+on the eGPU, a Bazzite update with a new kernel (driver built ahead, 0.7.155), TDP and controller settings on and off
+the eGPU, and Secure Boot (MOK enrollment).
+
 ## 2026-10-19 — third machine: ROG Xbox Ally X + ASUS XG Mobile 2025 (0.7.131–0.7.137)
 
 ROG Xbox Ally X (RC73XA, Ryzen AI Z2 Extreme), **SteamOS 3.8** (beta channel), kernel 7.2.7-valve2, **ASUS XG Mobile

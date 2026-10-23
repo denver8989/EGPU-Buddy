@@ -16,7 +16,7 @@ NVIDIA eGPUs are fully supported, including the fix for NVIDIA's Game Mode displ
 are supported in beta.
 
 > **Use at your own risk.** This changes the NVIDIA driver, boot settings and the Game Mode session. It has been
-> tested on three machines (below) and nothing else. Read [TESTED.md](TESTED.md) first, and keep a way to boot without
+> tested on four machines (below) and nothing else. Read [TESTED.md](TESTED.md) first, and keep a way to boot without
 > the eGPU. Claude (Anthropic) and Codex (OpenAI) were used as development assistants.
 
 ## Features
@@ -70,12 +70,12 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 
 ## Tested hardware
 
-| | Legion Go 2 | Legion Go 1 | ROG Xbox Ally X |
-|---|---|---|---|
-| OS | CachyOS (Deckify) | SteamOS 3.8 | SteamOS 3.8 |
-| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU |
-| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) |
-| Status | Tested | Tested | Tested (on-device testing and development: SilverplayerX) |
+| | Legion Go 2 | Legion Go 1 | ROG Xbox Ally X | Legion Go 2 (Ryzen Z2) |
+|---|---|---|---|---|
+| OS | CachyOS (Deckify) | SteamOS 3.8 | SteamOS 3.8 | Bazzite 44 (handheld image, bazzite-deck) |
+| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | Gigabyte AORUS AI Box, RTX 5060 Ti |
+| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) |
+| Status | Tested | Tested | Tested (on-device testing and development: SilverplayerX) | Partly tested: Game Mode attach works (see [TESTED.md](TESTED.md)) |
 
 **NVIDIA:** RTX 30 and RTX 50 tested here (desktop cards, and a laptop RTX 50 in an XG Mobile); RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**
 beta, not yet tested on real hardware. Reports are welcome. Details: [docs/TECHNICAL.md](docs/TECHNICAL.md).
