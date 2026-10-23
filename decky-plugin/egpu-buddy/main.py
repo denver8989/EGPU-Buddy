@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.155"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.156"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/SteamOS-EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1272,6 +1272,8 @@ def _support_report():
             model, detail = _screen_info(os.path.basename(c)); lines.append(f"{os.path.basename(c)}: {model or '?'} {detail}")
     # which gamescope Game Mode on the eGPU really runs: the GBM-scanout build (the NVIDIA picture fix) or Valve's fallback
     priv = f"{USER_HOME}/.local/gamescope-gbm/usr/bin/gamescope"
+    if IS_BAZZITE:   # Bazzite: built into a private, user-independent prefix (install.sh, egpu-gamescope-repair)
+        priv = "/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope"
     _, gpid, _ = _sh(["pgrep", "-n", "-x", "gamescope(-wl)?"], 3)
     exe = os.path.realpath(f"/proc/{gpid}/exe") if gpid else ""
     lines += ["", "## Game Mode gamescope",

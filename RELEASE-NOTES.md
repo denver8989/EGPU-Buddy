@@ -1,3 +1,8 @@
+0.7.156 — Bazzite: the support report sees the NVIDIA picture fix.
+
+**Fixed** (Bazzite only)
+- The support report and its timeline said the NVIDIA picture fix was "NOT ACTIVE" / "not installed" on Bazzite although Game Mode ran it: they looked for it where SteamOS keeps it. They now look where Bazzite keeps it.
+
 0.7.155 — Bazzite: the eGPU keeps working across Bazzite updates.
 
 **New** (Bazzite only)

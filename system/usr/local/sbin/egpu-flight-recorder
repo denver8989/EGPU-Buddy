@@ -18,6 +18,8 @@ set -u
 DIR=/var/log/egpu-buddy; LOG=$DIR/flight.log; MAX=$((4 * 1024 * 1024))
 U=$(getent passwd 1000 | cut -d: -f1); UH=$(getent passwd 1000 | cut -d: -f6); UH=${UH:-/home/deck}
 PRIV=$(readlink -f "$UH/.local/gamescope-gbm/usr/bin/gamescope" 2>/dev/null || echo "$UH/.local/gamescope-gbm/usr/bin/gamescope")
+# Bazzite: the GBM-scanout gamescope lives in a private prefix under /usr/local (= /var/usrlocal), not in the home
+grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && PRIV=$(readlink -f /usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope 2>/dev/null || echo /usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope)
 mkdir -p "$DIR"
 w(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
 ev(){ w "EVENT $*"; sync "$LOG" 2>/dev/null || sync; logger -t egpu-buddy "$*" 2>/dev/null || true; }
