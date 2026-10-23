@@ -8,7 +8,7 @@ repeatedly and behaved as described.
 Lenovo Legion Go 2 (83N1, AMD Ryzen Z2), **Bazzite 44** handheld image (bazzite-deck, Fedora Atomic, read-only /usr,
 SELinux enforcing; no NVIDIA driver of its own), kernel 7.2.9-ogc3.1, gamescope 3.16.31-ogc2 (Open Gaming Collective),
 OpenGamepadUI + Steam, **Gigabyte AORUS RTX 5060 Ti AI Box** (USB4 2 x 20 Gb/s), Samsung Odyssey G95SC over HDMI. Tested
-on the device by a community tester; read from that device's support reports. On Bazzite this project builds its
+on the device by **1khanfusion** (Discord); read from that device's support reports. **Testing in progress.** On Bazzite this project builds its
 patched NVIDIA driver 615.78.08 on the device (Fedora container) as a system extension, and builds the NVIDIA picture
 fix into the gamescope version Bazzite ships.
 
@@ -18,13 +18,14 @@ fix into the gamescope version Bazzite ships.
 | Attach in Game Mode (plug in, automatic) | Game Mode on the ultrawide, ~20 s; BAR1 16 GB, link pinned Gen3 x4, NVML health gate OK |
 | NVIDIA picture fix in Game Mode | the GBM-scanout build of Bazzite's own gamescope 3.16.31-ogc2; picture correct on the ultrawide |
 | Steam, Xwayland, OpenGamepadUI on the eGPU | yes |
+| Desktop (KDE) with the eGPU in use, and back to Game Mode on the eGPU (0.7.154) | yes |
 
 Found and fixed on the way (all Bazzite only): an install that built the driver in the boot path (0.7.148), the driver
 files keeping the build container's SELinux label so D-Bus could not start and Bazzite's greenboot restarted the
 machine (0.7.152), and support-report checks that looked in SteamOS's paths (0.7.156).
 
-Awaiting confirmation on the device: Safe Detach and cable pull in Game Mode with the driver loaded, attach, Safe
-Detach and cable pull on the desktop (KDE), re-plug after a cable pull, switching between screens, sleep/resume, games
+Awaiting confirmation on the device: Safe Detach and cable pull in Game Mode with the driver loaded, Safe Detach and
+cable pull on the desktop (KDE; a desktop cable pull was tried, result being confirmed), re-plug after a cable pull, switching between screens, sleep/resume, games
 on the eGPU, a Bazzite update with a new kernel (driver built ahead, 0.7.155), TDP and controller settings on and off
 the eGPU, and Secure Boot (MOK enrollment).
 
