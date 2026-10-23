@@ -20,9 +20,9 @@ set -u
 . /etc/os-release 2>/dev/null; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) ;; *) echo "not Bazzite"; exit 0 ;; esac
 LIB=/usr/local/lib/egpu-buddy/bazzite; PKG=$LIB/nvidia-open-egpu-615
 W=/var/lib/nvegpu/bazzite; KEYD=/var/lib/nvegpu/mok; NAME=egpu-nvidia; EXT=/var/lib/nvegpu/bazzite/ext; LINK=/etc/extensions/egpu-nvidia
-LOG=/var/log/egpu-bazzite-driver.log; MOKPW=egpubuddy; IMG="registry.fedoraproject.org/fedora:${VERSION_ID:-44}"
+LOG=/var/log/egpu-bazzite-driver.log; MOKPW=egpubuddy; IMG="registry.fedoraproject.org/fedora:${IMG_VERSION:-${VERSION_ID:-44}}"
 EGL_PKGS="egl-wayland egl-wayland2 egl-gbm egl-x11"
-K=$(uname -r); PV=$(sed -n 's/^pkgver=//p' "$PKG/PKGBUILD" 2>/dev/null)
+K=${EGPU_KERNEL:-$(uname -r)}; MODROOT=${EGPU_MODROOT:-/usr/lib/modules}; PV=$(sed -n 's/^pkgver=//p' "$PKG/PKGBUILD" 2>/dev/null)
 say(){ printf '%s\n' "$*"; printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; }
 host_nv(){ rpm -q --qf '%{VERSION}\n' nvidia-driver 2>/dev/null | grep -E '^[0-9]' | head -1; }   # Bazzite's own NVIDIA driver, if any
 # full = no NVIDIA driver in the image (bazzite-deck); modules = the image's driver is our version; conflict = another
@@ -36,6 +36,7 @@ built(){ [ -s "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" ] && [ "$(cat 
          && { ! sb_on || [ -e "$EXT/.signed" ]; }; }
 can_load(){ ! sb_on || key_enrolled; }
 merged(){ [ -L "$LINK" ] && systemd-sysext status 2>/dev/null | grep -qw "$NAME"; }
+staged_k(){ cut -d' ' -f2 "$EXT.staged/.egpu-version" 2>/dev/null; }   # the kernel a staged build is for
 nv_loaded(){ [ -d /sys/module/nvidia ]; }
 # every removal below goes through this: a fixed prefix, never an empty or unrelated path
 drop(){ local p; for p in "$@"; do case "$p" in /var/lib/nvegpu/bazzite*) rm -rf -- "${p:?}" ;; esac; done; }
@@ -94,7 +95,7 @@ label(){ # SELinux: every file gets the label the policy gives the same path und
 
 module_index(){ # <extension tree>: modules.dep & co for Bazzite's modules + ours (the extension's copy shadows the image's)
   local N=$1 T="$W/depmod"; drop "$T"; mkdir -p "$T/usr/lib/modules/$K"; ln -s usr/lib "$T/lib"
-  cp -as "/usr/lib/modules/$K/." "$T/usr/lib/modules/$K/" 2>/dev/null
+  cp -as "$MODROOT/$K/." "$T/usr/lib/modules/$K/" 2>/dev/null
   rm -rf "${T:?}/usr/lib/modules/$K/extra/nvidia"; mkdir -p "$T/usr/lib/modules/$K/extra/nvidia"
   cp "$N/usr/lib/modules/$K/extra/nvidia/"*.ko.xz "$T/usr/lib/modules/$K/extra/nvidia/"
   rm -f "$T/usr/lib/modules/$K"/modules.{dep,dep.bin,alias,alias.bin,softdep,symbols,symbols.bin,builtin.bin,builtin.alias.bin,devname,weakdep}
@@ -161,7 +162,8 @@ verify(){ # merged by systemd at this boot: is what modprobe and the libraries s
   say "the extension is merged but the system does not see the patched driver: switched off from the next boot"; deactivate; return 1
 }
 
-build(){
+build(){ # one build at a time (install, boot, prebuild timer)
+  mkdir -p "$W"; exec 9>"$W/.build.lock"; flock -n 9 || { say "a driver build is already running"; return 13; }
   local mode; mode=$(mode_now)
   [ "$mode" = conflict ] && { say "this Bazzite image has NVIDIA's driver $(host_nv); the patched driver is $PV. Use Bazzite's handheld image without NVIDIA (bazzite-deck): this project installs its own driver there"; return 3; }
   command -v podman >/dev/null || { say "podman is missing"; return 4; }
@@ -203,6 +205,8 @@ build(){
   printf 'ID=_any\nARCHITECTURE=x86-64\n' > "$N/usr/lib/extension-release.d/extension-release.$NAME"
   echo "$PV $K $mode" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"
   label "$N" || { drop "$N"; return 12; }
+  if [ "${EGPU_STAGE_ONLY:-0}" = 1 ]; then   # prebuild for the NEXT Bazzite deployment: waits as .staged for its first boot
+    drop "$EXT.staged"; mv "$N" "$EXT.staged"; drop "$W/kernel-devel-$K.rpm" "$W/out"; say "built for kernel $K and staged for its first boot"; return 0; fi
   if merged && ! nv_loaded; then   # the eGPU is not in use: take the old build out live and put the new one in
     rm -f "$LINK"; systemd-sysext refresh >>"$LOG" 2>&1
     if ! merged; then drop "$EXT.old"; mv "$EXT" "$EXT.old"; mv "$N" "$EXT"; drop "$EXT.old" "$W/kernel-devel-$K.rpm" "$W/out"
@@ -235,7 +239,7 @@ case "${1:---status}" in
     [ "$(id -u)" = 0 ] || exit 1
     # a staged build (made while the eGPU was in use) is swapped in while no NVIDIA module is loaded, as on SteamOS
     # (apply_staged in install-steamos-sysext.sh): un-merge, swap, and activate below merges it again live
-    if [ -d "$EXT.staged" ] && ! nv_loaded; then
+    if [ -d "$EXT.staged" ] && [ "$(staged_k)" = "$K" ] && ! nv_loaded; then
       merged && { rm -f "$LINK"; systemd-sysext refresh >>"$LOG" 2>&1; }
       merged || { drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"; }
     fi
@@ -260,12 +264,52 @@ case "${1:---status}" in
     n=$(cat "$W/boot-attempts" 2>/dev/null || echo 0); case "$n" in ''|*[!0-9]*) n=0 ;; esac
     if [ "$n" -ge 2 ]; then rm -f "$LINK"; echo 0 > "$W/boot-attempts"; date '+%F %T' > "$W/auto-off2"   # stays off until the next install (--build)
       say "boot guard: the last $n boots with the patched driver did not reach the login screen: switched it off (Bazzite runs as without it)"; exit 0; fi
-    if [ -d "$EXT.staged" ]; then rm -f "$LINK"; exit 0; fi   # a new build waits: --boot swaps it in unmerged, the next boot merges it
+    # a build staged for this kernel (prebuilt before a Bazzite update, or made while the eGPU was in use): swapped in
+    # here, before anything is merged, so this very boot merges it (as SteamOS's apply_staged does at boot)
+    if [ -d "$EXT.staged" ] && [ "$(staged_k)" = "$K" ]; then drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"
+      say "boot guard: the driver built ahead for kernel $K takes over"; fi
     if built && ! labeled; then rm -f "$LINK"; echo 0 > "$W/boot-attempts"; say "boot guard: the driver files do not have their SELinux labels yet: left off (relabelled after this boot)"; exit 0; fi
     if ! { built && can_load; }; then rm -f "$LINK"; say "boot guard: the patched driver does not match this boot (kernel $K, Bazzite NVIDIA $(host_nv | grep . || echo none)): left off"; exit 0; fi
     echo $((n + 1)) > "$W/boot-attempts"; echo "$bid" > "$W/boot-counted"
     { tail -n 4 "$W/merged-boots" 2>/dev/null; echo "$bid"; } > "$W/merged-boots.new"; mv -f "$W/merged-boots.new" "$W/merged-boots"   # for the support report
     exit 0 ;;
+  --prebuild)   # timer (egpu-driver-prebuild, every 2 min): the SteamOS prebuild, adapted. A Bazzite update waiting
+    # for its reboot (a staged rpm-ostree deployment) with a new kernel gets the driver built BEFORE the reboot, so its
+    # first boot merges it. Also retries a build for the running kernel that failed at boot (no network yet).
+    [ "$(id -u)" = 0 ] || exit 1
+    [ "$(mode_now)" = full ] && [ -e "$EXT/.egpu-version" ] || exit 0   # only where this project's driver is installed
+    [ -e "$W/auto-off2" ] && exit 0
+    flock -n "$W/.build.lock" true || exit 0                                     # a build is running
+    js=$(rpm-ostree status --json 2>/dev/null) || exit 0
+    nxt=$(printf '%s' "$js" | python3 -I -c '
+import json, sys
+d = json.load(sys.stdin)
+if d.get("transaction"): sys.exit(0)                       # an update is still being written: next time
+for x in d.get("deployments", []):
+    if x.get("staged") or (not x.get("booted") and x is d["deployments"][0]):
+        print("/ostree/deploy/%s/deploy/%s.%s" % (x["osname"], x["checksum"], x["serial"])); break
+' 2>/dev/null)
+    if [ -n "$nxt" ] && [ -d "$nxt/usr/lib/modules" ]; then
+      NK=$(cd "$nxt/usr/lib/modules" && for d in */; do [ -e "$d/vmlinuz" ] && echo "${d%/}"; done | head -1)
+      if [ -n "$NK" ] && [ "$NK" != "$K" ] && [ "$(staged_k)" != "$NK" ] && [ ! -e "$nxt/usr/bin/nvidia-smi" ]; then
+        STAMP=$W/prebuild-failed-$NK; [ "$(cat "$STAMP" 2>/dev/null || echo 0)" -ge 3 ] && exit 0
+        NV=$(sed -n 's/^VERSION_ID=//p' "$nxt/usr/lib/os-release" 2>/dev/null | tr -d '"')
+        say "a Bazzite update is waiting for its reboot with kernel $NK: building the driver for it now"
+        mkdir -p /run/nvegpu; echo "Bazzite update ready: preparing the eGPU driver for it (about 10 minutes). Restart after it says it is done." > /run/nvegpu/notice
+        if EGPU_KERNEL=$NK EGPU_MODROOT=$nxt/usr/lib/modules EGPU_STAGE_ONLY=1 IMG_VERSION=${NV:-} "$0" --stage-build; then
+          rm -f "$STAMP"; echo "The eGPU driver for the Bazzite update is ready. You can restart now." > /run/nvegpu/notice
+        else echo $(( $(cat "$STAMP" 2>/dev/null || echo 0) + 1 )) > "$STAMP"
+          echo "The eGPU driver could not be prepared ahead of the Bazzite update; it is built after the restart instead (about 10 minutes)." > /run/nvegpu/notice; fi
+        exit 0
+      fi
+    fi
+    # the running kernel without its driver (the build at boot had no network): try again, then switch it on live
+    if ! built && [ "$(staged_k)" != "$K" ] && ! nv_loaded; then
+      STAMP=$W/prebuild-failed-$K; [ "$(cat "$STAMP" 2>/dev/null || echo 0)" -ge 3 ] && exit 0
+      if build; then rm -f "$STAMP"; can_load && activate; else echo $(( $(cat "$STAMP" 2>/dev/null || echo 0) + 1 )) > "$STAMP"; fi
+    fi
+    exit 0 ;;
+  --stage-build) [ "${EGPU_STAGE_ONLY:-0}" = 1 ] || exit 2; build; exit $? ;;
   --boot-ok)  # the login screen started: the boot with the driver worked
     [ -L "$LINK" ] && { echo 0 > "$W/boot-attempts"; cat /proc/sys/kernel/random/boot_id > "$W/last-ok-boot" 2>/dev/null; }; exit 0 ;;
   --remove)   # the merged copy (if any) goes with the next boot; nothing is unmounted under the running session

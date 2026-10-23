@@ -1,3 +1,10 @@
+0.7.155 — Bazzite: the eGPU keeps working across Bazzite updates.
+
+**New** (Bazzite only)
+- As on SteamOS: when a Bazzite update with a new kernel is downloaded and waits for its restart, the patched NVIDIA driver is built for that kernel BEFORE the restart (about 10 minutes; a notice says when you can restart). The first boot of the update uses it right away; the eGPU works as before.
+- If the restart came too early, or the driver could not be built at boot because the network was not up yet, it is tried again in the background every few minutes and switched on as soon as it is ready, with no reboot.
+- Everything else already survives a Bazzite update: this project's files live outside the system image, the kernel parameters carry over, a new gamescope gets the NVIDIA picture fix rebuilt in the background (Bazzite's own gamescope is used meanwhile), and Bazzite's previous version stays in the boot menu.
+
 0.7.154 — Bazzite: a problem with the patched driver is caught while the system runs, never at a boot.
 
 **Changed** (Bazzite only)

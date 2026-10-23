@@ -11,6 +11,8 @@
 set -u
 LOG=/var/log/egpu-buddy-selfheal.log
 log(){ logger -t egpu-driver-prebuild "$*"; echo "$(date '+%F %T') prebuild: $*" >> "$LOG"; }
+# Bazzite: the same job for a staged rpm-ostree deployment (egpu-bazzite-driver exists only there)
+[ -x /usr/local/sbin/egpu-bazzite-driver ] && exec /usr/local/sbin/egpu-bazzite-driver --prebuild
 command -v steamos-readonly >/dev/null 2>&1 || exit 0          # SteamOS only: elsewhere DKMS builds at kernel install
 [ -d /home/.egpu-buddy ] || exit 0                               # no driver extension installed
 pgrep -x 'rauc|steamos-atomupd-client' >/dev/null && exit 0      # an update is still being written: look next time

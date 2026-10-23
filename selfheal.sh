@@ -93,6 +93,7 @@ fi
 # In the BACKGROUND: this service runs before the login screen, and a build takes 10-20 minutes (0.7.146 ran it here and
 # held the boot at the logo). The boot guard already decided before the merge whether the build matches this boot.
 [ -x /usr/local/sbin/egpu-bazzite-driver ] && { systemd-run --no-block --collect --quiet --unit=egpu-buddy-bazzite-driver-boot \
+  --property=Wants=network-online.target --property=After=network-online.target \
   /usr/local/sbin/egpu-bazzite-driver --boot >/dev/null 2>&1 && log "bazzite driver: boot check started in the background"; }
 # kernel parameters (bootloader config may have been regenerated)
 /usr/local/sbin/egpu-kernel-cmdline --repair 2>&1 | while read -r l; do log "kernel parameters: $l"; done

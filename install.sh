@@ -227,7 +227,7 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 for u in egpu-mount egpu-boot-enumerate egpu-conditional-session egpu-buddy-selfheal egpu-buddy-resume egpu-buddy-shutdown egpu-driver-trial-boot egpu-decky-guard egpu-flight-recorder; do [ -f /etc/systemd/system/\$u.service ] && systemctl enable \$u.service >/dev/null; done
 # watches for the session shim marking the GBM-scanout gamescope as crashing on this OS build (a .path unit, not a .service)
 [ -f /etc/systemd/system/egpu-buddy-gamescope-repair.path ] && systemctl enable --now egpu-buddy-gamescope-repair.path >/dev/null 2>&1 || true
-[ -f /etc/systemd/system/egpu-driver-prebuild.timer ] && command -v steamos-readonly >/dev/null 2>&1 && systemctl enable --now egpu-driver-prebuild.timer >/dev/null 2>&1 || true
+[ -f /etc/systemd/system/egpu-driver-prebuild.timer ] && { command -v steamos-readonly >/dev/null 2>&1 || [ '$IS_BAZZITE' = 1 ]; } && systemctl enable --now egpu-driver-prebuild.timer >/dev/null 2>&1 || true
 # the session shim (runs as the user) writes its crash mark here, so the folder must be the user's (an older deploy left it root's)
 mkdir -p $USER_HOME/.local/state/nv-egpu-buddy && chown $USER_NAME: $USER_HOME/.local/state $USER_HOME/.local/state/nv-egpu-buddy 2>/dev/null || true
 systemctl start egpu-decky-guard.service >/dev/null 2>&1 || true
