@@ -499,4 +499,9 @@ if [ "${DRIVER_FAILED:-0}" = 1 ]; then say "== NOT finished: the NVIDIA driver w
 # files had been written but never reached the disk, and an empty script "succeeds" at everything —
 # so no protection was applied and no driver was loaded, with nothing in any log to say why.
 sync
-say "== done. Reboot with the eGPU disconnected, then plug it in. Read TESTED.md before relying on any of this."
+if [ "$IS_BAZZITE" = 1 ] && [ -z "${DRIVER_FAILED:-}" ] && sudo /usr/local/sbin/egpu-bazzite-driver --status >/dev/null 2>&1 \
+   && /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then
+  say "== done. The patched driver is active now (no reboot needed): plug the eGPU in. Read TESTED.md before relying on any of this."
+else
+  say "== done. Reboot with the eGPU disconnected, then plug it in. Read TESTED.md before relying on any of this."
+fi

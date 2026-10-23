@@ -113,9 +113,26 @@ activate(){
   relabel || return 1
   systemctl enable systemd-sysext.service egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1
   [ -L "$LINK" ] || { mkdir -p /etc/extensions; ln -sfn "$EXT" "$LINK"; }   # systemd merges it from the next boot on
-  merged || { say "patched NVIDIA driver $PV ready for $K: active after the next reboot"; return 0; }
+  if ! merged; then
+    live_merge || { say "patched NVIDIA driver $PV ready for $K: active after the next reboot"; return 0; }
+    verify && return 0
+    live_unmerge; rm -f "$LINK"; return 1     # added live but not the driver it should be: out again, and off
+  fi
   verify
 }
+
+live_merge(){ # as on SteamOS: merge now, no reboot. Only while no NVIDIA driver is loaded (nothing uses the files that
+  # change) and with every label checked. The core services are checked right after; anything wrong -> unmerged again
+  # at once and left to the next boot (where the boot guard and its safety net apply).
+  nv_loaded && return 1; labeled || return 1
+  local i ok=1; for i in 1 2 3; do systemd-sysext refresh >>"$LOG" 2>&1 && { ok=0; break; }; sleep 2; done
+  [ $ok = 0 ] && merged || { say "could not add the driver to the running system: active after the next reboot"; return 1; }
+  ldconfig 2>/dev/null
+  busctl --system status >/dev/null 2>&1 && return 0
+  say "the system message bus did not answer after adding the driver: taken out again; active after the next reboot"
+  live_unmerge; return 1
+}
+live_unmerge(){ rm -f "$LINK"; systemd-sysext refresh >>"$LOG" 2>&1; ldconfig 2>/dev/null; ln -sfn "$EXT" "$LINK"; }
 
 relabel(){ # a build from 0.7.151 or older carries the container's labels: fix them in place (never while merged)
   labeled && return 0

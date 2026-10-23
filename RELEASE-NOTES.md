@@ -1,3 +1,8 @@
+0.7.153 — Bazzite: no reboot needed to switch the patched driver on.
+
+**Changed** (Bazzite only)
+- As on SteamOS, the patched NVIDIA driver is now added to the running system right after the install, with no reboot, as long as no NVIDIA driver is loaded at that moment. The system's message bus is checked right after; if it does not answer, the driver is taken out again at once and used from the next boot instead (where the boot safety net applies). The install tells you which of the two happened.
+
 0.7.152 — Bazzite: the patched driver no longer stops the system from starting.
 
 **Fixed** (Bazzite only)
