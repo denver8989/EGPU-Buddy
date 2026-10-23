@@ -1,6 +1,6 @@
 {
   "name": "EGPU Buddy",
-  "version": "0.7.157",
+  "version": "0.7.158",
   "author": "denver8989",
   "flags": [
     "root"
@@ -13,6 +13,6 @@
       "hardware"
     ],
     "description": "Hot-pluggable NVIDIA eGPU in Game Mode: attach, safe detach, live details, power controls, and a one-button install of the whole SteamOS EGPU Buddy system integration.",
-    "image": "https://raw.githubusercontent.com/denver8989/SteamOS-EGPU-Buddy/main/desktop-app/egpu-buddy.png"
+    "image": "https://raw.githubusercontent.com/denver8989/EGPU-Buddy/main/desktop-app/egpu-buddy.png"
   }
 }

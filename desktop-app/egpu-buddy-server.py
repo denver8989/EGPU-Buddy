@@ -137,7 +137,7 @@ def action(p):
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}
 
-REPO = "denver8989/SteamOS-EGPU-Buddy"
+REPO = "denver8989/EGPU-Buddy"
 _NOTES = {"t": 0.0, "rels": []}
 def vt(v): return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3]) or (0,)
 def release_notes():

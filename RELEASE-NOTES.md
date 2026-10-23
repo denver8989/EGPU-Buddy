@@ -1,3 +1,8 @@
+0.7.158 — The project is now called EGPU Buddy on GitHub.
+
+**Changed**
+- The GitHub repository was renamed to **EGPU-Buddy** (github.com/denver8989/EGPU-Buddy). Updates, the one-line installer and all links now use the new name; the old links keep working (GitHub redirects them). Nothing changes on installed systems.
+
 0.7.157 — Clearer support reports.
 
 **Changed**

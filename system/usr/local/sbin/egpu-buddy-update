@@ -6,7 +6,7 @@
 # it is only changed from the plugin's driver controls (a beta driver must never be rolled back by an app update).
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
-REPO=denver8989/SteamOS-EGPU-Buddy
+REPO=denver8989/EGPU-Buddy
 U=$(id -nu 1000); H=$(getent passwd "$U" | cut -d: -f6)
 SYSDIR=$H/.local/share/steamos-egpu-buddy; PLUGIN=$H/homebrew/plugins/EGPU-Buddy; BAK=$H/homebrew/egpu-buddy-plugin-backup
 LOG=/var/log/egpu-buddy-update.log; exec > >(tee -a "$LOG") 2>&1

@@ -91,13 +91,13 @@ after a reboot.
 
 1. **From Game Mode (recommended):** with [Decky Loader](https://decky.xyz) installed, go to Decky settings →
    Developer → **Install plugin from URL**, and paste the `EGPU-Buddy-Decky-<version>.zip` link from
-   [Releases](https://github.com/denver8989/SteamOS-EGPU-Buddy/releases). Open **EGPU Buddy** in the Quick Access
+   [Releases](https://github.com/denver8989/EGPU-Buddy/releases). Open **EGPU Buddy** in the Quick Access
    menu, press **Install system integration**, then reboot.
 2. **From the Desktop:** download `SteamOS-EGPU-Buddy-<version>.run` from
-   [Releases](https://github.com/denver8989/SteamOS-EGPU-Buddy/releases), make it executable and run it, then reboot.
+   [Releases](https://github.com/denver8989/EGPU-Buddy/releases), make it executable and run it, then reboot.
 3. **One line in a terminal:**
    ```
-   curl -fsSL https://raw.githubusercontent.com/denver8989/SteamOS-EGPU-Buddy/master/get-egpu-buddy.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/denver8989/EGPU-Buddy/master/get-egpu-buddy.sh | bash
    ```
 
 After the reboot, plug the eGPU in. Updates are offered in the plugin and the desktop app, each with its release notes
@@ -106,7 +106,7 @@ Releases page.
 
 ## Reporting problems
 
-Open an [issue](https://github.com/denver8989/SteamOS-EGPU-Buddy/issues) with your handheld, OS, eGPU and GPU, the
+Open an [issue](https://github.com/denver8989/EGPU-Buddy/issues) with your handheld, OS, eGPU and GPU, the
 version (`cat /etc/nv-egpu-buddy/version`), and whether the eGPU was plugged in at boot or later. Logs worth
 attaching are listed in [docs/TECHNICAL.md](docs/TECHNICAL.md#reporting-problems).
 

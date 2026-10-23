@@ -1,10 +1,10 @@
 #!/bin/bash
 # SteamOS EGPU Buddy one-line installer:
-#   curl -fsSL https://raw.githubusercontent.com/denver8989/SteamOS-EGPU-Buddy/master/get-egpu-buddy.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/denver8989/EGPU-Buddy/master/get-egpu-buddy.sh | bash
 # Fetches the latest release, verifies its SHA-256, offers to install Decky Loader from its official installer if it
 # is missing, then runs the EGPU Buddy installer (graphical if a display is available, otherwise in this terminal).
 set -euo pipefail
-REPO=denver8989/SteamOS-EGPU-Buddy
+REPO=denver8989/EGPU-Buddy
 say(){ printf '\033[1m%s\033[0m\n' "$*"; }
 ask(){ read -rp "$1 [y/N] " r </dev/tty; [ "${r,,}" = y ]; }
 [ "$(id -u)" = 0 ] && { echo "run this as your normal user (sudo is asked for when needed)"; exit 1; }
