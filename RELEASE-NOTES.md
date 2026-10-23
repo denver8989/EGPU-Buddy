@@ -1,3 +1,12 @@
+0.7.157 — Clearer support reports.
+
+**Changed**
+- The support report now includes the newest failure snapshots in full (GPU lost after a cable pull, a GPU error, a failed detach), not only the 3 most recent ones, so what went wrong is in the report even after more activity.
+
+**Fixed** (Bazzite only)
+- The report said Game Mode was "not started by the session wrapper" on Bazzite although it was (Bazzite's session starts gamescope from the wrapper instead of becoming it).
+- During an update from 0.7.154 the driver prebuild check could run once against the previous driver tool and show as a failed service; it now waits for the new one.
+
 0.7.156 — Bazzite: the support report sees the NVIDIA picture fix.
 
 **Fixed** (Bazzite only)

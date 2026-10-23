@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.156"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.157"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/SteamOS-EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1184,6 +1184,12 @@ def _fix_verdict(gpid, exe, priv):
     on_egpu = any(t.startswith("/dev/nvidia") for t in fds)
     w, s = crumb["session-wrapper"], crumb["gamescope-shim"]
     w_ok, s_ok = w.get("pid") == gpid, s.get("pid") == gpid
+    if IS_BAZZITE and not w_ok and w.get("pid"):   # Bazzite: the hook is sourced by gamescope-session-plus, which STARTS gamescope
+        p = gpid
+        for _ in range(6):
+            p = (re.findall(r"^PPid:\s*(\d+)", _read(f"/proc/{p}/status"), re.M) or ["0"])[0]
+            if p == w.get("pid"): w_ok = True; break
+            if p in ("0", "1"): break
     if exe and exe == os.path.realpath(priv):
         v = "ACTIVE (Game Mode runs the GBM-scanout build)"
     elif not on_egpu:
@@ -1427,8 +1433,10 @@ def _support_report():
         lines += ["", f"## System and boot history: could not be read ({ex})"]
     # snapshots egpu-snapshot took at the moment something failed (Safe Detach, driver trial, GPU lost) or after an attach
     snaps = sorted(glob.glob("/var/log/egpu-buddy/snap-*.txt"), key=os.path.getmtime, reverse=True)
-    lines += ["", f"## Snapshots ({len(snaps)} kept, newest 3 in full)"] + [os.path.basename(p) for p in snaps]
-    for p in snaps[:3]:
+    lines += ["", f"## Snapshots ({len(snaps)} kept, newest 3 and the newest failures in full)"] + [os.path.basename(p) for p in snaps]
+    # the newest 3, plus the newest failure snapshots (GPU lost, kernel GPU error, failed detach): those explain what went wrong
+    fails = [p for p in snaps[3:] if re.search(r"gpu-lost|gpu-error|fail", os.path.basename(p))][:3]
+    for p in snaps[:3] + fails:
         lines += ["", f"======== {os.path.basename(p)} ========"] + _read(p).splitlines()[:400]
     hw = _read("/var/log/egpu-hw-repair.log").splitlines()[-10:]
     if hw:
