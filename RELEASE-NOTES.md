@@ -1,3 +1,8 @@
+0.7.150 — Bazzite: the support report shows how the last boot with the patched driver ended.
+
+**Changed** (Bazzite only)
+- When boots with the patched NVIDIA driver do not reach the login screen (the safety net then switches it off), the support report now includes that boot's journal, so the cause can be found.
+
 0.7.149 — Bazzite: the patched driver is no longer switched off by mistake; Safe Detach works when the driver is not loaded.
 
 **Fixed**

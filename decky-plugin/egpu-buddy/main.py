@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.149"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.150"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/SteamOS-EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1317,6 +1317,17 @@ def _support_report():
         lines += ["", "## Bazzite NVIDIA driver"] + (_sh(["/usr/local/sbin/egpu-bazzite-driver", "--status"], 20)[1].splitlines()
                                                    if os.path.exists("/usr/local/sbin/egpu-bazzite-driver") else ["(not installed)"])
         lines += [l[:300] for l in _read("/var/log/egpu-bazzite-driver.log").splitlines()[-25:]]
+        # the last earlier boot with the driver merged: how it ended (a boot with it that never reached the login screen)
+        cur = _read("/proc/sys/kernel/random/boot_id").strip().replace("-", "")
+        mb = [b.strip().replace("-", "") for b in _read("/var/lib/nvegpu/bazzite/merged-boots").splitlines() if b.strip()]
+        mb = [b for b in mb if b != cur]
+        if mb:
+            jb = _sh(["journalctl", "-b", mb[-1], "--no-pager", "-o", "short-monotonic"], 30)[1].splitlines()
+            key = [l for l in jb if re.search(r"(?i)logind|power key|reboot|shutdown|poweroff|sddm|gamescope|plymouth|sysext|"
+                                              r"segfault|core dump|oops|BUG:|watchdog|nvidia|\bFailed\b|error", l)]
+            ok = "reached the login screen" if mb[-1] == _read("/var/lib/nvegpu/bazzite/last-ok-boot").strip().replace("-", "") else "did NOT reach the login screen"
+            lines += ["", f"## Bazzite: last earlier boot with the patched driver ({ok}; key lines, last 120)"] + [l[:300] for l in key[-120:]]
+            lines += ["", "## Bazzite: that boot's last 60 journal lines"] + [l[:300] for l in jb[-60:]]
         bz = f"/usr/local/lib/egpu-buddy/gamescope-gbm/usr/bin/gamescope"
         lines.append(f"our Bazzite gamescope: {'installed' if os.path.exists(bz) else 'not installed'} · Bazzite's own has GBM scan-out: "
                      + ("yes" if _sh(["grep", "-qa", "drm_gbm_scanout", "/usr/bin/gamescope"], 10)[0] == 0 else "no"))

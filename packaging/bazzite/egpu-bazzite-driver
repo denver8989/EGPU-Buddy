@@ -199,9 +199,11 @@ case "${1:---status}" in
       say "boot guard: the last $n boots with the patched driver did not reach the login screen: switched it off (Bazzite runs as without it)"; exit 0; fi
     if [ -d "$EXT.staged" ]; then rm -f "$LINK"; exit 0; fi   # a new build waits: --boot swaps it in unmerged, the next boot merges it
     if ! { built && can_load; }; then rm -f "$LINK"; say "boot guard: the patched driver does not match this boot (kernel $K, Bazzite NVIDIA $(host_nv | grep . || echo none)): left off"; exit 0; fi
-    echo $((n + 1)) > "$W/boot-attempts"; echo "$bid" > "$W/boot-counted"; exit 0 ;;
+    echo $((n + 1)) > "$W/boot-attempts"; echo "$bid" > "$W/boot-counted"
+    { tail -n 4 "$W/merged-boots" 2>/dev/null; echo "$bid"; } > "$W/merged-boots.new"; mv -f "$W/merged-boots.new" "$W/merged-boots"   # for the support report
+    exit 0 ;;
   --boot-ok)  # the login screen started: the boot with the driver worked
-    [ -L "$LINK" ] && echo 0 > "$W/boot-attempts"; exit 0 ;;
+    [ -L "$LINK" ] && { echo 0 > "$W/boot-attempts"; cat /proc/sys/kernel/random/boot_id > "$W/last-ok-boot" 2>/dev/null; }; exit 0 ;;
   --remove)   # the merged copy (if any) goes with the next boot; nothing is unmounted under the running session
     rm -f "$LINK"; systemctl disable egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1
     merged || drop "$W"
