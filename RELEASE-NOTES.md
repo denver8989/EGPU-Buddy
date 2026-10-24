@@ -1,7 +1,10 @@
-0.7.178 — Release notes for every version since yours, in a scrolling window.
+0.7.178 — Release notes for every version since yours; XG Mobile ultrawide at its real resolution.
 
 **Changed**
 - "What's new" opens a window like SteamOS's update notes: every version since the one installed, newest first, one block per version. The D-pad or stick steps through them and the window scrolls with it. (Up to the last 100 releases.)
+
+**Fixed** (ROG Ally / XG Mobile only, NVIDIA)
+- Game Mode on a monitor behind the XG Mobile could start at 1024x768: a huge interface between thick black bars (ROG Xbox Ally X + Odyssey G9 49"). Right after boot the monitor is connected before its identity data (EDID) has arrived, and until then the system offers only fallback modes. Game Mode now waits for it (up to 20 seconds) before choosing the resolution. Every other machine is unchanged.
 
 0.7.177 — The ultrawide scale fix is limited to ROG Ally / XG Mobile.
 

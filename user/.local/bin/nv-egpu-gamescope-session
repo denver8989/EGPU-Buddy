@@ -443,6 +443,20 @@ best_egpu_drm_mode() {
 
 stage_gamescope_native_mode() {
   local output mode width height refresh
+  # ROG Ally / XG Mobile only: right after boot the monitor behind the XG Mobile can be connected before its EDID has been
+  # read, and the kernel then lists only its no-EDID fallback modes. Game Mode was staged at 1024x768 on a 5120x1440
+  # Odyssey G9 (ROG Xbox Ally X report: a huge interface between thick black bars). Wait for the EDID (up to 20 s).
+  if [ "$ALLYXGM" = 1 ]; then
+    local o n i
+    o=$(connector_order | tr , '\n' | grep -vxE '\*|eDP-[0-9]+' | head -1)
+    for i in $(seq 1 20); do
+      n=""; for n in /sys/class/drm/card*-"$o"; do [ -e "$n/edid" ] && break; done
+      [ -n "$o" ] && [ -e "$n/edid" ] || break
+      [ "$(head -c 8 "$n/edid" 2>/dev/null | wc -c)" -gt 0 ] && break
+      [ "$i" = 1 ] && log "$o: connected but no EDID yet (only the fallback modes): waiting for it before staging the mode"
+      sleep 1
+    done
+  fi
   # in Game Mode's own order (the plugin's choice first): the mode must be the screen gamescope drives
   for output in $(connector_order | tr , '\n' | grep -vxE '\*|eDP-[0-9]+'); do
     mode=$(best_egpu_drm_mode "$output" || true)
