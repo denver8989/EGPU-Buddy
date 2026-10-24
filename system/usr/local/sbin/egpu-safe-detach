@@ -22,6 +22,13 @@ TEARDOWN_ONLY=0
 # the installed userspace version (610 tested, 615 beta), read from the library itself whether hidden (.egpu-off) or not
 NVV=$(ls /usr/lib/libnvidia-ml.so.* 2>/dev/null | sed -n 's/.*libnvidia-ml\.so\.\([0-9][0-9.]*[0-9]\)\(\.egpu-off\)\{0,1\}$/\1/p' | grep -F . | head -1); NVV=${NVV:-610.57.04}
 HIDE_LIST="/usr/lib/libnvidia-ml.so.1 /usr/lib/libnvidia-ml.so.$NVV /usr/lib32/libnvidia-ml.so.1 /usr/lib32/libnvidia-ml.so.$NVV /usr/share/glvnd/egl_vendor.d/10_nvidia.json /usr/lib/gbm/nvidia-drm_gbm.so /usr/share/vulkan/icd.d/nvidia_icd.json /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /usr/share/egl/egl_external_platform.d/10_nvidia_wayland.json /usr/share/egl/egl_external_platform.d/15_nvidia_gbm.json"
+# Bazzite (Fedora layout): the 64-bit libraries live in /usr/lib64 and the Vulkan driver file is named per architecture.
+# The list above names SteamOS's paths only, so Game Mode's performance overlay (mangoapp) in the handheld session still
+# loaded /usr/lib64/libnvidia-ml.so and held the eGPU: "teardown failed ... still held by: mangoapp" (Legion Go 2, 0.7.178)
+if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then
+  _bv=$(ls /usr/lib64/libnvidia-ml.so.* 2>/dev/null | sed -n 's/.*libnvidia-ml\.so\.\([0-9][0-9.]*[0-9]\)$/\1/p' | grep -F . | head -1)
+  HIDE_LIST="$HIDE_LIST /usr/lib64/libnvidia-ml.so.1 ${_bv:+/usr/lib64/libnvidia-ml.so.$_bv} /usr/lib64/gbm/nvidia-drm_gbm.so /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /usr/share/vulkan/icd.d/nvidia_icd.i686.json"
+fi
 nv_drm_nodes(){ g=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}'); [ -n "$g" ] || return 0
   for n in /sys/class/drm/card[0-9]* /sys/class/drm/renderD*; do [ "$(basename "$(readlink -f "$n/device" 2>/dev/null)")" = "$g" ] && echo "/dev/dri/$(basename "$n")"; done; }
 panel_bl(){ for b in /sys/class/backlight/*; do echo "$1" > "$b/bl_power" 2>/dev/null; done; }   # 0 = on, 4 = FB_BLANK_POWERDOWN

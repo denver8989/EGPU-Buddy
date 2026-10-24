@@ -1,3 +1,8 @@
+0.7.179 — Bazzite: Safe Detach in Game Mode.
+
+**Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
+- Safe Detach in Game Mode still said "eGPU teardown failed" after moving Game Mode to the handheld screen. Before the handheld session starts, Safe Detach hides NVIDIA's libraries so nothing in it opens the eGPU, but it only knew SteamOS's file locations. On Bazzite the performance overlay found NVIDIA's monitoring library in Fedora's location and kept the eGPU open. Bazzite's locations are now hidden too.
+
 0.7.178 — Release notes for every version since yours; XG Mobile ultrawide at its real resolution.
 
 **Changed**
