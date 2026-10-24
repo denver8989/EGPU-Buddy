@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.162"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.163"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -200,6 +200,18 @@ def _gpu_bdf():
         if m:
             return m.group(1)
     return ""
+
+
+GENERIC = "/usr/local/sbin/egpu-generic"   # the AMD / Intel eGPU path (beta)
+
+
+def _generic_egpu():
+    """An AMD or Intel eGPU (egpu-detect: a display-class device that is not the built-in GPU): (bdf, vendor, card) or None.
+    The NVIDIA checks above match 10de only, so without this the plugin showed "No eGPU attached" and offered no Safe Detach."""
+    if not os.path.exists("/usr/local/sbin/egpu-detect"):
+        return None
+    f = _sh(["/usr/local/sbin/egpu-detect"], 5)[1].split()
+    return (f + [""])[:3] if len(f) >= 2 and f[1] != "nvidia" else None
 
 
 def _proc_running(name):
@@ -1763,11 +1775,13 @@ class Plugin:
     async def get_status(self):
         _settle_detach_status(); _heal_audio()
         bdf = _gpu_bdf()
+        gen = None if bdf else _generic_egpu()   # AMD / Intel eGPU (beta): same status fields, no NVIDIA telemetry
+        if gen: bdf = gen[0]
         game_mode = _gamescope_running()
         driver = os.path.exists("/sys/module/nvidia_drm")
         output = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] if game_mode else ""
         status = {
-            "present": bool(bdf), "bdf": bdf, "driver_loaded": driver,
+            "present": bool(bdf), "bdf": bdf, "driver_loaded": driver, "vendor": gen[1] if gen else ("nvidia" if bdf else ""),
             "game_mode": game_mode, "game_running": _game_running() if game_mode else False, "ogui": _ogui_running(),
             "attach_pending": os.path.exists(GM_PENDING), "dock_present": _dock_present(),
             # Game Mode on the handheld screen (or a USB-C screen on it) with the games on the eGPU
@@ -1788,7 +1802,7 @@ class Plugin:
                      "width": _read(f"/sys/bus/pci/devices/{bdf}/current_link_width") if bdf else ""},
             "displays": [{**d, "state": _screen_state(d["name"])} for d in _displays(bdf)] if bdf else [],
             "audio_sink": _audio_sink(),
-            "telemetry": _nvidia_query(bdf, bool(_dock_label(bdf))) if (bdf and driver) else {},
+            "telemetry": _nvidia_query(bdf, bool(_dock_label(bdf))) if (bdf and driver and not gen) else {},
             "ts": time.time(),
         }
         return status
@@ -1995,13 +2009,14 @@ class Plugin:
 
     async def safe_detach(self):
         decky.logger.info("safe detach pressed")
-        if not _gpu_bdf():
+        gen = None if _gpu_bdf() else _generic_egpu()
+        if not _gpu_bdf() and not gen:
             return {"ok": True, "message": "No eGPU attached."}
         if not _gamescope_running():
             return {"ok": False, "message": "Not in Game Mode. Use the Safely Eject desktop icon."}
         if _game_running():
             return {"ok": False, "message": "Close the running game first, then Safe Detach."}
-        _spawn_root_job("detach", [DETACH])
+        _spawn_root_job("detach", [GENERIC, "detach"] if gen else [DETACH])   # AMD / Intel: its own path (beta)
         return {"ok": True, "message": "Detaching: the screen goes dark for a moment while Game Mode moves to the handheld screen. Reopen this menu afterwards; it says when it is safe to unplug."}
 
     async def get_driver_trial(self):

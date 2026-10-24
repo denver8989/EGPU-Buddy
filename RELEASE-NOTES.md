@@ -1,3 +1,9 @@
+0.7.163 — AMD / Intel eGPUs (beta): the plugin sees them, and Safe Detach works for them.
+
+**Fixed** (AMD / Intel eGPU path only; NVIDIA is unchanged)
+- The plugin only recognised NVIDIA cards: with an AMD or Intel eGPU it said "No eGPU attached" and offered no Safe Detach. It now shows the AMD / Intel eGPU and its Safe Detach runs the AMD / Intel detach path.
+- Game Mode on an AMD eGPU next to the handheld's own AMD graphics: gamescope is now told explicitly to use the eGPU (it picks its GPU by Vulkan device, and both use the same driver), without any of the NVIDIA-only workarounds.
+
 0.7.162 — The install check also finds other NVIDIA drivers.
 
 **New**

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# AMD / Intel eGPU (beta, set by nv-egpu-gamescope-session's generic route): stock gamescope on the eGPU, none of the
+# NVIDIA workarounds below; only the eGPU named as the Vulkan device (it decides which GPU gamescope drives)
+if [ -n "${NV_EGPU_GAMESCOPE_GENERIC_VK:-}" ] && [ "${NV_EGPU_GAMESCOPE_GENERIC_VK#:}" = "$NV_EGPU_GAMESCOPE_GENERIC_VK" ]; then
+  [[ " $* " == *" --prefer-vk-device "* ]] || set -- --prefer-vk-device "$NV_EGPU_GAMESCOPE_GENERIC_VK" "$@"
+  exec /usr/bin/gamescope "$@"
+fi
 gamescope_bin=${NV_EGPU_BUDDY_GAMESCOPE_BIN:-/usr/bin/gamescope}
 format_filter=${NV_EGPU_GAMESCOPE_FORMAT_FILTER:-/home/deck/.local/lib/nv-egpu-buddy/nv-egpu-gamescope-format-filter.so}
 format_filter_enable=${NV_EGPU_GAMESCOPE_FORMAT_FILTER_ENABLE:-0}

@@ -195,6 +195,7 @@ connector_order() {
 }
 
 clear_egpu_env() {
+  unset NV_EGPU_GAMESCOPE_GENERIC_VK
   unset DISPLAY
   unset WAYLAND_DISPLAY
   unset WAYLAND_SOCKET
@@ -754,6 +755,10 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   export OUTPUT_CONNECTOR="$(printf '%s,' $gen_outputs)*,${PANEL}"
   export WLR_DRM_DEVICES="/dev/dri/$gen_card"
   export DRI_PRIME="pci-$(printf '%s' "$gen_bdf" | tr ':.' '__')!"
+  # gamescope picks the GPU it drives from the Vulkan device it chooses, not from WLR_DRM_DEVICES; with an AMD eGPU next
+  # to an AMD built-in GPU both use the same Vulkan driver, so name the eGPU (the shim adds --prefer-vk-device, nothing else)
+  export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
+  export NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)"
   log "generic eGPU route: $gen_vendor $gen_bdf ($gen_card) outputs: $gen_outputs"
 else
   clear_egpu_env
