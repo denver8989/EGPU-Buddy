@@ -552,9 +552,13 @@ if [ "${DRIVER_FAILED:-0}" = 1 ]; then say "== NOT finished: the NVIDIA driver w
 # files had been written but never reached the disk, and an empty script "succeeds" at everything —
 # so no protection was applied and no driver was loaded, with nothing in any log to say why.
 sync
-if [ "$IS_BAZZITE" = 1 ] && [ -z "${DRIVER_FAILED:-}" ] && sudo /usr/local/sbin/egpu-bazzite-driver --status >/dev/null 2>&1 \
-   && /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then
-  say "== done. The patched driver is active now (no reboot needed): plug the eGPU in. Read TESTED.md before relying on any of this."
+# A reboot is asked for only when one is really needed: kernel parameters written but not yet active, or (Bazzite) a
+# patched driver that could not be added to the running system and switches on at the next boot. Everything else
+# (scripts, udev rules, services, the SteamOS driver extension, a DKMS module loaded at attach) works right away.
+if ! /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then
+  say "== done. One reboot activates the kernel parameters (eGPU unplugged until then). Read TESTED.md before relying on any of this."
+elif [ "$IS_BAZZITE" = 1 ] && [ "$GPU_VENDOR" != amd ] && [ -z "${DRIVER_FAILED:-}" ] && want driver && ! sudo /usr/local/sbin/egpu-bazzite-driver --status >/dev/null 2>&1; then
+  say "== done. The patched driver switches on with the next reboot. Read TESTED.md before relying on any of this."
 else
-  say "== done. Reboot with the eGPU disconnected, then plug it in. Read TESTED.md before relying on any of this."
+  say "== done. No reboot needed: plug the eGPU in. Read TESTED.md before relying on any of this."
 fi

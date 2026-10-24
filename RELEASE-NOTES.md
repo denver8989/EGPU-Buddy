@@ -1,3 +1,8 @@
+0.7.167 — No more "reboot" after every install.
+
+**Changed**
+- The installer asked for a reboot at the end of every install and update. It now asks only when one is really needed: kernel parameters written but not active yet (normally only the first install), or on Bazzite a patched driver that could not be added to the running system. Everything else works right away.
+
 0.7.166 — AMD / Intel eGPUs: plugging in no longer drops the card and hangs the handheld.
 
 **Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)
