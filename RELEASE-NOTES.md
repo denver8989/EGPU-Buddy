@@ -1,3 +1,8 @@
+0.7.177 — The ultrawide scale fix is limited to ROG Ally / XG Mobile.
+
+**Changed**
+- The Steam interface scale change from 0.7.176 now applies only on a ROG Ally or a machine that has used an ASUS XG Mobile (where the ultrawide problem was reported). Every other machine behaves exactly as before 0.7.176.
+
 0.7.176 — Bazzite: sleep, Safe Detach in Game Mode and on the desktop.
 
 **Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
@@ -5,8 +10,8 @@
 - Safe Detach in Game Mode said "eGPU teardown failed, the GPU is still attached" although Game Mode had moved to the handheld screen. The performance overlay still held the eGPU (on Bazzite it is not a separate service, so stopping that service did nothing); it is now stopped for the removal.
 - Safe Detach on the desktop left both screens black until a hard reset. Restarting the desktop's compositor ends the whole login on Bazzite, and the eGPU attach then put the new desktop straight back on the eGPU. Bazzite now uses the desktop detach made for that case on the ROG Ally: the desktop is restarted on the handheld screen once, with the eGPU removed in between, and no attach can interrupt it.
 
-**Fixed** (ROG Ally / other machines, NVIDIA)
-- The Steam interface scale helper forced the Legion Go 2's tuned scale onto every monitor while it ran; elsewhere it now uses the smallest scale Steam itself computed for that monitor, as intended.
+**Fixed** (ROG Ally / XG Mobile only, NVIDIA)
+- Ultrawide monitor on an XG Mobile: the Steam interface scale helper forced the Legion Go 2's tuned scale onto it while it ran; there it now uses the smallest scale Steam itself computed for that monitor, as intended. Every other machine is unchanged.
 
 **Support report**
 - Shows the size Game Mode runs at (gamescope's command line) and Steam's interface scale for each external screen, for screens where the interface looks too large or has black bars.
