@@ -1,3 +1,12 @@
+0.7.159 — Bazzite: Game Mode Safe Detach, cable pull and the screen switch, made to work the way they do on SteamOS.
+
+**Fixed** (Bazzite only)
+- Switching the Game Mode screen in the plugin always went back to the monitor: Bazzite's Game Mode now follows the screen picked in the plugin, as SteamOS does. Picking the handheld screen keeps Game Mode on the handheld with the games still rendered on the eGPU, which is also what happens when no monitor is connected to the eGPU.
+- After a Safe Detach or a cable pull in Game Mode the screen could stay black, and the next plug-in landed on the desktop with Steam signed out. Bazzite switches to the desktop and resets Steam's start files after five Game Mode sessions shorter than a minute; EGPU Buddy's own restarts (attach, detach, cable pull, screen switch) were counted as such failures. They no longer are. The Game Mode session on the handheld screen now also uses only the handheld's graphics drivers, as on SteamOS, so it never touches the NVIDIA driver while the eGPU is going away or gone, and a leftover NVIDIA graphics setting from the desktop is repaired at the start of Game Mode.
+- Game Mode on the handheld screen with the eGPU attached could not start on Bazzite (it picked the 32-bit graphics driver).
+
+Being looked at with the tester's logs: Safe Detach on the desktop (froze), a sluggish desktop after plugging in on the desktop, and sleep with the eGPU attached.
+
 0.7.158 — The project is now called EGPU Buddy on GitHub.
 
 **Changed**

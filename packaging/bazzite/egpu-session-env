@@ -4,32 +4,91 @@
 # nvidia driver and drives a connected screen; then Game Mode starts on that screen with the NVIDIA picture fix.
 # @GAMESCOPE@ is filled in by install.sh: our GBM-scanout gamescope, or Bazzite's own when it already has GBM scan-out.
 _egpu_bz(){
-  local d bdf="" card="" c out="" rt=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+  local d bdf="" card="" c out="" rt=${XDG_RUNTIME_DIR:-/run/user/$(id -u)} v route pcard pv hh pick
   # what the SteamOS session wrapper does at every Game Mode start: the session-type marker the cable-pull recovery
   # reads (not while a desktop is on screen), and the login fallback back to the system's own default (Game Mode)
   pgrep -u "$(id -u)" -x kwin_wayland >/dev/null 2>&1 || printf gamemode > "$rt/egpu-session-type" 2>/dev/null
   sudo -n /usr/local/sbin/nv-egpu-buddy-privileged session-fallback game >/dev/null 2>&1
-  # a Safe Detach restarts Game Mode on purpose for the handheld screen: never back onto the eGPU then
-  { [ -e "$rt/egpu-detach-mode" ] || [ -e /run/nvegpu/gm-detach-pending ]; } && return 0
+  # SAFETY NET (the SteamOS wrapper's): a Vulkan driver pin naming a file that is gone or hidden (the NVIDIA one after a
+  # detach or cable pull, left in the user manager by a desktop attach) makes the loader find no driver at all: gamescope
+  # cannot start, the screen stays black and the session crash-loops. Repaired here, in this session and the user manager.
+  for v in VK_DRIVER_FILES VK_ICD_FILENAMES; do
+    eval "d=\${$v:-}"
+    if [ -n "$d" ] && [ ! -r "${d%%:*}" ]; then unset "$v"; systemctl --user unset-environment "$v" >/dev/null 2>&1; fi
+  done
+  # The handheld's own GPU (the panel's card) and its Vulkan driver, 64-bit and 32-bit (Fedora names them per architecture)
+  pcard=$(basename "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)" 2>/dev/null); pcard=${pcard%%-*}
+  pv=$(cat "/sys/class/drm/$pcard/device/vendor" 2>/dev/null)
+  case "$pv" in 0x8086) pv=intel ;; *) pv=radeon ;; esac
+  pv=$(ls /usr/share/vulkan/icd.d/${pv}_icd.x86_64.json /usr/share/vulkan/icd.d/${pv}_icd.i686.json 2>/dev/null | paste -sd: -)
+  # The screen picked in the plugin for Game Mode (as on SteamOS: /var/lib/nvegpu/game-screen)
+  pick=$(cat /var/lib/nvegpu/game-screen 2>/dev/null)
+  # Bazzite switches the login to the DESKTOP (and re-extracts Steam's bootstrap, which signs Steam out) after 5 Game Mode
+  # sessions shorter than a minute. Every eGPU attach, Safe Detach, cable pull and screen switch restarts Game Mode on
+  # purpose: those restarts must not count. Cleared when EGPU Buddy restarted the session, or when the route changed.
+  route=none
+  { [ -e "$rt/egpu-detach-mode" ] || [ -e /run/nvegpu/gm-detach-pending ]; } && route=detach
+  [ $(( $(date +%s) - $(stat -c %Y /run/nvegpu/session-restart-ours 2>/dev/null || echo 0) )) -lt 300 ] && rm -f /tmp/chimeraos-short-session-tracker
+  # a Safe Detach restarts Game Mode on purpose for the handheld screen: never back onto the eGPU then. As on SteamOS,
+  # gamescope and Vulkan/EGL are pinned to the handheld's GPU so nothing in this session opens the eGPU.
+  if [ "$route" = detach ]; then
+    [ "$(cat "$rt/egpu-route" 2>/dev/null)" = detach ] || rm -f /tmp/chimeraos-short-session-tracker; printf detach > "$rt/egpu-route" 2>/dev/null
+    OUTPUT_CONNECTOR="*,eDP-1"
+    [ -n "$pv" ] && { VK_DRIVER_FILES=$pv; VK_ICD_FILENAMES=$pv; }
+    __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json; __GLX_VENDOR_LIBRARY_NAME=mesa
+    return 0
+  fi
   for d in /sys/bus/pci/devices/*; do
     [ "$(cat "$d/vendor" 2>/dev/null)" = 0x10de ] || continue
     case "$(cat "$d/class" 2>/dev/null)" in 0x0300*|0x0302*) ;; *) continue ;; esac
     [ "$(basename "$(readlink -f "$d/driver" 2>/dev/null)")" = nvidia ] || continue
     bdf=${d##*/}; break
   done
-  [ -n "$bdf" ] || return 0
-  for c in /sys/bus/pci/devices/$bdf/drm/card[0-9]*; do [ -e "$c" ] && { card=${c##*/}; break; }; done
-  [ -n "$card" ] || return 0
-  for c in /sys/class/drm/$card-*; do
+  # (a card with connectors: a stale one from a driver reload has none, and gamescope on it crash-loops; SteamOS wrapper)
+  [ -n "$bdf" ] && for c in /sys/bus/pci/devices/$bdf/drm/card[0-9]*; do
+    [ -e "$c" ] || continue; [ -n "$card" ] || card=${c##*/}
+    compgen -G "/sys/class/drm/${c##*/}-*" >/dev/null 2>&1 && { card=${c##*/}; break; }
+  done
+  # Fedora names the ICD per architecture (nvidia_icd.x86_64.json, nvidia_icd.i686.json for 32-bit games)
+  local icd; icd=$(ls /usr/share/vulkan/icd.d/nvidia_icd*.json 2>/dev/null | paste -sd: -)
+  if [ -z "$bdf" ] || [ -z "$card" ] || [ -z "$icd" ]; then
+    # No usable eGPU: Game Mode on the handheld exactly as Bazzite runs it, but with Vulkan/EGL on the handheld's GPU. With
+    # the patched driver installed its Vulkan driver is always there, and after a cable pull it would talk to an NVIDIA
+    # driver whose card is gone (gamescope hanging at start = black screen, then the short-session fallback above).
+    [ "$(cat "$rt/egpu-route" 2>/dev/null)" = none ] || rm -f /tmp/chimeraos-short-session-tracker; printf none > "$rt/egpu-route" 2>/dev/null
+    if [ -n "$pv" ] && ls /usr/share/vulkan/icd.d/nvidia_icd*.json >/dev/null 2>&1; then
+      VK_DRIVER_FILES=$pv; VK_ICD_FILENAMES=$pv
+      __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json; __GLX_VENDOR_LIBRARY_NAME=mesa
+    fi
+    return 0
+  fi
+  # the eGPU's connected screens; the one picked in the plugin first
+  local outs=""; for c in /sys/class/drm/$card-*; do
     [ "$(cat "$c/status" 2>/dev/null)" = connected ] || continue
     case "${c##*/}" in *-eDP-*|*-Writeback-*) continue ;; esac
-    out=${c##*/$card-}; break
+    outs="$outs ${c##*/$card-}"
   done
-  [ -n "$out" ] || return 0
-  # Fedora names the ICD per architecture (nvidia_icd.x86_64.json, nvidia_icd.i686.json for 32-bit games). Checked
-  # BEFORE anything is set: without NVIDIA's Vulkan driver Game Mode is left exactly as it is.
-  local icd; icd=$(ls /usr/share/vulkan/icd.d/nvidia_icd*.json 2>/dev/null | paste -sd: -)
-  [ -n "$icd" ] || return 0
+  case " $outs " in *" $pick "*) [ -n "$pick" ] && out=$pick ;; esac
+  [ -n "$out" ] || out=${outs# }; out=${out%% *}
+  # The handheld's own screen picked in the plugin (or a screen on the handheld's USB-C), or no monitor on the eGPU: as on
+  # SteamOS, gamescope stays on the handheld's GPU and drives that screen, Steam and the games render on the eGPU.
+  hh=""
+  case "$pick" in eDP-*) hh=$pick ;; ?*) [ -n "$pcard" ] && [ "$(cat "/sys/class/drm/$pcard-$pick/status" 2>/dev/null)" = connected ] && hh=$pick ;; esac
+  [ -n "$out" ] || hh=${hh:-eDP-1}
+  if [ -n "$hh" ]; then
+    [ "$(cat "$rt/egpu-route" 2>/dev/null)" = handheld ] || rm -f /tmp/chimeraos-short-session-tracker; printf handheld > "$rt/egpu-route" 2>/dev/null
+    OUTPUT_CONNECTOR=$hh; [ "$hh" = eDP-1 ] || OUTPUT_CONNECTOR="$hh,eDP-1"
+    VK_DRIVER_FILES=$icd; VK_ICD_FILENAMES=$icd; PROTON_ENABLE_NVAPI=1
+    NV_EGPU_GAMESCOPE_HANDHELD_GPU=1                 # the shim keeps gamescope itself on the handheld's GPU
+    NV_EGPU_BUDDY_GAMESCOPE_BIN=/usr/bin/gamescope
+    GAMESCOPE_BIN="$HOME/.local/lib/nv-egpu-buddy/gamescope-shim/gamescope"; [ -x "$GAMESCOPE_BIN" ] || GAMESCOPE_BIN=/usr/bin/gamescope
+    sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1
+    mkdir -p "$rt/nv-egpu-buddy" 2>/dev/null
+    printf 'pid=%s time=%s bazzite=1 egpu=%s card=%s output=%s HANDHELD_GPU=1 gamescope=%s\n' "$$" "$(date '+%F %T')" "$bdf" "$card" "$hh" "$GAMESCOPE_BIN" \
+      > "$rt/nv-egpu-buddy/session-wrapper" 2>/dev/null
+    return 0
+  fi
+  [ "$(cat "$rt/egpu-route" 2>/dev/null)" = egpu ] || rm -f /tmp/chimeraos-short-session-tracker; printf egpu > "$rt/egpu-route" 2>/dev/null
   # Started through EGPU Buddy's gamescope shim, as on SteamOS: it runs the GBM-scanout build when that can start and has
   # not been crash-looping on this OS build, otherwise Bazzite's own gamescope (and it marks a crashing build, which
   # egpu-buddy-gamescope-repair.path rebuilds for the new Bazzite in a Fedora container).

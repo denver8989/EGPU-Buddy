@@ -136,7 +136,11 @@ UIDX=(); [ "$USER_UID" = 1000 ] || UIDX=(-e "s|/run/user/1000|/run/user/$USER_UI
 # Bazzite is Fedora: NVIDIA's 64-bit libraries are in /usr/lib64 (32-bit in /usr/lib, Arch's /usr/lib32), and the Vulkan
 # driver files are per architecture (nvidia_icd.x86_64.json / .i686.json; Mesa's radeon_icd.x86_64.json likewise).
 ICD=/usr/share/vulkan/icd.d
-BZX=(); [ "$IS_BAZZITE" = 1 ] && BZX=(-e "s#\\(systemctl --user [a-z-]* [^|;&>]*\\)gamescope-session\\.target#\\1'gamescope-session-plus@*.service'#g"
+BZX=(); [ "$IS_BAZZITE" = 1 ] && BZX=(
+  # every deliberate Game Mode restart (they all reset the shim's crash counter first) also marks itself as ours, so
+  # Bazzite's "5 short sessions -> desktop" fallback (packaging/bazzite/egpu-session-env) does not count it
+  -e "s#\\(rm -f /run/user/[0-9]*/nv-egpu-buddy-gamescope-starts\\)#\\1 /tmp/chimeraos-short-session-tracker; mkdir -p /run/nvegpu; touch /run/nvegpu/session-restart-ours#g"
+  -e "s#\\(systemctl --user [a-z-]* [^|;&>]*\\)gamescope-session\\.target#\\1'gamescope-session-plus@*.service'#g"
   -e "s#\\(VK_[A-Z_]*=\\)$ICD/nvidia_icd\\.json#\\1$ICD/nvidia_icd.x86_64.json:$ICD/nvidia_icd.i686.json#g"
   -e "/^HIDE_LIST=/s#$ICD/nvidia_icd\\.json#$ICD/nvidia_icd.x86_64.json $ICD/nvidia_icd.i686.json#"
   -e "s#$ICD/nvidia_icd\\.json#$ICD/nvidia_icd.x86_64.json#g" -e "/radeon_icd\\.\\(\\*\\|x86_64\\)/!s#$ICD/radeon_icd\\.json#$ICD/radeon_icd.x86_64.json#g"

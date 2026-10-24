@@ -154,7 +154,10 @@ fi
 if [ "${NV_EGPU_GAMESCOPE_HANDHELD_GPU:-0}" = 1 ]; then
   _card=$(basename "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)"); _card=${_card%%-*}   # the panel's card
   _v=$(cat "/sys/class/drm/$_card/device/vendor" 2>/dev/null || true); _d=$(cat "/sys/class/drm/$_card/device/device" 2>/dev/null || true)
-  _icd=$(ls /usr/share/vulkan/icd.d/$(case "$_v" in 0x8086) echo intel;; *) echo radeon;; esac)_icd*.json 2>/dev/null | head -1 || true)
+  _k=$(case "$_v" in 0x8086) echo intel;; *) echo radeon;; esac)
+  _icd=$(ls /usr/share/vulkan/icd.d/${_k}_icd*.json 2>/dev/null | head -1 || true)
+  # Bazzite: per-architecture names (radeon_icd.i686.json sorts first, and a 64-bit gamescope cannot use it)
+  grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && [ -e "/usr/share/vulkan/icd.d/${_k}_icd.x86_64.json" ] && _icd=/usr/share/vulkan/icd.d/${_k}_icd.x86_64.json
   [ -n "$_icd" ] && export VK_DRIVER_FILES="$_icd" VK_ICD_FILENAMES="$_icd"
   prefix=()   # exactly like stock Game Mode on the handheld: none of the eGPU-monitor workarounds
   [ -n "$_v" ] && [ -n "$_d" ] && prefix+=(--prefer-vk-device "${_v#0x}:${_d#0x}")
