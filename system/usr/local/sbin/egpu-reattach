@@ -6,8 +6,8 @@ set -u; U=1000; RUNENV="XDG_RUNTIME_DIR=/run/user/$U DBUS_SESSION_BUS_ADDRESS=un
 [ "$(/usr/local/sbin/egpu-detect --dock 2>/dev/null)" = xg-mobile-legacy ] && { say "      powering the XG Mobile on"; /usr/local/sbin/egpu-detect --xgm-power on || say "      XG Mobile switch did not confirm; rescanning anyway"; sleep 2; }
 say "[1/4] PCI rescan"; echo 1 > /sys/bus/pci/rescan; sleep 4
 GPU=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}')
-# AMD / Intel eGPU (on the bus, or the AMD / Intel install with the card not up yet): its own bring-up + attach
-[ -n "$GPU" ] || { { /usr/local/sbin/egpu-detect 2>/dev/null | grep -qv ' nvidia' || [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; } && { say "AMD / Intel eGPU -> generic attach"; exec /usr/local/sbin/egpu-generic bringup --manual; }; }
+# the AMD / Intel install: its own bring-up + attach (an NVIDIA install never goes there)
+[ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && { say "AMD / Intel install -> generic attach"; exec /usr/local/sbin/egpu-generic bringup --manual; }
 [ -n "$GPU" ] || { say "GPU did not enumerate"; exit 2; }; say "      GPU at $GPU"
 say "[2/4] fresh nvidia stack"; modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia 2>/dev/null
 # ROG Ally / XG Mobile (each detected on its own): nouveau bound the eGPU at the rescan in a beta driver trial, so the NVIDIA

@@ -1,3 +1,9 @@
+0.7.175 — First install asks for the GPU type; the AMD / Intel code is walled off.
+
+**Changed**
+- The first Install always asks which GPU type you use: NVIDIA, or AMD / Intel (untested). A connected eGPU is mentioned but no longer decides by itself. Both installs are also listed in Setup & updates. A first install from a terminal asks the same question.
+- Everything added for AMD / Intel eGPUs now runs only on the AMD / Intel install. An NVIDIA setup behaves exactly as before, whatever is plugged in: no AMD hot-plug handling, no Vulkan GPU pinning, no AMD steps after sleep, Attach and Safe Detach on the NVIDIA path.
+
 0.7.174 — AMD / Intel eGPUs get the hot-plug features of the NVIDIA path.
 
 **New** (AMD / Intel eGPUs; NVIDIA unchanged)

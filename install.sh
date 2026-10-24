@@ -38,6 +38,12 @@ MODE=install
 # self-heal or a reinstall of an AMD / Intel setup must never build the NVIDIA driver again. --nvidia switches back.
 GPU_VENDOR=${EGPU_GPU_VENDOR:-$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null | grep -xE 'nvidia|amd' || echo nvidia)}
 for a in "$@"; do case "$a" in --check) MODE=check;; --amd|--no-nvidia) GPU_VENDOR=amd;; --nvidia) GPU_VENDOR=nvidia;; --with-driver) COMPONENTS="$COMPONENTS,driver";; --no-gamescope) COMPONENTS=${COMPONENTS//gamescope/};; *) echo "unknown option $a"; exit 1;; esac; done
+# first install from a terminal with no choice made (no flag, no earlier install): ask, as the plugin does
+if [ -z "${EGPU_GPU_VENDOR:-}" ] && [ ! -s /etc/nv-egpu-buddy/gpu-vendor ] && [ "${MODE:-install}" = install ] && [ -t 0 ] \
+   && ! printf ' %s ' "$@" | grep -qE ' --(amd|no-nvidia|nvidia) '; then
+  printf 'Which GPU type will you use?\n  1) NVIDIA (builds the NVIDIA driver, several minutes)\n  2) AMD / Intel (untested; no driver build)\nChoice [1/2]: '
+  read -r _c || _c=1; case "$_c" in 2) GPU_VENDOR=amd ;; *) GPU_VENDOR=nvidia ;; esac; echo "-> $GPU_VENDOR"
+fi
 want(){ case ",$COMPONENTS," in *",$1,"*) return 0;; *) return 1;; esac; }
 if [ "$GPU_VENDOR" = amd ]; then
   COMPONENTS=$(printf '%s' "$COMPONENTS" | tr ',' '\n' | grep -vxE 'gamescope|driver' | paste -sd, -)

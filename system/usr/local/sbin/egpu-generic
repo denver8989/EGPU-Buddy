@@ -37,6 +37,8 @@ log(){ printf '%s %s: %s\n' "$(date '+%F %T')" "${verb:-?}" "$*" >> "$LOG"; }
 status(){ printf '{"state":"%s","message":"%s"}\n' "$1" "$2" > $ST/gm-status.json; }
 as_deck(){ runuser -u "$UN" -- env $RUNENV "$@"; }
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
+# Walled off: the AMD / Intel install only. On an NVIDIA install this path does nothing at all, whatever is plugged in.
+[ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] || exit 0
 verb=${1:-}; manual=0; force=""; boot=0
 for a in "${@:2}"; do case "$a" in --manual) manual=1 ;; --force) force=--force ;; --boot) boot=1 ;; esac; done
 SEEN=/var/lib/nvegpu/egpu-seen; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode

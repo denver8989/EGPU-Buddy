@@ -17,8 +17,8 @@ log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync 
 # AMD / Intel eGPU (the AMD / Intel install, or such a card on the bus): never this NVIDIA path. It looks for an NVIDIA
 # card only and, not finding one, re-authorized the dock: that dropped a working RX 6800 XT off the bus mid-attach and hung
 # the handheld (Legion Go 1, 2026-10-24). /usr/local/sbin/egpu-generic handles AMD / Intel eGPUs.
-_egpu_nonnv(){ [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && return 0
-  case "$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '{print $2}')" in amd|intel) return 0 ;; esac; return 1; }
+# Walled off: only the AMD / Intel install (the choice made at install) takes this exit; every NVIDIA setup runs as before.
+_egpu_nonnv(){ [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; }
 # The dock bring-up (authorize, tunnel ports, rescans) it does have its AMD / Intel version there: hand over to it.
 _egpu_nonnv && { log "AMD / Intel eGPU: handing the dock over to egpu-generic"; exec /usr/local/sbin/egpu-generic bringup ${1:+--manual}; }
 

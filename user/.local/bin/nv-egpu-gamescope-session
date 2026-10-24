@@ -565,6 +565,7 @@ disable_steam_gamescope_hdr_config() {
 # non-NVIDIA eGPU (egpu-detect: "BDF VENDOR CARD") with a DRM card and a connected output
 gen_bdf=; gen_vendor=; gen_card=; gen_outputs=
 generic_egpu_ready() {
+  [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] || return 1   # walled off: the AMD / Intel install only
   [ -x /usr/local/sbin/egpu-detect ] || return 1
   read -r gen_bdf gen_vendor gen_card < <(/usr/local/sbin/egpu-detect 2>/dev/null) || return 1
   [ -n "$gen_card" ] && [ "$gen_vendor" != nvidia ] || return 1
@@ -592,7 +593,10 @@ unset _v _p
 # A "this GPU only" Vulkan pin (MESA_VK_DEVICE_SELECT=...!) or a DRI_PRIME choice is only ever set below, for this session's
 # route. Inherited from an earlier one (the user manager keeps a session's environment) it could name an eGPU that is gone
 # and leave gamescope with no GPU at all: never take it over.
-unset MESA_VK_DEVICE_SELECT DRI_PRIME; systemctl --user unset-environment MESA_VK_DEVICE_SELECT DRI_PRIME >/dev/null 2>&1 || true
+# (the AMD / Intel install only: an NVIDIA setup starts exactly as it always did)
+if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
+  unset MESA_VK_DEVICE_SELECT DRI_PRIME; systemctl --user unset-environment MESA_VK_DEVICE_SELECT DRI_PRIME >/dev/null 2>&1 || true
+fi
 
 # which session type is running: read by egpu-surprise-recover (gamescope itself dies with the card, so it cannot be asked)
 # Only claim the session marker if a desktop is NOT on screen. SteamOS keeps this session's target
@@ -783,7 +787,7 @@ else
       # an AMD / Intel eGPU uses the same Vulkan driver file as the built-in GPU, so the radeon pin below does not keep
       # this session off it: expose ONLY the built-in GPU to Vulkan, or gamescope may open the eGPU and the detach waits
       _hv=$(cut -c3- "/sys/class/drm/${_amd#/dev/dri/}/device/vendor" 2>/dev/null); _hd=$(cut -c3- "/sys/class/drm/${_amd#/dev/dri/}/device/device" 2>/dev/null)
-      [ -n "$_hv" ] && [ -n "$_hd" ] && export MESA_VK_DEVICE_SELECT="$_hv:$_hd!" ;; esac
+      [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ -n "$_hv" ] && [ -n "$_hd" ] && export MESA_VK_DEVICE_SELECT="$_hv:$_hd!" ;; esac
     export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json
     export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
   fi

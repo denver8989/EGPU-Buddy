@@ -40,7 +40,7 @@ ev "flight recorder started (EGPU Buddy $(cat /etc/nv-egpu-buddy/version 2>/dev/
 while :; do
   gpu=$(nvidia_gpu || true)
   # an AMD / Intel eGPU (egpu-detect): the same "on the eGPU" judgement from its device files (NVIDIA-only before)
-  egpu=$gpu; [ -n "$egpu" ] || egpu=$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '$2!="nvidia"{print $1}')
+  egpu=$gpu; [ -n "$egpu" ] || { [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && egpu=$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '$2!="nvidia"{print $1}'); }
   ENODES=""; [ -n "$egpu" ] && ENODES=$(ls "/sys/bus/pci/devices/$egpu/drm" 2>/dev/null | grep -E '^(card|renderD)[0-9]+$' | tr '\n' ' ')
   gs=$(pgrep -n -x 'gamescope(-wl)?' || true); kw=$(pgrep -n -U "$U" -x kwin_wayland || true)
   kx=$(pgrep -n -U "$U" -x kwin_x11 || true); xo=$(pgrep -n -x Xorg || true)
