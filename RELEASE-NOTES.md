@@ -1,3 +1,8 @@
+0.7.168 — AMD / Intel eGPUs: Game Mode starts on the eGPU instead of restarting in a loop.
+
+**Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)
+- With an AMD eGPU attached, every Game Mode start ended after a few seconds and started again (black screen, unresponsive handheld): the Game Mode session stopped at its first step for AMD / Intel cards when no screen had been picked in the plugin. Found on the first real AMD eGPU (Legion Go 1 + RX 6800 XT). The attach itself already worked: the card came up on the bus with its monitor detected.
+
 0.7.167 — No more "reboot" after every install.
 
 **Changed**
