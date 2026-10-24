@@ -1,3 +1,8 @@
+0.7.162 — The install check also finds other NVIDIA drivers.
+
+**New**
+- Before installing, the plugin also looks for an NVIDIA driver that would be used instead of EGPU Buddy's patched one (which carries the eGPU hot-unplug fixes): a driver package whose kernel module is the one actually loaded (for example a closed or legacy NVIDIA package, or a distribution's prebuilt NVIDIA module package), and a driver installed with NVIDIA's own .run installer. It offers to remove those (the package with the package manager, the .run driver with NVIDIA's own uninstaller). A stock package EGPU Buddy already outranks or replaces is not reported. On Bazzite's NVIDIA image, whose driver is part of the system, it explains that the handheld image without NVIDIA is needed.
+
 0.7.161 — Conflicting eGPU tools are found before installing.
 
 **New**

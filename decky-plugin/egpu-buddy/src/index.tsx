@@ -53,7 +53,7 @@ const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"],
 const resetClocks = callable<[], Result>("reset_clocks");
 type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
-type Conflict = { id: string; name: string; url: string; why: string; evidence: string[] };
+type Conflict = { id: string; name: string; url: string; why: string; evidence: string[]; removable?: boolean };
 const getConflicts = callable<[], Conflict[]>("get_conflicts");   // other eGPU tools that change the same things
 const removeConflicts = callable<[string[]], Result>("remove_conflicts");
 const acceptUntested = callable<[], Result>("accept_untested");
@@ -254,7 +254,7 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.161";
+const PLUGIN_VERSION = "0.7.162";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -410,13 +410,14 @@ function Content() {
   const withConflictCheck = (next: () => void) => {
     getConflicts().then((cs) => {
       if (!cs?.length) { next(); return; }
-      showModal(<ConfirmModal strTitle={cs.length > 1 ? "Other eGPU tools found" : `${cs[0].name} found`} bDestructiveWarning
-        strDescription={cs.map((c) => `${c.name} (${c.url}) is installed: ${c.why}. Found: ${c.evidence.slice(0, 3).join(", ")}`).join("\n\n")
-          + "\n\nRunning both leads to black screens and a GPU that does not switch. Uninstall " + (cs.length > 1 ? "them" : "it")
-          + " now (with " + (cs.length > 1 ? "their" : "its") + " own uninstaller), then install EGPU Buddy? A reboot is recommended afterwards."}
-        strOKButtonText="Uninstall, then continue" strMiddleButtonText="Keep and continue" strCancelButtonText="Cancel"
-        onOK={() => run(async () => { const r = await removeConflicts(cs.map((c) => c.id)); next(); return r; })}
-        onMiddleButton={next} />);
+      const rm = cs.filter((c) => c.removable);   // a driver built into the system image cannot be removed from here
+      const text = cs.map((c) => `${c.name}${c.url ? ` (${c.url})` : ""}: ${c.why}. Found: ${c.evidence.slice(0, 3).join(", ")}`).join("\n\n");
+      showModal(<ConfirmModal strTitle={cs.length > 1 ? "Conflicts found" : `${cs[0].name} found`} bDestructiveWarning
+        strDescription={text + "\n\nRunning EGPU Buddy alongside leads to black screens, a GPU that does not switch, or a driver without the eGPU fixes."
+          + (rm.length ? ` Uninstall ${rm.map((c) => c.name).join(" and ")} now (with ${rm.length > 1 ? "their" : "its"} own uninstaller), then install EGPU Buddy? A reboot is recommended afterwards.` : "")}
+        strOKButtonText={rm.length ? "Uninstall, then continue" : "Continue anyway"} strMiddleButtonText={rm.length ? "Keep and continue" : undefined} strCancelButtonText="Cancel"
+        onOK={() => rm.length ? run(async () => { const r = await removeConflicts(rm.map((c) => c.id)); next(); return r; }) : next()}
+        onMiddleButton={rm.length ? next : undefined} />);
     }).catch(next);
   };
   const confirmInstall = (title: string, go: () => Promise<Result>, detachGo?: () => Promise<Result>) =>

@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.161"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.162"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1529,6 +1529,34 @@ def _awe_session_overrides():   # all-ways-eGPU's Game Mode session override (it
             if "gamescope-session-egpu" in _read(f)]
 
 
+def _driver_conflicts():
+    """Another NVIDIA driver that would be used instead of EGPU Buddy's patched one (the hot-unplug fixes are in the patched
+    module only). Judged by the module the system really loads, not by what is installed: a stock package that the patched
+    build already outranks is no conflict."""
+    out = []
+    pv = _read(f"{SYSDIR}/packaging/nvidia-open-egpu-615/PKGBUILD") and re.findall(r"^pkgver=(\S+)", _read(f"{SYSDIR}/packaging/nvidia-open-egpu-615/PKGBUILD"), re.M)
+    if os.path.exists("/usr/bin/nvidia-uninstall"):   # NVIDIA's own .run installer: replaces files every package manager owns
+        out.append({"id": "nvidia-run", "name": "NVIDIA driver from NVIDIA's .run installer", "url": "https://www.nvidia.com/drivers",
+                    "why": "it overwrites the driver and libraries EGPU Buddy installs, without the eGPU hot-unplug fixes",
+                    "evidence": ["/usr/bin/nvidia-uninstall"], "removable": True})
+    if shutil.which("pacman"):
+        mod = _sh(["modinfo", "-n", "nvidia"], 10)[1].strip()
+        ours = _sh(["pacman", "-Q", "nvidia-open-egpu-dkms"], 10)[0] == 0
+        if mod and not ("/updates/dkms/" in mod and ours):
+            owner = _sh(["pacman", "-Qqo", mod], 10)[1].strip().split("\n")[0]
+            if owner and owner != "nvidia-open-egpu-dkms":
+                out.append({"id": f"pkg:{owner}", "name": f"NVIDIA driver package {owner}", "url": "",
+                            "why": f"its kernel module ({mod}) is the one loaded instead of EGPU Buddy's patched driver, which carries the eGPU hot-unplug fixes",
+                            "evidence": [mod], "removable": owner not in ("linux", "linux-lts", "linux-zen", "linux-neptune") and not owner.startswith("linux-neptune")})
+    if IS_BAZZITE:
+        v = _sh(["rpm", "-q", "--qf", "%{VERSION}", "nvidia-driver"], 10)[1].strip()
+        if v and v[0].isdigit() and pv and v != pv[0]:   # the same version is supported (only the modules are replaced)
+            out.append({"id": "bazzite-nvidia", "name": f"Bazzite's NVIDIA driver {v}", "url": "https://docs.bazzite.gg",
+                        "why": f"this Bazzite image carries NVIDIA's driver {v} built in; EGPU Buddy's patched driver is {pv[0] if pv else '?'}, and the two cannot be used together. Use Bazzite's handheld image without NVIDIA (bazzite-deck): EGPU Buddy then installs its own driver",
+                        "evidence": [f"nvidia-driver {v}"], "removable": False})
+    return out
+
+
 def _conflicts():
     found = []
     for cid, c in CONFLICTS.items():
@@ -1536,11 +1564,26 @@ def _conflicts():
         if cid == "all-ways-egpu":
             ev += _awe_session_overrides()
         if ev:
-            found.append({"id": cid, "name": c["name"], "url": c["url"], "why": c["why"], "evidence": ev[:6]})
+            found.append({"id": cid, "name": c["name"], "url": c["url"], "why": c["why"], "evidence": ev[:6], "removable": True})
+    try:
+        found += _driver_conflicts()
+    except Exception:  # noqa: BLE001  (a check must never block the install)
+        pass
     return found
 
 
 def _remove_conflict(cid):
+    if cid == "nvidia-run":   # its own uninstaller, unattended
+        rc, out, err = _sh(["/usr/bin/nvidia-uninstall", "--silent"], 600)
+        return f"NVIDIA .run driver: nvidia-uninstall rc={rc}"
+    if cid.startswith("pkg:"):   # the package whose module wins; never the kernel itself, never with dependency checks off
+        pkg = cid[4:]
+        if not re.fullmatch(r"[a-z0-9@._+-]+", pkg) or pkg.startswith("linux-neptune") or pkg in ("linux", "linux-lts", "linux-zen"):
+            return f"{pkg}: not removed"
+        rc, out, err = _sh(["pacman", "-R", "--noconfirm", pkg], 300)
+        return f"{pkg}: " + ("removed" if rc == 0 else f"not removed ({(err or out).splitlines()[-1][:160] if (err or out) else rc})")
+    if cid == "bazzite-nvidia":
+        return "Bazzite's built-in NVIDIA driver is part of the system image and is not removed"
     c = CONFLICTS.get(cid)
     if not c:
         return f"unknown tool {cid}"
@@ -1691,8 +1734,8 @@ class Plugin:
             return []
 
     async def remove_conflicts(self, ids: list = None):
-        msgs = [_remove_conflict(i) for i in (ids or [c["id"] for c in _conflicts()])]
-        still = _conflicts()
+        msgs = [_remove_conflict(i) for i in (ids or [c["id"] for c in _conflicts() if c.get("removable")])]
+        still = [c for c in _conflicts() if c.get("removable")]
         return {"ok": not still, "message": " · ".join(msgs) + (" · a reboot is recommended before using the eGPU" if msgs else "")}
 
     async def accept_untested(self):
