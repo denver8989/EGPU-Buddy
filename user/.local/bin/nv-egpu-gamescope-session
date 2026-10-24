@@ -195,7 +195,7 @@ connector_order() {
 }
 
 clear_egpu_env() {
-  unset NV_EGPU_GAMESCOPE_GENERIC_VK
+  unset NV_EGPU_GAMESCOPE_GENERIC_VK MESA_VK_DEVICE_SELECT
   unset DISPLAY
   unset WAYLAND_DISPLAY
   unset WAYLAND_SOCKET
@@ -762,6 +762,9 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # to an AMD built-in GPU both use the same Vulkan driver, so name the eGPU (the shim adds --prefer-vk-device, nothing else)
   export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
   export NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)"
+  # games: the eGPU is the default Vulkan device (Mesa's device selection), not only by DRI_PRIME; with two AMD GPUs on the
+  # same driver this is what guarantees a game renders on the eGPU and not the handheld's own chip
+  export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK"
   log "generic eGPU route: $gen_vendor $gen_bdf ($gen_card) outputs: $gen_outputs"
 else
   clear_egpu_env

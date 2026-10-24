@@ -1,3 +1,9 @@
+0.7.172 — AMD eGPUs: full speed in games.
+
+**Fixed** (AMD eGPUs; NVIDIA unchanged)
+- Games could run poorly with the AMD eGPU under 30% busy. AMD cards lower their own PCIe link speed when they are not busy (down to its slowest level); behind USB4 that turns into a trap: the game is starved by the narrow link, the card stays idle, so the link stays low. While an AMD eGPU is attached, its PCIe link is now held at full speed and its power profile set for full-screen 3D (through AMD's own driver controls; both end when the eGPU is unplugged or detached). The NVIDIA path has always pinned the eGPU's link for the same reason.
+- Games are also pointed explicitly at the eGPU's Vulkan device, so with two AMD GPUs a game never picks the handheld's own one.
+
 0.7.171 — The support report shows which GPU every program really uses.
 
 **New**

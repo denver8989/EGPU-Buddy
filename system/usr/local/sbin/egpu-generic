@@ -75,6 +75,20 @@ panel_output_back(){   # the panel must come back as an OUTPUT, not just back-li
   as_deck env WAYLAND_DISPLAY="$wd" DISPLAY=:0 kscreen-doctor output."$PANEL".enable output."$PANEL".priority.1 >/dev/null 2>&1
   as_deck env WAYLAND_DISPLAY="$wd" DISPLAY=:0 kscreen-doctor --dpms on >/dev/null 2>&1 || true
   log "panel re-enabled: $(cat /sys/class/drm/card*-"$PANEL"/enabled 2>/dev/null | head -1)"; }
+# AMD cards change their own PCIe link speed by load (pp_dpm_pcie): idle -> the lowest level (as low as 2.5 GT/s x1).
+# Behind USB4 that becomes a trap: a game streaming to the card is starved by the narrow link, the card stays under 30%
+# busy, so the driver keeps the link low and the frame rate collapses (Legion Go 1 + RX 6800 XT, "GPU usage under 30%").
+# The NVIDIA path has always pinned the eGPU link for the same reason (a link that renegotiates on its own stalls); here
+# it is done through amdgpu's own controls, which are made for a running card: the top PCIe level held, and the
+# full-screen 3D power profile so the clocks ramp at once. Both vanish with the card (unplug, Safe Detach).
+amd_tune(){ local D=/sys/bus/pci/devices/$1 top idx
+  [ -w "$D/power_dpm_force_performance_level" ] && [ -r "$D/pp_dpm_pcie" ] || { log "amdgpu power controls not available on $1"; return 0; }
+  top=$(sed -n 's/^\([0-9]*\):.*/\1/p' "$D/pp_dpm_pcie" | tail -1)
+  echo manual > "$D/power_dpm_force_performance_level" 2>/dev/null || { log "amdgpu: manual power level refused"; return 0; }
+  [ -n "$top" ] && echo "$top" > "$D/pp_dpm_pcie" 2>/dev/null
+  idx=$(awk '/3D_FULL_SCREEN/{gsub(/[^0-9]/,"",$1); print $1; exit}' "$D/pp_power_profile_mode" 2>/dev/null)
+  [ -n "$idx" ] && echo "$idx" > "$D/pp_power_profile_mode" 2>/dev/null
+  log "amdgpu tuned for an eGPU: PCIe held at $(grep '\*' "$D/pp_dpm_pcie" 2>/dev/null | tr -s ' ' | head -1), profile $(grep '\*' "$D/pp_power_profile_mode" 2>/dev/null | awk '{print $2}' | head -1)"; }
 session_on_card(){ local p; for p in $(pgrep -x 'gamescope(-wl)?') $(pgrep -U "$U" -x kwin_wayland); do
     ls -l "/proc/$p/fd" 2>/dev/null | grep -qE "/dev/dri/$1\$" && return 0; done; return 1; }
 logout_plasma(){ as_deck qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null || as_deck qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null; }
@@ -102,6 +116,7 @@ attach)
   [ -n "$card" ] || { log "$vendor $bdf: no kernel driver bound a DRM card within 30s — leaving it alone"; exit 0; }
   [ -e $MOVED ] && { log "session already moved to $bdf"; exit 0; }   # display hotplug events re-enter here: never relogin twice
   echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null     # no runtime suspend across the tunnel
+  [ "$vendor" = amd ] && amd_tune "$bdf"
   out=""; for _ in $(seq 1 15); do out=$(egpu_connected_outputs "$card" | head -1); [ -n "$out" ] && break; sleep 2; done
   log "$vendor eGPU $bdf ($card) link x$(cat /sys/bus/pci/devices/$bdf/current_link_width 2>/dev/null) output=${out:-none}"
   echo "$bdf" > $MARK
