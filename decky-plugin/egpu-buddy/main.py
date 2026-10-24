@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.160"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.161"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1502,6 +1502,74 @@ def _system_report():
     return L
 
 
+# ---- other eGPU tools that change the same things (primary GPU, Game Mode session, boot GPU) --------------------------
+# Detected by the files their own installers write (read from their install scripts), removed with their OWN uninstaller
+# first, then only the leftovers that are unmistakably theirs. Read-only unless the user agrees in the install prompt.
+CONFLICTS = {
+    "all-ways-egpu": {
+        "name": "all-ways-eGPU", "url": "https://github.com/ewagner12/all-ways-egpu",
+        "why": "it makes the eGPU the primary GPU at boot and replaces the Game Mode session, the same things EGPU Buddy does",
+        "bins": ["/usr/bin/all-ways-egpu", "/usr/local/bin/all-ways-egpu", "/home/*/bin/all-ways-egpu"],
+        "marks": ["/etc/all-ways-egpu", "/etc/systemd/system/all-ways-egpu*.service", "/etc/udev/rules.d/61-mutter-primary-gpu.rules",
+                  "/usr/share/all-ways-egpu", "/etc/profile.d/all-ways-egpu-user-dir.sh"],
+        "uninstall": ["uninstall"],
+    },
+    "egpu-switcher": {
+        "name": "egpu-switcher", "url": "https://github.com/hertg/egpu-switcher",
+        "why": "it switches the X.Org primary GPU to the eGPU at boot, which EGPU Buddy manages itself",
+        "bins": ["/usr/bin/egpu-switcher", "/opt/egpu-switcher", "/usr/local/bin/egpu-switcher"],
+        "marks": ["/etc/egpu-switcher", "/etc/X11/xorg.conf.d/99-egpu-switcher.conf", "/usr/share/egpu-switcher"],
+        "uninstall": ["disable", "--hard"],
+    },
+}
+
+
+def _awe_session_overrides():   # all-ways-eGPU's Game Mode session override (it points at its gamescope-session-egpu)
+    return [f for f in glob.glob("/home/*/.config/systemd/user/gamescope-session.service.d/override.conf")
+            if "gamescope-session-egpu" in _read(f)]
+
+
+def _conflicts():
+    found = []
+    for cid, c in CONFLICTS.items():
+        ev = [p for g in c["bins"] + c["marks"] for p in glob.glob(g)]
+        if cid == "all-ways-egpu":
+            ev += _awe_session_overrides()
+        if ev:
+            found.append({"id": cid, "name": c["name"], "url": c["url"], "why": c["why"], "evidence": ev[:6]})
+    return found
+
+
+def _remove_conflict(cid):
+    c = CONFLICTS.get(cid)
+    if not c:
+        return f"unknown tool {cid}"
+    log, env = [], _clean_env(HOME="/root")
+    exe = next((p for g in c["bins"] for p in glob.glob(g) if os.access(p, os.X_OK) and not os.path.isdir(p)), None)
+    if exe:   # its own uninstaller: it knows what it changed (boot GPU, iGPU settings, its services and environment files)
+        rc, out, err = _sh([exe] + c["uninstall"], 180, env)
+        log.append(f"{os.path.basename(exe)} {' '.join(c['uninstall'])}: rc={rc}")
+    leftovers = [p for g in c["bins"] + c["marks"] for p in glob.glob(g)]
+    if cid == "all-ways-egpu":
+        for u in ("all-ways-egpu", "all-ways-egpu-boot-vga", "all-ways-egpu-shutdown", "all-ways-egpu-set-compositor"):
+            _sh(["systemctl", "disable", f"{u}.service"], 20)
+        leftovers += _awe_session_overrides() + glob.glob("/home/*/bin/all-ways-egpu-entry.sh") + glob.glob("/home/*/bin/gamescope-session-egpu") \
+            + glob.glob("/usr/bin/all-ways-egpu-entry.sh") + glob.glob("/usr/bin/gamescope-session-egpu") \
+            + glob.glob("/home/*/.config/autostart/all-ways-egpu-reenable.desktop") + glob.glob("/home/*/.local/share/applications/all-ways-egpu.desktop") \
+            + glob.glob("/usr/share/applications/all-ways-egpu.desktop")
+    elif "egpu-switcher" in _read("/etc/systemd/system/egpu.service"):
+        _sh(["systemctl", "disable", "egpu.service"], 20); leftovers.append("/etc/systemd/system/egpu.service")
+    left = []
+    for p in sorted(set(leftovers)):
+        try:
+            shutil.rmtree(p) if os.path.isdir(p) and not os.path.islink(p) else os.remove(p)
+        except OSError:
+            left.append(p)   # e.g. on a read-only /usr
+    _sh(["systemctl", "daemon-reload"], 20); _sh(["udevadm", "control", "--reload"], 10)
+    log.append("removed" if not left else f"could not remove: {' '.join(left)}")
+    return f"{c['name']}: " + "; ".join(log)
+
+
 def _save_report():
     """The support report as ONE file in the user's Desktop folder (the plugin button and egpu-report both use this)."""
     text = _support_report()
@@ -1615,6 +1683,17 @@ class Plugin:
                                             "It is used by itself when it is done (a few minutes); nothing to install."}
         return _start_setup("install", bool(with_driver), vendor=(vendor if vendor in ("nvidia", "amd") else "nvidia"))
 
+
+    async def get_conflicts(self):
+        try:
+            return _conflicts()
+        except Exception:  # noqa: BLE001
+            return []
+
+    async def remove_conflicts(self, ids: list = None):
+        msgs = [_remove_conflict(i) for i in (ids or [c["id"] for c in _conflicts()])]
+        still = _conflicts()
+        return {"ok": not still, "message": " · ".join(msgs) + (" · a reboot is recommended before using the eGPU" if msgs else "")}
 
     async def accept_untested(self):
         d = _settings(); d["accepted_untested"] = True; _save_settings(d); return {"ok": True, "message": "accepted"}

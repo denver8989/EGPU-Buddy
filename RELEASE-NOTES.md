@@ -1,3 +1,8 @@
+0.7.161 — Conflicting eGPU tools are found before installing.
+
+**New**
+- Installing or updating from the plugin now checks for other eGPU tools that change the same settings as EGPU Buddy (the primary GPU, the Game Mode session, the GPU used at boot): **all-ways-eGPU** and **egpu-switcher**. If one is found, the plugin says what was found and offers to uninstall it with its own uninstaller before installing EGPU Buddy; you can also keep it and continue, or cancel. Running both leads to black screens and a GPU that does not switch. A reboot is recommended after removing one. Nothing is changed unless you choose to uninstall.
+
 0.7.160 — Bazzite: the cause of the black screens after Safe Detach and cable pulls, found in the tester's log.
 
 **Fixed** (Bazzite only)

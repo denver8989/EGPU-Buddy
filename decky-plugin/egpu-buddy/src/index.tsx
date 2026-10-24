@@ -53,6 +53,9 @@ const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"],
 const resetClocks = callable<[], Result>("reset_clocks");
 type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
+type Conflict = { id: string; name: string; url: string; why: string; evidence: string[] };
+const getConflicts = callable<[], Conflict[]>("get_conflicts");   // other eGPU tools that change the same things
+const removeConflicts = callable<[string[]], Result>("remove_conflicts");
 const acceptUntested = callable<[], Result>("accept_untested");
 const installSystem = callable<[boolean, string?], Result>("install_system");
 const uninstallSystem = callable<[], Result>("uninstall_system");
@@ -251,7 +254,7 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.160";
+const PLUGIN_VERSION = "0.7.161";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -402,7 +405,23 @@ function Content() {
     strDescription={(egpuMounted ? "The eGPU is safely detached first: Game Mode moves to the handheld screen for a few seconds. " : "") + "Then the system integration is removed and the machine goes back to how it was."}
     onOK={() => run(uninstallSystem)} />);
   const WHAT = "Installs the hot-plug scripts, the Game Mode session, the GBM gamescope, the boot policy, the desktop app, the patched hot-unplug driver with the NVIDIA userspace pinned to it, and the kernel parameters. Backups are kept.";
-  const confirmInstall = (title: string, go: () => Promise<Result>, detachGo?: () => Promise<Result>) => {
+  // Before installing: other eGPU tools that change the same settings (primary GPU, Game Mode session, boot GPU) conflict
+  // with EGPU Buddy. Offer to remove them with their own uninstaller; installing alongside them stays possible.
+  const withConflictCheck = (next: () => void) => {
+    getConflicts().then((cs) => {
+      if (!cs?.length) { next(); return; }
+      showModal(<ConfirmModal strTitle={cs.length > 1 ? "Other eGPU tools found" : `${cs[0].name} found`} bDestructiveWarning
+        strDescription={cs.map((c) => `${c.name} (${c.url}) is installed: ${c.why}. Found: ${c.evidence.slice(0, 3).join(", ")}`).join("\n\n")
+          + "\n\nRunning both leads to black screens and a GPU that does not switch. Uninstall " + (cs.length > 1 ? "them" : "it")
+          + " now (with " + (cs.length > 1 ? "their" : "its") + " own uninstaller), then install EGPU Buddy? A reboot is recommended afterwards."}
+        strOKButtonText="Uninstall, then continue" strMiddleButtonText="Keep and continue" strCancelButtonText="Cancel"
+        onOK={() => run(async () => { const r = await removeConflicts(cs.map((c) => c.id)); next(); return r; })}
+        onMiddleButton={next} />);
+    }).catch(next);
+  };
+  const confirmInstall = (title: string, go: () => Promise<Result>, detachGo?: () => Promise<Result>) =>
+    withConflictCheck(() => confirmInstallNow(title, go, detachGo));
+  const confirmInstallNow = (title: string, go: () => Promise<Result>, detachGo?: () => Promise<Result>) => {
     const needAccept = !!(su?.untested && !su.accepted_untested);
     if (detachGo && up?.needs_detach && !needAccept) {   // SteamOS with the eGPU in use: the update cannot be written until it is detached
       showModal(<ConfirmModal strTitle={`${title}: the eGPU is in use`} strOKButtonText="Detach and update" bDestructiveWarning
@@ -685,7 +704,7 @@ function Content() {
           )}
 
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { if (confirmSetup === "install") { setConfirmSetup(""); run(() => installSystem(false)); } else setConfirmSetup("install"); }}>
+            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { if (confirmSetup === "install") { setConfirmSetup(""); withConflictCheck(() => run(() => installSystem(false))); } else setConfirmSetup("install"); }}>
               {confirmSetup === "install"
                 ? "Press again to confirm"
                 : (su?.installed_version ? "Reinstall / update system integration" : "NVIDIA eGPU - install (builds the driver)")}
@@ -700,7 +719,7 @@ function Content() {
           )}
 
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { if (confirmSetup === "amd") { setConfirmSetup(""); run(() => installSystem(false, "amd")); } else setConfirmSetup("amd"); }}>
+            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { if (confirmSetup === "amd") { setConfirmSetup(""); withConflictCheck(() => run(() => installSystem(false, "amd"))); } else setConfirmSetup("amd"); }}>
               {confirmSetup === "amd"
                 ? "Press again to confirm"
                 : (su?.installed_version ? "Switch to the AMD / Intel install (no NVIDIA driver)" : "AMD / Intel eGPU - install (no driver build)")}
