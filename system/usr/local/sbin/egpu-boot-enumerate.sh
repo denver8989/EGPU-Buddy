@@ -19,6 +19,12 @@ LOG=/var/log/egpu-boot-enumerate.log
 # bus-poking recovery below so it can never run on someone's plain dock.
 SEEN=/var/lib/nvegpu/egpu-seen
 log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync -d "$LOG" 2>/dev/null || true; }
+# AMD / Intel eGPU (the AMD / Intel install, or such a card on the bus): never this NVIDIA path. It looks for an NVIDIA
+# card only and, not finding one, re-authorized the dock: that dropped a working RX 6800 XT off the bus mid-attach and hung
+# the handheld (Legion Go 1, 2026-10-24). /usr/local/sbin/egpu-generic handles AMD / Intel eGPUs.
+_egpu_nonnv(){ [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && return 0
+  case "$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '{print $2}')" in amd|intel) return 0 ;; esac; return 1; }
+_egpu_nonnv && { log "AMD / Intel eGPU: nothing for the NVIDIA boot path to do"; exit 0; }
 
 # The flood lockout that used to live here is gone: it refused to bring the eGPU up at boot
 # until the user ran egpu-rearm, which read as "the eGPU just stopped working". Unplugging the

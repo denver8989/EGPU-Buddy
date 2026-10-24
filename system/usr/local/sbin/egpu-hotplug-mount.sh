@@ -14,6 +14,12 @@ LOG=/var/log/egpu-hotplug-mount.log
 # fdatasync every line: a fabric flood is an instant reset, and it took the unflushed tail of this
 # log with it every time — the lines that would have shown which step caused it
 log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync -d "$LOG" 2>/dev/null || true; }
+# AMD / Intel eGPU (the AMD / Intel install, or such a card on the bus): never this NVIDIA path. It looks for an NVIDIA
+# card only and, not finding one, re-authorized the dock: that dropped a working RX 6800 XT off the bus mid-attach and hung
+# the handheld (Legion Go 1, 2026-10-24). /usr/local/sbin/egpu-generic handles AMD / Intel eGPUs.
+_egpu_nonnv(){ [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && return 0
+  case "$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '{print $2}')" in amd|intel) return 0 ;; esac; return 1; }
+_egpu_nonnv && { log "AMD / Intel eGPU: not the NVIDIA attach path (egpu-generic handles it)"; exit 0; }
 
 # kscreen-doctor is a Qt program. With no WAYLAND_DISPLAY (and no DISPLAY) it cannot create a
 # platform plugin, Qt calls qFatal(), and the process ABORTS before doing anything at all:
@@ -228,6 +234,8 @@ if [ -z "$gpu" ]; then
     gpu=$(find_gpu || true); [ -n "$gpu" ] && { log "GPU appeared after a gentle rescan (~$((_g*3))s) — no re-authorization needed"; break; }
   done
 fi
+# the card may enumerate later than the dock: look again right before the drastic step, never re-authorize under it
+[ -z "$gpu" ] && _egpu_nonnv && { log "an AMD / Intel eGPU came up behind the dock: leaving it to egpu-generic"; exit 0; }
 if [ -z "$gpu" ]; then
   log "no GPU yet — clear DPC (status+trigger) + reauth + rescan"
   clear_dpc

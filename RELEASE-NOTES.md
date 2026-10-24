@@ -1,3 +1,8 @@
+0.7.166 — AMD / Intel eGPUs: plugging in no longer drops the card and hangs the handheld.
+
+**Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)
+- On plug-in the NVIDIA attach also ran for an AMD card (it starts for any Thunderbolt dock). It looks for an NVIDIA card only and, finding none, re-authorized the dock while the AMD attach was moving Game Mode onto the card: the card dropped off the bus, the screen stayed black and the handheld hung (first test on a Legion Go 1 with an RX 6800 XT). The NVIDIA attach, boot and mount steps now do nothing on an AMD / Intel install or when an AMD / Intel eGPU is on the bus, and never re-authorize the dock under one.
+
 0.7.165 — Switching to the AMD / Intel install is made boot-safe on every system.
 
 **Changed**
