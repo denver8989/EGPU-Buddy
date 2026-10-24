@@ -1,3 +1,10 @@
+0.7.165 — Switching to the AMD / Intel install is made boot-safe on every system.
+
+**Changed**
+- A driver build still running is stopped cleanly through systemd, never by killing processes (on CachyOS a killed build could interrupt the package manager), and the NVIDIA package is not removed while the package manager is busy.
+- Bazzite: the old NVIDIA driver files are only deleted once nothing has them merged into the system; until then they wait for the next boot, where the repair at startup removes them.
+- Nothing in the boot path changes: the kernel parameters stay as they were (they are already active and needed by every eGPU), and Game Mode falls back to the system's own gamescope.
+
 0.7.164 — The AMD / Intel install works from the plugin, and switching to it removes the NVIDIA driver.
 
 **Fixed**

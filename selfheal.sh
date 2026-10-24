@@ -89,6 +89,12 @@ fi
 if { [ -n "$ro" ] || grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; } && [ -x /usr/local/sbin/egpu-gamescope-repair ] && /usr/local/sbin/egpu-gamescope-repair --needed >>$SLOG 2>&1; then
   systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 && log "GBM-scanout gamescope needs a rebuild for this OS: started in the background"
 fi
+# Bazzite, switched to the AMD / Intel install: the old NVIDIA driver files, deleted once nothing has them merged
+if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ -d /var/lib/nvegpu/bazzite ] && [ ! -L /etc/extensions/egpu-nvidia ] \
+   && ! systemd-sysext status 2>/dev/null | grep -qw egpu-nvidia; then
+  rm -rf /var/lib/nvegpu/bazzite && log "removed the old NVIDIA driver files (AMD / Intel install)"
+  rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service
+fi
 # Bazzite only (the tool exists only there): patched NVIDIA modules for a new kernel, a staged build taking over
 # In the BACKGROUND: this service runs before the login screen, and a build takes 10-20 minutes (0.7.146 ran it here and
 # held the boot at the logo). The boot guard already decided before the merge whether the build matches this boot.

@@ -203,25 +203,36 @@ fi
 # NVIDIA-only gamescope fix are removed; a driver build still running is stopped. The kernel parameters stay: they are
 # the USB4 / PCIe settings every eGPU needs (the one NVIDIA option among them does nothing without NVIDIA's driver).
 if [ "$GPU_VENDOR" = amd ] && [ "$MODE" = install ]; then
+  # A driver build still running is stopped through systemd (its whole unit, cleanly), never by killing processes: on
+  # CachyOS the build ends in pacman, and a killed pacman leaves a locked, half-written package database.
   sudo systemctl stop egpu-buddy-driver-build.service egpu-driver-prebuild.service egpu-buddy-driver-repack.service \
     egpu-buddy-bazzite-driver-boot.service >/dev/null 2>&1 || true
-  sudo pkill -f 'install-steamos-sysext\.sh|install-patched-nvidia\.sh|egpu-bazzite-driver --(build|boot|stage-build)' >/dev/null 2>&1 || true
   if [ -d /sys/module/nvidia ]; then
     echo "note: the NVIDIA driver is loaded right now (an NVIDIA eGPU attached?): it is left in place; run this install again with it unplugged to remove it"
   else
+    # SteamOS: the driver is an extension on /home; taking it out returns /usr to Valve's image exactly
     if [ -d /home/.egpu-buddy ] && [ -f "$SYSEXT_TOOL" ]; then
       say "== AMD / Intel install: removing the NVIDIA driver extension"; sudo bash "$SYSEXT_TOOL" --remove 2>&1 | tail -1
     fi
+    # Bazzite: the link goes (the extension is unmerged at the next boot); its files are deleted only once nothing has them
+    # merged (deleting under a mounted overlay is unsafe): here if already unmerged, otherwise by the self-heal later
     if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then
-      say "== AMD / Intel install: removing the patched NVIDIA driver"; sudo /usr/local/sbin/egpu-bazzite-driver --remove 2>&1 | tail -1
-      sudo rm -rf /var/lib/nvegpu/bazzite 2>/dev/null || true
-      sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service
-      sudo systemctl daemon-reload >/dev/null 2>&1 || true
+      say "== AMD / Intel install: removing the patched NVIDIA driver"
+      if sudo /usr/local/sbin/egpu-bazzite-driver --remove 2>&1 | tail -1 && [ ! -L /etc/extensions/egpu-nvidia ]; then
+        sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service
+        sudo systemctl daemon-reload >/dev/null 2>&1 || true
+      fi
     fi
+    # CachyOS / Arch: never while pacman is working (another install, an update, a build ending in pacman)
     if command -v pacman >/dev/null 2>&1 && pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1; then
-      say "== AMD / Intel install: removing the patched NVIDIA driver package"; sudo pacman -R --noconfirm nvidia-open-egpu-dkms 2>&1 | tail -1
+      if [ -e /var/lib/pacman/db.lck ]; then
+        echo "note: pacman is busy (another install or update): the NVIDIA driver package is left in place; run this install again when it is done"
+      else
+        say "== AMD / Intel install: removing the patched NVIDIA driver package"; sudo pacman -R --noconfirm nvidia-open-egpu-dkms 2>&1 | tail -1
+      fi
     fi
   fi
+  # the NVIDIA-only gamescope fix (Game Mode falls back to the system's own gamescope when it is gone)
   rm -rf "$USER_HOME/.local/gamescope-gbm" 2>/dev/null || sudo rm -rf "$USER_HOME/.local/gamescope-gbm"
   [ "$IS_BAZZITE" = 1 ] && sudo rm -rf /usr/local/lib/egpu-buddy/gamescope-gbm /etc/nv-egpu-buddy/gamescope-wanted 2>/dev/null
   echo "AMD / Intel install: no NVIDIA driver and no NVIDIA gamescope fix on this machine"
