@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.173"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.174"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -2034,11 +2034,13 @@ class Plugin:
             # on the bus but never brought up (lockout, or an attach that stopped early): the full attach, not just a session switch
             _spawn_root_job("attach", ["/usr/local/sbin/egpu-hotplug-mount.sh", "--manual"])
             return {"ok": True, "message": "Attaching: driver load, then Game Mode restarts on the eGPU display (about 30 seconds). Reopen this menu afterwards."}
-        if _gpu_bdf():
+        gen = None if _gpu_bdf() else _generic_egpu()
+        if _gpu_bdf() or gen:
             out = _gamescope_env("OUTPUT_CONNECTOR").split(",")[0]
             if out not in ("", "*", "eDP-1"):
                 return {"ok": True, "message": f"Already attached: Game Mode is on {out}."}
-            cmd = [SWITCH] + (["--force"] if force else [])
+            # AMD / Intel eGPU on the bus: its own attach (tuning, screen wake, sound), which also moves Game Mode
+            cmd = ([GENERIC, "attach", "--manual"] if gen else [SWITCH]) + (["--force"] if force else [])
         else:
             cmd = [REATTACH]  # GPU off the bus (after a safe detach): rescan + fresh driver + gamescope switch
         _spawn_root_job("attach", cmd)

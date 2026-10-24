@@ -24,7 +24,7 @@ log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync 
 # the handheld (Legion Go 1, 2026-10-24). /usr/local/sbin/egpu-generic handles AMD / Intel eGPUs.
 _egpu_nonnv(){ [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && return 0
   case "$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '{print $2}')" in amd|intel) return 0 ;; esac; return 1; }
-_egpu_nonnv && { log "AMD / Intel eGPU: nothing for the NVIDIA boot path to do"; exit 0; }
+_egpu_nonnv && { log "AMD / Intel eGPU: boot bring-up by egpu-generic"; exec /usr/local/sbin/egpu-generic bringup --boot; }
 
 # The flood lockout that used to live here is gone: it refused to bring the eGPU up at boot
 # until the user ran egpu-rearm, which read as "the eGPU just stopped working". Unplugging the

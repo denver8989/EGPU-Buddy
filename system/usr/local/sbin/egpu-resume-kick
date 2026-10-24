@@ -7,7 +7,8 @@
 set -u
 log(){ logger -t egpu-resume-kick "$*"; }
 sleep 4
-lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' || exit 0
+# AMD / Intel eGPU: its own resume step (power tuning back, panel off again); this NVIDIA modeset kick is not needed there
+lspci -Dn 2>/dev/null | grep -qE '0300: 10de:' || { case "$(/usr/local/sbin/egpu-detect 2>/dev/null)" in *" amd"*|*" intel"*) exec /usr/local/sbin/egpu-generic resume ;; esac; exit 0; }
 nv=""; for card in /sys/class/drm/card[0-9]; do [ "$(cat "$card/device/vendor" 2>/dev/null)" = 0x10de ] && nv=$card; done
 [ -n "$nv" ] || exit 0
 active=$(for c in "$nv"-*; do [ "$(cat "$c/status" 2>/dev/null)" = connected ] && echo "${c##*/}"; done | head -1)

@@ -4,7 +4,7 @@
 # egpu-gamemode-detach, egpu-surprise-recover) is separate and is never entered from here.
 # What differs from NVIDIA: the kernel driver is shared with the built-in GPU, so nothing is loaded or
 # unloaded; no BAR resize / link pin / FLR; detach = move the session to the panel, then PCI-remove the eGPU only.
-#   egpu-generic attach | detach | surprise
+#   egpu-generic attach [--manual] [--force] | bringup [--boot] | resume | detach | surprise
 # Portable by construction: GPUs, DRM cards, the panel connector and the desktop user are detected, not assumed.
 set -u
 . /usr/local/sbin/egpu-detect                              # also reads /etc/nv-egpu-buddy/egpu.conf (EGPU_USER, EGPU_PCI_BDF)
@@ -37,8 +37,11 @@ log(){ printf '%s %s: %s\n' "$(date '+%F %T')" "${verb:-?}" "$*" >> "$LOG"; }
 status(){ printf '{"state":"%s","message":"%s"}\n' "$1" "$2" > $ST/gm-status.json; }
 as_deck(){ runuser -u "$UN" -- env $RUNENV "$@"; }
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
-verb=${1:-}; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
-exec 9>/run/egpu-generic.lock; flock -n 9 || { log "another instance running — skip"; exit 0; }
+verb=${1:-}; manual=0; force=""; boot=0
+for a in "${@:2}"; do case "$a" in --manual) manual=1 ;; --force) force=--force ;; --boot) boot=1 ;; esac; done
+SEEN=/var/lib/nvegpu/egpu-seen; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
+# resume waits its turn (the dock re-announces itself on wake at the same moment); every other verb skips a duplicate
+exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ]; then flock -w 60 9; else flock -n 9; fi || { log "another instance running — skip"; exit 0; }
 
 game_mode(){ pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1; }
 igpu_card(){ basename "$(ls -d /sys/bus/pci/devices/"$(egpu_igpu_bdf)"/drm/card[0-9]* 2>/dev/null | head -1)"; }
@@ -91,10 +94,40 @@ amd_tune(){ local D=/sys/bus/pci/devices/$1 top idx
   log "amdgpu tuned for an eGPU: PCIe held at $(grep '\*' "$D/pp_dpm_pcie" 2>/dev/null | tr -s ' ' | head -1), profile $(grep '\*' "$D/pp_power_profile_mode" 2>/dev/null | awk '{print $2}' | head -1)"; }
 session_on_card(){ local p; for p in $(pgrep -x 'gamescope(-wl)?') $(pgrep -U "$U" -x kwin_wayland); do
     ls -l "/proc/$p/fd" 2>/dev/null | grep -qE "/dev/dri/$1\$" && return 0; done; return 1; }
+# The NVIDIA path's dock bring-up (egpu-hotplug-mount.sh / egpu-boot-enumerate.sh), minus everything NVIDIA: authorize a
+# dock boltd left waiting, keep the tunnel ports awake, then plain rescans until the card is on the bus. NEVER the NVIDIA
+# path's last resort (de-authorize + re-authorize = a cable pull in software): that dropped a working RX 6800 XT mid-attach.
+# The bus is only poked for a machine that has had an eGPU before ($SEEN): a plain dock or a USB4 drive is left alone.
+bring_up(){ local tb sec any=0 _
+  for tb in /sys/bus/thunderbolt/devices/*-*; do [ -e "$tb/device_name" ] && any=1; done
+  [ "$any" = 1 ] || return 0
+  egpu_find >/dev/null && return 0                          # on the bus already (the usual case): nothing to do
+  if [ "$boot" = 1 ] && [ ! -e /run/egpu-rearmed ] && dmesg 2>/dev/null | grep -qi 'data fabric sync flood'; then
+    log "the system reset itself with the eGPU connected on the last boot: bus left alone at boot (plug in again or press Attach)"; return 0; fi
+  for _ in $(seq 1 6); do grep -qx 0 /sys/bus/thunderbolt/devices/*-*/authorized 2>/dev/null || break; sleep 1; done   # boltd first
+  sec=$(cat /sys/bus/thunderbolt/devices/domain0/security 2>/dev/null)
+  for tb in /sys/bus/thunderbolt/devices/*-*; do
+    [ -e "$tb/device_name" ] && [ "$(cat "$tb/authorized" 2>/dev/null)" = 0 ] || continue
+    case "$sec" in user|none|dponly) echo 1 > "$tb/authorized" 2>/dev/null && log "authorized $(cat "$tb/device_name") (security=$sec)" ;;
+      *) log "$(cat "$tb/device_name") is not authorized (security '$sec' needs a key): authorize it once from the desktop (boltctl enroll)" ;; esac
+  done
+  command -v boltctl >/dev/null 2>&1 && for tb in /sys/bus/thunderbolt/devices/*-*; do [ -e "$tb/unique_id" ] && boltctl enroll --policy auto "$(cat "$tb/unique_id")" >/dev/null 2>&1; done
+  [ -e $SEEN ] || [ "$boot" = 0 ] || { log "boot: a Thunderbolt device but no eGPU has attached on this machine yet: bus left alone"; return 0; }
+  platform_guards
+  for _ in $(seq 1 8); do egpu_find >/dev/null && { log "eGPU on the bus after the dock bring-up"; return 0; }; echo 1 > /sys/bus/pci/rescan 2>/dev/null; sleep 3; done
+  egpu_find >/dev/null || log "no GPU behind the Thunderbolt device after 24 s of rescans (a dock, or the card is still starting: press Attach)"; }
 logout_plasma(){ as_deck qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null || as_deck qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null; }
 
 case "$verb" in
-attach)
+bringup|attach)
+  if [ "$verb" = bringup ]; then
+    bring_up
+    if [ "$boot" = 1 ]; then   # before the login screen: protect + tune the card; Game Mode starts on it by itself (the wrapper)
+      read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" != nvidia ] || exit 0
+      platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && amd_tune "$bdf"
+      echo "$bdf" > $MARK; mkdir -p /var/lib/nvegpu; : > $SEEN; log "boot: $vendor eGPU $bdf ready"; exit 0
+    fi
+  fi
   # Runs on every display hotplug of the built-in GPU too (XR glasses on the handheld's USB-C reconnect about once a
   # second while Game Mode is on another screen): a read-only look first, and nothing touched unless an AMD / Intel
   # eGPU is there and not yet set up. NVIDIA has its own path (egpu-hotplug-mount.sh).
@@ -105,6 +138,8 @@ attach)
   # (only an old mark: right after an attach the session is still restarting onto the card, and the monitor's hot-plug
   # events land here too; treating those as stale would restart Game Mode in a loop)
   if [ -e $MOVED ] && [ -n "$card" ] && [ $(( $(date +%s) - $(stat -c %Y $MOVED 2>/dev/null || date +%s) )) -gt 90 ] && ! session_on_card "$card"; then log "stale attach mark (the session is not on $card): attaching again"; rm -f $MOVED $MARK; fi
+  # a press of Attach always tries again unless the session really is on the card
+  [ "$manual" = 1 ] && [ -e $MOVED ] && ! session_on_card "$card" && rm -f $MOVED
   [ -e $MOVED ] && exit 0
   # platform guards first: the tunnel must be awake and its fatal errors masked BEFORE the card is
   # touched, or a link event during bring-up can take the whole machine down with a fabric flood.
@@ -119,9 +154,15 @@ attach)
   [ "$vendor" = amd ] && amd_tune "$bdf"
   out=""; for _ in $(seq 1 15); do out=$(egpu_connected_outputs "$card" | head -1); [ -n "$out" ] && break; sleep 2; done
   log "$vendor eGPU $bdf ($card) link x$(cat /sys/bus/pci/devices/$bdf/current_link_width 2>/dev/null) output=${out:-none}"
-  echo "$bdf" > $MARK
+  echo "$bdf" > $MARK; mkdir -p /var/lib/nvegpu; : > $SEEN
   [ -n "$out" ] || { log "no display on the eGPU: it stays available for rendering (DRI_PRIME), session untouched"; exit 0; }
-  if game_mode; then touch $MOVED; exec 9>&-; exec /usr/local/sbin/egpu-gamemode-switch; fi
+  if game_mode; then touch $MOVED; exec 9>&-
+    # as on NVIDIA: sound follows the picture and the monitor is asked to wake (DDC/CI / CEC). A deferred switch (a game
+    # is running) leaves no "moved" mark behind, or the later Attach would be skipped as already done.
+    /usr/local/sbin/egpu-gamemode-switch $force >/dev/null 2>&1; rc=$?; log "gamemode-switch rc=$rc"
+    if [ $rc = 0 ]; then audio follow; /usr/local/sbin/egpu-screen wake "$out" 2>/dev/null | while read -r l; do log "screen $l"; done
+    else rm -f $MOVED; fi
+    exit $rc; fi
   # boot / login screen: no session to move. Game Mode picks the eGPU by itself (session wrapper); never touch the greeter's GPU.
   pgrep -U 1000 -x kwin_wayland >/dev/null || { log "no running session — nothing to move"; exit 0; }
   pgrep -u "$UN" -x plasmashell >/dev/null || { log "login screen, not a user desktop — nothing to move"; exit 0; }
@@ -134,6 +175,17 @@ attach)
     as_deck kscreen-doctor output."$out".enable output."$out".priority.1 >/dev/null 2>&1; sleep 1
     as_deck kscreen-doctor output."$PANEL".disable >/dev/null 2>&1 && log "external-only: $out primary, panel off"
       audio follow ) &
+  ;;
+resume)
+  # after sleep: the same protections and tuning as at attach (a resumed card starts from its defaults again), then, while
+  # Game Mode is on the eGPU display, the handheld panel back off (resume lights it) and the monitor asked to wake
+  read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" != nvidia ] || exit 0
+  platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && amd_tune "$bdf"
+  [ -n "$card" ] && session_on_card "$card" || exit 0
+  /usr/local/sbin/egpu-screen wake 2>/dev/null | while read -r l; do log "screen $l"; done
+  g=$(pgrep -n -x 'gamescope(-wl)?') || exit 0
+  oc=$(tr '\0' '\n' </proc/$g/environ 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p'); case "${oc%%,*}" in ""|"*"|eDP-*) exit 0 ;; esac
+  /usr/local/sbin/egpu-panel off >/dev/null 2>&1 && log "resume: handheld panel off again (Game Mode on ${oc%%,*})"
   ;;
 detach)
   read -r bdf vendor card < <(egpu_find) || { status IDLE "No eGPU connected."; exit 0; }
@@ -175,5 +227,5 @@ surprise)
   if game_mode; then sleep 3; rm -f /run/user/1000/nv-egpu-buddy-gamescope-starts; as_deck systemctl --user restart gamescope-session.target >/dev/null 2>&1; status IDLE "eGPU unplugged. Game Mode is back on the handheld screen."
   else pin_plasma; fi                                      # KWin exits when its primary GPU vanishes; autologin brings Plasma back on the panel
   ;;
-*) echo "usage: egpu-generic attach|detach|surprise"; exit 2 ;;
+*) echo "usage: egpu-generic attach [--manual] [--force] | bringup [--boot] | resume | detach | surprise"; exit 2 ;;
 esac

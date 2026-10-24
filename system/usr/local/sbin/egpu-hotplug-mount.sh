@@ -19,7 +19,8 @@ log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync 
 # the handheld (Legion Go 1, 2026-10-24). /usr/local/sbin/egpu-generic handles AMD / Intel eGPUs.
 _egpu_nonnv(){ [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && return 0
   case "$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '{print $2}')" in amd|intel) return 0 ;; esac; return 1; }
-_egpu_nonnv && { log "AMD / Intel eGPU: not the NVIDIA attach path (egpu-generic handles it)"; exit 0; }
+# The dock bring-up (authorize, tunnel ports, rescans) it does have its AMD / Intel version there: hand over to it.
+_egpu_nonnv && { log "AMD / Intel eGPU: handing the dock over to egpu-generic"; exec /usr/local/sbin/egpu-generic bringup ${1:+--manual}; }
 
 # kscreen-doctor is a Qt program. With no WAYLAND_DISPLAY (and no DISPLAY) it cannot create a
 # platform plugin, Qt calls qFatal(), and the process ABORTS before doing anything at all:

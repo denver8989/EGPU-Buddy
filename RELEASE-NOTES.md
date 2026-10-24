@@ -1,3 +1,15 @@
+0.7.174 — AMD / Intel eGPUs get the hot-plug features of the NVIDIA path.
+
+**New** (AMD / Intel eGPUs; NVIDIA unchanged)
+- Plugging in the dock: a dock the system left unauthorized is authorized, the USB4 ports are kept awake and the bus is rescanned until the card shows up, as on NVIDIA. The NVIDIA path's last resort (disconnecting the dock in software and connecting it again) is never used: it dropped a working AMD card.
+- Booting with the eGPU connected: the card is protected against a cable pull and tuned before the login screen, so Game Mode starts on it directly.
+- Sleep and wake: the power tuning is applied again, the handheld screen goes back off while Game Mode is on the eGPU monitor, and the monitor is asked to wake.
+- Attach moves sound to the monitor and asks the monitor to turn on (DDC/CI / HDMI-CEC), as on NVIDIA.
+- The Attach button works for an AMD eGPU that is already plugged in (also with a game open, after the warning), and after Safe Detach it brings the card back without replugging.
+
+**Fixed**
+- An attach put off because a game was running was afterwards skipped as already done.
+
 0.7.173 — AMD eGPUs: Game Mode only sees the eGPU, no reboot.
 
 **Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)
