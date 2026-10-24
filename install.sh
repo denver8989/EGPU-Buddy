@@ -312,6 +312,13 @@ if want gamescope && [ "$IS_BAZZITE" = 1 ]; then
   # hook: one line per Game Mode client (Bazzite: steam, ogui-steam). A file the user wrote themselves is left alone.
   HK="$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"; umkdir "$(dirname "$HK")"
   sed "s|@GAMESCOPE@|$BZ_GS|" "$ROOT/packaging/bazzite/egpu-session-env" > "$HK"; uown "$HK"
+  # the Game Mode environment older versions wrote at boot into ~/.config/environment.d overrode this hook on Bazzite (read
+  # after it) and outlived the eGPU: removed, and taken out of the running user manager (see nv-egpu-buddy-mount)
+  EF="$USER_HOME/.config/environment.d/10-egpu-gamescope-output.conf"
+  if grep -qs 'NV-EGPU-Buddy - NVIDIA-native Game Mode environment' "$EF"; then
+    rm -f "$EF"; userctl unset-environment OUTPUT_CONNECTOR KWIN_DRM_DEVICES VK_DRIVER_FILES VK_ICD_FILENAMES __EGL_VENDOR_LIBRARY_FILENAMES \
+      __GLX_VENDOR_LIBRARY_NAME PROTON_ENABLE_NVAPI DXVK_ENABLE_NVAPI PROTON_HIDE_NVIDIA_GPU DXVK_HDR STEAM_DISPLAY_REFRESH_LIMITS >/dev/null 2>&1 || true
+  fi
   SD="$USER_HOME/.config/gamescope-session-plus/sessions.d"; umkdir "$SD"
   for c in steam ogui-steam; do
     if [ ! -e "$SD/$c" ] || grep -q 'SteamOS EGPU Buddy' "$SD/$c"; then

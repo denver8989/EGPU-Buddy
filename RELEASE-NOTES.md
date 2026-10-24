@@ -1,3 +1,8 @@
+0.7.160 — Bazzite: the cause of the black screens after Safe Detach and cable pulls, found in the tester's log.
+
+**Fixed** (Bazzite only)
+- After the machine had once started with the eGPU plugged in, a Game Mode setting file (written at boot, as on SteamOS) kept telling Game Mode to use the NVIDIA card and driver, even after the eGPU was detached or pulled. On SteamOS EGPU Buddy's session overrides that file; Bazzite reads it last, so it won. The result: Safe Detach failed (the handheld-screen session itself held the NVIDIA card), Game Mode could not start after a cable pull (black screen, then Bazzite's fallback to the desktop), and the desktop ran across both graphics chips (sluggish). The file is no longer written on Bazzite and an existing one is removed; Game Mode's screen and graphics drivers are decided at every start from what is actually connected.
+
 0.7.159 — Bazzite: Game Mode Safe Detach, cable pull and the screen switch, made to work the way they do on SteamOS.
 
 **Fixed** (Bazzite only)

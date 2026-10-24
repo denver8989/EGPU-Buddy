@@ -349,6 +349,11 @@ recover_once() {
 }
 
 write_gamescope_env() {
+  # Bazzite: never. Its Game Mode reads ~/.config/environment.d AFTER EGPU Buddy's session hook, so this file overrode the
+  # hook's routing, and it outlived the eGPU: after a Safe Detach or cable pull Game Mode was still told to use the NVIDIA
+  # card and driver (black screen, crash loop, Bazzite's fallback to the desktop) and the desktop ran on both GPUs.
+  # There the hook (packaging/bazzite/egpu-session-env) decides the route at every Game Mode start, from the live state.
+  if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then clear_gamescope_env; return 0; fi
   local conf_dir="/home/deck/.config/environment.d"
   local conf_file="$conf_dir/10-egpu-gamescope-output.conf"
   local egpu_card igpu_card igpu_bdf output_connector

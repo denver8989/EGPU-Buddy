@@ -9,6 +9,16 @@ _egpu_bz(){
   # reads (not while a desktop is on screen), and the login fallback back to the system's own default (Game Mode)
   pgrep -u "$(id -u)" -x kwin_wayland >/dev/null 2>&1 || printf gamemode > "$rt/egpu-session-type" 2>/dev/null
   sudo -n /usr/local/sbin/nv-egpu-buddy-privileged session-fallback game >/dev/null 2>&1
+  # The Game Mode environment an older version wrote at boot (nv-egpu-buddy-mount) into ~/.config/environment.d, which this
+  # session reads AFTER this hook: removed (the glob is expanded later, so it is not read now), and what it put into the user
+  # manager and this session taken back out. The route is decided below from the live state, at every Game Mode start.
+  if grep -qs 'NV-EGPU-Buddy - NVIDIA-native Game Mode environment' "$HOME/.config/environment.d/10-egpu-gamescope-output.conf"; then
+    rm -f "$HOME/.config/environment.d/10-egpu-gamescope-output.conf"
+    for v in OUTPUT_CONNECTOR KWIN_DRM_DEVICES VK_DRIVER_FILES VK_ICD_FILENAMES __EGL_VENDOR_LIBRARY_FILENAMES __GLX_VENDOR_LIBRARY_NAME \
+             PROTON_ENABLE_NVAPI DXVK_ENABLE_NVAPI PROTON_HIDE_NVIDIA_GPU DXVK_HDR STEAM_DISPLAY_REFRESH_LIMITS; do
+      unset "$v"; systemctl --user unset-environment "$v" >/dev/null 2>&1
+    done
+  fi
   # SAFETY NET (the SteamOS wrapper's): a Vulkan driver pin naming a file that is gone or hidden (the NVIDIA one after a
   # detach or cable pull, left in the user manager by a desktop attach) makes the loader find no driver at all: gamescope
   # cannot start, the screen stays black and the session crash-loops. Repaired here, in this session and the user manager.
@@ -56,6 +66,7 @@ _egpu_bz(){
     # the patched driver installed its Vulkan driver is always there, and after a cable pull it would talk to an NVIDIA
     # driver whose card is gone (gamescope hanging at start = black screen, then the short-session fallback above).
     [ "$(cat "$rt/egpu-route" 2>/dev/null)" = none ] || rm -f /tmp/chimeraos-short-session-tracker; printf none > "$rt/egpu-route" 2>/dev/null
+    OUTPUT_CONNECTOR="*,eDP-1"                     # Bazzite's own default (it only fills it in when nothing set it)
     if [ -n "$pv" ] && ls /usr/share/vulkan/icd.d/nvidia_icd*.json >/dev/null 2>&1; then
       VK_DRIVER_FILES=$pv; VK_ICD_FILENAMES=$pv
       __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json; __GLX_VENDOR_LIBRARY_NAME=mesa
