@@ -1,3 +1,11 @@
+0.7.169 — AMD / Intel eGPUs: cable pulls are recovered, and plugging in again works.
+
+**Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)
+- After a cable pull, EGPU Buddy's recovery did not run: the kernel announces the removal while the card is still listed for a moment, so it concluded "still there" and stopped. Game Mode came back on the handheld only through SteamOS's own restart (over a minute), and the leftover "attached" mark made every later plug-in do nothing. The recovery now waits for the removal to finish, and a mark left by a session that is no longer on the card is cleared at the next plug-in.
+- The support report and its timeline showed an AMD / Intel eGPU as "no eGPU attached" / "on the handheld's GPU" (they looked for NVIDIA cards only).
+
+Confirmed on the first real AMD eGPU (Legion Go 1 + RX 6800 XT, SteamOS): plugging in moves Game Mode to the eGPU's monitor, the handheld screen turns off and the sound follows to the eGPU.
+
 0.7.168 — AMD / Intel eGPUs: Game Mode starts on the eGPU instead of restarting in a loop.
 
 **Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)

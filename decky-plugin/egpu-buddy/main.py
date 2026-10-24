@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.168"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.169"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1274,6 +1274,8 @@ def _support_report():
              + (f" (pre-release installed by EGPU Buddy: {_settings().get('decky_prerelease_by_us')})" if _settings().get("decky_prerelease_by_us") else "")
              + f" · Steam client {_steam_beta() or 'stable'} · SteamOS channel {_steamos_branch() or '?'}",
              "", "## GPU and link"]
+    if not bdf:   # an AMD / Intel eGPU (the NVIDIA lookup above matches 10de only)
+        g = _generic_egpu(); bdf = g[0] if g else ""
     if bdf:
         lines += [_sh(["lspci", "-nn", "-s", bdf], 5)[1],
                   f"PCIe {_read(f'/sys/bus/pci/devices/{bdf}/current_link_speed')} x{_read(f'/sys/bus/pci/devices/{bdf}/current_link_width')}"]

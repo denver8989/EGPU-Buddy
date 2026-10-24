@@ -75,6 +75,8 @@ panel_output_back(){   # the panel must come back as an OUTPUT, not just back-li
   as_deck env WAYLAND_DISPLAY="$wd" DISPLAY=:0 kscreen-doctor output."$PANEL".enable output."$PANEL".priority.1 >/dev/null 2>&1
   as_deck env WAYLAND_DISPLAY="$wd" DISPLAY=:0 kscreen-doctor --dpms on >/dev/null 2>&1 || true
   log "panel re-enabled: $(cat /sys/class/drm/card*-"$PANEL"/enabled 2>/dev/null | head -1)"; }
+session_on_card(){ local p; for p in $(pgrep -x 'gamescope(-wl)?') $(pgrep -U "$U" -x kwin_wayland); do
+    ls -l "/proc/$p/fd" 2>/dev/null | grep -qE "/dev/dri/$1\$" && return 0; done; return 1; }
 logout_plasma(){ as_deck qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null || as_deck qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null; }
 
 case "$verb" in
@@ -84,6 +86,11 @@ attach)
   # eGPU is there and not yet set up. NVIDIA has its own path (egpu-hotplug-mount.sh).
   read -r bdf vendor card < <(egpu_find) || exit 0
   [ "$vendor" != nvidia ] || exit 0
+  # "already moved" only while the running session really has THIS card open: a cable pull whose recovery did not run
+  # left the mark behind, and every later plug-in was then skipped without a word (first real AMD eGPU, 2026-10-24)
+  # (only an old mark: right after an attach the session is still restarting onto the card, and the monitor's hot-plug
+  # events land here too; treating those as stale would restart Game Mode in a loop)
+  if [ -e $MOVED ] && [ -n "$card" ] && [ $(( $(date +%s) - $(stat -c %Y $MOVED 2>/dev/null || date +%s) )) -gt 90 ] && ! session_on_card "$card"; then log "stale attach mark (the session is not on $card): attaching again"; rm -f $MOVED $MARK; fi
   [ -e $MOVED ] && exit 0
   # platform guards first: the tunnel must be awake and its fatal errors masked BEFORE the card is
   # touched, or a link event during bring-up can take the whole machine down with a fabric flood.
@@ -138,7 +145,10 @@ detach)
   ;;
 surprise)
   [ -e $PENDING ] && exit 0; [ -e $MARK ] || exit 0
-  egpu_find >/dev/null && exit 0                          # some other function went away; the GPU is still there
+  # The kernel announces the removal while the card is still listed for a moment (the driver lets go first), so the
+  # first look always found it "still there" and the recovery silently never ran. Give the removal up to 10 s to finish.
+  for _ in $(seq 1 20); do egpu_find >/dev/null || break; sleep 0.5; done
+  egpu_find >/dev/null && { log "remove event, but the eGPU is still on the bus: a function of it went away, nothing to recover"; exit 0; }
   log "surprise removal of $(cat $MARK)"; rm -f $MARK $MOVED; clear_boot_vga; user_env_igpu
   /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1
   panel_output_back; audio restore

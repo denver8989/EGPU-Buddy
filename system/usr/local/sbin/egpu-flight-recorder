@@ -39,7 +39,9 @@ cursor=""; prev=""; prev_aer=""; prev_gpu=""
 ev "flight recorder started (EGPU Buddy $(cat /etc/nv-egpu-buddy/version 2>/dev/null || echo ?), kernel $(uname -r))"
 while :; do
   gpu=$(nvidia_gpu || true)
-  ENODES=""; [ -n "$gpu" ] && ENODES=$(ls "/sys/bus/pci/devices/$gpu/drm" 2>/dev/null | grep -E '^(card|renderD)[0-9]+$' | tr '\n' ' ')
+  # an AMD / Intel eGPU (egpu-detect): the same "on the eGPU" judgement from its device files (NVIDIA-only before)
+  egpu=$gpu; [ -n "$egpu" ] || egpu=$(/usr/local/sbin/egpu-detect 2>/dev/null | awk '$2!="nvidia"{print $1}')
+  ENODES=""; [ -n "$egpu" ] && ENODES=$(ls "/sys/bus/pci/devices/$egpu/drm" 2>/dev/null | grep -E '^(card|renderD)[0-9]+$' | tr '\n' ' ')
   gs=$(pgrep -n -x 'gamescope(-wl)?' || true); kw=$(pgrep -n -U "$U" -x kwin_wayland || true)
   kx=$(pgrep -n -U "$U" -x kwin_x11 || true); xo=$(pgrep -n -x Xorg || true)
   if [ -n "$gs" ]; then mode=game; comp="gamescope:$(gpu_of "$gs")"
@@ -77,9 +79,9 @@ while :; do
   fi
   w "$line"
   # events: what changed since the last sample
-  if [ "$gpu" != "$prev_gpu" ]; then
-    if [ -n "$gpu" ]; then ev "eGPU on the bus: $gpu ($(cat /sys/bus/pci/devices/$gpu/device 2>/dev/null))"; else ev "eGPU gone from the bus (was $prev_gpu)"; snap gpu-gone; fi
-    prev_gpu=$gpu
+  if [ "$egpu" != "$prev_gpu" ]; then
+    if [ -n "$egpu" ]; then ev "eGPU on the bus: $egpu ($(cat /sys/bus/pci/devices/$egpu/vendor 2>/dev/null):$(cat /sys/bus/pci/devices/$egpu/device 2>/dev/null))"; else ev "eGPU gone from the bus (was $prev_gpu)"; snap gpu-gone; fi
+    prev_gpu=$egpu
   fi
   key="$mode $comp fix=$fix out=$out game=$game"
   [ -z "$prev" ] && ev "state at start: $key"
