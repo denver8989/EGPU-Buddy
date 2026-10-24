@@ -2411,13 +2411,16 @@ const NotesBody = ({ body }) => (SP_JSX.jsx(SP_JSX.Fragment, { children: body.sp
             return SP_JSX.jsx("div", { style: { marginTop: "8px", fontWeight: 700 }, children: mdInline(t) }, i);
         return SP_JSX.jsx("div", { style: { margin: "3px 0" }, children: mdInline(t) }, i);
     }) }));
-// "What's new": loaded from GitHub when opened (what an update brings, or the installed version's notes)
-function ReleaseNotes({ label }) {
+// "What's new": loaded from GitHub when opened. Every version since the installed one, newest first, in a scrolling window
+// like SteamOS's own update notes: the D-pad / stick steps through the versions and the window scrolls with them.
+function NotesModal({ closeModal }) {
     const [n, setN] = SP_REACT.useState(null);
-    const [open, setOpen] = SP_REACT.useState(false);
-    const toggle = () => { setOpen(!open); if (!open && !n)
-        getReleaseNotes().then(setN).catch((e) => setN({ title: "Release notes", notes: [], error: `${e}` })); };
-    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: toggle, children: open ? "Hide release notes" : label }) }), open && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", lineHeight: 1.4 }, children: !n ? "Loading the release notes from GitHub…" : n.error ? n.error : !n.notes.length ? "No release notes found." : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx("div", { style: { fontWeight: 700, fontSize: "13px", marginBottom: "4px" }, children: n.title }), n.notes.map((r) => SP_JSX.jsxs("div", { style: { marginBottom: "12px" }, children: [SP_JSX.jsxs("div", { style: { opacity: 0.7 }, children: [r.version, " \u00B7 ", r.date] }), SP_JSX.jsx(NotesBody, { body: r.body })] }, r.version))] })) }) })] }));
+    SP_REACT.useEffect(() => { getReleaseNotes().then(setN).catch((e) => setN({ title: "Release notes", notes: [], error: `${e}` })); }, []);
+    return (SP_JSX.jsxs(DFL.ModalRoot, { closeModal: closeModal, children: [SP_JSX.jsx("div", { style: { fontWeight: 700, fontSize: "18px", marginBottom: "4px" }, children: n?.title || "Release notes" }), n && n.notes.length > 1 && SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.7, marginBottom: "8px" }, children: [n.notes.length, " versions, newest first. Scroll for older ones."] }), SP_JSX.jsx(DFL.Focusable, { "flow-children": "column", style: { maxHeight: "60vh", overflowY: "auto", fontSize: "13px", lineHeight: 1.45, paddingRight: "8px" }, children: !n ? SP_JSX.jsx("div", { children: "Loading the release notes from GitHub\u2026" }) : n.error ? SP_JSX.jsx("div", { children: n.error }) : !n.notes.length ? SP_JSX.jsx("div", { children: "No release notes found." }) :
+                    n.notes.map((r) => SP_JSX.jsxs(DFL.Focusable, { onActivate: () => { }, onFocus: (e) => e.currentTarget.scrollIntoView({ block: "nearest" }), style: { padding: "8px", marginBottom: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.04)" }, children: [SP_JSX.jsxs("div", { style: { fontWeight: 700 }, children: [r.version, " ", SP_JSX.jsxs("span", { style: { fontWeight: 400, opacity: 0.7 }, children: ["\u00B7 ", r.date] })] }), SP_JSX.jsx(NotesBody, { body: r.body })] }, r.version)) })] }));
+}
+function ReleaseNotes({ label }) {
+    return SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => DFL.showModal(SP_JSX.jsx(NotesModal, {})), children: label }) });
 }
 const xgmIntro = callable("xgm_intro"); // the XG Mobile intro animation (data URI, or "" once shown)
 const xgmIntroDone = callable("xgm_intro_done"); // light-effect, brightness, offset

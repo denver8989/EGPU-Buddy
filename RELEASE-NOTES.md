@@ -1,3 +1,8 @@
+0.7.178 — Release notes for every version since yours, in a scrolling window.
+
+**Changed**
+- "What's new" opens a window like SteamOS's update notes: every version since the one installed, newest first, one block per version. The D-pad or stick steps through them and the window scrolls with it. (Up to the last 100 releases.)
+
 0.7.177 — The ultrawide scale fix is limited to ROG Ally / XG Mobile.
 
 **Changed**

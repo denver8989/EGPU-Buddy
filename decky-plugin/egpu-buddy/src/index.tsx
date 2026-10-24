@@ -1,4 +1,4 @@
-import { ButtonItem, ConfirmModal, DropdownItem, Field, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
+import { ButtonItem, ConfirmModal, DropdownItem, Field, Focusable, ModalRoot, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
 import { callable, definePlugin, toaster, useQuickAccessVisible } from "@decky/api";
 import { useEffect, useState, useRef } from "react";
 import { FaPlug } from "react-icons/fa";
@@ -34,18 +34,26 @@ const NotesBody = ({ body }: { body: string }) => (<>{body.split("\n").map((l, i
   if (/^\*\*[^*]+\*\*/.test(t)) return <div key={i} style={{ marginTop: "8px", fontWeight: 700 }}>{mdInline(t)}</div>;
   return <div key={i} style={{ margin: "3px 0" }}>{mdInline(t)}</div>;
 })}</>);
-// "What's new": loaded from GitHub when opened (what an update brings, or the installed version's notes)
+// "What's new": loaded from GitHub when opened. Every version since the installed one, newest first, in a scrolling window
+// like SteamOS's own update notes: the D-pad / stick steps through the versions and the window scrolls with them.
+function NotesModal({ closeModal }: { closeModal?: () => void }) {
+  const [n, setN] = useState<Notes | null>(null);
+  useEffect(() => { getReleaseNotes().then(setN).catch((e) => setN({ title: "Release notes", notes: [], error: `${e}` })); }, []);
+  return (<ModalRoot closeModal={closeModal}>
+    <div style={{ fontWeight: 700, fontSize: "18px", marginBottom: "4px" }}>{n?.title || "Release notes"}</div>
+    {n && n.notes.length > 1 && <div style={{ fontSize: "12px", opacity: 0.7, marginBottom: "8px" }}>{n.notes.length} versions, newest first. Scroll for older ones.</div>}
+    <Focusable flow-children="column" style={{ maxHeight: "60vh", overflowY: "auto", fontSize: "13px", lineHeight: 1.45, paddingRight: "8px" }}>
+      {!n ? <div>Loading the release notes from GitHub…</div> : n.error ? <div>{n.error}</div> : !n.notes.length ? <div>No release notes found.</div> :
+        n.notes.map((r) => <Focusable key={r.version} onActivate={() => {}} onFocus={(e) => (e.currentTarget as HTMLElement).scrollIntoView({ block: "nearest" })}
+          style={{ padding: "8px", marginBottom: "8px", borderRadius: "4px", background: "rgba(255,255,255,0.04)" }}>
+          <div style={{ fontWeight: 700 }}>{r.version} <span style={{ fontWeight: 400, opacity: 0.7 }}>· {r.date}</span></div>
+          <NotesBody body={r.body} />
+        </Focusable>)}
+    </Focusable>
+  </ModalRoot>);
+}
 function ReleaseNotes({ label }: { label: string }) {
-  const [n, setN] = useState<Notes | null>(null); const [open, setOpen] = useState(false);
-  const toggle = () => { setOpen(!open); if (!open && !n) getReleaseNotes().then(setN).catch((e) => setN({ title: "Release notes", notes: [], error: `${e}` })); };
-  return (<>
-    <PanelSectionRow><ButtonItem layout="below" onClick={toggle}>{open ? "Hide release notes" : label}</ButtonItem></PanelSectionRow>
-    {open && <PanelSectionRow><div style={{ fontSize: "12px", lineHeight: 1.4 }}>
-      {!n ? "Loading the release notes from GitHub…" : n.error ? n.error : !n.notes.length ? "No release notes found." : (<>
-        <div style={{ fontWeight: 700, fontSize: "13px", marginBottom: "4px" }}>{n.title}</div>
-        {n.notes.map((r) => <div key={r.version} style={{ marginBottom: "12px" }}><div style={{ opacity: 0.7 }}>{r.version} · {r.date}</div><NotesBody body={r.body} /></div>)}
-      </>)}</div></PanelSectionRow>}
-  </>);
+  return <PanelSectionRow><ButtonItem layout="below" onClick={() => showModal(<NotesModal />)}>{label}</ButtonItem></PanelSectionRow>;
 }
 const xgmIntro = callable<[], string>("xgm_intro");   // the XG Mobile intro animation (data URI, or "" once shown)
 const xgmIntroDone = callable<[], boolean>("xgm_intro_done");   // light-effect, brightness, offset

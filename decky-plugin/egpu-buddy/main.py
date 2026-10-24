@@ -100,10 +100,11 @@ def _save_settings(d):
 def _vt(v): return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3]) or (0,)
 _notes_cache = {"t": 0.0, "rels": []}
 def _release_notes(installed):
-    """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first;
+    """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first
+    (the last 100 releases; the plugin shows them in a scrolling window);
     with nothing newer, the installed release's own notes. Each GitHub release carries only its own changes. Cached 10 min."""
     if time.time() - _notes_cache["t"] > 600:
-        data = json.loads(_get(f"https://api.github.com/repos/{REPO}/releases?per_page=30", 20).decode())
+        data = json.loads(_get(f"https://api.github.com/repos/{REPO}/releases?per_page=100", 20).decode())
         _notes_cache.update(t=time.time(), rels=[{"version": r.get("tag_name", "").lstrip("v"), "date": (r.get("published_at") or "")[:10],
                                                   "body": r.get("body") or "", "url": r.get("html_url", "")}
                                                  for r in data if not r.get("draft") and not r.get("prerelease")])
