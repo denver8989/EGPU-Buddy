@@ -62,9 +62,22 @@ while :; do
       for p in $(fuser /dev/nvidia0 2>/dev/null | tr -s ' ' '\n'); do
         grep -qa "SteamAppId=$app" "/proc/$p/environ" 2>/dev/null && { on=egpu; name=$(cat "/proc/$p/comm" 2>/dev/null); break; }; done
     fi
+    # AMD / Intel eGPU: a game process holding the eGPU's render node renders there
+    if [ -z "$gpu" ] && [ -n "$egpu" ] && [ -n "$app" ]; then
+      rn=$(ls "/sys/bus/pci/devices/$egpu/drm" 2>/dev/null | grep -m1 renderD)
+      for p in $( [ -n "$rn" ] && fuser "/dev/dri/$rn" 2>/dev/null | tr -s ' ' '\n'); do
+        grep -qa "SteamAppId=$app" "/proc/$p/environ" 2>/dev/null && { on=egpu; name=$(cat "/proc/$p/comm" 2>/dev/null); break; }; done
+    fi
     game="${app:-?}:${name}@${on}"
   fi
   line="S $mode comp=$comp fix=$fix out=$out game=$game"
+  # AMD eGPU: amdgpu's own numbers (busy %, the active core / memory clock, power, temperature, the power profile, the link)
+  if [ -z "$gpu" ] && [ -n "$egpu" ]; then
+    D=/sys/bus/pci/devices/$egpu; hw=$(ls -d "$D"/hwmon/hwmon* 2>/dev/null | head -1)
+    sclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_sclk" 2>/dev/null); mclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_mclk" 2>/dev/null)
+    pw=$(( $(cat "$hw/power1_average" 2>/dev/null || cat "$hw/power1_input" 2>/dev/null || echo 0) / 1000000 )); tp=$(( $(cat "$hw/temp1_input" 2>/dev/null || echo 0) / 1000 ))
+    line="$line gpu=$egpu util=$(cat "$D/gpu_busy_percent" 2>/dev/null || echo ?)/$(cat "$D/mem_busy_percent" 2>/dev/null || echo ?)% clk=${sclk:-?}/${mclk:-?} pw=${pw}W t=${tp}C perf=$(cat "$D/power_dpm_force_performance_level" 2>/dev/null || echo ?) link=$(sed 's/ PCIe//; s/ //g' "$D/current_link_speed" 2>/dev/null)x$(cat "$D/current_link_width" 2>/dev/null) load=$(cut -d' ' -f1 /proc/loadavg)"
+  fi
   if [ -n "$gpu" ]; then
     smi=""; [ -e /sys/module/nvidia ] && smi=$(timeout 4 nvidia-smi -i "$gpu" --format=csv,noheader,nounits \
       --query-gpu=utilization.gpu,utilization.memory,clocks.gr,clocks.mem,power.draw,temperature.gpu,memory.used,pstate,pcie.link.gen.current,pcie.link.width.current 2>/dev/null | tr -d ' ')
@@ -101,8 +114,8 @@ while :; do
   else k=$(journalctl -k --no-pager -o cat -n 1 --show-cursor 2>/dev/null); fi
   c=$(printf '%s\n' "$k" | sed -n 's/^-- cursor: //p' | tail -1); [ -n "$c" ] && cursor=$c
   [ -n "$had" ] || k=""
-  hits=$(printf '%s\n' "$k" | grep -E 'NVRM: Xid|fallen off the bus|GPU has fallen|AER:|DPC:|pciehp.*(Link Down|Card not present)|nvidia-modeset: ERROR' | head -5)
+  hits=$(printf '%s\n' "$k" | grep -E 'NVRM: Xid|fallen off the bus|GPU has fallen|AER:|DPC:|pciehp.*(Link Down|Card not present)|nvidia-modeset: ERROR|amdgpu.*(ring .* timeout|GPU reset|device lost|Failed|ERROR)' | head -5)
   if [ -n "$hits" ]; then while IFS= read -r h; do ev "kernel: ${h:0:240}"; done <<< "$hits"; snap kernel-gpu-error; fi
   [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt "$MAX" ] && mv -f "$LOG" "$LOG.1"
-  if [ -n "$gpu" ]; then sleep 3; else sleep 10; fi
+  if [ -n "$egpu" ]; then sleep 3; else sleep 10; fi
 done

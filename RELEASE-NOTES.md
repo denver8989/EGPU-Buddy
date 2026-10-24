@@ -1,3 +1,8 @@
+0.7.170 — AMD / Intel eGPUs: the support report records the card's performance.
+
+**Changed** (AMD / Intel eGPUs)
+- The support report's timeline now samples an AMD eGPU every 3 seconds like an NVIDIA one: how busy it is, its core and memory clock, power, temperature, power profile, link and the system load, and whether the running game really renders on the eGPU. It also notes AMD driver errors (GPU resets, timeouts). This shows where low frame rates come from.
+
 0.7.169 — AMD / Intel eGPUs: cable pulls are recovered, and plugging in again works.
 
 **Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)
