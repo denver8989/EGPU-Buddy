@@ -138,9 +138,22 @@ steamwebhelper_signature() {
   pgrep -u "$(id -u)" -x steamwebhelper 2>/dev/null | sort -n | paste -sd, -
 }
 
+# "lowest": the live scale is the minimum Steam computed for this display (read back from its config), never the
+# Legion Go 2's tuned number above: forcing that one onto every other monitor ignored the mode (ultrawide report, Ally X)
+lowest_scale() {
+  local config v
+  for config in $(unique_existing_files $HOME/.local/share/Steam/config/config.vdf $HOME/.steam/steam/config/config.vdf); do
+    v=$(perl -0ne 'while (/"External: [^\n]*?\|\|\|Windowed"\s*\{(.*?)\n\s*\}/sg) { my $b=$1; if ($b =~ /"MinScaleFactor"\s*"([0-9.]+)"/) { $m=$1 } } print $m if defined $m' "$config" 2>/dev/null)
+    [ -n "$v" ] && { printf '%s\n' "$v"; return 0; }
+  done
+  return 1
+}
+
 set_live_scale() {
   command -v node >/dev/null 2>&1 || return 0
-  NV_EGPU_STEAM_UI_SCALE="$scale" node <<'NODE'
+  local live=$scale
+  if [ "$mode" = lowest ]; then live=$(lowest_scale) || return 0; fi
+  NV_EGPU_STEAM_UI_SCALE="$live" node <<'NODE'
 const http = require('http');
 const net = require('net');
 const crypto = require('crypto');

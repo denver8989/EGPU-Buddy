@@ -225,6 +225,7 @@ if [ "$GPU_VENDOR" = amd ] && [ "$MODE" = install ]; then
     if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then
       say "== AMD / Intel install: removing the patched NVIDIA driver"
       if sudo /usr/local/sbin/egpu-bazzite-driver --remove 2>&1 | tail -1 && [ ! -L /etc/extensions/egpu-nvidia ]; then
+        sudo semodule -r egpu-nvidia-sleep >/dev/null 2>&1
         sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service
         sudo systemctl daemon-reload >/dev/null 2>&1 || true
       fi
@@ -477,6 +478,10 @@ if want driver; then
       install -m755 "$2/nvidia-egpu-hotplug.sh" /usr/local/sbin/nvidia-egpu-hotplug.sh
       sed "s|/usr/lib/nvidia-egpu/nvidia-egpu-hotplug.sh|/usr/local/sbin/nvidia-egpu-hotplug.sh|g" "$2/nvidia-egpu-hotplug.rules" > /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules
       printf "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1\n" > /etc/modprobe.d/egpu-nvidia-open.conf
+      # sleep: let systemd-sleep write the driver'"'"'s video-memory file (packaging/bazzite/egpu-nvidia-sleep.cil); loaded live
+      command -v semodule >/dev/null && { semodule -l 2>/dev/null | grep -qx egpu-nvidia-sleep && cmp -s "$1/egpu-nvidia-sleep.cil" /usr/local/lib/egpu-buddy/bazzite/egpu-nvidia-sleep.cil || {
+        install -m644 "$1/egpu-nvidia-sleep.cil" /usr/local/lib/egpu-buddy/bazzite/egpu-nvidia-sleep.cil
+        semodule -i /usr/local/lib/egpu-buddy/bazzite/egpu-nvidia-sleep.cil 2>/dev/null || echo "note: the sleep permission (SELinux) could not be loaded"; }; }
       command -v restorecon >/dev/null && restorecon /usr/local/sbin/egpu-bazzite-driver /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service 2>/dev/null || true
       # a link left by 0.7.146 (merged LIVE under the session) is kept; the counter starts clean
       [ -L /etc/extensions/egpu-nvidia ] && { systemctl enable egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1; mkdir -p /var/lib/nvegpu/bazzite; echo 0 > /var/lib/nvegpu/bazzite/boot-attempts; } || true

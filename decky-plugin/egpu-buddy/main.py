@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.175"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.176"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1302,6 +1302,16 @@ def _support_report():
               + (f" · marked as crashing: {_read(USER_HOME + '/.local/state/nv-egpu-buddy/gamescope-bad')}" if os.path.exists(USER_HOME + "/.local/state/nv-egpu-buddy/gamescope-bad") else ""),
               f"running: {exe or '(none)'}" + (" (GBM-scanout build)" if exe and exe == os.path.realpath(priv) else "")]
     lines += _fix_verdict(gpid, exe, priv)
+    # the size Game Mode really runs at (-W/-H = output, -w/-h = Steam's canvas) and Steam's own UI scale for the external
+    # screen: a UI drawn too large or with black bars (ultrawide reports) shows here as a small canvas or a high scale
+    if gpid:
+        cl = _read(f"/proc/{gpid}/cmdline").replace("\0", " ").strip()
+        lines.append(f"gamescope command line: {cl[:400]}")
+    for name, body in re.findall(r'"(External: [^"\n]*?)"\s*\{(.*?)\n\s*\}', _read(f"{USER_HOME}/.local/share/Steam/config/config.vdf"), re.S)[:4]:
+        vals = dict(re.findall(r'"((?:Min|Max|Auto)?ScaleFactor)"\s*"([0-9.]+)"', body))
+        lines.append(f"Steam UI scale, {name[:60]}: " + (" ".join(f"{k}={v[:5]}" for k, v in vals.items()) or "none"))
+    lines.append(f"Steam UI scale helper: {(_read('/tmp/nv-egpu-gamescope-steam-scale-clamp.log').splitlines() or ['no log'])[-1][:200]}"
+                 + f" · node {'present' if shutil.which('node') else 'missing (live scale not applied)'}")
     # the flight recorder's timeline (egpu-flight-recorder): every change of state, kernel GPU error and PCIe error count
     # since it started (two rotated files, ~2 days of play), then the last ~10 minutes of 3-second samples
     fl = _read("/var/log/egpu-buddy/flight.log.1").splitlines() + _read("/var/log/egpu-buddy/flight.log").splitlines()

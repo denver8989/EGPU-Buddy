@@ -1,0 +1,12 @@
+; SteamOS EGPU Buddy - Bazzite only. Sleep with the NVIDIA eGPU attached.
+; The NVIDIA driver saves the GPU's video memory into a temporary file when the system suspends
+; (NVreg_PreserveVideoMemoryAllocations=1, NVreg_UseKernelSuspendNotifiers=1). It opens that file from the context of
+; systemd-sleep, which Fedora's policy does not let write there, so the driver aborts every suspend:
+;   avc: denied { write open } comm="systemd-sleep" scontext=systemd_sleep_t tcontext=tmp_t  -> "NVRM: nvidia_suspend
+;   returned 0x59; aborting suspend" (the screen comes straight back on). Legion Go 2 + Bazzite report on 0.7.175.
+; The same permission Fedora is adding upstream for this driver (Red Hat bug 2512142, selinux-policy PR #3087:
+; fs_rw_tmpfs_files(systemd_sleep_t)), plus the driver's file path on this system (/var/tmp, tmp_t). Nothing else.
+(allow systemd_sleep_t tmpfs_t (dir (search getattr)))
+(allow systemd_sleep_t tmpfs_t (file (create open read write getattr setattr append unlink map)))
+(allow systemd_sleep_t tmp_t (dir (search getattr open read write add_name remove_name)))
+(allow systemd_sleep_t tmp_t (file (create open read write getattr setattr append unlink map)))

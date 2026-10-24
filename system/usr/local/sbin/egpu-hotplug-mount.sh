@@ -20,6 +20,10 @@ log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync 
 # Walled off: only the AMD / Intel install (the choice made at install) takes this exit; every NVIDIA setup runs as before.
 _egpu_nonnv(){ [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; }
 # The dock bring-up (authorize, tunnel ports, rescans) it does have its AMD / Intel version there: hand over to it.
+# Bazzite: a Desktop Safe Detach in progress stops and restarts the login session; the monitor events that causes must not
+# bring the eGPU back up and log the desktop onto it again (both screens black, hard reset: Legion Go 2 report on 0.7.175)
+grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && systemctl list-units --no-legend --state=active 'egpu-desktop-detach-*' 2>/dev/null | grep -q . \
+  && { log "Desktop Safe Detach in progress: not attaching"; exit 0; }
 _egpu_nonnv && { log "AMD / Intel eGPU: handing the dock over to egpu-generic"; exec /usr/local/sbin/egpu-generic bringup ${1:+--manual}; }
 
 # kscreen-doctor is a Qt program. With no WAYLAND_DISPLAY (and no DISPLAY) it cannot create a

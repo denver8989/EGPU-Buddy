@@ -71,6 +71,14 @@ else
 gs_on_panel || finish_fail "Game Mode did not come back on the handheld screen; the eGPU is still attached." 6
 # the MangoHud overlay (gamescope-mangoapp.service) opens /dev/nvidia* through NVML -> stop it for the teardown
 as_deck systemctl --user stop gamescope-mangoapp.service >/dev/null 2>&1
+# Bazzite: the overlay is not a user service there (gamescope starts mangoapp itself), so the stop above does nothing and
+# it kept /dev/nvidia* open: "teardown failed ... still held by: mangoapp" (Legion Go 2 report on 0.7.175). Give the old
+# session's overlay a moment to go, then stop the ones still holding the eGPU (the overlay only; Game Mode keeps running).
+if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then
+  _mh(){ fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm 2>/dev/null | tr -s ' \n' '\n' | while read -r p; do [ "$(cat /proc/$p/comm 2>/dev/null)" = mangoapp ] && echo "$p"; done; }
+  for _ in $(seq 1 8); do [ -z "$(_mh)" ] && break; sleep 1; done
+  _p=$(_mh); [ -n "$_p" ] && { kill -TERM $_p 2>/dev/null; sleep 2; log "Bazzite: performance overlay (mangoapp $(echo $_p)) held the eGPU: stopped"; }
+fi
 sleep 4; log "panel session up (gamescope=$(gs)); removing the GPU"; status DETACHING "Game Mode is on the handheld screen. Removing the eGPU. Do not unplug yet."
 { echo "holders before teardown:"; for hp in $(fuser /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm 2>/dev/null | tr -s ' \n' ' '); do echo "  $hp $(cat /proc/$hp/comm 2>/dev/null) libs=[$(grep -oE '/[^ ]*nvidia[^ ]*\.so[^ ]*' /proc/$hp/maps 2>/dev/null | xargs -n1 basename 2>/dev/null | sort -u | tr '\n' ' ')] cmd=$(tr '\0' ' ' </proc/$hp/cmdline 2>/dev/null | cut -c1-80)"; done; } > $ST/gm-holders.log 2>&1
 if ! $HELPER --teardown-only > $ST/gm-helper.log 2>&1; then finish_fail "eGPU teardown failed; the GPU is still attached. Do not unplug. ($(grep -oE 'still held by:.*|ABORTING.*' $ST/gm-helper.log | head -1 | cut -c1-90))" 7; fi

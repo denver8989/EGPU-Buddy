@@ -1,3 +1,16 @@
+0.7.176 — Bazzite: sleep, Safe Detach in Game Mode and on the desktop.
+
+**Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
+- Sleep: the screen came straight back on. Bazzite's security policy (SELinux) did not let the system's sleep step write the file the NVIDIA driver saves the eGPU's video memory into, so the driver cancelled every sleep. EGPU Buddy now adds that one permission, the same one Fedora is adding upstream (Red Hat bug 2512142). It applies at once, no reboot.
+- Safe Detach in Game Mode said "eGPU teardown failed, the GPU is still attached" although Game Mode had moved to the handheld screen. The performance overlay still held the eGPU (on Bazzite it is not a separate service, so stopping that service did nothing); it is now stopped for the removal.
+- Safe Detach on the desktop left both screens black until a hard reset. Restarting the desktop's compositor ends the whole login on Bazzite, and the eGPU attach then put the new desktop straight back on the eGPU. Bazzite now uses the desktop detach made for that case on the ROG Ally: the desktop is restarted on the handheld screen once, with the eGPU removed in between, and no attach can interrupt it.
+
+**Fixed** (ROG Ally / other machines, NVIDIA)
+- The Steam interface scale helper forced the Legion Go 2's tuned scale onto every monitor while it ran; elsewhere it now uses the smallest scale Steam itself computed for that monitor, as intended.
+
+**Support report**
+- Shows the size Game Mode runs at (gamescope's command line) and Steam's interface scale for each external screen, for screens where the interface looks too large or has black bars.
+
 0.7.175 — First install asks for the GPU type; the AMD / Intel code is walled off.
 
 **Changed**

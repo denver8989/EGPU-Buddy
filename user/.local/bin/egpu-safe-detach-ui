@@ -129,7 +129,9 @@ pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 && fail 'Desktop Safe Detach is not a
 # Ally X reports, 0.7.116 and 0.7.117). There the session is restarted on purpose instead, with the next login kept on
 # the same desktop (X11 or Wayland), and the eGPU removed while nothing holds it (egpu-desktop-detach). Elsewhere (Legion Go)
 # this is unchanged.
-if { [ "$DEVICE" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && systemctl is-active --quiet sddm.service 2>/dev/null; then
+# Bazzite (SDDM as well, any device): the same. Its KWin handoff ended the session, the eGPU attach then moved the new
+# desktop straight back onto the eGPU, and both screens stayed black until a hard reset (Legion Go 2 report on 0.7.175).
+if { [ "$DEVICE" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ] || grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; } && systemctl is-active --quiet sddm.service 2>/dev/null; then
   status PREFLIGHT_PASS 'The desktop restarts on the handheld screen without the eGPU; the screen goes dark for a moment. Do not unplug yet.'
   _dt=wayland; pgrep -U "$(id -u)" -x kwin_wayland >/dev/null 2>&1 || ! pgrep -U "$(id -u)" -x 'kwin_x11|Xorg' >/dev/null 2>&1 || _dt=x11
   sudo -n /usr/local/sbin/egpu-desktop-detach "$_dt" && exit 0
