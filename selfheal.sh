@@ -71,7 +71,7 @@ if [ -z "$ro" ] && command -v pacman >/dev/null 2>&1 && ! pacman -Q nvidia-open-
 fi
 # kernel modules for the running kernel: DKMS rebuild if possible, else the cached modules of this exact kernel
 K=$(uname -r)
-if [ -z "$ro" ] && [ ! -x /usr/local/sbin/egpu-bazzite-driver ] && { ! modinfo -n nvidia >/dev/null 2>&1 || [ ! -f "/usr/lib/modules/$K/updates/dkms/nvidia.ko.zst" ]; }; then   # not on SteamOS/Bazzite: their extension carries the modules
+if [ -z "$ro" ] && [ ! -x /usr/local/sbin/egpu-bazzite-driver ] && [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && { ! modinfo -n nvidia >/dev/null 2>&1 || [ ! -f "/usr/lib/modules/$K/updates/dkms/nvidia.ko.zst" ]; }; then   # not on SteamOS/Bazzite: their extension carries the modules
   if command -v dkms >/dev/null 2>&1 && [ -f "/usr/lib/modules/$K/build/Makefile" ]; then
     log "no patched modules for $K: dkms autoinstall"; [ -n "$ro" ] && $ro disable >/dev/null 2>&1; dkms autoinstall -k "$K" >/dev/null 2>&1 && log "dkms built for $K" || log "dkms build failed for $K"; [ -n "$ro" ] && $ro enable >/dev/null 2>&1
   elif [ -d "$HERE/modcache/$K" ]; then
@@ -97,7 +97,7 @@ fi
   /usr/local/sbin/egpu-bazzite-driver --boot >/dev/null 2>&1 && log "bazzite driver: boot check started in the background"; }
 # kernel parameters (bootloader config may have been regenerated)
 /usr/local/sbin/egpu-kernel-cmdline --repair 2>&1 | while read -r l; do log "kernel parameters: $l"; done
-if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then
+if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then
   # Bazzite: rpm-ostree writes a whole new deployment and waits on its daemon (which may be busy updating at boot), so it
   # never runs in the boot path, and not at all when the parameters are already written and only wait for a reboot
   /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1 || /usr/local/sbin/egpu-kernel-cmdline --pending >/dev/null 2>&1 \

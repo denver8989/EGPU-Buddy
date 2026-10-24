@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.163"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.164"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -864,7 +864,7 @@ def _session_fingerprint():
     return out
 
 
-def _setup_worker(action, with_driver=False, version=None, vendor="nvidia"):
+def _setup_worker(action, with_driver=False, version=None, vendor=""):
     env = _clean_env(EGPU_TARGET_USER=USER, HOME=USER_HOME, EGPU_AUTO_YES="1", EGPU_ACCEPT_UNTESTED="1" if _accepted() else "0")
     ro = shutil.which("steamos-readonly")
     try:
@@ -891,7 +891,8 @@ def _setup_worker(action, with_driver=False, version=None, vendor="nvidia"):
             # An AMD (or Intel) eGPU skips the two NVIDIA-only components: the patched nvidia-open
             # build, which is the long part of an install, and the GBM-scanout gamescope, which only
             # exists to fix the NVIDIA scan-out corruption. Everything else is vendor-neutral.
-            _argv = ["bash", f"{SYSDIR}/install.sh"] + (["--amd"] if vendor == "amd" else [])
+            # "" = keep the vendor this machine was set up for (install.sh reads it): an update never switches it
+            _argv = ["bash", f"{SYSDIR}/install.sh"] + ({"amd": ["--amd"], "nvidia": ["--nvidia"]}.get(vendor, []))
             rc = _run_logged(_argv, env, SYSDIR)
             if ro: subprocess.run([ro, "enable"], env=_clean_env())
             # only a running Game Mode can be behind; otherwise the next start picks the new files up anyway
@@ -949,7 +950,7 @@ def _unsupported():
     return ""
 
 
-def _start_setup(action, with_driver=False, version=None, vendor="nvidia"):
+def _start_setup(action, with_driver=False, version=None, vendor=""):
     if action == "install" and _unsupported():
         return {"ok": False, "message": _unsupported()}
     if action == "install" and _untested() and not _accepted():
@@ -1703,9 +1704,9 @@ class Plugin:
                 "cmdline_pending": rc != 0 and _sh(["/usr/local/sbin/egpu-kernel-cmdline", "--pending"], 5)[0] == 0,
                 "helpers_present": os.path.exists(PRIV) and os.path.exists(DETACH),
                 "busy": _setup["busy"], "step": _setup["step"], "rc": _setup["rc"], "progress": _setup["progress"],
-                "started": _setup["started"], "expect": _expect(), "driver_ready": _driver_ready(), "driver_building": _driver_job(),
+                "started": _setup["started"], "expect": _expect(), "driver_ready": True if _installed_vendor() == "amd" else _driver_ready(), "driver_building": "" if _installed_vendor() == "amd" else _driver_job(),
                 "installed_vendor": _installed_vendor(), "egpu_on_bus": _egpu_on_bus(),
-                "can_build_driver": bool(shutil.which("pacman")), "slow_build": bool(shutil.which("steamos-readonly")), "log": tail}
+                "can_build_driver": bool(shutil.which("pacman")), "slow_build": bool(shutil.which("steamos-readonly")) and _installed_vendor() != "amd", "log": tail}
 
     async def pop_notice(self):
         _decky_ui["seen"] = time.time()   # the plugin's UI polls this every 5 s from the moment Decky loads it
@@ -1732,11 +1733,12 @@ class Plugin:
     async def reboot_system(self):
         subprocess.Popen(["systemctl", "reboot"], env=_clean_env()); return {"ok": True, "message": "Rebooting"}
 
-    async def install_system(self, with_driver: bool = False, vendor: str = "nvidia"):
-        if _driver_job():
+    async def install_system(self, with_driver: bool = False, vendor: str = ""):
+        # (an AMD / Intel install stops a running NVIDIA driver build itself and removes the NVIDIA driver)
+        if vendor != "amd" and _driver_job():
             return {"ok": False, "message": "The eGPU driver is being built for this SteamOS version in the background. "
                                             "It is used by itself when it is done (a few minutes); nothing to install."}
-        return _start_setup("install", bool(with_driver), vendor=(vendor if vendor in ("nvidia", "amd") else "nvidia"))
+        return _start_setup("install", bool(with_driver), vendor=(vendor if vendor in ("nvidia", "amd") else ""))
 
 
     async def get_conflicts(self):

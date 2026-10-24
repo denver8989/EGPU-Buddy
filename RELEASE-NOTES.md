@@ -1,3 +1,13 @@
+0.7.164 — The AMD / Intel install works from the plugin, and switching to it removes the NVIDIA driver.
+
+**Fixed**
+- The plugin's main Install button always set up an NVIDIA eGPU (it built the NVIDIA driver even for an AMD card). The first install now uses the eGPU that is plugged in, or asks which one you will connect (NVIDIA, or AMD / Intel).
+- The AMD / Intel button in Setup & updates could do nothing (it skipped the untested-hardware notice, so the install was refused silently). Both buttons now go through the same confirmation as the main one.
+- Updates and the automatic repair after an OS update could switch an AMD / Intel setup back to NVIDIA. The choice is now remembered: only the Setup buttons change it.
+
+**Changed**
+- Switching to the AMD / Intel install removes what an NVIDIA install put in place: the patched NVIDIA driver (SteamOS's driver extension, CachyOS's driver package, Bazzite's driver) and the NVIDIA-only gamescope fix; a driver build still running is stopped. The kernel parameters stay: they are the USB4 / PCIe settings every eGPU needs.
+
 0.7.163 — AMD / Intel eGPUs (beta): the plugin sees them, and Safe Detach works for them.
 
 **Fixed** (AMD / Intel eGPU path only; NVIDIA is unchanged)

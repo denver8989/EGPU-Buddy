@@ -57,7 +57,7 @@ type Conflict = { id: string; name: string; url: string; why: string; evidence: 
 const getConflicts = callable<[], Conflict[]>("get_conflicts");   // other eGPU tools that change the same things
 const removeConflicts = callable<[string[]], Result>("remove_conflicts");
 const acceptUntested = callable<[], Result>("accept_untested");
-const installSystem = callable<[boolean, string?], Result>("install_system");
+const installSystem = callable<[boolean, string?], Result>("install_system");   // vendor: "nvidia" | "amd" | "" (keep)
 const uninstallSystem = callable<[], Result>("uninstall_system");
 const rebootSystem = callable<[], Result>("reboot_system");
 const restartGamemode = callable<[], Result>("restart_gamemode");
@@ -254,7 +254,7 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.163";
+const PLUGIN_VERSION = "0.7.164";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -334,7 +334,6 @@ function Content() {
   const [gr, setGr] = useState<{ enabled: boolean } | null>(null);
   const [tr, setTr] = useState<Trial | null>(null);
   const staleChecked = useRef(false);
-  const [confirmSetup, setConfirmSetup] = useState<"" | "install" | "amd">("");
   const [s, setS] = useState<Status | null>(null);
   const [scr, setScr] = useState<Screen[] | null>(null);
   const [msg, setMsg] = useState("");
@@ -442,7 +441,19 @@ function Content() {
   // offered whenever a newer release exists and setup is complete, including half way through an earlier update (plugin
   // newer than its system files): hiding it there left users with no way forward
   const updateReady = !!(up?.available && vt(up.available) > vt(PLUGIN_VERSION) && (!needsInstall || (behind && !!su?.helpers_present)));
-  const installClick = () => confirmInstall(su?.installed_version ? "Update the system files" : "Install", () => installSystem(false), su?.installed_version ? () => updateDetached("") : undefined);
+  // First install: which eGPU decides whether the NVIDIA driver is built. A connected eGPU answers it; otherwise ask.
+  // Later installs and updates keep the choice made (install.sh remembers it).
+  const installFor = (v: "nvidia" | "amd") => confirmInstall(v === "amd" ? "Install for an AMD / Intel eGPU" : "Install for an NVIDIA eGPU", () => installSystem(false, v));
+  const installClick = () => {
+    if (su?.installed_version) { confirmInstall("Update the system files", () => installSystem(false), () => updateDetached("")); return; }
+    const bus = su?.egpu_on_bus;
+    if (bus === "amd" || bus === "intel") { installFor("amd"); return; }
+    if (bus === "nvidia") { installFor("nvidia"); return; }
+    showModal(<ConfirmModal strTitle="Which eGPU will you connect?"
+      strDescription="This decides whether the NVIDIA driver is built (NVIDIA only; it takes several minutes). The eGPU does not need to be plugged in. You can switch later in Setup & updates."
+      strOKButtonText="NVIDIA" strMiddleButtonText="AMD / Intel" strCancelButtonText="Cancel"
+      onOK={() => installFor("nvidia")} onMiddleButton={() => installFor("amd")} />);
+  };
   // An AMD or Intel eGPU needs neither the patched nvidia-open build (the long part of an install)
   // nor the GBM-scanout gamescope (that exists only to fix the NVIDIA scan-out corruption).
   // Everything else - hot-plug attach, safe detach, cable-pull recovery, the session fallback,
@@ -705,10 +716,8 @@ function Content() {
           )}
 
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { if (confirmSetup === "install") { setConfirmSetup(""); withConflictCheck(() => run(() => installSystem(false))); } else setConfirmSetup("install"); }}>
-              {confirmSetup === "install"
-                ? "Press again to confirm"
-                : (su?.installed_version ? "Reinstall / update system integration" : "NVIDIA eGPU - install (builds the driver)")}
+            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => su?.installed_version && su.installed_vendor !== "amd" ? confirmInstall("Reinstall / update", () => installSystem(false)) : installFor("nvidia")}>
+              {su?.installed_version ? (su.installed_vendor === "amd" ? "Switch to the NVIDIA install (builds the driver)" : "Reinstall / update system integration") : "NVIDIA eGPU - install (builds the driver)"}
             </ButtonItem>
           </PanelSectionRow>
           {!su?.installed_version && (
@@ -720,10 +729,8 @@ function Content() {
           )}
 
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { if (confirmSetup === "amd") { setConfirmSetup(""); withConflictCheck(() => run(() => installSystem(false, "amd"))); } else setConfirmSetup("amd"); }}>
-              {confirmSetup === "amd"
-                ? "Press again to confirm"
-                : (su?.installed_version ? "Switch to the AMD / Intel install (no NVIDIA driver)" : "AMD / Intel eGPU - install (no driver build)")}
+            <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => installFor("amd")}>
+              {su?.installed_version ? (su.installed_vendor === "amd" ? "Reinstall / update (AMD / Intel)" : "Switch to the AMD / Intel install (removes the NVIDIA driver)") : "AMD / Intel eGPU - install (no driver build)"}
             </ButtonItem>
           </PanelSectionRow>
           <PanelSectionRow>

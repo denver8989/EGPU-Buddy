@@ -34,8 +34,10 @@ MODE=install
 # the NVIDIA scan-out corruption and does nothing on Mesa. Everything that makes this project useful is
 # vendor-neutral and still installed: hot-plug attach, safe detach, surprise-removal recovery, the
 # session fallback, audio follow, the Decky plugin and the desktop app.
-GPU_VENDOR=${EGPU_GPU_VENDOR:-nvidia}
-for a in "$@"; do case "$a" in --check) MODE=check;; --amd|--no-nvidia) GPU_VENDOR=amd;; --with-driver) COMPONENTS="$COMPONENTS,driver";; --no-gamescope) COMPONENTS=${COMPONENTS//gamescope/};; *) echo "unknown option $a"; exit 1;; esac; done
+# Without an explicit choice the install keeps the one made before (/etc/nv-egpu-buddy/gpu-vendor): an update, the boot
+# self-heal or a reinstall of an AMD / Intel setup must never build the NVIDIA driver again. --nvidia switches back.
+GPU_VENDOR=${EGPU_GPU_VENDOR:-$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null | grep -xE 'nvidia|amd' || echo nvidia)}
+for a in "$@"; do case "$a" in --check) MODE=check;; --amd|--no-nvidia) GPU_VENDOR=amd;; --nvidia) GPU_VENDOR=nvidia;; --with-driver) COMPONENTS="$COMPONENTS,driver";; --no-gamescope) COMPONENTS=${COMPONENTS//gamescope/};; *) echo "unknown option $a"; exit 1;; esac; done
 want(){ case ",$COMPONENTS," in *",$1,"*) return 0;; *) return 1;; esac; }
 if [ "$GPU_VENDOR" = amd ]; then
   COMPONENTS=$(printf '%s' "$COMPONENTS" | tr ',' '\n' | grep -vxE 'gamescope|driver' | paste -sd, -)
@@ -194,6 +196,35 @@ if command -v steamos-readonly >/dev/null 2>&1 && grep -q '^sysext /usr ' /proc/
   say "== SteamOS: unmerging the driver extension while the system files are written"
   sudo systemd-sysext unmerge >/dev/null 2>&1 || { echo "could not unmerge the driver extension (files in use?). Reboot with the eGPU unplugged and run the install again. Nothing was changed."; exit 21; }
   trap 'sudo bash "$SYSEXT_TOOL" --activate >/dev/null 2>&1 || true' EXIT
+fi
+
+# ---- AMD / Intel install: undo what an NVIDIA install put in place -------------------------------------------------
+# (a machine first set up for NVIDIA by mistake, or switched to an AMD / Intel eGPU). The patched NVIDIA driver and the
+# NVIDIA-only gamescope fix are removed; a driver build still running is stopped. The kernel parameters stay: they are
+# the USB4 / PCIe settings every eGPU needs (the one NVIDIA option among them does nothing without NVIDIA's driver).
+if [ "$GPU_VENDOR" = amd ] && [ "$MODE" = install ]; then
+  sudo systemctl stop egpu-buddy-driver-build.service egpu-driver-prebuild.service egpu-buddy-driver-repack.service \
+    egpu-buddy-bazzite-driver-boot.service >/dev/null 2>&1 || true
+  sudo pkill -f 'install-steamos-sysext\.sh|install-patched-nvidia\.sh|egpu-bazzite-driver --(build|boot|stage-build)' >/dev/null 2>&1 || true
+  if [ -d /sys/module/nvidia ]; then
+    echo "note: the NVIDIA driver is loaded right now (an NVIDIA eGPU attached?): it is left in place; run this install again with it unplugged to remove it"
+  else
+    if [ -d /home/.egpu-buddy ] && [ -f "$SYSEXT_TOOL" ]; then
+      say "== AMD / Intel install: removing the NVIDIA driver extension"; sudo bash "$SYSEXT_TOOL" --remove 2>&1 | tail -1
+    fi
+    if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then
+      say "== AMD / Intel install: removing the patched NVIDIA driver"; sudo /usr/local/sbin/egpu-bazzite-driver --remove 2>&1 | tail -1
+      sudo rm -rf /var/lib/nvegpu/bazzite 2>/dev/null || true
+      sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service
+      sudo systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
+    if command -v pacman >/dev/null 2>&1 && pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1; then
+      say "== AMD / Intel install: removing the patched NVIDIA driver package"; sudo pacman -R --noconfirm nvidia-open-egpu-dkms 2>&1 | tail -1
+    fi
+  fi
+  rm -rf "$USER_HOME/.local/gamescope-gbm" 2>/dev/null || sudo rm -rf "$USER_HOME/.local/gamescope-gbm"
+  [ "$IS_BAZZITE" = 1 ] && sudo rm -rf /usr/local/lib/egpu-buddy/gamescope-gbm /etc/nv-egpu-buddy/gamescope-wanted 2>/dev/null
+  echo "AMD / Intel install: no NVIDIA driver and no NVIDIA gamescope fix on this machine"
 fi
 
 # stray copies of the Decky plugin inside homebrew/plugins (update backups of older versions): Decky would run THEM
