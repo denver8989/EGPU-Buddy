@@ -55,7 +55,7 @@ set_boot_vga(){ local d f; mkdir -p $BIND; echo 1 > $BIND/1; echo 0 > $BIND/0; c
     done; done; }
 user_env_igpu(){ local ic; ic=$(igpu_card)
   as_deck systemctl --user set-environment "KWIN_DRM_DEVICES=/dev/dri/${ic:-card1}" >/dev/null 2>&1
-  as_deck systemctl --user unset-environment DRI_PRIME WLR_DRM_DEVICES KWIN_RENDER_NODES >/dev/null 2>&1; }
+  as_deck systemctl --user unset-environment DRI_PRIME WLR_DRM_DEVICES KWIN_RENDER_NODES MESA_VK_DEVICE_SELECT >/dev/null 2>&1; }
 # Arm the login manager's fallback at the SESSION that is running, through the shared tool.
 # This used to write /etc/plasmalogin.conf* directly, which meant it did nothing at all on SteamOS (no
 # plasmalogin) and hand-wrote a file named after SteamOS's own autologin drop-in. Both matter: KWin is

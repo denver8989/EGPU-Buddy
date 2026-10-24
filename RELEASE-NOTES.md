@@ -1,3 +1,10 @@
+0.7.173 — AMD eGPUs: Game Mode only sees the eGPU, no reboot.
+
+**Fixed** (AMD / Intel eGPUs; NVIDIA unchanged)
+- While Game Mode runs on an AMD eGPU, Vulkan now shows ONLY the eGPU to Game Mode, Steam and games, so nothing can render on the handheld's built-in GPU and copy frames across. This is the AMD version of what the NVIDIA path has always done (it shows Vulkan only the NVIDIA driver). Before, the built-in GPU was still visible and a game or Game Mode itself could choose it. It applies when Game Mode restarts, with no reboot; unplugging or detaching gives the built-in GPU back the same way.
+- Detach on an AMD eGPU: the restarted Game Mode shows Vulkan only the built-in GPU, so it can no longer open the eGPU and stall the detach.
+- A GPU choice from an earlier session is never carried into the next one.
+
 0.7.172 — AMD eGPUs: full speed in games.
 
 **Fixed** (AMD eGPUs; NVIDIA unchanged)

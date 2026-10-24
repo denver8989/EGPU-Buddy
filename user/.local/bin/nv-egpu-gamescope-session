@@ -589,6 +589,10 @@ for _v in VK_DRIVER_FILES VK_ICD_FILENAMES; do
   fi
 done
 unset _v _p
+# A "this GPU only" Vulkan pin (MESA_VK_DEVICE_SELECT=...!) or a DRI_PRIME choice is only ever set below, for this session's
+# route. Inherited from an earlier one (the user manager keeps a session's environment) it could name an eGPU that is gone
+# and leave gamescope with no GPU at all: never take it over.
+unset MESA_VK_DEVICE_SELECT DRI_PRIME; systemctl --user unset-environment MESA_VK_DEVICE_SELECT DRI_PRIME >/dev/null 2>&1 || true
 
 # which session type is running: read by egpu-surprise-recover (gamescope itself dies with the card, so it cannot be asked)
 # Only claim the session marker if a desktop is NOT on screen. SteamOS keeps this session's target
@@ -762,9 +766,10 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # to an AMD built-in GPU both use the same Vulkan driver, so name the eGPU (the shim adds --prefer-vk-device, nothing else)
   export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
   export NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)"
-  # games: the eGPU is the default Vulkan device (Mesa's device selection), not only by DRI_PRIME; with two AMD GPUs on the
-  # same driver this is what guarantees a game renders on the eGPU and not the handheld's own chip
-  export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK"
+  # Vulkan sees ONLY the eGPU (Mesa: a trailing "!" exposes nothing else), the AMD counterpart of the NVIDIA route's
+  # driver-file pin: with two AMD GPUs on one driver, nothing in this session can route through the handheld's chip.
+  # (Without the "!" this variable outranks DRI_PRIME's own "!" and made the built-in GPU visible again.)
+  export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK!"
   log "generic eGPU route: $gen_vendor $gen_bdf ($gen_card) outputs: $gen_outputs"
 else
   clear_egpu_env
@@ -774,7 +779,11 @@ else
     _amd=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"$PANEL" 2>/dev/null | head -1)"); _amd=${_amd%%-*}; [ -n "$_amd" ] && _amd=/dev/dri/$_amd
     [ -n "$_amd" ] && export KWIN_DRM_DEVICES="$_amd"
     # a Mesa eGPU shares the driver with the built-in GPU: only an explicit device list keeps gamescope off it
-    case "$(/usr/local/sbin/egpu-detect 2>/dev/null)" in ""|*" nvidia "*|*" nvidia") ;; *) [ -n "$_amd" ] && export WLR_DRM_DEVICES="$_amd" ;; esac
+    case "$(/usr/local/sbin/egpu-detect 2>/dev/null)" in ""|*" nvidia "*|*" nvidia") ;; *) [ -n "$_amd" ] && export WLR_DRM_DEVICES="$_amd"
+      # an AMD / Intel eGPU uses the same Vulkan driver file as the built-in GPU, so the radeon pin below does not keep
+      # this session off it: expose ONLY the built-in GPU to Vulkan, or gamescope may open the eGPU and the detach waits
+      _hv=$(cut -c3- "/sys/class/drm/${_amd#/dev/dri/}/device/vendor" 2>/dev/null); _hd=$(cut -c3- "/sys/class/drm/${_amd#/dev/dri/}/device/device" 2>/dev/null)
+      [ -n "$_hv" ] && [ -n "$_hd" ] && export MESA_VK_DEVICE_SELECT="$_hv:$_hd!" ;; esac
     export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json
     export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
   fi
