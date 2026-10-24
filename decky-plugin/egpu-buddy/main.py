@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.170"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.171"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1443,6 +1443,11 @@ def _support_report():
     if pk:
         lines += ["", "## eGPU log lines from the previous boot (last 100)"] + pk[-100:]
     try:
+        gc = _gpu_clients()
+        lines += ["", "## Programs using a GPU (kernel accounting, render share over 2 s)"] + (gc[:40] or ["(none)"])
+    except Exception as ex:  # noqa: BLE001
+        lines += ["", f"## Programs using a GPU: could not be read ({ex})"]
+    try:
         lines += _system_report()
     except Exception as ex:  # noqa: BLE001  (the report itself must never fail over one section)
         lines += ["", f"## System and boot history: could not be read ({ex})"]
@@ -1466,6 +1471,34 @@ def _support_report():
         if tail:
             lines += ["", f"## {p} (last 30)"] + [t[:300] for t in tail]
     return _redact("\n".join(lines))
+
+
+def _gpu_clients():
+    """Which program renders on which GPU, measured by the kernel (vendor-neutral): every open DRM file reports its PCI
+    device (drm-pdev) and the render time used so far (drm-engine-gfx / -render). Sampled twice, 2 s apart, so the
+    result is the share of the GPU each program used just now. Settles "is the game really on the eGPU?"."""
+    def snap():
+        out = {}
+        for fi in glob.glob("/proc/[0-9]*/fdinfo/*"):
+            try:
+                t = open(fi).read()
+            except OSError:
+                continue
+            if "drm-pdev" not in t:
+                continue
+            pid = fi.split("/")[2]; f = dict(l.split(":", 1) for l in t.splitlines() if ":" in l)
+            dev = f.get("drm-pdev", "").strip(); cid = f.get("drm-client-id", "").strip()
+            ns = sum(int(re.findall(r"\d+", v)[0]) for k, v in f.items() if k.startswith(("drm-engine-gfx", "drm-engine-render")) and re.findall(r"\d+", v))
+            out[(pid, dev, cid)] = ns
+        return out
+    a = snap(); time.sleep(2); b = snap()
+    rows = {}
+    for (pid, dev, cid), ns in b.items():
+        busy = max(0, ns - a.get((pid, dev, cid), ns)) / 2e9 * 100
+        key = (pid, dev); r = rows.setdefault(key, [0.0, _read(f"/proc/{pid}/comm") or "?"]); r[0] += busy
+    g = _generic_egpu(); egpu = g[0] if g else _gpu_bdf()
+    return [f"{c[:24]:24} pid {pid:>7} on {dev}{' (eGPU)' if dev == egpu else ' (built-in GPU)'}: {busy:5.1f}% busy"
+            for (pid, dev), (busy, c) in sorted(rows.items(), key=lambda x: -x[1][0])]
 
 
 def _system_report():

@@ -1,3 +1,8 @@
+0.7.171 — The support report shows which GPU every program really uses.
+
+**New**
+- A section "Programs using a GPU": for every program with the graphics driver open, which GPU it uses (the eGPU or the built-in one) and how much of that GPU's render time it used over two seconds, as the kernel measures it. Works for NVIDIA, AMD and Intel. Made while a game runs, it shows for certain whether the game and Game Mode render on the eGPU.
+
 0.7.170 — AMD / Intel eGPUs: the support report records the card's performance.
 
 **Changed** (AMD / Intel eGPUs)
