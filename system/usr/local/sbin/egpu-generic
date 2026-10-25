@@ -181,6 +181,29 @@ bringup|attach)
 resume)
   # after sleep: the same protections and tuning as at attach (a resumed card starts from its defaults again), then, while
   # Game Mode is on the eGPU display, the handheld panel back off (resume lights it) and the monitor asked to wake
+  # The card did not come back: sleep can take the whole USB4 dock off and bring it back without its PCIe tunnel - the dock
+  # authorized, no GPU behind it, until a replug (Legion Go 1 + RX 6800 XT, 0.7.178). Give the tunnel its normal time, then
+  # the dock bring-up, then the NVIDIA path's last resort (de-authorize + authorize the dock = a replug in software). That
+  # step is kept out of plug-in for AMD cards because it once dropped a card that was still starting; here no AMD / Intel
+  # card is on the bus at all, so there is nothing it can drop.
+  if ! egpu_find >/dev/null && [ -e $SEEN ] && ls /sys/bus/thunderbolt/devices/*-*/device_name >/dev/null 2>&1; then
+    for _ in $(seq 1 15); do egpu_find >/dev/null && break; sleep 1; done
+    if ! egpu_find >/dev/null; then
+      log "the eGPU did not come back after sleep: dock bring-up"
+      bring_up
+      if ! egpu_find >/dev/null; then
+        for tb in /sys/bus/thunderbolt/devices/*-*; do
+          [ -e "$tb/device_name" ] && [ "$(cat "$tb/authorized" 2>/dev/null)" = 1 ] || continue
+          log "still no GPU behind $(cat "$tb/device_name"): re-authorizing the dock (rebuilds its PCIe tunnel)"
+          "$PRIV" dpc-off >/dev/null 2>&1 || true
+          echo 0 > "$tb/authorized" 2>/dev/null; sleep 2; echo 1 > "$tb/authorized" 2>/dev/null; sleep 3
+        done
+        for _ in $(seq 1 10); do echo 1 > /sys/bus/pci/rescan 2>/dev/null; sleep 2; egpu_find >/dev/null && break; done
+      fi
+      egpu_find >/dev/null || { log "the eGPU did not come back after sleep; unplug and plug it in again"; exit 0; }
+      log "eGPU back after sleep: attaching"; exec 9>&-; exec "$0" attach
+    fi
+  fi
   read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" != nvidia ] || exit 0
   platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && amd_tune "$bdf"
   [ -n "$card" ] && session_on_card "$card" || exit 0

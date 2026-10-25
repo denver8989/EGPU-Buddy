@@ -1,3 +1,8 @@
+0.7.184 — AMD / Intel eGPUs: the eGPU comes back after sleep.
+
+**Fixed** (AMD / Intel install only; NVIDIA unchanged)
+- After a sleep the AMD eGPU could stay gone until it was unplugged and plugged in again, and Game Mode stayed on the handheld screen (Legion Go 1 + RX 6800 XT). Sleep can take the whole USB4 dock off and bring it back without the connection to the graphics card inside it. After waking, EGPU Buddy now waits for the card, then runs the dock bring-up, and if the card is still missing reconnects the dock in software (the step the NVIDIA path uses), then moves Game Mode back to the eGPU monitor. The reconnect only happens when no AMD card is on the bus, so it can never cut off a working one.
+
 0.7.183 — ROG Ally / XG Mobile: the Steam interface fits the ultrawide monitor.
 
 **Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
