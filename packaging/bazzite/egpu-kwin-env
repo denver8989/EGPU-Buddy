@@ -1,0 +1,17 @@
+#!/bin/bash
+# SteamOS EGPU Buddy - Bazzite only. Runs as ExecStartPre of the desktop compositor (plasma-kwin_wayland.service, drop-in
+# 10-egpu-buddy.conf) and writes the GPU routing KWin starts with into $XDG_RUNTIME_DIR/egpu-kwin.env (the drop-in's
+# EnvironmentFile, read for the compositor itself right after this).
+# Why: on SteamOS the routing is done by ~/.config/plasma-workspace/env/00-egpu-free-nvidia-modeset.sh, which Plasma
+# sources before KWin starts. On Bazzite (Plasma 6.7) it never ran - not one line in its log across three reports - and
+# KWin came up on BOTH GPUs, drawing on the handheld's and copying every frame over USB4 to the eGPU's monitor (the
+# sluggish desktop, Legion Go 2 on 0.7.178 and 0.7.180). Same script, same decisions; only the way it reaches KWin differs.
+out=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-kwin.env
+s=$HOME/.config/plasma-workspace/env/00-egpu-free-nvidia-modeset.sh
+[ -r "$s" ] || { : > "$out"; exit 0; }
+XDG_CURRENT_DESKTOP=KDE bash -c '. "$1" >/dev/null 2>&1
+  for v in KWIN_DRM_DEVICES KWIN_RENDER_NODES VK_DRIVER_FILES VK_ICD_FILENAMES __EGL_VENDOR_LIBRARY_FILENAMES __GLX_VENDOR_LIBRARY_NAME; do
+    eval "x=\${$v-}"; [ -z "$x" ] || printf "%s=%s\n" "$v" "$x"
+  done; :' _ "$s" > "$out.tmp" 2>/dev/null && mv -f "$out.tmp" "$out"
+printf '%s [kwin-env] compositor starts with: %s\n' "$(date '+%F %T')" "$(tr '\n' ' ' < "$out" 2>/dev/null)" >> "$HOME/.egpu-desktop-display.log"
+exit 0

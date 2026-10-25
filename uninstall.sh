@@ -82,7 +82,7 @@ sudo bash -c "$(declare -f restore_or_remove); systemctl disable egpu-mount.serv
 # Bazzite: the Game Mode hook (only our own sessions.d files) and the Bazzite gamescope build
 for f in "$USER_HOME"/.config/gamescope-session-plus/sessions.d/steam "$USER_HOME"/.config/gamescope-session-plus/sessions.d/ogui-steam; do
   grep -q 'SteamOS EGPU Buddy' "$f" 2>/dev/null && rm -f "$f"; done
-rm -f "$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env"
+rm -f "$USER_HOME/.local/lib/nv-egpu-buddy/bazzite-session-env" "$USER_HOME/.local/lib/nv-egpu-buddy/egpu-kwin-env" "$USER_HOME/.config/systemd/user/plasma-kwin_wayland.service.d/10-egpu-buddy.conf"
 if [ -x /usr/local/sbin/egpu-bazzite-driver ]; then   # Bazzite: back to Bazzite's own NVIDIA modules
   sudo /usr/local/sbin/egpu-bazzite-driver --remove; sudo semodule -r egpu-nvidia-sleep >/dev/null 2>&1; sudo rm -f /usr/local/sbin/egpu-bazzite-driver /etc/systemd/system/egpu-bazzite-driver-guard.service /etc/systemd/system/egpu-bazzite-boot-ok.service \
     /usr/local/sbin/nvidia-egpu-hotplug.sh /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules /etc/modprobe.d/egpu-nvidia-open.conf \

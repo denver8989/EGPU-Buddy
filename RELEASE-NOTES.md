@@ -1,3 +1,8 @@
+0.7.181 — Bazzite: the desktop really runs on the eGPU alone now.
+
+**Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
+- 0.7.180 did not help the sluggish desktop: the report showed the desktop's compositor still on both GPUs, and the routing script still had not run at all on Bazzite (Plasma 6.7 never ran it). Bazzite's desktop compositor is a systemd service, so EGPU Buddy now hands it the routing through that service directly: the same script, run right before the compositor starts, and its decision given to the compositor. The support report now also shows which GPUs the compositor started with.
+
 0.7.180 — Bazzite: the desktop runs on the eGPU alone (sluggish desktop).
 
 **Fixed** (Bazzite only; SteamOS and CachyOS unchanged)

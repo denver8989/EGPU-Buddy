@@ -314,6 +314,12 @@ want core && { userctl enable egpu-display-failover.service; userctl enable --no
 # ---- gamescope with GBM scan-out (NVIDIA scan-out corruption fix) --------------------------------
 # Bazzite only: Fedora names Qt 6's qdbus qdbus-qt6; the scripts call qdbus6 (and qdbus as a fallback)
 if [ "$IS_BAZZITE" = 1 ] && want core; then
+  # the desktop compositor gets its GPU routing from a drop-in: Plasma 6.7 never ran the routing script (sluggish desktop)
+  umkdir "$USER_HOME/.local/lib/nv-egpu-buddy" "$USER_HOME/.config/systemd/user/plasma-kwin_wayland.service.d"
+  templ < "$ROOT/packaging/bazzite/egpu-kwin-env" > "$USER_HOME/.local/lib/nv-egpu-buddy/egpu-kwin-env"; chmod 755 "$USER_HOME/.local/lib/nv-egpu-buddy/egpu-kwin-env"
+  templ < "$ROOT/packaging/bazzite/plasma-kwin_wayland-egpu.conf" > "$USER_HOME/.config/systemd/user/plasma-kwin_wayland.service.d/10-egpu-buddy.conf"
+  uown "$USER_HOME/.local/lib/nv-egpu-buddy/egpu-kwin-env" "$USER_HOME/.config/systemd/user/plasma-kwin_wayland.service.d"
+  userctl daemon-reload >/dev/null 2>&1 || true
   sudo install -m755 "$ROOT/packaging/bazzite/qdbus6" /usr/local/bin/qdbus6
   command -v qdbus >/dev/null 2>&1 || sudo ln -sf qdbus6 /usr/local/bin/qdbus
   # Decky cannot start systemd units on Bazzite: its long jobs (detach, switch, attach) go through this runner instead
