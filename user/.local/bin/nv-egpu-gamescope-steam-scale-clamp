@@ -150,11 +150,51 @@ lowest_scale() {
   return 1
 }
 
+# ROG Ally / XG Mobile only: stock SteamOS has no node, so the live step below never ran there and only the config edit
+# applied, which Steam overrides when it decides the 49" monitor is a TV (huge interface with a black area: ROG Xbox
+# Ally X + Odyssey G9 report, "node missing (live scale not applied)"). The same call through Python, which SteamOS has.
+set_live_scale_py() {
+  NV_EGPU_STEAM_UI_SCALE="$1" python3 - <<'PY' 2>/dev/null || true
+import base64, json, os, socket, struct, urllib.request
+scale = float(os.environ.get("NV_EGPU_STEAM_UI_SCALE", "1.27981042861938477"))
+expr = ('(() => { if (typeof SteamClient !== "object" || !SteamClient._internal || typeof SteamClient._internal.SetForceDeviceScaleFactor !== "function") return "no-scale-api";'
+        ' SteamClient._internal.SetForceDeviceScaleFactor(%r); return "scale-set"; })()' % scale)
+def evaluate(url):
+    host_port, path = url[len("ws://"):].split("/", 1)
+    host, port = host_port.split(":")
+    s = socket.create_connection((host, int(port)), timeout=2)
+    key = base64.b64encode(os.urandom(16)).decode()
+    s.sendall(("GET /%s HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n" % (path, host_port, key)).encode())
+    head = b""
+    while b"\r\n\r\n" not in head:
+        c = s.recv(4096)
+        if not c: return
+        head += c
+    if b" 101 " not in head.split(b"\r\n", 1)[0]: return
+    data = json.dumps({"id": 1, "method": "Runtime.evaluate", "params": {"expression": expr, "returnByValue": True}}).encode()
+    n = len(data); hdr = bytes([0x81]) + (bytes([0x80 | n]) if n < 126 else bytes([0x80 | 126]) + struct.pack(">H", n) if n < 65536 else bytes([0x80 | 127]) + struct.pack(">Q", n))
+    mask = os.urandom(4)
+    s.sendall(hdr + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+    try: s.recv(65536)
+    except Exception: pass
+    s.close()
+pages = json.load(urllib.request.urlopen("http://127.0.0.1:8080/json", timeout=2))
+for pg in pages:
+    if pg.get("webSocketDebuggerUrl") and any(t in pg.get("title", "") for t in ("Steam Big Picture Mode", "SharedJSContext")):
+        try: evaluate(pg["webSocketDebuggerUrl"])
+        except Exception: pass
+PY
+}
+
 set_live_scale() {
-  command -v node >/dev/null 2>&1 || return 0
-  local live=$scale
-  if [ "$mode" = lowest ] && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
+  local live=$scale ax=0
+  { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && ax=1
+  if [ "$mode" = lowest ] && [ "$ax" = 1 ]; then
     live=$(lowest_scale) || return 0
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    [ "$ax" = 1 ] && command -v python3 >/dev/null 2>&1 && set_live_scale_py "$live"
+    return 0
   fi
   NV_EGPU_STEAM_UI_SCALE="$live" node <<'NODE'
 const http = require('http');

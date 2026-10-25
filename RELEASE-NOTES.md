@@ -1,3 +1,8 @@
+0.7.183 — ROG Ally / XG Mobile: the Steam interface fits the ultrawide monitor.
+
+**Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
+- On a 49" ultrawide behind the XG Mobile, Steam's interface came up far too large with a black area (ROG Xbox Ally X + Odyssey G9). Steam treats such a monitor as a big TV and scales its interface up. EGPU Buddy corrects that in two ways: in Steam's settings file (Steam can overrule that) and live in the running Steam, which is what makes it stick. The live step needed a program (node) that stock SteamOS does not have, so on this machine it never ran. It now runs through Python, which SteamOS has.
+
 0.7.182 — ROG Ally / XG Mobile: "Return to Gaming Mode" works with the eGPU attached.
 
 **Fixed** (ROG Ally / XG Mobile on SteamOS only; every other machine unchanged)
