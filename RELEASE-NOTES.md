@@ -1,3 +1,8 @@
+0.7.186 — AMD eGPUs: sleep as the driver does it on its own.
+
+**Fixed** (AMD / Intel install, AMD cards only; NVIDIA unchanged)
+- Sleep during a game froze the machine (a forced restart was needed), and outside games the picture took much longer to come back than without EGPU Buddy (Legion Go 1 + RX 6800 XT). Right before sleep, the AMD eGPU is now put back on its own driver's power management (the full-speed tuning and its keeper switched off), so the card goes to sleep exactly as it would without EGPU Buddy. After waking, the tuning is applied again.
+
 0.7.185 — AMD eGPUs keep their full-speed tuning in Game Mode; clearer support report.
 
 **Fixed** (AMD / Intel install, AMD cards only; NVIDIA unchanged)

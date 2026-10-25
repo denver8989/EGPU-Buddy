@@ -1,0 +1,10 @@
+[Unit]
+Description=SteamOS EGPU Buddy: AMD eGPU back to its own power defaults before sleep (AMD / Intel install only)
+Before=sleep.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/egpu-generic presleep
+
+[Install]
+WantedBy=sleep.target
