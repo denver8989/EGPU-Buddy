@@ -20,7 +20,13 @@ DROP=zzz-egpu-buddy-session.conf
 # switch still wins). Every other system keeps the name above.
 BZ=0; (. /etc/os-release 2>/dev/null; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) exit 0 ;; esac; exit 1) && BZ=1
 [ $BZ = 1 ] && DROP=zzs-egpu-buddy-session.conf
-old_drop(){ [ $BZ = 1 ] && rm -f "$1/zzz-egpu-buddy-session.conf"; return 0; }   # Bazzite: the name before 0.7.144
+# ROG Ally / XG Mobile under SteamOS's sddm: the same order as Bazzite's. SteamOS's default is zz-steamos-autologin.conf and
+# "Return to Gaming Mode" is the one-off zzt-steamos-temp-login.conf; "zzz-" outranked that one-off too, so with the eGPU
+# attached on the desktop every Return to Gaming Mode logged straight back into the desktop until a forced shutdown
+# (ROG Xbox Ally X + XG Mobile report on 0.7.181). "zzs-" sorts after the default and before the one-off switch.
+AX=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && AX=1
+[ $AX = 1 ] && [ $BZ = 0 ] && [ "$(systemctl show -p Id --value display-manager.service 2>/dev/null)" = sddm.service ] && DROP=zzs-egpu-buddy-session.conf
+old_drop(){ [ "$DROP" = zzs-egpu-buddy-session.conf ] && rm -f "$1/zzz-egpu-buddy-session.conf"; return 0; }   # the earlier name
 
 dm_dir(){
   local dm d=""
@@ -81,6 +87,13 @@ case "${1:-show}" in
     { [ -e /run/nvegpu/gm-detach-pending ] || pgrep -f '/usr/local/sbin/egpu-(safe|desktop)-detach' >/dev/null 2>&1; } && { echo "kept: a Safe Detach is running"; exit 0; }
     s=$(sed -n 's/^Session=//p' "$d/$DROP" 2>/dev/null)
     rm -f "$d/$DROP"; echo "released a leftover pin (${s:-?}): the system's own session choice applies again"
+    ;;
+  migrate)
+    # an update moves a pin left under the earlier name to the current one (run by install.sh)
+    d=$(dm_dir) || exit 0
+    [ "$DROP" = zzs-egpu-buddy-session.conf ] && [ -f "$d/zzz-egpu-buddy-session.conf" ] && [ ! -f "$d/$DROP" ] &&
+      mv -f "$d/zzz-egpu-buddy-session.conf" "$d/$DROP" && echo "pin moved to $DROP"
+    exit 0
     ;;
   show)
     d=$(dm_dir) || { echo "none"; exit 0; }

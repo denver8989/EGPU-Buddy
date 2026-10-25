@@ -1,3 +1,8 @@
+0.7.182 — ROG Ally / XG Mobile: "Return to Gaming Mode" works with the eGPU attached.
+
+**Fixed** (ROG Ally / XG Mobile on SteamOS only; every other machine unchanged)
+- With the eGPU attached on the desktop, "Return to Gaming Mode" went black and came back to the desktop, every time, until a forced shutdown. EGPU Buddy keeps the desktop as the login after a cable pull, and that setting outranked the one-time "Switch to Gaming Mode" the user had just asked for. It now ranks between the two, as it already did on Bazzite: a cable pull still returns to the desktop, and the user's own switch wins. An update moves a setting left behind by an earlier version, so a machine stuck in that loop gets out of it with this update.
+
 0.7.181 — Bazzite: the desktop really runs on the eGPU alone now.
 
 **Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
