@@ -1,4 +1,7 @@
-0.7.185 — Clearer hardware line in the support report.
+0.7.185 — AMD eGPUs keep their full-speed tuning in Game Mode; clearer support report.
+
+**Fixed** (AMD / Intel install, AMD cards only; NVIDIA unchanged)
+- The full-speed tuning for AMD eGPUs (PCIe link held at its top speed, full-screen 3D power profile, added in 0.7.172) did not last: it was applied at the attach, and Game Mode starting on the eGPU set the card back to automatic 20 seconds later, for the whole session (Legion Go 1 + RX 6800 XT report: the card 13-20 % busy with its clock held down, games swinging between 60 and 20 frames per second). EGPU Buddy now puts the tuning back whenever something resets it, for as long as the eGPU is attached.
 
 **Changed** (support report only)
 - The hardware line shows the eGPU dock as it is when the report is made, with its name (for example "usb4 (ASMedia 246x)"), instead of what was recorded at the last update ("dock none" with an Aoostar AG02 plugged in). An ASUS XG Mobile is only mentioned when one is or was connected: on a phone the line broke after "XG Mobile" and the "no" read like a detected XG Mobile.

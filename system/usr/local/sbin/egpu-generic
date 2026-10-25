@@ -4,7 +4,7 @@
 # egpu-gamemode-detach, egpu-surprise-recover) is separate and is never entered from here.
 # What differs from NVIDIA: the kernel driver is shared with the built-in GPU, so nothing is loaded or
 # unloaded; no BAR resize / link pin / FLR; detach = move the session to the panel, then PCI-remove the eGPU only.
-#   egpu-generic attach [--manual] [--force] | bringup [--boot] | resume | detach | surprise
+#   egpu-generic attach [--manual] [--force] | bringup [--boot] | resume | detach | surprise | keep-tuned
 # Portable by construction: GPUs, DRM cards, the panel connector and the desktop user are detected, not assumed.
 set -u
 . /usr/local/sbin/egpu-detect                              # also reads /etc/nv-egpu-buddy/egpu.conf (EGPU_USER, EGPU_PCI_BDF)
@@ -43,7 +43,8 @@ verb=${1:-}; manual=0; force=""; boot=0
 for a in "${@:2}"; do case "$a" in --manual) manual=1 ;; --force) force=--force ;; --boot) boot=1 ;; esac; done
 SEEN=/var/lib/nvegpu/egpu-seen; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
 # resume waits its turn (the dock re-announces itself on wake at the same moment); every other verb skips a duplicate
-exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ]; then flock -w 60 9; else flock -n 9; fi || { log "another instance running — skip"; exit 0; }
+# (keep-tuned runs for as long as the eGPU is attached: it never takes the lock, or every attach / detach would be skipped)
+[ "$verb" = keep-tuned ] || { exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ]; then flock -w 60 9; else flock -n 9; fi; } || { log "another instance running — skip"; exit 0; }
 
 game_mode(){ pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1; }
 igpu_card(){ basename "$(ls -d /sys/bus/pci/devices/"$(egpu_igpu_bdf)"/drm/card[0-9]* 2>/dev/null | head -1)"; }
@@ -94,6 +95,11 @@ amd_tune(){ local D=/sys/bus/pci/devices/$1 top idx
   idx=$(awk '/3D_FULL_SCREEN/{gsub(/[^0-9]/,"",$1); print $1; exit}' "$D/pp_power_profile_mode" 2>/dev/null)
   [ -n "$idx" ] && echo "$idx" > "$D/pp_power_profile_mode" 2>/dev/null
   log "amdgpu tuned for an eGPU: PCIe held at $(grep '\*' "$D/pp_dpm_pcie" 2>/dev/null | tr -s ' ' | head -1), profile $(grep '\*' "$D/pp_power_profile_mode" 2>/dev/null | awk '{print $2}' | head -1)"; }
+# The tuning does not stay: a Game Mode start sets the card back to "auto" (Legion Go 1 + RX 6800 XT, 0.7.178: manual at
+# the attach, auto 20 s later when Game Mode came up on the eGPU, and auto for the whole game - 13-20 % busy, clock stuck,
+# frame rate swinging between 60 and 20). A small keeper puts it back whenever it was reset, for as long as the eGPU is
+# attached; it ends by itself on unplug, Safe Detach or a cable pull.
+start_keeper(){ systemd-run --no-block --collect --quiet --unit=egpu-amd-tune-keeper /usr/local/sbin/egpu-generic keep-tuned >/dev/null 2>&1 || true; }
 session_on_card(){ local p; for p in $(pgrep -x 'gamescope(-wl)?') $(pgrep -U "$U" -x kwin_wayland); do
     ls -l "/proc/$p/fd" 2>/dev/null | grep -qE "/dev/dri/$1\$" && return 0; done; return 1; }
 # The NVIDIA path's dock bring-up (egpu-hotplug-mount.sh / egpu-boot-enumerate.sh), minus everything NVIDIA: authorize a
@@ -126,7 +132,7 @@ bringup|attach)
     bring_up
     if [ "$boot" = 1 ]; then   # before the login screen: protect + tune the card; Game Mode starts on it by itself (the wrapper)
       read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" != nvidia ] || exit 0
-      platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && amd_tune "$bdf"
+      platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && { amd_tune "$bdf"; start_keeper; }
       echo "$bdf" > $MARK; mkdir -p /var/lib/nvegpu; : > $SEEN; log "boot: $vendor eGPU $bdf ready"; exit 0
     fi
   fi
@@ -153,7 +159,7 @@ bringup|attach)
   [ -n "$card" ] || { log "$vendor $bdf: no kernel driver bound a DRM card within 30s — leaving it alone"; exit 0; }
   [ -e $MOVED ] && { log "session already moved to $bdf"; exit 0; }   # display hotplug events re-enter here: never relogin twice
   echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null     # no runtime suspend across the tunnel
-  [ "$vendor" = amd ] && amd_tune "$bdf"
+  [ "$vendor" = amd ] && { amd_tune "$bdf"; start_keeper; }
   out=""; for _ in $(seq 1 15); do out=$(egpu_connected_outputs "$card" | head -1); [ -n "$out" ] && break; sleep 2; done
   log "$vendor eGPU $bdf ($card) link x$(cat /sys/bus/pci/devices/$bdf/current_link_width 2>/dev/null) output=${out:-none}"
   echo "$bdf" > $MARK; mkdir -p /var/lib/nvegpu; : > $SEEN
@@ -205,12 +211,23 @@ resume)
     fi
   fi
   read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" != nvidia ] || exit 0
-  platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && amd_tune "$bdf"
+  platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && { amd_tune "$bdf"; start_keeper; }
   [ -n "$card" ] && session_on_card "$card" || exit 0
   /usr/local/sbin/egpu-screen wake 2>/dev/null | while read -r l; do log "screen $l"; done
   g=$(pgrep -n -x 'gamescope(-wl)?') || exit 0
   oc=$(tr '\0' '\n' </proc/$g/environ 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p'); case "${oc%%,*}" in ""|"*"|eDP-*) exit 0 ;; esac
   /usr/local/sbin/egpu-panel off >/dev/null 2>&1 && log "resume: handheld panel off again (Game Mode on ${oc%%,*})"
+  ;;
+keep-tuned)
+  # every 5 s while the AMD eGPU is attached: power level back to manual + the link held, if anything reset it
+  # (started before the attach has written its mark: give it up to a minute)
+  for _ in $(seq 1 12); do [ -e $MARK ] && break; sleep 5; done
+  while [ -e $MARK ] && [ ! -e $PENDING ]; do
+    read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" = amd ] || exit 0
+    lvl=$(cat "/sys/bus/pci/devices/$bdf/power_dpm_force_performance_level" 2>/dev/null) || exit 0
+    [ "$lvl" = manual ] || { log "the power level was set back to '$lvl' (Game Mode start?): tuning again"; amd_tune "$bdf"; }
+    sleep 5
+  done
   ;;
 detach)
   read -r bdf vendor card < <(egpu_find) || { status IDLE "No eGPU connected."; exit 0; }
