@@ -1,3 +1,9 @@
+0.7.180 — Bazzite: the desktop runs on the eGPU alone (sluggish desktop).
+
+**Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
+- The desktop on the eGPU monitor felt sluggish. The support report showed why: the desktop's compositor (KWin) had BOTH GPUs open and drew on the handheld's own GPU, so every frame was copied across the USB4 cable to the eGPU's monitor. On SteamOS a small script puts the desktop on the eGPU alone before the compositor starts. On Bazzite it never took effect: Plasma runs it before it marks the session as KDE (the script then stopped at once), and it looked for NVIDIA's Vulkan file under SteamOS's name, which Fedora names differently. Both are fixed, so on Bazzite the desktop now runs on the eGPU alone, as on SteamOS.
+- After plugging in on the desktop, Vulkan programs in the new desktop session were pointed at that same missing file (no Vulkan driver at all). They now get NVIDIA's real file.
+
 0.7.179 — Bazzite: Safe Detach in Game Mode.
 
 **Fixed** (Bazzite only; SteamOS and CachyOS unchanged)

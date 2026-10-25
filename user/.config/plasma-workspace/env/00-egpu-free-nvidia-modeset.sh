@@ -24,12 +24,22 @@
 # Steam is relaunched after login by ~/.config/autostart/steam.desktop, so this
 # only moves its shutdown earlier in the handoff — it does not remove Steam.
 # Only run in KDE Plasma session.
-if [ "${XDG_CURRENT_DESKTOP:-}" != "KDE" ] && [ "${XDG_SESSION_DESKTOP:-}" != "KDE" ]; then
+# Bazzite: Plasma runs these scripts BEFORE it sets XDG_CURRENT_DESKTOP=KDE itself (startplasma.cpp: runEnvironmentScripts()
+# precedes setupPlasmaEnvironment()), so the check above depends on what the login manager passed. On Bazzite this script
+# left no trace at all while the desktop came up on both GPUs (KWin holding the AMD card next to the NVIDIA one: the
+# sluggish desktop, Legion Go 2 report on 0.7.178). Only startplasma sources this directory, so there it always runs.
+_egpu_bz=0; grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && _egpu_bz=1
+if [ "$_egpu_bz" = 0 ] && [ "${XDG_CURRENT_DESKTOP:-}" != "KDE" ] && [ "${XDG_SESSION_DESKTOP:-}" != "KDE" ]; then
   exit 0
 fi
 
 _egpu_log="$HOME/.egpu-desktop-display.log"
 _egpu_emlog() { printf '%s [env] %s\n' "$(date '+%F %T')" "$*" >> "$_egpu_log"; }
+# NVIDIA's Vulkan driver file: SteamOS / CachyOS name it nvidia_icd.json, Fedora (Bazzite) per architecture. Where the plain
+# name exists nothing changes; the per-architecture names are used only where it does not (the check below used to fail
+# there: "NVIDIA userspace files missing; leaving KWin default" = KWin on both GPUs).
+_egpu_nv_icd=/usr/share/vulkan/icd.d/nvidia_icd.json
+[ -r "$_egpu_nv_icd" ] || _egpu_nv_icd=$(ls /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /usr/share/vulkan/icd.d/nvidia_icd.i686.json 2>/dev/null | paste -sd: -)
 
 _egpu_detect_nvidia_gpu_bdf() {
   local dev vendor class card
@@ -157,7 +167,7 @@ _egpu_stage_desktop_kwin() {
     _egpu_emlog "Plasma pre-compositor: egpu-noauto is set; leaving KWin default"
     return 0
   fi
-  if [ ! -r /usr/share/vulkan/icd.d/nvidia_icd.json ] || [ ! -r /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
+  if [ ! -r "${_egpu_nv_icd%%:*}" ] || [ ! -r /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
     _egpu_emlog "Plasma pre-compositor: NVIDIA userspace files missing; leaving KWin default"
     return 0
   fi
@@ -237,8 +247,8 @@ _egpu_stage_desktop_kwin() {
 
   export KWIN_DRM_DEVICES="$kwin_devices"
   export KWIN_RENDER_NODES="$(_egpu_render_for_card "$egpu_card")"   # NVIDIA render node only (no AMD crosstalk, no stale iGPU pin)
-  export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json
-  export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json
+  export VK_DRIVER_FILES="$_egpu_nv_icd"
+  export VK_ICD_FILENAMES="$_egpu_nv_icd"
   export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
   export __GLX_VENDOR_LIBRARY_NAME=nvidia
   export PROTON_ENABLE_NVAPI=1
@@ -280,5 +290,5 @@ if [ -n "$_egpu_pci" ] && [ -e "/sys/bus/pci/devices/$_egpu_pci" ] && { pgrep -x
   fi
   _egpu_emlog "Steam down; /dev/nvidia-modeset should now be free for KWin"
 fi
-unset _egpu_pci _egpu_log
+unset _egpu_pci _egpu_log _egpu_nv_icd _egpu_bz
 unset -f _egpu_render_for_card _egpu_emlog _egpu_detect_nvidia_gpu_bdf _egpu_card_for_pci _egpu_panel_pci _egpu_detect_amd_gpu_bdf _egpu_connected_outputs_for_pci _egpu_stage_desktop_kwin 2>/dev/null || true

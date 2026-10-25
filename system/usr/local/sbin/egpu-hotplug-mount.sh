@@ -644,11 +644,15 @@ relogin_session(){
   # never ran. The NVIDIA-only session works on KWIN_DRM_DEVICES alone; the step is gone rather than switched on.
 
   log "routing KWin to NVIDIA-only: KWIN_DRM_DEVICES=/dev/dri/$nvcard (AMD masked)"
+  # NVIDIA's Vulkan driver file under its SteamOS / CachyOS name; Fedora (Bazzite) has only the per-architecture names, and a
+  # pin to a missing file leaves Vulkan with no driver at all in the new desktop
+  local _icd=/usr/share/vulkan/icd.d/nvidia_icd.json
+  [ -r "$_icd" ] || _icd=$(ls /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /usr/share/vulkan/icd.d/nvidia_icd.i686.json 2>/dev/null | paste -sd: -)
   runuser -u deck -- env $runenv systemctl --user set-environment \
       "KWIN_DRM_DEVICES=/dev/dri/$nvcard" \
       "KWIN_RENDER_NODES=/dev/dri/$(ls /sys/class/drm/$nvcard/device/drm 2>/dev/null | grep -m1 renderD)" \
-      "VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json" \
-      "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json" \
+      "VK_DRIVER_FILES=$_icd" \
+      "VK_ICD_FILENAMES=$_icd" \
       "__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json" \
       "__GLX_VENDOR_LIBRARY_NAME=nvidia" 2>/dev/null || { log "set-environment failed"; return 1; }
 
