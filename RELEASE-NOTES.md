@@ -1,3 +1,8 @@
+0.7.185 — Clearer hardware line in the support report.
+
+**Changed** (support report only)
+- The hardware line shows the eGPU dock as it is when the report is made, with its name (for example "usb4 (ASMedia 246x)"), instead of what was recorded at the last update ("dock none" with an Aoostar AG02 plugged in). An ASUS XG Mobile is only mentioned when one is or was connected: on a phone the line broke after "XG Mobile" and the "no" read like a detected XG Mobile.
+
 0.7.184 — AMD / Intel eGPUs: the eGPU comes back after sleep.
 
 **Fixed** (AMD / Intel install only; NVIDIA unchanged)

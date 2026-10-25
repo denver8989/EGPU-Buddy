@@ -1149,7 +1149,18 @@ def _redact(text):
 def _hw_line():
     """profile, dock and XG Mobile (attached now or seen before) as egpu-hw-repair recorded them at the last update."""
     d = dict(l.split("=", 1) for l in _read("/var/lib/nvegpu/hardware").splitlines() if "=" in l)
-    return f"{d.get('chip', '?')} · profile {d.get('profile', '?')} · dock {d.get('dock', '?')} · XG Mobile {d.get('xg_mobile', '?')} · built-in GPU {d.get('igpu', '?')}" if d else "not checked yet"
+    if not d:
+        return "not checked yet"
+    # the dock as it is NOW, with its name (the recorded value is from the last update, often taken with nothing plugged
+    # in: an Aoostar AG02 read "dock none"); XG Mobile only named when one is or was there - on a phone the line broke after
+    # "XG Mobile" and the "no" read like a detected XG Mobile (Legion Go 1 + AG02 report)
+    dock = _sh(["/usr/local/sbin/egpu-detect", "--dock"], 5)[1] or d.get("dock", "?")
+    names = [f"{_read(t + '/vendor_name')} {_read(t + '/device_name')}".strip() for t in sorted(glob.glob("/sys/bus/thunderbolt/devices/*-*"))
+             if re.fullmatch(r"\d+-\d+", os.path.basename(t)) and _read(t + "/device_name")]
+    dock = f"{dock} ({', '.join(names)})" if names and dock != "none" else ("not connected" if dock == "none" else dock)
+    xg = d.get("xg_mobile", "")
+    xg = f" · ASUS XG Mobile: {xg}" if xg and xg not in ("no", "none", "never", "?") else ""
+    return f"{d.get('chip', '?')} · profile {d.get('profile', '?')} · eGPU dock {dock}{xg} · built-in GPU {d.get('igpu', '?')}"
 
 
 def _xgm_state():
