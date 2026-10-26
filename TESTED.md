@@ -8,7 +8,7 @@ repeatedly and behaved as described.
 Lenovo Legion Go 2 (83N1, AMD Ryzen Z2), **Bazzite 44** handheld image (bazzite-deck, Fedora Atomic, read-only /usr,
 SELinux enforcing; no NVIDIA driver of its own), kernel 7.2.9-ogc3.1, gamescope 3.16.31-ogc2 (Open Gaming Collective),
 OpenGamepadUI + Steam, **Gigabyte AORUS RTX 5060 Ti AI Box** (USB4 2 x 20 Gb/s), Samsung Odyssey G95SC over HDMI. Tested
-on the device by **1khanfusion** (Discord); read from that device's support reports. **Testing in progress.** On Bazzite this project builds its
+on the device by **1khanfusion** (Discord); read from that device's support reports. **Tested: all good as of 0.7.181.** On Bazzite this project builds its
 patched NVIDIA driver 615.78.08 on the device (Fedora container) as a system extension, and builds the NVIDIA picture
 fix into the gamescope version Bazzite ships.
 
@@ -35,8 +35,13 @@ Found and fixed on the way (all Bazzite only): an install that built the driver 
 files keeping the build container's SELinux label so D-Bus could not start and Bazzite's greenboot restarted the
 machine (0.7.152), and support-report checks that looked in SteamOS's paths (0.7.156).
 
-Awaiting confirmation on the device: the fixes of 0.7.159, Secure Boot (MOK enrollment), TDP and controller settings
-on and off the eGPU.
+Retested on the device (0.7.159–0.7.181): screen switch, Safe Detach and cable pull in Game Mode, plug in again after
+either, plug in and Safe Detach on the desktop, sleep in Game Mode and on the desktop: **all working.** Fixed on the way
+(Bazzite only): sleep (SELinux kept the NVIDIA driver from saving video memory, 0.7.176), Safe Detach in Game Mode
+(the performance overlay held the eGPU, 0.7.176 / 0.7.179), Safe Detach on the desktop (SDDM restarted the session
+under it, 0.7.176), the desktop compositor on both GPUs (sluggish desktop, 0.7.180 / 0.7.181).
+
+Not tested on the device: Secure Boot (MOK enrollment).
 
 ## 2026-10-19 — third machine: ROG Xbox Ally X + ASUS XG Mobile 2025 (0.7.131–0.7.137)
 
@@ -80,13 +85,21 @@ Verified on that rig in one session:
 No benchmarks or performance figures are recorded for any rig: what is tracked here is whether the eGPU attaches,
 renders, survives a cable pull and comes back.
 
-## AMD / Intel eGPU: NOT tested
+## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.8)
 
-The non-NVIDIA path (`/usr/local/sbin/egpu-generic`, udev rule `96-egpu-generic.rules`) and the
-`./install.sh --amd` mode have **never been run on real hardware**. They were written from the kernel's
-behaviour: the Mesa driver is shared with the built-in GPU, so nothing is loaded or unloaded, and there
-is no BAR resize, link pin or FLR. It is a separate code path that the NVIDIA rules never enter, so it
-cannot affect a working NVIDIA install - but nothing about it is proven.
+Tested on the device by **RetroMann** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), SteamOS 3.8, AOOSTAR AG02
+over USB4 (ASMedia 246x), AMD Radeon RX 6800 XT, MSI MP275 over HDMI. The AMD / Intel install (`./install.sh --amd`,
+or "AMD / Intel" at the first install) skips the NVIDIA driver; the path (`/usr/local/sbin/egpu-generic`) is separate
+and runs only on that install, so it cannot affect an NVIDIA setup.
+
+| Tested on the device | Result |
+|---|---|
+| Plug in, Game Mode on the eGPU monitor | working |
+| Unplug / plug in again | working |
+| Games on the eGPU | working; Game Mode, Steam and games see only the eGPU (0.7.173) |
+| Performance | some games starved on the USB4 cable (CALX: 24-37 fps, GPU 20 % busy); fix in 0.7.188 being confirmed |
+| Sleep | the eGPU could stay gone after waking (0.7.184), slow picture after waking (0.7.187), freeze when sleeping during a game (0.7.186): being confirmed |
+| Sleep on the desktop | being looked at |
 
 If you try it, `/var/log/egpu-generic.log` is the file to attach to a report.
 

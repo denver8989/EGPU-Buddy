@@ -13,7 +13,7 @@ moves to your monitor or TV; unplug it, safely or by pulling the cable, and it g
 plug it in again and it comes back. It's all controlled from a Decky plugin in the Quick Access menu.
 
 NVIDIA eGPUs are fully supported, including the fix for NVIDIA's Game Mode display glitches. AMD and Intel eGPUs
-are supported in beta.
+are supported in beta (an RX 6800 XT is being tested now).
 
 > **Use at your own risk.** This changes the NVIDIA driver, boot settings and the Game Mode session. It has been
 > tested on four machines (below) and nothing else. Read [TESTED.md](TESTED.md) first, and keep a way to boot without
@@ -70,19 +70,18 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 
 ## Tested hardware
 
-| | Legion Go 2 | Legion Go 2 (Ryzen Z2) | Legion Go 1 | ROG Xbox Ally X |
-|---|---|---|---|---|
-| OS | CachyOS (Deckify) | Bazzite 44 (handheld image, bazzite-deck) | SteamOS 3.8 | SteamOS 3.8 |
-| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU |
-| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) |
-| Status | Tested | **Testing in progress** (on-device testing: 1khanfusion): Game Mode and desktop attach work, the rest is being tested ([TESTED.md](TESTED.md)) | Tested | Tested (on-device testing and development: SilverplayerX) |
+| | Legion Go 2 | Legion Go 2 (Ryzen Z2) | Legion Go 1 | ROG Xbox Ally X | Legion Go 1 (AMD eGPU) |
+|---|---|---|---|---|---|
+| OS | CachyOS (Deckify) | Bazzite 44 (handheld image, bazzite-deck) | SteamOS 3.8 | SteamOS 3.8 | SteamOS 3.8 |
+| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | AOOSTAR AG02, AMD RX 6800 XT |
+| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) | MSI MP275 (HDMI) |
+| Status | Tested | Tested (on-device testing: 1khanfusion) | Tested | Tested (on-device testing and development: SilverplayerX) | **Testing in progress** (on-device testing: RetroMann): plug-in, unplug and games work; sleep and performance fixes being confirmed ([TESTED.md](TESTED.md)) |
 
-**Operating systems:** SteamOS 3.8 and CachyOS (Deckify) tested; **Bazzite** (handheld image, bazzite-deck) supported
-since 0.7.145, testing in progress. On Bazzite the patched NVIDIA driver is built on the device for its kernel (no
+**Operating systems:** SteamOS 3.8, CachyOS (Deckify) and **Bazzite** (handheld image, bazzite-deck) tested. On Bazzite the patched NVIDIA driver is built on the device for its kernel (no
 NVIDIA driver needed from Bazzite) and the NVIDIA picture fix is built into the gamescope Bazzite ships.
 
 **NVIDIA:** RTX 30 and RTX 50 tested here (desktop cards, and a laptop RTX 50 in an XG Mobile); RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**
-beta, not yet tested on real hardware. Reports are welcome. Details: [docs/TECHNICAL.md](docs/TECHNICAL.md).
+beta, testing in progress on an AMD RX 6800 XT (choose "AMD / Intel" at the first install). Reports are welcome. Details: [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Install
 
@@ -115,6 +114,8 @@ attaching are listed in [docs/TECHNICAL.md](docs/TECHNICAL.md#reporting-problems
 This builds on other people's work. Full details, with links and licenses: [CREDITS.md](CREDITS.md).
 
 - **SilverplayerX** (Discord): on-device testing and development on the ROG Xbox Ally X with the ASUS XG Mobile.
+- **1khanfusion** (Discord): on-device testing of Bazzite on the Legion Go 2.
+- **RetroMann** (Discord): on-device testing of the AMD eGPU path (Legion Go 1, AOOSTAR AG02, RX 6800 XT).
 - **seerge ([G-Helper](https://github.com/seerge/g-helper)), RomanYazvinsky** and
   **[Handheld Daemon](https://github.com/hhd-dev/hhd):** the XG Mobile's USB control protocol (fan, lights).
 - **matt-schwartz:** found the root cause of the NVIDIA Game Mode corruption.
