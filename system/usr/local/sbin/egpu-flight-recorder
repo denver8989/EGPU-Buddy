@@ -77,6 +77,18 @@ while :; do
     sclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_sclk" 2>/dev/null); mclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_mclk" 2>/dev/null)
     pw=$(( $(cat "$hw/power1_average" 2>/dev/null || cat "$hw/power1_input" 2>/dev/null || echo 0) / 1000000 )); tp=$(( $(cat "$hw/temp1_input" 2>/dev/null || echo 0) / 1000 ))
     line="$line gpu=$egpu util=$(cat "$D/gpu_busy_percent" 2>/dev/null || echo ?)/$(cat "$D/mem_busy_percent" 2>/dev/null || echo ?)% clk=${sclk:-?}/${mclk:-?} pw=${pw}W t=${tp}C perf=$(cat "$D/power_dpm_force_performance_level" 2>/dev/null || echo ?) link=$(sed 's/ PCIe//; s/ //g' "$D/current_link_speed" 2>/dev/null)x$(cat "$D/current_link_width" 2>/dev/null) load=$(cut -d' ' -f1 /proc/loadavg)"
+    # While a game runs on the AMD eGPU: why the card waits. Its busiest thread (% of one CPU core over half a second: near
+    # 100 = the game is limited by that thread, not by the GPU or the link) and Game Mode's frame limit (Steam's FPS limit;
+    # 0 = off). A low, perfectly steady frame rate with the GPU mostly idle is one of these two or the USB4 link (Legion Go 1
+    # + RX 6800 XT in CALX: 37 fps, frame time locked at 25.8-28.8 ms, GPU 20 % busy)
+    if [ "${on:-}" = egpu ] && [ -n "${app:-}" ]; then
+      _gp=$(grep -lsa "SteamAppId=$app" /proc/[0-9]*/environ 2>/dev/null | cut -d/ -f3 | tr '\n' ' ')
+      _snap(){ for _p in $_gp; do for _t in /proc/$_p/task/*/stat; do cat "$_t" 2>/dev/null; done; done | awk '{tid=$1; sub(/^.*\) /,""); print tid, $12+$13}'; }
+      _a=$(_snap); sleep 0.5; _b=$(_snap)
+      _top=$(printf '%s\n%s\n' "$_a" "--" "$_b" | awk '$1=="--"{s=1; next} !s{a[$1]=$2; next} ($1 in a){d=$2-a[$1]; if(d>m){m=d; t=$1}} END{if(t!="") print t, int(m*2)}')
+      [ -n "$_top" ] && line="$line thr=${_top#* }%($(cat /proc/*/task/"${_top%% *}"/comm 2>/dev/null | head -1 | tr -d ' '))"
+      _lf=$(tr '\0' '\n' < "/proc/$gs/environ" 2>/dev/null | sed -n 's/^GAMESCOPE_LIMITER_FILE=//p'); [ -r "$_lf" ] && line="$line fpslimit=$(tr -d '\n ' < "$_lf" | head -c 8)"
+    fi
   fi
   if [ -n "$gpu" ]; then
     smi=""; [ -e /sys/module/nvidia ] && smi=$(timeout 4 nvidia-smi -i "$gpu" --format=csv,noheader,nounits \

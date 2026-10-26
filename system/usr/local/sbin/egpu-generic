@@ -213,7 +213,9 @@ resume)
   read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" != nvidia ] || exit 0
   platform_guards; echo on > "/sys/bus/pci/devices/$bdf/power/control" 2>/dev/null; [ "$vendor" = amd ] && { amd_tune "$bdf"; start_keeper; }
   [ -n "$card" ] && session_on_card "$card" || exit 0
-  /usr/local/sbin/egpu-screen wake 2>/dev/null | while read -r l; do log "screen $l"; done
+  # (no DDC/CI "wake" of the monitor here: the AMD driver brings the display back itself, and asking the monitor to power
+  # on and select its input made it re-sync - seconds more of black after every wake (Legion Go 1 + RX 6800 XT, MSI MP275).
+  # That wake is an NVIDIA workaround for a link that does not re-train; the NVIDIA path keeps it.)
   g=$(pgrep -n -x 'gamescope(-wl)?') || exit 0
   oc=$(tr '\0' '\n' </proc/$g/environ 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p'); case "${oc%%,*}" in ""|"*"|eDP-*) exit 0 ;; esac
   /usr/local/sbin/egpu-panel off >/dev/null 2>&1 && log "resume: handheld panel off again (Game Mode on ${oc%%,*})"

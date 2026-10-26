@@ -1,3 +1,11 @@
+0.7.187 — AMD eGPUs: faster picture after waking; the support report shows why a game is slow.
+
+**Fixed** (AMD / Intel install only; NVIDIA unchanged)
+- After waking, the picture on the eGPU monitor took much longer to come back than without EGPU Buddy (Legion Go 1 + RX 6800 XT, MSI monitor). EGPU Buddy asked the monitor to power on and select its input right after waking, and the monitor answered by re-syncing: more seconds of black. AMD's driver brings the display back by itself, so the AMD path no longer does that (it was a workaround for an NVIDIA problem; the NVIDIA path keeps it).
+
+**Support report** (AMD eGPUs)
+- While a game runs on the AMD eGPU, the flight recorder now also records the game's busiest thread (how much of one CPU core it uses) and Game Mode's frame limit. A game that runs slowly while the GPU is mostly idle is then visibly limited by one of them, or by the USB4 link.
+
 0.7.186 — AMD eGPUs: sleep as the driver does it on its own.
 
 **Fixed** (AMD / Intel install, AMD cards only; NVIDIA unchanged)
