@@ -88,6 +88,23 @@ case "${1:-show}" in
     s=$(sed -n 's/^Session=//p' "$d/$DROP" 2>/dev/null)
     rm -f "$d/$DROP"; echo "released a leftover pin (${s:-?}): the system's own session choice applies again"
     ;;
+  watch-temp)
+    # ROG Ally / XG Mobile under SteamOS's sddm only (egpu-dm-watch.path, on every change in the sddm directory).
+    # 0.7.182 assumed "Return to Gaming Mode" writes a one-off Game Mode file the pin could rank below. It does not:
+    # "Switch to Desktop" writes the one-off DESKTOP file zzt-steamos-temp-login.conf (it stays until sddm restarts at
+    # boot), and "Return to Gaming Mode" removes it and logs out, so the system default (Game Mode) applies - which our
+    # desktop pin outranks whatever its name. So: once that file has been seen and then goes (or turns to Game Mode), the
+    # user asked for Game Mode: the pin goes too. A cable pull leaves the file alone, so it still returns to the desktop.
+    [ $BZ = 0 ] && [ "$DROP" = zzs-egpu-buddy-session.conf ] || exit 0
+    d=$(dm_dir) || exit 0; T=$d/zzt-steamos-temp-login.conf; S=/run/nvegpu/steamos-desktop-switch
+    if [ -f "$T" ] && ! grep -qs '^Session=gamescope' "$T"; then mkdir -p /run/nvegpu; : > "$S"; exit 0; fi
+    [ -e "$S" ] || exit 0
+    rm -f "$S"
+    [ -f "$d/$DROP" ] || exit 0
+    { [ -e /run/nvegpu/gm-detach-pending ] || pgrep -f '/usr/local/sbin/egpu-(safe|desktop)-detach' >/dev/null 2>&1; } && exit 0
+    rm -f "$d/$DROP"; logger -t egpu-buddy "Return to Gaming Mode: the desktop login pin was released" 2>/dev/null
+    echo "released the desktop pin: the user returned to Gaming Mode"
+    ;;
   migrate)
     # an update moves a pin left under the earlier name to the current one (run by install.sh)
     d=$(dm_dir) || exit 0

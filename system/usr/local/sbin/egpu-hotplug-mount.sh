@@ -352,6 +352,7 @@ case "$_hw_dock" in xg-mobile-*)
   # remembered for the X11 desktop guard (egpu-hw-repair runs at updates, usually with nothing attached); put it in now,
   # before the user can switch to the desktop with this dock attached
   mkdir -p /var/lib/nvegpu; echo "$_hw_dock" > /var/lib/nvegpu/xg-mobile-seen
+  systemctl enable --now egpu-dm-watch.path >/dev/null 2>&1 || true   # "Return to Gaming Mode" watch (egpu-dm-session watch-temp)
   /usr/local/sbin/egpu-hw-repair --xorg >/dev/null 2>&1 || true ;;   # X11 guard + Gen3 driver option, before the load below
 esac
 _hw_why=""; [ "$_hw_dev" = rog-ally ] && _hw_why="ROG Ally"

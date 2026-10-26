@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.188"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.189"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1320,7 +1320,11 @@ def _support_report():
     if gpid:
         cl = _read(f"/proc/{gpid}/cmdline").replace("\0", " ").strip()
         lines.append(f"gamescope command line: {cl[:400]}")
-    for name, body in re.findall(r'"(External: [^"\n]*?)"\s*\{(.*?)\n\s*\}', _read(f"{USER_HOME}/.local/share/Steam/config/config.vdf"), re.S)[:4]:
+    try:   # Steam's config.vdf is not always valid UTF-8 (_read gave up on it silently: no scale lines in the report)
+        _cfg = open(f"{USER_HOME}/.local/share/Steam/config/config.vdf", encoding="utf-8", errors="replace").read()
+    except OSError:
+        _cfg = ""
+    for name, body in re.findall(r'"(External: [^"\n]*?)"\s*\{(.*?)\n\s*\}', _cfg, re.S)[:4]:
         vals = dict(re.findall(r'"((?:Min|Max|Auto)?ScaleFactor)"\s*"([0-9.]+)"', body))
         lines.append(f"Steam UI scale, {name[:60]}: " + (" ".join(f"{k}={v[:5]}" for k, v in vals.items()) or "none"))
     lines.append(f"Steam UI scale helper: {(_read('/tmp/nv-egpu-gamescope-steam-scale-clamp.log').splitlines() or ['no log'])[-1][:200]}"

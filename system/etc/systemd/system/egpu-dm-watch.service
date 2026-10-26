@@ -1,0 +1,6 @@
+[Unit]
+Description=SteamOS EGPU Buddy: release the desktop login pin when the user returns to Gaming Mode
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/egpu-dm-session watch-temp

@@ -1,6 +1,10 @@
-0.7.189 — The support report names the OS version.
+0.7.189 — ROG Ally / XG Mobile: "Return to Gaming Mode" from the desktop with the eGPU attached.
 
-**Changed** (support report only)
+**Fixed** (ROG Ally / XG Mobile on SteamOS only; every other machine unchanged)
+- With the eGPU attached on the desktop, "Return to Gaming Mode" still came back to the desktop until a Safe Detach (ROG Xbox Ally X + XG Mobile; the 0.7.182 fix rested on a wrong assumption). SteamOS's "Switch to Desktop" writes a one-time desktop login, and "Return to Gaming Mode" removes it so the system default (Game Mode) applies; EGPU Buddy's own desktop login, which brings the desktop back after a cable pull, outranked that default. EGPU Buddy now notices when "Return to Gaming Mode" removes the one-time login and releases its own at that moment. A cable pull still returns to the desktop.
+
+**Support report**
+- Steam's interface scale for each external screen is shown again (the report could not read Steam's settings file when it contained non-UTF-8 text), and the scale helper logs whether its live step reached Steam.
 - The report header gives the OS version and build (for example "SteamOS 3.9 (build 20261023.100)"); it said only "SteamOS".
 
 0.7.188 — AMD eGPUs: games no longer starve on the USB4 cable.

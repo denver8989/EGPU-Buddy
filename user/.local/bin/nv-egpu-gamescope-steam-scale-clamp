@@ -154,7 +154,7 @@ lowest_scale() {
 # applied, which Steam overrides when it decides the 49" monitor is a TV (huge interface with a black area: ROG Xbox
 # Ally X + Odyssey G9 report, "node missing (live scale not applied)"). The same call through Python, which SteamOS has.
 set_live_scale_py() {
-  NV_EGPU_STEAM_UI_SCALE="$1" python3 - <<'PY' 2>/dev/null || true
+  NV_EGPU_STEAM_UI_SCALE="$1" python3 - <<'PY' 2>&1 | while read -r _l; do log "live scale (python): $_l"; done
 import base64, json, os, socket, struct, urllib.request
 scale = float(os.environ.get("NV_EGPU_STEAM_UI_SCALE", "1.27981042861938477"))
 expr = ('(() => { if (typeof SteamClient !== "object" || !SteamClient._internal || typeof SteamClient._internal.SetForceDeviceScaleFactor !== "function") return "no-scale-api";'
@@ -178,11 +178,16 @@ def evaluate(url):
     try: s.recv(65536)
     except Exception: pass
     s.close()
-pages = json.load(urllib.request.urlopen("http://127.0.0.1:8080/json", timeout=2))
+try:
+    pages = json.load(urllib.request.urlopen("http://127.0.0.1:8080/json", timeout=2))
+except Exception as e:
+    print("Steam's debug port is not answering yet (%s)" % e.__class__.__name__); raise SystemExit
+done = 0
 for pg in pages:
     if pg.get("webSocketDebuggerUrl") and any(t in pg.get("title", "") for t in ("Steam Big Picture Mode", "SharedJSContext")):
-        try: evaluate(pg["webSocketDebuggerUrl"])
-        except Exception: pass
+        try: evaluate(pg["webSocketDebuggerUrl"]); done += 1
+        except Exception as e: print("page %r: %s" % (pg.get("title"), e))
+print("scale %.3f sent to %d Steam page(s) of %d" % (scale, done, len(pages)))
 PY
 }
 

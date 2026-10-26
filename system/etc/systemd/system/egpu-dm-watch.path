@@ -1,0 +1,8 @@
+[Unit]
+Description=SteamOS EGPU Buddy: notice "Return to Gaming Mode" (ROG Ally / XG Mobile under SteamOS only)
+
+[Path]
+PathChanged=/etc/sddm.conf.d
+
+[Install]
+WantedBy=multi-user.target

@@ -278,6 +278,7 @@ mkdir -p /etc/nv-egpu-buddy /var/lib/nvegpu; rm -f /var/lib/nvegpu/handheld-scre
 # reloads are conveniences (a reboot applies everything); they have nothing to talk to in a chroot/container
 udevadm control --reload >/dev/null 2>&1 || true; udevadm trigger --subsystem-match=pci --action=change >/dev/null 2>&1 || true
 systemctl daemon-reload >/dev/null 2>&1 || true
+[ -f /etc/systemd/system/egpu-dm-watch.path ] && { { [ \"\$(/usr/local/sbin/egpu-detect --device 2>/dev/null)\" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && systemctl enable --now egpu-dm-watch.path >/dev/null 2>&1 || systemctl disable --now egpu-dm-watch.path >/dev/null 2>&1; }
 [ -f /etc/systemd/system/egpu-amd-presleep.service ] && { [ \"\$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)\" = amd ] && systemctl enable egpu-amd-presleep.service >/dev/null 2>&1 || systemctl disable egpu-amd-presleep.service >/dev/null 2>&1; }
 for u in egpu-mount egpu-boot-enumerate egpu-conditional-session egpu-buddy-selfheal egpu-buddy-resume egpu-buddy-shutdown egpu-driver-trial-boot egpu-decky-guard egpu-flight-recorder; do [ -f /etc/systemd/system/\$u.service ] && systemctl enable \$u.service >/dev/null; done
 # watches for the session shim marking the GBM-scanout gamescope as crashing on this OS build (a .path unit, not a .service)
