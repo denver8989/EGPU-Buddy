@@ -1278,7 +1278,8 @@ def _support_report():
     lines = ["EGPU Buddy support report", "",
              "## Versions",
              f"plugin {PAYLOAD_VERSION} · system {_read('/etc/nv-egpu-buddy/version') or '?'}",
-             f"OS {osr.get('PRETTY_NAME', '?')} · kernel {os.uname().release}",
+             f"OS {osr.get('PRETTY_NAME', '?')}" + (f" {osr['VERSION_ID']}" if osr.get('VERSION_ID') and osr['VERSION_ID'] not in osr.get('PRETTY_NAME', '') else "")
+             + (f" (build {osr['BUILD_ID']})" if osr.get('BUILD_ID') else "") + f" · kernel {os.uname().release}",
              f"NVIDIA driver {_sh(['modinfo', '-F', 'version', 'nvidia'], 5)[1] or 'not installed'}",
              f"device {_read('/sys/class/dmi/id/sys_vendor')} {_read('/sys/class/dmi/id/product_name')} ({_read('/sys/class/dmi/id/product_version')})",
              f"hardware {_hw_line()}",

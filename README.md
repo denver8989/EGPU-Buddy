@@ -72,12 +72,12 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 
 | | Legion Go 2 | Legion Go 2 (Ryzen Z2) | Legion Go 1 | ROG Xbox Ally X | Legion Go 1 (AMD eGPU) |
 |---|---|---|---|---|---|
-| OS | CachyOS (Deckify) | Bazzite 44 (handheld image, bazzite-deck) | SteamOS 3.8 | SteamOS 3.8 | SteamOS 3.8 |
+| OS | CachyOS (Deckify) | Bazzite 44 (handheld image, bazzite-deck) | SteamOS 3.8 | SteamOS 3.8 | SteamOS 3.9 |
 | eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | AOOSTAR AG02, AMD RX 6800 XT |
 | Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) | MSI MP275 (HDMI) |
 | Status | Tested | Tested (on-device testing: 1khanfusion) | Tested | Tested (on-device testing and development: SilverplayerX) | **Testing in progress** (on-device testing: RetroMann): plug-in, unplug and games work; sleep and performance fixes being confirmed ([TESTED.md](TESTED.md)) |
 
-**Operating systems:** SteamOS 3.8, CachyOS (Deckify) and **Bazzite** (handheld image, bazzite-deck) tested. On Bazzite the patched NVIDIA driver is built on the device for its kernel (no
+**Operating systems:** SteamOS 3.8 and 3.9, CachyOS (Deckify) and **Bazzite** (handheld image, bazzite-deck) tested. On Bazzite the patched NVIDIA driver is built on the device for its kernel (no
 NVIDIA driver needed from Bazzite) and the NVIDIA picture fix is built into the gamescope Bazzite ships.
 
 **NVIDIA:** RTX 30 and RTX 50 tested here (desktop cards, and a laptop RTX 50 in an XG Mobile); RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**

@@ -85,9 +85,9 @@ Verified on that rig in one session:
 No benchmarks or performance figures are recorded for any rig: what is tracked here is whether the eGPU attaches,
 renders, survives a cable pull and comes back.
 
-## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.8)
+## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.9)
 
-Tested on the device by **RetroMann** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), SteamOS 3.8, AOOSTAR AG02
+Tested on the device by **RetroMann** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), SteamOS 3.9 (build 20261023.100), AOOSTAR AG02
 over USB4 (ASMedia 246x), AMD Radeon RX 6800 XT, MSI MP275 over HDMI. The AMD / Intel install (`./install.sh --amd`,
 or "AMD / Intel" at the first install) skips the NVIDIA driver; the path (`/usr/local/sbin/egpu-generic`) is separate
 and runs only on that install, so it cannot affect an NVIDIA setup.

@@ -1,3 +1,8 @@
+0.7.189 — The support report names the OS version.
+
+**Changed** (support report only)
+- The report header gives the OS version and build (for example "SteamOS 3.9 (build 20261023.100)"); it said only "SteamOS".
+
 0.7.188 — AMD eGPUs: games no longer starve on the USB4 cable.
 
 **Fixed** (AMD / Intel install only; NVIDIA unchanged)
