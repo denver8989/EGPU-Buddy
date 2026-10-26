@@ -196,6 +196,7 @@ connector_order() {
 
 clear_egpu_env() {
   unset NV_EGPU_GAMESCOPE_GENERIC_VK MESA_VK_DEVICE_SELECT
+  [ "${NV_EGPU_GENERIC_SYSMEM:-}" = 1 ] && unset DXVK_CONFIG VKD3D_CONFIG NV_EGPU_GENERIC_SYSMEM
   unset DISPLAY
   unset WAYLAND_DISPLAY
   unset WAYLAND_SOCKET
@@ -788,6 +789,18 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # driver-file pin: with two AMD GPUs on one driver, nothing in this session can route through the handheld's chip.
   # (Without the "!" this variable outranks DRI_PRIME's own "!" and made the built-in GPU visible again.)
   export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK!"
+  # CPU-written GPU buffers in system RAM, not in the eGPU's VRAM. With the full 16 GB BAR, DXVK / vkd3d-proton put the
+  # buffers a game rewrites every frame straight into VRAM; across USB4 every CPU access to them crosses the cable and the
+  # game's render thread stalls on it: RX 6800 XT in CALX at 20 % busy, UnityGfxDeviceWorker maxing a CPU core, 24-37 fps.
+  # After a sleep the driver had moved those buffers to system RAM and the same scene ran at 80+ fps with the GPU 70-98 %
+  # busy (Legion Go 1 + AG02, flight recorder 0.7.187, reproduced twice). These are the two translation layers' own switches
+  # for exactly that (DXVK ships the first as a per-game fix, e.g. Assassin's Creed 3 / Black Flag); a value the user set wins.
+  if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
+    case "${DXVK_CONFIG:-}" in *cachedDynamicResources*) ;; *) export DXVK_CONFIG="${DXVK_CONFIG:+$DXVK_CONFIG; }d3d11.cachedDynamicResources = a" ;; esac
+    case "${VKD3D_CONFIG:-}" in *upload_hvv*) ;; *) export VKD3D_CONFIG="${VKD3D_CONFIG:+$VKD3D_CONFIG,}no_upload_hvv" ;; esac
+    export NV_EGPU_GENERIC_SYSMEM=1
+    log "eGPU over USB4: CPU-written game buffers in system RAM (DXVK_CONFIG='$DXVK_CONFIG' VKD3D_CONFIG='$VKD3D_CONFIG')"
+  fi
   log "generic eGPU route: $gen_vendor $gen_bdf ($gen_card) outputs: $gen_outputs"
 else
   clear_egpu_env

@@ -84,8 +84,8 @@ while :; do
     if [ "${on:-}" = egpu ] && [ -n "${app:-}" ]; then
       _gp=$(grep -lsa "SteamAppId=$app" /proc/[0-9]*/environ 2>/dev/null | cut -d/ -f3 | tr '\n' ' ')
       _snap(){ for _p in $_gp; do for _t in /proc/$_p/task/*/stat; do cat "$_t" 2>/dev/null; done; done | awk '{tid=$1; sub(/^.*\) /,""); print tid, $12+$13}'; }
-      _a=$(_snap); sleep 0.5; _b=$(_snap)
-      _top=$(printf '%s\n%s\n' "$_a" "--" "$_b" | awk '$1=="--"{s=1; next} !s{a[$1]=$2; next} ($1 in a){d=$2-a[$1]; if(d>m){m=d; t=$1}} END{if(t!="") print t, int(m*2)}')
+      _t0=$(date +%s%N); _a=$(_snap); sleep 0.5; _b=$(_snap); _el=$(( $(date +%s%N) - _t0 ))   # the real window (scanning takes time)
+      _top=$(printf '%s\n%s\n' "$_a" "--" "$_b" | awk -v el="$_el" '$1=="--"{s=1; next} !s{a[$1]=$2; next} ($1 in a){d=$2-a[$1]; if(d>m){m=d; t=$1}} END{if(t!="" && el>0) print t, int(m*1e9/el)}')
       [ -n "$_top" ] && line="$line thr=${_top#* }%($(cat /proc/*/task/"${_top%% *}"/comm 2>/dev/null | head -1 | tr -d ' '))"
       _lf=$(tr '\0' '\n' < "/proc/$gs/environ" 2>/dev/null | sed -n 's/^GAMESCOPE_LIMITER_FILE=//p'); [ -r "$_lf" ] && line="$line fpslimit=$(tr -d '\n ' < "$_lf" | head -c 8)"
     fi

@@ -1,3 +1,11 @@
+0.7.188 — AMD eGPUs: games no longer starve on the USB4 cable.
+
+**Fixed** (AMD / Intel install only; NVIDIA unchanged)
+- Some games ran at a fraction of the eGPU's speed with the GPU mostly idle: CALX at 24-37 fps with the RX 6800 XT 20 % busy (Legion Go 1 + Aoostar AG02). The flight recorder showed why: the game's render thread was maxing a CPU core while the GPU waited. Windows games translated by Proton place the buffers they rewrite every frame directly in the eGPU's memory, and over USB4 every access the CPU makes to them crosses the cable. After a sleep the driver had moved those buffers to the handheld's RAM, and the same scene ran at 80+ fps with the GPU 70-98 % busy (seen twice in one report). Game Mode on an AMD eGPU now tells Proton's two translation layers (DXVK, vkd3d-proton) to keep those buffers in system RAM from the start, using their own settings for exactly this. A value you set yourself is kept.
+
+**Support report**
+- The game's busiest-thread reading now uses the real sampling time (it read up to 170 %).
+
 0.7.187 — AMD eGPUs: faster picture after waking; the support report shows why a game is slow.
 
 **Fixed** (AMD / Intel install only; NVIDIA unchanged)
