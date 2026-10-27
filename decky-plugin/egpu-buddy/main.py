@@ -1436,7 +1436,10 @@ def _support_report():
     if dj:
         lines += ["", "## Desktop and compositor log, this boot (last 60)"] + [l[:300] for l in dj[-60:]]
     # the attach, Game Mode switch/detach and driver trial logs: the journal tail alone was all NVRM flood after a GPU hang
-    for title, path, n in (("Attach log", "/var/log/egpu-hotplug-mount.log", 40), ("Game Mode switch / detach log", "/var/log/egpu-gamemode.log", 25),
+    # ROG Ally / XG Mobile: the last 40 lines held only the newest attach, so an earlier failed one in the same session was
+    # cut off (ROG Xbox Ally X report on 0.7.192: why the first attach chose the handheld screen was not in the report)
+    xa = os.path.exists("/var/lib/nvegpu/xg-mobile-seen") or _sh(["/usr/local/sbin/egpu-detect", "--device"], 5)[1].strip() == "rog-ally"
+    for title, path, n in (("Attach log", "/var/log/egpu-hotplug-mount.log", 200 if xa else 40), ("Game Mode switch / detach log", "/var/log/egpu-gamemode.log", 25),
                            ("Safe Detach status", "/run/nvegpu/gm-status.json", 2), ("Safe Detach teardown (last run)", "/run/nvegpu/gm-helper.log", 30),
                            ("Safe Detach: what held the GPU", "/run/nvegpu/gm-holders.log", 15),
                            ("Safe Detach: shared GPU buffers when the driver would not unload", "/run/nvegpu/gm-dmabuf.log", 60),
