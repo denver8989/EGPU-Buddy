@@ -16,14 +16,6 @@ mode=${NV_EGPU_STEAM_UI_SCALE_MODE:-}
 if [ -z "$mode" ]; then
   if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = legion-go-2 ] || [ "${NV_EGPU_GAMESCOPE_OUTPUT_WIDTH:-}x${NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT:-}" = 5120x1440 ]; then mode=fixed; else mode=lowest; fi
 fi
-# ROG Ally / XG Mobile only: never "lowest". It ran whenever a Game Mode start was not (yet) at 5120x1440 - the seconds at
-# 1024x768 before the monitor's EDID arrived - and wrote Steam's minimum (0.711) into EVERY external screen's entry, the
-# Odyssey G9's included; since 0.7.183 the live step pushed it into Steam too (ROG Xbox Ally X report on 0.7.191: G9 at
-# ScaleFactor 0.711). There the scale is only set when Game Mode really runs at 5120x1440, otherwise left to Steam.
-if [ "$mode" = lowest ] && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
-  log "ROG Ally / XG Mobile: Game Mode is not at 5120x1440 (${NV_EGPU_GAMESCOPE_OUTPUT_WIDTH:-?}x${NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT:-?}): Steam's scale left as it is"
-  exit 0
-fi
 scale=${NV_EGPU_STEAM_UI_SCALE:-1.27981042861938477}
 min_scale=${NV_EGPU_STEAM_UI_MIN_SCALE:-0.711512446403503418}
 max_scale=${NV_EGPU_STEAM_UI_MAX_SCALE:-3.40971922874450684}
@@ -37,6 +29,14 @@ timestamp=$(date +%Y%m%d_%H%M%S)
 log() {
   printf 'nv-egpu-gamescope-steam-scale-clamp: %s\n' "$*" >&2
 }
+# ROG Ally / XG Mobile only: never "lowest". It ran whenever a Game Mode start was not (yet) at 5120x1440 - the seconds at
+# 1024x768 before the monitor's EDID arrived - and wrote Steam's minimum (0.711) into EVERY external screen's entry, the
+# Odyssey G9's included; since 0.7.183 the live step pushed it into Steam too (ROG Xbox Ally X report on 0.7.191: G9 at
+# ScaleFactor 0.711). There the scale is only set when Game Mode really runs at 5120x1440, otherwise left to Steam.
+if [ "$mode" = lowest ] && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
+  log "ROG Ally / XG Mobile: Game Mode is not at 5120x1440 (${NV_EGPU_GAMESCOPE_OUTPUT_WIDTH:-?}x${NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT:-?}): Steam's scale left as it is"
+  exit 0
+fi
 
 mkdir -p "$runtime_dir" 2>/dev/null || true
 exec 9>"$lock_file"
@@ -165,8 +165,11 @@ set_live_scale_py() {
   NV_EGPU_STEAM_UI_SCALE="$1" python3 - <<'PY' 2>&1 | while read -r _l; do log "live scale (python): $_l"; done
 import base64, json, os, socket, struct, urllib.request
 scale = float(os.environ.get("NV_EGPU_STEAM_UI_SCALE", "1.27981042861938477"))
-expr = ('(() => { if (typeof SteamClient !== "object" || !SteamClient._internal || typeof SteamClient._internal.SetForceDeviceScaleFactor !== "function") return "no-scale-api";'
-        ' SteamClient._internal.SetForceDeviceScaleFactor(%r); return "scale-set"; })()' % scale)
+# the reply says what the page itself sees: its viewport in CSS pixels and the device scale, i.e. whether the scale took
+# and how large Steam's own window is (5120x1440 / 1.28 = 4000x1125; a TV scale or a smaller Steam window shows here)
+expr = ('(() => { const v = window.innerWidth + "x" + window.innerHeight + " @" + (window.devicePixelRatio || 0).toFixed(3) + " screen " + screen.width + "x" + screen.height;'
+        ' if (typeof SteamClient !== "object" || !SteamClient._internal || typeof SteamClient._internal.SetForceDeviceScaleFactor !== "function") return "no-scale-api, viewport " + v;'
+        ' SteamClient._internal.SetForceDeviceScaleFactor(%r); return "scale-set, viewport before " + v; })()' % scale)
 def evaluate(url):
     host_port, path = url[len("ws://"):].split("/", 1)
     host, port = host_port.split(":")
@@ -183,19 +186,31 @@ def evaluate(url):
     n = len(data); hdr = bytes([0x81]) + (bytes([0x80 | n]) if n < 126 else bytes([0x80 | 126]) + struct.pack(">H", n) if n < 65536 else bytes([0x80 | 127]) + struct.pack(">Q", n))
     mask = os.urandom(4)
     s.sendall(hdr + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
-    try: s.recv(65536)
+    buf = b""; s.settimeout(2)
+    try:
+        while True:
+            c = s.recv(65536)
+            if not c: break
+            buf += c
+            if len(buf) >= 2:
+                n = buf[1] & 0x7f; o = 2
+                if n == 126: n = struct.unpack(">H", buf[2:4])[0]; o = 4
+                elif n == 127: n = struct.unpack(">Q", buf[2:10])[0]; o = 10
+                if len(buf) >= o + n: buf = buf[o:o + n]; break
     except Exception: pass
     s.close()
+    try: return str(json.loads(buf.decode("utf-8", "replace")).get("result", {}).get("result", {}).get("value", "no reply"))
+    except Exception: return "no reply"
 try:
     pages = json.load(urllib.request.urlopen("http://127.0.0.1:8080/json", timeout=2))
 except Exception as e:
     print("Steam's debug port is not answering yet (%s)" % e.__class__.__name__); raise SystemExit
-done = 0
+done = 0; seen = []
 for pg in pages:
     if pg.get("webSocketDebuggerUrl") and any(t in pg.get("title", "") for t in ("Steam Big Picture Mode", "SharedJSContext")):
-        try: evaluate(pg["webSocketDebuggerUrl"]); done += 1
+        try: r = evaluate(pg["webSocketDebuggerUrl"]); done += 1; seen.append("%s: %s" % (pg.get("title"), r))
         except Exception as e: print("page %r: %s" % (pg.get("title"), e))
-print("scale %.3f sent to %d Steam page(s) of %d" % (scale, done, len(pages)))
+print("scale %.3f sent to %d Steam page(s) of %d%s" % (scale, done, len(pages), "".join(" | " + x for x in seen)))
 PY
 }
 

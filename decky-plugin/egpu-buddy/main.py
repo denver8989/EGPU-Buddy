@@ -1488,6 +1488,11 @@ def _support_report():
     except Exception as ex:  # noqa: BLE001
         lines += ["", f"## Other Decky plugins: could not be read ({ex})"]
     try:
+        om = _other_mods()
+        lines += ["", f"## Other mods touching Game Mode, the desktop login or Steam ({len(om)})"] + (om or ["(none)"])
+    except Exception as ex:  # noqa: BLE001
+        lines += ["", f"## Other mods: could not be read ({ex})"]
+    try:
         lines += _system_report()
     except Exception as ex:  # noqa: BLE001  (the report itself must never fail over one section)
         lines += ["", f"## System and boot history: could not be read ({ex})"]
@@ -1668,6 +1673,50 @@ def _decky_plugins():
         logs = sorted(glob.glob(f"{USER_HOME}/homebrew/logs/{os.path.basename(d.rstrip('/'))}/*.log"), key=os.path.getmtime)
         err = [l for l in (_read(logs[-1]).splitlines() if logs else []) if re.search(r"ERROR|Traceback|Exception", l)]
         out.append(" · ".join(p for p in parts if p) + (f"\n    last error: {err[-1][:200]}" if err else ""))
+    return out
+
+
+def _other_mods():
+    """Changes other tools and mods made to Game Mode, the desktop login or Steam, for the support report: anything here can
+    override what EGPU Buddy sets up (a session replaced, a scale or a launch flag forced, a theme reshaping Steam's UI).
+    Our own files are left out. Read-only."""
+    H, out = USER_HOME, []
+    ours = {"10-nv-egpu-buddy.conf", "zzz-nv-egpu-buddy-ally.conf", "zz-nv-egpu-sync.lua", "10-egpu-gamescope-output.conf",
+            "zzs-egpu-buddy-session.conf", "lenovo.legiongo2.oled.lua", "00-egpu-free-nvidia-modeset.sh"} | set(
+        os.path.basename(f) for f in glob.glob(f"{SYSDIR}/user/.config/systemd/user/*.service.d/*.conf"))
+    def keylines(f, rx=r"^\s*(ExecStart|ExecStartPre|ExecStartPost|Environment|UnsetEnvironment|Session|User)\b"):
+        return [l.strip()[:220] for l in _read(f).splitlines() if re.search(rx, l)][:8]
+    for g in (f"{H}/.config/systemd/user/gamescope-session.service.d/*.conf", "/etc/systemd/user/gamescope-session.service.d/*.conf",
+              f"{H}/.config/systemd/user/plasma-*.service.d/*.conf", f"{H}/.config/systemd/user/steam-launcher.service.d/*.conf"):
+        for f in sorted(glob.glob(g)):
+            if os.path.basename(f) not in ours:
+                out += [f"session drop-in {f}"] + [f"    {l}" for l in keylines(f)]
+    for f in (f"{H}/.local/bin/gamescope-session", f"{H}/.local/bin/steamos-session-select", f"{H}/.local/bin/gamescope"):
+        if os.path.exists(f):
+            head = [l.strip()[:200] for l in _read(f).splitlines()[:40] if l.strip().startswith("#") and len(l.strip()) > 3][:4]
+            out += [f"replacement program {f} ({os.path.getsize(f)} bytes)"] + [f"    {l}" for l in head]
+    for f in sorted(glob.glob(f"{H}/.config/gamescope/scripts/**/*.lua", recursive=True)):
+        if os.path.basename(f) not in ours:
+            out.append(f"gamescope script {f}")
+    for f in sorted(glob.glob(f"{H}/.config/environment.d/*.conf")):
+        if os.path.basename(f) not in ours:
+            out.append(f"environment {f}: " + " ".join(sorted(set(re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_]*)=", _read(f), re.M))))[:300])
+    for f in sorted(glob.glob("/etc/sddm.conf.d/*.conf")):
+        if os.path.basename(f) not in ours:
+            out.append(f"login setting {f}: " + "; ".join(keylines(f)))
+    for f in (f"{H}/.local/share/Steam/steam_dev.cfg", f"{H}/.steam/steam/steam_dev.cfg"):
+        if os.path.exists(f):
+            out += [f"Steam developer settings {f}"] + [f"    {l.strip()[:200]}" for l in _read(f).splitlines() if l.strip()][:10]
+            break
+    th = sorted(os.path.basename(d.rstrip("/")) for d in glob.glob(f"{H}/homebrew/themes/*/"))
+    if th:
+        out.append(f"CSS Loader themes installed ({len(th)}): " + ", ".join(th)[:600])
+    for f in sorted(glob.glob(f"{H}/.config/plasma-workspace/env/*")):
+        if os.path.basename(f) not in ours:
+            out.append(f"desktop start script {f}")
+    for f in sorted(glob.glob(f"{H}/.config/systemd/user/*.service")):
+        if not os.path.basename(f).startswith("egpu-"):
+            out.append(f"user service {os.path.basename(f)}: " + "; ".join(keylines(f, r"^\s*ExecStart\b")))
     return out
 
 
