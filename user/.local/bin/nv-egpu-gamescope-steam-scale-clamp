@@ -16,6 +16,14 @@ mode=${NV_EGPU_STEAM_UI_SCALE_MODE:-}
 if [ -z "$mode" ]; then
   if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = legion-go-2 ] || [ "${NV_EGPU_GAMESCOPE_OUTPUT_WIDTH:-}x${NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT:-}" = 5120x1440 ]; then mode=fixed; else mode=lowest; fi
 fi
+# ROG Ally / XG Mobile only: never "lowest". It ran whenever a Game Mode start was not (yet) at 5120x1440 - the seconds at
+# 1024x768 before the monitor's EDID arrived - and wrote Steam's minimum (0.711) into EVERY external screen's entry, the
+# Odyssey G9's included; since 0.7.183 the live step pushed it into Steam too (ROG Xbox Ally X report on 0.7.191: G9 at
+# ScaleFactor 0.711). There the scale is only set when Game Mode really runs at 5120x1440, otherwise left to Steam.
+if [ "$mode" = lowest ] && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
+  log "ROG Ally / XG Mobile: Game Mode is not at 5120x1440 (${NV_EGPU_GAMESCOPE_OUTPUT_WIDTH:-?}x${NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT:-?}): Steam's scale left as it is"
+  exit 0
+fi
 scale=${NV_EGPU_STEAM_UI_SCALE:-1.27981042861938477}
 min_scale=${NV_EGPU_STEAM_UI_MIN_SCALE:-0.711512446403503418}
 max_scale=${NV_EGPU_STEAM_UI_MAX_SCALE:-3.40971922874450684}

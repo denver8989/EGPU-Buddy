@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.191"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.192"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1483,6 +1483,11 @@ def _support_report():
     except Exception as ex:  # noqa: BLE001
         lines += ["", f"## Programs using a GPU: could not be read ({ex})"]
     try:
+        dp = _decky_plugins()
+        lines += ["", f"## Other Decky plugins ({len(dp)})"] + (dp or ["(none)"])
+    except Exception as ex:  # noqa: BLE001
+        lines += ["", f"## Other Decky plugins: could not be read ({ex})"]
+    try:
         lines += _system_report()
     except Exception as ex:  # noqa: BLE001  (the report itself must never fail over one section)
         lines += ["", f"## System and boot history: could not be read ({ex})"]
@@ -1637,6 +1642,32 @@ def _driver_conflicts():
             out.append({"id": "bazzite-nvidia", "name": f"Bazzite's NVIDIA driver {v}", "url": "https://docs.bazzite.gg",
                         "why": f"this Bazzite image carries NVIDIA's driver {v} built in; EGPU Buddy's patched driver is {pv[0] if pv else '?'}, and the two cannot be used together. Use Bazzite's handheld image without NVIDIA (bazzite-deck): EGPU Buddy then installs its own driver",
                         "evidence": [f"nvidia-driver {v}"], "removable": False})
+    return out
+
+
+def _decky_plugins():
+    """Every other installed Decky plugin, for the support report: what it is, where its source lives (so its code can be
+    read for conflicts: TDP / CPU / GPU controls, display or session changes), whether it runs as root and has a backend or
+    native binaries, and its latest error. Read-only."""
+    out = []
+    disabled = (_json(f"{USER_HOME}/homebrew/settings/loader.json") or {}).get("disabled_plugins") or []
+    for d in sorted(glob.glob(f"{USER_HOME}/homebrew/plugins/*/")):
+        pj = _json(os.path.join(d, "plugin.json")) or {}
+        name = pj.get("name") or os.path.basename(d.rstrip("/"))
+        if name == "EGPU Buddy":
+            continue
+        pk = _json(os.path.join(d, "package.json")) or {}
+        repo = pk.get("repository") or pk.get("homepage") or (pk["bugs"].get("url") if isinstance(pk.get("bugs"), dict) else None)
+        if isinstance(repo, dict):
+            repo = repo.get("url")
+        repo = re.sub(r"^git\+|\.git$", "", repo or "") or f"store: decky-plugin-database/plugins/{os.path.basename(d.rstrip('/'))}"
+        flags = ",".join(pj.get("flags") or []) or "-"
+        parts = [f"{name} {pk.get('version') or pj.get('version') or '?'}", f"by {pj.get('author') or pk.get('author') or '?'}",
+                 f"flags {flags}", "backend" if os.path.exists(os.path.join(d, "main.py")) else "no backend",
+                 "native binaries" if glob.glob(os.path.join(d, "bin", "*")) else "", "DISABLED" if name in disabled else "", repo]
+        logs = sorted(glob.glob(f"{USER_HOME}/homebrew/logs/{os.path.basename(d.rstrip('/'))}/*.log"), key=os.path.getmtime)
+        err = [l for l in (_read(logs[-1]).splitlines() if logs else []) if re.search(r"ERROR|Traceback|Exception", l)]
+        out.append(" · ".join(p for p in parts if p) + (f"\n    last error: {err[-1][:200]}" if err else ""))
     return out
 
 

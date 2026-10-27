@@ -1,3 +1,12 @@
+0.7.192 — ROG Ally / XG Mobile: Steam's scale on the Odyssey G9 and the desktop switch on SteamOS 3.9.5.
+
+**Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
+- Steam's interface became tiny and sluggish on the Odyssey G9 behind the XG Mobile (ROG Xbox Ally X, report on 0.7.191: scale 0.711). While Game Mode was still starting at 1024x768, before the monitor's resolution arrived, the scale helper set Steam's smallest scale on every external screen and pushed it into Steam live. On the ROG Ally / XG Mobile the scale is now only set when Game Mode really runs at 5120x1440; otherwise Steam's own scale is left alone.
+- "Switch to Desktop" with the eGPU attached hung and restarted the desktop until a forced restart on SteamOS 3.9.5: SteamOS 3.9.5 asks for the X11 desktop, which EGPU Buddy's login setting had always replaced with the Wayland desktop until 0.7.189 released it. While the NVIDIA eGPU is attached, that one-off request now asks for the Wayland desktop again. Without the eGPU, SteamOS's choice is left as it is.
+
+**Support report**
+- Lists the installed Decky plugins (version, author, root, enabled or disabled, source repository and last logged error), so a conflict with another plugin can be checked against its code.
+
 0.7.191 — AMD eGPUs: the support report records the handheld's CPU while playing.
 
 **Support report** (AMD / Intel install only; nothing else changes)
