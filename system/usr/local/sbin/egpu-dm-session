@@ -97,6 +97,23 @@ case "${1:-show}" in
     # user asked for Game Mode: the pin goes too. A cable pull leaves the file alone, so it still returns to the desktop.
     [ $BZ = 0 ] && [ "$DROP" = zzs-egpu-buddy-session.conf ] || exit 0
     d=$(dm_dir) || exit 0; T=$d/zzt-steamos-temp-login.conf; S=/run/nvegpu/steamos-desktop-switch
+    # what the login directory holds at every change (targeted record: SteamOS 3.9 switches through steamos-manager and
+    # did not use the 3.8 file names - ROG Xbox Ally X report on 0.7.189, the pin never released)
+    { printf '%s' "$(date '+%F %T')"; for f in "$d"/*.conf /usr/lib/sddm/sddm.conf.d/*.conf; do [ -f "$f" ] || continue
+        printf ' | %s %s %s' "$f" "$(stat -c %Y "$f" 2>/dev/null)" "$(sed -n 's/^Session=//p' "$f" | tail -1)"; done; echo; } >> /var/log/egpu-dm-watch.log 2>/dev/null
+    tail -n 200 /var/log/egpu-dm-watch.log > /var/log/egpu-dm-watch.log.t 2>/dev/null && mv -f /var/log/egpu-dm-watch.log.t /var/log/egpu-dm-watch.log
+    # SteamOS 3.9 (steamos-manager): "Return to Gaming Mode" writes a temporary login override asking for Game Mode. Any
+    # login file other than ours, written after our pin and asking for a gamescope session, is that request: step aside.
+    if [ -f "$d/$DROP" ]; then
+      for f in "$d"/*.conf; do
+        [ "$f" = "$d/$DROP" ] && continue; [ "$f" -nt "$d/$DROP" ] || continue
+        if sed -n 's/^Session=//p' "$f" | tail -1 | grep -q '^gamescope'; then
+          { [ -e /run/nvegpu/gm-detach-pending ] || pgrep -f '/usr/local/sbin/egpu-(safe|desktop)-detach' >/dev/null 2>&1; } && exit 0
+          rm -f "$d/$DROP" "$S"; logger -t egpu-buddy "Return to Gaming Mode ($(basename "$f") asks for Game Mode): the desktop login pin was released" 2>/dev/null
+          echo "released the desktop pin: $(basename "$f") asks for Game Mode"; exit 0
+        fi
+      done
+    fi
     if [ -f "$T" ] && ! grep -qs '^Session=gamescope' "$T"; then mkdir -p /run/nvegpu; : > "$S"; exit 0; fi
     [ -e "$S" ] || exit 0
     rm -f "$S"

@@ -752,6 +752,19 @@ egpu_external_only(){
   fi
   ksd output."$ext".enable output."$ext".priority.1 >/dev/null 2>&1
   sleep 1
+  # ROG Ally / XG Mobile only: the desktop takes the monitor's "preferred" EDID mode, which a Samsung Odyssey G9 over HDMI
+  # gives as 3840x1080 (or 2560x1440) although it runs 5120x1440 - the monitor then stretches the desktop: everything a
+  # third larger (ROG Xbox Ally X + XG Mobile report, photo of the desktop). Game Mode already gets the largest mode
+  # (nv-egpu-gamescope-session); here the desktop does too, at most 144 Hz as there. Nothing changes if KDE already has it.
+  if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; then
+    _ko=$(ksd -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk -v o="$ext" '/^Output:/{on=($3==o)} on')
+    _cur=$(printf '%s\n' "$_ko" | grep -oE '[0-9]+:[0-9]+x[0-9]+@[0-9.]+[!*]*' | grep -m1 '\*' | sed 's/^[0-9]*://; s/[!*]//g')
+    _best=$(printf '%s\n' "$_ko" | grep -oE '[0-9]+:[0-9]+x[0-9]+@[0-9.]+' | awk -F'[:x@]' '$4<=144.5{a=$2*$3; if(a>ba||(a==ba&&$4>br)){ba=a;br=$4;b=$0}} END{print b}')
+    log "desktop mode on $ext: ${_cur:-?} (largest: ${_best#*:}) · $(printf '%s\n' "$_ko" | grep -oE 'Scale: [0-9.]+' | head -1)"
+    if [ -n "$_best" ] && [ "${_best#*:}" != "$_cur" ] && [ "$(printf '%s' "${_best#*:}" | cut -d@ -f1)" != "$(printf '%s' "$_cur" | cut -d@ -f1)" ]; then
+      ksd output."$ext".mode."${_best%%:*}" >/dev/null 2>&1 && log "desktop mode on $ext set to ${_best#*:} (KDE had picked ${_cur:-?})"
+    fi
+  fi
   if ksd output.eDP-1.disable >/dev/null 2>&1; then
     log "EXTERNAL-ONLY: $ext primary, eDP-1 disabled"
   else

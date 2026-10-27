@@ -1,3 +1,12 @@
+0.7.190 — ROG Ally / XG Mobile: Return to Gaming Mode on SteamOS 3.9; the desktop at the monitor's full resolution.
+
+**Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
+- "Return to Gaming Mode" with the eGPU attached still came back to the desktop on SteamOS 3.9 (ROG Xbox Ally X + XG Mobile): SteamOS 3.9 switches sessions through its own manager and no longer uses the login file 0.7.189 watched for. EGPU Buddy now steps aside whenever SteamOS writes a login setting that asks for Game Mode, whatever it is called. A cable pull still returns to the desktop.
+- The desktop on a Samsung Odyssey G9 behind the XG Mobile was drawn too large: over HDMI the monitor names 3840x1080 as its preferred mode, the desktop took it, and the monitor stretched it to its 5120x1440 panel. At the eGPU attach on the desktop, the monitor is now set to its largest mode (at most 144 Hz, as in Game Mode).
+
+**Support report**
+- Steam's interface scale is read correctly (Steam keeps the screen name as a value, which the report missed); a log of the login settings SteamOS writes (ROG Ally / XG Mobile on SteamOS only); the desktop's mode and scale on the eGPU monitor in the attach log.
+
 0.7.189 — ROG Ally / XG Mobile: "Return to Gaming Mode" from the desktop with the eGPU attached.
 
 **Fixed** (ROG Ally / XG Mobile on SteamOS only; every other machine unchanged)

@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.189"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.190"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1324,7 +1324,14 @@ def _support_report():
         _cfg = open(f"{USER_HOME}/.local/share/Steam/config/config.vdf", encoding="utf-8", errors="replace").read()
     except OSError:
         _cfg = ""
-    for name, body in re.findall(r'"(External: [^"\n]*?)"\s*\{(.*?)\n\s*\}', _cfg, re.S)[:4]:
+    # the screen's name is a block name ("External: X|||Windowed" { ... }) or a value ("name" "External: X|||Windowed"
+    # inside a "Current" block): take the scale keys that follow each mention
+    _seen = set()
+    for m in re.finditer(r'External: [^"\n]*', _cfg):
+        name = m.group(0); body = _cfg[m.end():m.end() + 700]
+        if (name, body[:200]) in _seen or len(_seen) >= 4:
+            continue
+        _seen.add((name, body[:200]))
         vals = dict(re.findall(r'"((?:Min|Max|Auto)?ScaleFactor)"\s*"([0-9.]+)"', body))
         lines.append(f"Steam UI scale, {name[:60]}: " + (" ".join(f"{k}={v[:5]}" for k, v in vals.items()) or "none"))
     lines.append(f"Steam UI scale helper: {(_read('/tmp/nv-egpu-gamescope-steam-scale-clamp.log').splitlines() or ['no log'])[-1][:200]}"
@@ -1434,7 +1441,8 @@ def _support_report():
                            ("Safe Detach: what held the GPU", "/run/nvegpu/gm-holders.log", 15),
                            ("Safe Detach: shared GPU buffers when the driver would not unload", "/run/nvegpu/gm-dmabuf.log", 60),
                            ("Cable-pull recovery: kernel-side holders of the driver", "/run/nvegpu/recover-dmabuf.log", 120),
-                           ("Cable-pull recovery log", "/var/log/egpu-surprise-recover.log", 15)):
+                           ("Cable-pull recovery log", "/var/log/egpu-surprise-recover.log", 15),
+                           ("Login manager changes (ROG Ally / XG Mobile on SteamOS)", "/var/log/egpu-dm-watch.log", 15)):
         tail = _read(path).splitlines()[-n:]
         if tail:
             lines += ["", f"## {title} (last {n})"] + [t[:300] for t in tail]
