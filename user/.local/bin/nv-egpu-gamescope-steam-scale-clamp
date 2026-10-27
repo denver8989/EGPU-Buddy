@@ -162,7 +162,7 @@ lowest_scale() {
 # applied, which Steam overrides when it decides the 49" monitor is a TV (huge interface with a black area: ROG Xbox
 # Ally X + Odyssey G9 report, "node missing (live scale not applied)"). The same call through Python, which SteamOS has.
 set_live_scale_py() {
-  NV_EGPU_STEAM_UI_SCALE="$1" python3 - <<'PY' 2>&1 | while read -r _l; do log "live scale (python): $_l"; done
+  NV_EGPU_STEAM_UI_PROBE="${2:-0}" NV_EGPU_STEAM_UI_SCALE="$1" python3 - <<'PY' 2>&1 | while read -r _l; do log "live scale (python): $_l"; done
 import base64, json, os, socket, struct, urllib.request
 scale = float(os.environ.get("NV_EGPU_STEAM_UI_SCALE", "1.27981042861938477"))
 # the reply says what the page itself sees: its viewport in CSS pixels and the device scale, i.e. whether the scale took
@@ -170,6 +170,10 @@ scale = float(os.environ.get("NV_EGPU_STEAM_UI_SCALE", "1.27981042861938477"))
 expr = ('(() => { const v = window.innerWidth + "x" + window.innerHeight + " @" + (window.devicePixelRatio || 0).toFixed(3) + " screen " + screen.width + "x" + screen.height;'
         ' if (typeof SteamClient !== "object" || !SteamClient._internal || typeof SteamClient._internal.SetForceDeviceScaleFactor !== "function") return "no-scale-api, viewport " + v;'
         ' SteamClient._internal.SetForceDeviceScaleFactor(%r); return "scale-set, viewport before " + v; })()' % scale)
+probe = os.environ.get("NV_EGPU_STEAM_UI_PROBE") == "1"
+if probe:   # look only: what Steam's page shows, nothing is changed
+    expr = ('(() => window.innerWidth + "x" + window.innerHeight + " @" + (window.devicePixelRatio || 0).toFixed(3) +'
+            ' " screen " + screen.width + "x" + screen.height)()')
 def evaluate(url):
     host_port, path = url[len("ws://"):].split("/", 1)
     host, port = host_port.split(":")
@@ -210,7 +214,8 @@ for pg in pages:
     if pg.get("webSocketDebuggerUrl") and any(t in pg.get("title", "") for t in ("Steam Big Picture Mode", "SharedJSContext")):
         try: r = evaluate(pg["webSocketDebuggerUrl"]); done += 1; seen.append("%s: %s" % (pg.get("title"), r))
         except Exception as e: print("page %r: %s" % (pg.get("title"), e))
-print("scale %.3f sent to %d Steam page(s) of %d%s" % (scale, done, len(pages), "".join(" | " + x for x in seen)))
+if probe: print("Steam's own scale left in place; viewport of %d Steam page(s) of %d%s" % (done, len(pages), "".join(" | " + x for x in seen)))
+else: print("scale %.3f sent to %d Steam page(s) of %d%s" % (scale, done, len(pages), "".join(" | " + x for x in seen)))
 PY
 }
 
@@ -221,7 +226,16 @@ set_live_scale() {
     live=$(lowest_scale) || return 0
   fi
   if ! command -v node >/dev/null 2>&1; then
-    [ "$ax" = 1 ] && command -v python3 >/dev/null 2>&1 && set_live_scale_py "$live"
+    # ROG Ally / XG Mobile on stock SteamOS (no node): the scale is NOT pushed live any more (0.7.194). The proven working
+    # SteamOS builds (Legion Go 1 + 49" ultrawide, no node either) only ever had the config edit above; the push made Steam
+    # lay out its whole interface again on every call, many times a minute at a Game Mode start (ROG Xbox Ally X + Odyssey
+    # G9: sluggish, wrong-looking interface). What Steam's page shows is still recorded, once per Steam start, read-only.
+    if [ "$ax" = 1 ] && command -v python3 >/dev/null 2>&1; then
+      local sig; sig=$(steamwebhelper_signature)
+      [ -n "$sig" ] && [ "$sig" != "${probed_sig:-}" ] || return 0
+      local out; out=$(set_live_scale_py "$live" 1 2>&1); [ -n "$out" ] && printf '%s\n' "$out" >&2
+      case "$out" in *"not answering"*) ;; *) probed_sig=$sig ;; esac
+    fi
     return 0
   fi
   NV_EGPU_STEAM_UI_SCALE="$live" node <<'NODE'

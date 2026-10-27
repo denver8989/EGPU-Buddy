@@ -1,3 +1,9 @@
+0.7.194 — ROG Ally / XG Mobile: Steam's scale works like the proven ultrawide builds; uninstall no longer leaves Game Mode in a restart loop.
+
+**Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
+- Uninstalling EGPU Buddy on a ROG Ally / XG Mobile could leave the system restarting Game Mode in a loop after the next boot (ROG Xbox Ally X). A Game Mode setting EGPU Buddy writes while it runs pointed at a program the uninstall removes, and the uninstall did not remove that setting; its desktop login setting was missed too. Both are removed now, and the uninstall check lists them.
+- Steam's interface scale is no longer pushed into the running Steam on stock SteamOS. Each push made Steam lay out its whole interface again, many times at every Game Mode start. The Ally / XG Mobile now gets exactly what the proven SteamOS ultrawide setups get: Steam's settings file set to the tuned 49" scale. What Steam's page shows is still recorded once per Steam start for the support report, without changing anything.
+
 0.7.193 — Support report: other mods and plugins that can change Game Mode; ROG Ally / XG Mobile scale diagnostics.
 
 **Support report**
