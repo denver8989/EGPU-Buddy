@@ -1,3 +1,12 @@
+0.7.193 — Support report: other mods and plugins that can change Game Mode; ROG Ally / XG Mobile scale diagnostics.
+
+**Support report**
+- A new section lists changes other tools and mods made to Game Mode, the desktop login or Steam: session overrides, replacement programs, gamescope scripts, environment settings, login settings, Steam developer settings, CSS Loader themes and user services. With the Decky plugin list from 0.7.192, a conflict with another mod can be checked against its code.
+- ROG Ally / XG Mobile only (every other machine unchanged): the Steam scale helper records what Steam's Big Picture page itself reports (its size, its scale and the screen size), so a wrong-looking interface on an ultrawide can be told apart from a wrong scale. The report keeps 200 lines of the attach log instead of 40, so an earlier attach that chose the handheld screen is not cut off.
+
+**Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
+- The scale helper's 0.7.192 message "Game Mode is not at 5120x1440" was not written (its exit worked).
+
 0.7.192 — ROG Ally / XG Mobile: Steam's scale on the Odyssey G9 and the desktop switch on SteamOS 3.9.5.
 
 **Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
