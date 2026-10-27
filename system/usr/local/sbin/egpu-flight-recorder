@@ -87,8 +87,20 @@ while :; do
       _t0=$(date +%s%N); _a=$(_snap); sleep 0.5; _b=$(_snap); _el=$(( $(date +%s%N) - _t0 ))   # the real window (scanning takes time)
       _top=$(printf '%s\n%s\n' "$_a" "--" "$_b" | awk -v el="$_el" '$1=="--"{s=1; next} !s{a[$1]=$2; next} ($1 in a){d=$2-a[$1]; if(d>m){m=d; t=$1}} END{if(t!="" && el>0) print t, int(m*1e9/el)}')
       [ -n "$_top" ] && line="$line thr=${_top#* }%($(cat /proc/*/task/"${_top%% *}"/comm 2>/dev/null | head -1 | tr -d ' '))"
-      _lf=$(tr '\0' '\n' < "/proc/$gs/environ" 2>/dev/null | sed -n 's/^GAMESCOPE_LIMITER_FILE=//p'); [ -r "$_lf" ] && line="$line fpslimit=$(tr -d '\n ' < "$_lf" | head -c 8)"
+      # (the limiter file is binary: a 32-bit number, 0 = no limit; reading it as text gave "ignored null byte" warnings)
+      _lf=$(tr '\0' '\n' < "/proc/$gs/environ" 2>/dev/null | sed -n 's/^GAMESCOPE_LIMITER_FILE=//p'); [ -r "$_lf" ] && line="$line fpslimit=$(od -An -tu4 -N4 "$_lf" 2>/dev/null | tr -d ' ')"
     fi
+    # the handheld itself while the AMD eGPU is attached: average CPU clock, CPU temperature (k10temp Tctl), the built-in
+    # chip's power (its amdgpu power reading is the whole APU) and the power source. Elden Ring dropped to 10-15 fps with
+    # the CPU at 400-1200 MHz (Legion Go 1 + AG02, 0.7.188) and nothing in the logs said why: a throttled CPU shows here.
+    _mhz=$(cat /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq 2>/dev/null | awk '{s+=$1; n++} END{if(n) printf "%d", s/n/1000}')
+    _ct=""; for _h in /sys/class/hwmon/hwmon*; do [ "$(cat "$_h/name" 2>/dev/null)" = k10temp ] && { _ct=$(( $(cat "$_h/temp1_input" 2>/dev/null || echo 0) / 1000 )); break; }; done
+    [ -n "${IGBDF:-}" ] || IGBDF=$(/usr/local/sbin/egpu-detect --igpu 2>/dev/null)
+    _ih=$(ls -d /sys/bus/pci/devices/${IGBDF:-none}/hwmon/hwmon* 2>/dev/null | head -1)
+    _ap=$(( $(cat "$_ih/power1_average" 2>/dev/null || cat "$_ih/power1_input" 2>/dev/null || echo 0) / 1000000 ))
+    _ac=-; for _s in /sys/class/power_supply/*; do [ "$(cat "$_s/type" 2>/dev/null)" = Mains ] && _ac=$(cat "$_s/online" 2>/dev/null); done
+    _bt=$(for _s in /sys/class/power_supply/BAT*; do [ -e "$_s/status" ] && { printf '%s' "$(cat "$_s/status")"; [ -r "$_s/power_now" ] && printf '/%dW' $(( $(cat "$_s/power_now") / 1000000 )); break; }; done)
+    line="$line cpu=${_mhz:-?}MHz/${_ct:-?}C apu=${_ap}W ac=${_ac} bat=${_bt:--}"
   fi
   if [ -n "$gpu" ]; then
     smi=""; [ -e /sys/module/nvidia ] && smi=$(timeout 4 nvidia-smi -i "$gpu" --format=csv,noheader,nounits \

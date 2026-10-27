@@ -1,3 +1,9 @@
+0.7.191 — AMD eGPUs: the support report records the handheld's CPU while playing.
+
+**Support report** (AMD / Intel install only; nothing else changes)
+- While the AMD eGPU is attached, the flight recorder also records the handheld's average CPU clock, CPU temperature, its own chip's power and whether it runs on the charger or the battery. A game that suddenly drops to 10-15 fps with the CPU at a few hundred MHz (Elden Ring on a Legion Go 1 + AG02) then shows whether the CPU was held back by heat, power or the power source.
+- Game Mode's frame limit is read correctly (the file is binary; the report showed nothing and logged warnings).
+
 0.7.190 — ROG Ally / XG Mobile: Return to Gaming Mode on SteamOS 3.9; the desktop at the monitor's full resolution.
 
 **Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
