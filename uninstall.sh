@@ -35,6 +35,8 @@ runtime_leftovers(){
     "$USER_HOME/.config/environment.d/10-egpu-gamescope-output.conf"
 }
 
+# ROG Ally / XG Mobile: decided now, while egpu-detect and the XG Mobile marker still exist (both are removed below)
+AX=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && AX=1
 # --verify: list anything this project left behind. Used to prove a clean uninstall
 # before a from-scratch reinstall. Prints nothing and exits 0 when the machine is clean.
 if [ "${1:-}" = "--verify" ]; then
@@ -51,6 +53,9 @@ if [ "${1:-}" = "--verify" ]; then
     [ -e "$d" ] && { echo "LEFT  $d"; left=1; }
   done
   grep -q '^sysext /usr ' /proc/mounts 2>/dev/null && { echo "LEFT  driver extension still merged into /usr"; left=1; }
+  [ "$AX" = 1 ] && for d in "$USER_HOME/.config/systemd/user/gamescope-session.service.d/zzz-nv-egpu-buddy-ally.conf" /etc/sddm.conf.d/zzs-egpu-buddy-session.conf; do
+    [ -e "$d" ] && { echo "LEFT  $d"; left=1; }
+  done
   grep -qE '^IgnorePkg.*\b(nvidia-utils|lib32-nvidia-utils|opencl-nvidia|lib32-opencl-nvidia)\b' /etc/pacman.conf 2>/dev/null &&
     { echo "LEFT  pacman.conf still pins NVIDIA packages (IgnorePkg)"; left=1; }
   # the boot configuration must be able to boot unattended and quietly, as it did before the install
@@ -73,6 +78,16 @@ fi
 if command -v steamos-readonly >/dev/null 2>&1 && grep -q '^sysext /usr ' /proc/mounts 2>/dev/null; then
   [ -d /sys/module/nvidia ] && { echo "The NVIDIA driver is loaded (eGPU in use). Safe Detach, unplug the eGPU, then uninstall again. Nothing was changed."; exit 21; }
   sudo systemd-sysext unmerge >/dev/null 2>&1 || { echo "could not unmerge the driver extension. Reboot with the eGPU unplugged and uninstall again. Nothing was changed."; exit 21; }
+fi
+# ROG Ally / XG Mobile only (every other machine unchanged): two files written at RUNTIME, so not in the install tree and
+# left behind by the uninstall (ROG Xbox Ally X: after an uninstall and a restart the system looped and SteamOS was
+# reinstalled). egpu-gamescope-repair's drop-in sorts after every other one and starts ~/.local/bin/nv-egpu-gamescope-session,
+# which the uninstall deletes: Game Mode then failed at once on every login and the login manager started it again, for
+# ever. The SDDM pin zzs-egpu-buddy-session.conf was missed too: "egpu-dm-session unpin" below runs after that script is
+# deleted, and its fallback list has only the old names.
+if [ "$AX" = 1 ]; then
+  rm -f "$USER_HOME/.config/systemd/user/gamescope-session.service.d/zzz-nv-egpu-buddy-ally.conf"
+  sudo rm -f /etc/sddm.conf.d/zzs-egpu-buddy-session.conf
 fi
 userctl disable --now egpu-display-failover.service egpu-wake-guard.service egpu-screen-watch.service egpu-buddy-tray.service 2>/dev/null
 cd "$ROOT"; find user -type f | while read -r f; do restore_or_remove "$(map_dest "$f")"; done
