@@ -11,6 +11,8 @@ set -u
 UH=/home/deck; LOG=/var/log/egpu-gamescope-repair.log
 PRIV=$UH/.local/gamescope-gbm/usr/bin/gamescope; BAD=$UH/.local/state/nv-egpu-buddy/gamescope-bad
 DONE=/var/lib/nvegpu/gamescope-rebuilt-for
+BZTRIES=/var/lib/nvegpu/gamescope-bazzite-tries   # Bazzite only: line 1 the OS build, line 2 the builds tried for it
+bz_tries(){ if [ "$(sed -n 1p "$BZTRIES" 2>/dev/null)" = "$OS" ]; then sed -n 2p "$BZTRIES"; else echo 0; fi; }
 BUILD=$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/build-steamos.sh
 BR=/home/.egpu-buddy/buildroot
 log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; echo "$*"; }
@@ -33,7 +35,10 @@ OS=$(os_id)
 reason(){
   if [ "$BZ" = 1 ]; then                                              # Bazzite: a Fedora container builds it
     command -v podman >/dev/null 2>&1 && [ -f "$BUILD" ] || return 1
-    [ "$(cat "$DONE" 2>/dev/null)" = "$OS" ] && return 1
+    # at most two builds per Bazzite build (BZTRIES), not one: the first can fail for a reason that is gone the next time
+    # (Bazzite 44.20261026, gamescope 3.17.0-ogc1: an EGPU Buddy update replaced the build files during the build, and the
+    # single try recorded before it left Game Mode on Bazzite's own gamescope, the picture corruption back, for good)
+    [ "$(bz_tries)" -ge 2 ] 2>/dev/null && return 1
     [ -e /etc/nv-egpu-buddy/gamescope-wanted ] || return 1            # the installer chose ours (Bazzite's own lacks the fix)
     [ -n "$(bz_tag)" ] || return 1
     [ -x "$PRIV" ] || { echo "not built for this Bazzite yet (gamescope $(bz_tag))"; return 0; }
@@ -154,13 +159,22 @@ done
 NETCHK=https://steamdeck-packages.steamos.cloud/; [ "$BZ" = 1 ] && NETCHK=https://github.com/   # where the build fetches from
 for _ in $(seq 1 40); do curl -sI -o /dev/null --max-time 8 "$NETCHK" 2>/dev/null && break; sleep 30; done
 
+if [ "$BZ" = 1 ]; then   # Bazzite: count the try BEFORE building (a hang or a failure is retried once, never in a loop)
+  n=$(bz_tries); printf '%s\n%s\n' "$OS" "$(( ${n:-0} + 1 ))" > "$BZTRIES"
+else
 echo "$OS" > "$DONE"    # recorded BEFORE building: a build that hangs or fails is not retried in a loop on this OS build
+fi
 bz_build(){ # Bazzite: build in fedora:<this Bazzite's Fedora version>, then swap it in atomically (a running gamescope keeps
             # the old binary busy, so it is never copied over in place)
   local T=/var/lib/nvegpu/gamescope-build V tag rc; V=$( . /etc/os-release; echo "${VERSION_ID:-44}" ); tag=$(bz_tag)
   rm -rf "${T:?}"; mkdir -p "$T"
-  podman run --rm --network host --security-opt label=disable -v "$(dirname "$BUILD"):/gs:ro" -v "$T:/out" \
+  # a private copy of the build files: an EGPU Buddy update replaces the installed copy, and did so in the middle of a
+  # build ("cat: /gs/bazzite/BASE-TAG: No such file or directory")
+  local G=/var/lib/nvegpu/gamescope-build-src; rm -rf "${G:?}"; cp -a "$(dirname "$BUILD")" "$G" || return 1
+  podman run --rm --network host --security-opt label=disable -v "$G:/gs:ro" -v "$T:/out" \
     "registry.fedoraproject.org/fedora:$V" bash /gs/build-bazzite.sh /out "$tag"; rc=$?
+  rm -rf "${G:?}"
+  [ "$rc" = 3 ] && printf '%s\n2\n' "$OS" > "$BZTRIES"   # the fix does not apply to this version: a second try cannot change that
   if [ "$rc" != 0 ]; then
     # the fix could not be built into THIS version: Game Mode must not keep an older gamescope of ours; it uses Bazzite's own
     rm -rf "${T:?}" /usr/local/lib/egpu-buddy/gamescope-gbm/usr /usr/local/lib/egpu-buddy/gamescope-gbm/BUILT-FROM
