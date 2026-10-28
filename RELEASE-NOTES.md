@@ -1,3 +1,8 @@
+0.7.195 — Bazzite: the NVIDIA Game Mode picture fix is rebuilt after a Bazzite update again.
+
+**Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
+- After Bazzite 44.20261026 (gamescope 3.17.0) the picture corruption in Game Mode came back (Legion Go 2 + AORUS RTX 5060 Ti). EGPU Buddy builds its fix into the gamescope Bazzite ships, so a new Bazzite gamescope needs a rebuild. It started on its own, but an EGPU Buddy update replaced the build files halfway through, and the one try allowed per Bazzite version was used up. The rebuild now works from its own copy of the files and gets a second try. Installing this version starts it: about 10 minutes in the background, then Game Mode switches to it when no game runs. The fix applies cleanly to gamescope 3.17.0.
+
 0.7.194 — ROG Ally / XG Mobile: Steam's scale works like the proven ultrawide builds; uninstall no longer leaves Game Mode in a restart loop.
 
 **Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
