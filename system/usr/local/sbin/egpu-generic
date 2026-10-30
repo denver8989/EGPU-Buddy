@@ -41,7 +41,7 @@ as_deck(){ runuser -u "$UN" -- env $RUNENV "$@"; }
 [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] || exit 0
 verb=${1:-}; manual=0; force=""; boot=0
 for a in "${@:2}"; do case "$a" in --manual) manual=1 ;; --force) force=--force ;; --boot) boot=1 ;; esac; done
-SEEN=/var/lib/nvegpu/egpu-seen; DROPS=/var/lib/nvegpu/generic-drops; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
+SEEN=/var/lib/nvegpu/egpu-seen; DROPS=/var/lib/nvegpu/generic-drops; TB3N22=/var/lib/nvegpu/generic-tb3-navi22; SYSPCI=${EGPU_SYSPCI:-/sys/bus/pci/devices}; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
 # resume waits its turn (the dock re-announces itself on wake at the same moment); every other verb skips a duplicate
 # (keep-tuned runs for as long as the eGPU is attached: it never takes the lock, or every attach / detach would be skipped)
 [ "$verb" = keep-tuned ] || [ "$verb" = presleep ] || { exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ]; then flock -w 60 9; else flock -n 9; fi; } || { log "another instance running — skip"; exit 0; }
@@ -87,6 +87,16 @@ panel_output_back(){   # the panel must come back as an OUTPUT, not just back-li
 # The NVIDIA path has always pinned the eGPU link for the same reason (a link that renegotiates on its own stalls); here
 # it is done through amdgpu's own controls, which are made for a running card: the top PCIe level held, and the
 # full-screen 3D power profile so the clocks ramp at once. Both vanish with the card (unplug, Safe Detach).
+# the drop guard's hardware (see the attach): an RX 6700 / 6750 XT (Navi 22, 1002:73df) with an Intel Titan Ridge
+# Thunderbolt 3 bridge (8086:15e7 / 15ea / 15ef) in its own PCI path. Recorded at the attach ($TB3N22): at a drop the
+# card is already gone and its path cannot be read.
+tb3_navi22(){ local d=$SYSPCI/${1:-none} p
+  [ "$(cat "$d/vendor" 2>/dev/null):$(cat "$d/device" 2>/dev/null)" = 0x1002:0x73df ] || { rm -f $TB3N22; return 1; }
+  p=$(readlink -f "$d") || { rm -f $TB3N22; return 1; }
+  while p=${p%/*}; [ -e "$p/vendor" ]; do   # each bridge above the card, up to the root complex
+    case "$(cat "$p/vendor"):$(cat "$p/device" 2>/dev/null)" in 0x8086:0x15e7|0x8086:0x15ea|0x8086:0x15ef) return 0 ;; esac
+  done
+  rm -f $TB3N22; return 1; }
 amd_tune(){ local D=/sys/bus/pci/devices/$1 top idx
   [ -w "$D/power_dpm_force_performance_level" ] && [ -r "$D/pp_dpm_pcie" ] || { log "amdgpu power controls not available on $1"; return 0; }
   top=$(sed -n 's/^\([0-9]*\):.*/\1/p' "$D/pp_dpm_pcie" | tail -1)
@@ -159,8 +169,11 @@ bringup|attach)
   # disconnected" every 15 s to a few minutes) made every attach log the desktop out onto the card and every drop log it
   # back: an endless black, restarting screen. After 3 drops in 10 minutes the session is no longer moved by itself;
   # pressing Attach (or 10 quiet minutes) tries again.
+  # Only on the hardware it was seen on: an RX 6700 / 6750 XT (1002:73df) behind an Intel Titan Ridge Thunderbolt 3
+  # enclosure (JHL7440: bridge ids 8086:15e7 / 15ea / 15ef in the card's own PCI path). Every other AMD setup is unchanged.
+  tb3_navi22 "$bdf" && { mkdir -p /var/lib/nvegpu; : > $TB3N22; }
   if [ "$manual" = 1 ]; then rm -f $DROPS
-  else
+  elif [ -e $TB3N22 ]; then
     n=$(awk -v t=$(( $(date +%s) - 600 )) '$1 > t' $DROPS 2>/dev/null | wc -l)
     if [ "$n" -ge 3 ]; then
       log "the eGPU dropped off the bus $n times in 10 minutes (dock, cable or power): the session stays on the built-in GPU; press Attach to try again"
@@ -293,7 +306,7 @@ surprise)
   for _ in $(seq 1 20); do egpu_find >/dev/null || break; sleep 0.5; done
   egpu_find >/dev/null && { log "remove event, but the eGPU is still on the bus: a function of it went away, nothing to recover"; exit 0; }
   log "surprise removal of $(cat $MARK)"; rm -f $MARK $MOVED; clear_boot_vga; user_env_igpu
-  mkdir -p /var/lib/nvegpu; { tail -n 9 $DROPS 2>/dev/null; date +%s; } > $DROPS.t && mv -f $DROPS.t $DROPS
+  [ -e $TB3N22 ] && { mkdir -p /var/lib/nvegpu; { tail -n 9 $DROPS 2>/dev/null; date +%s; } > $DROPS.t && mv -f $DROPS.t $DROPS; }
   /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1
   panel_output_back; audio restore
   # Steam dies with the session that was rendering on the card, and the display manager's relogin races
