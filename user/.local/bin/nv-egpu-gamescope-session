@@ -818,6 +818,24 @@ else
     export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json
     export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
   fi
+  # ROG Ally / XG Mobile only (every other machine unchanged): an NVIDIA eGPU bound to the driver whose init is wedged
+  # (the attach's health gate: NVML does not answer) is left on the bus. Game Mode on the handheld then still loaded the
+  # NVIDIA Vulkan driver, which hung asking that card for its devices: gamescope never came up, the session timed out
+  # three times, black screen until a forced restart (ROG Xbox Ally X report on 0.7.197). The same pin as Safe Detach's
+  # handheld session above: Vulkan and EGL on the built-in GPU, for this session only.
+  if [ "$detach_mode" != 1 ] && [ -z "${VK_DRIVER_FILES:-}" ] && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
+    _nv=; for _d in /sys/bus/pci/devices/*; do
+      [ "$(cat "$_d/vendor" 2>/dev/null)" = 0x10de ] || continue
+      case "$(cat "$_d/class" 2>/dev/null)" in 0x0300*|0x0302*) ;; *) continue ;; esac
+      [ "$(basename "$(readlink -f "$_d/driver" 2>/dev/null)")" = nvidia ] && { _nv=${_d##*/}; break; }
+    done
+    if [ -n "$_nv" ] && ! timeout 5 nvidia-smi -i "$_nv" --query-gpu=name --format=csv,noheader >/dev/null 2>&1; then
+      export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json
+      export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
+      log "the NVIDIA eGPU $_nv does not answer (wedged init): Game Mode on the handheld with Vulkan/EGL on the built-in GPU only"
+    fi
+    unset _nv _d
+  fi
 fi
 
 if [ "${1:-}" = "--print-env" ] || [ "${NV_EGPU_GAMESCOPE_SESSION_PRINT_ENV:-0}" = "1" ]; then
