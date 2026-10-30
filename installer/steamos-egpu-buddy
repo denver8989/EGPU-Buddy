@@ -76,6 +76,21 @@ You install and test it AT YOUR OWN RISK. Continue?" || exit 0
   export EGPU_ACCEPT_UNTESTED=1
 fi
 
+# ---------------------------------------------------------------- GPU type (first install only)
+# install.sh asks this in a terminal, but here its output goes to the progress window, where nobody would see the
+# question: ask it here, as the Game Mode plugin does. An update keeps the type chosen before.
+if [ -z "${EGPU_GPU_VENDOR:-}" ] && [ ! -s /etc/nv-egpu-buddy/gpu-vendor ]; then
+  if [ $GUI = 1 ]; then
+    _v=$(zenity --list --radiolist --title="SteamOS EGPU Buddy" --width=520 --height=260 --text="Which GPU will be in the eGPU?" \
+         --column=" " --column=Key --column="GPU" --hide-column=2 --print-column=2 \
+         TRUE nvidia "NVIDIA (builds the NVIDIA driver, several minutes)" FALSE amd "AMD / Intel (no driver build)") || exit 0
+  else
+    printf 'Which GPU will be in the eGPU?\n  1) NVIDIA (builds the NVIDIA driver, several minutes)\n  2) AMD / Intel (no driver build)\nChoice [1/2]: '
+    read -r _c || _c=1; case "$_c" in 2) _v=amd ;; *) _v=nvidia ;; esac
+  fi
+  export EGPU_GPU_VENDOR=${_v:-nvidia}
+fi
+
 # ---------------------------------------------------------------- component choice
 ALL="core,session,gamescope,decky,bootpolicy,desktopapp$([ $ARCH_LIKE = 1 ] && echo ,driver)"
 if [ $ADV = 0 ]; then

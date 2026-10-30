@@ -1,8 +1,9 @@
 #!/bin/bash
 # SteamOS EGPU Buddy one-line installer:
 #   curl -fsSL https://raw.githubusercontent.com/denver8989/EGPU-Buddy/master/get-egpu-buddy.sh | bash
-# Fetches the latest release, verifies its SHA-256, offers to install Decky Loader from its official installer if it
-# is missing, then runs the EGPU Buddy installer (graphical if a display is available, otherwise in this terminal).
+# Fetches the latest release, verifies its SHA-256, installs Decky Loader with its official installer if it is missing
+# (EGPU_NO_DECKY=1 skips it), then runs the EGPU Buddy installer (graphical if a display is available, otherwise in this
+# terminal), which installs everything: the integration, the Game Mode plugin and the desktop app.
 set -euo pipefail
 REPO=denver8989/EGPU-Buddy
 say(){ printf '\033[1m%s\033[0m\n' "$*"; }
@@ -23,11 +24,14 @@ curl -fsSL -o "$T/SHA256SUMS" "https://github.com/$REPO/releases/download/$TAG/S
 WANT=$(awk -v n="$NAME" '$2 ~ ("(^|/)" n "$") {print $1; exit}' "$T/SHA256SUMS"); GOT=$(sha256sum "$T/$NAME" | cut -d" " -f1)
 [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] && say "== checksum ok" || { echo "checksum mismatch, aborting"; exit 1; }
 chmod +x "$T/$NAME"
-if [ ! -d "$HOME/homebrew/plugins" ]; then
-  say "== Decky Loader is not installed (needed for the Game Mode plugin)"
-  if ask "Install Decky Loader now with its official installer (github.com/SteamDeckHomebrew/decky-installer)?"; then
-    curl -fsSL https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install_release.sh | sh </dev/tty || echo "Decky installer returned an error; continuing without the plugin"
-  fi
+# Everything is installed: Decky Loader too when it is missing (its official installer; the EGPU Buddy Game Mode plugin
+# needs it), unless EGPU_NO_DECKY=1. The installer below then puts the plugin in, with every other component.
+if [ ! -d "$HOME/homebrew/plugins" ] && [ "${EGPU_NO_DECKY:-0}" != 1 ]; then
+  say "== installing Decky Loader with its official installer (github.com/SteamDeckHomebrew/decky-installer), for the Game Mode plugin"
+  curl -fsSL https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install_release.sh | sh </dev/tty \
+    || echo "the Decky Loader installer returned an error"
+  [ -d "$HOME/homebrew/plugins" ] && say "== Decky Loader installed" \
+    || echo "note: Decky Loader is not installed; EGPU Buddy is installed without its Game Mode plugin (install Decky Loader and run this again to add it)"
 fi
 [ "${EGPU_BOOTSTRAP_DRYRUN:-0}" = 1 ] && { say "== dry run: would now run $NAME"; exit 0; }
 say "== running the installer"
