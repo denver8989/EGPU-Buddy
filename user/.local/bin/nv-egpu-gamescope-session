@@ -795,7 +795,12 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # After a sleep the driver had moved those buffers to system RAM and the same scene ran at 80+ fps with the GPU 70-98 %
   # busy (Legion Go 1 + AG02, flight recorder 0.7.187, reproduced twice). These are the two translation layers' own switches
   # for exactly that (DXVK ships the first as a per-game fix, e.g. Assassin's Creed 3 / Black Flag); a value the user set wins.
-  if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
+  # Not on an RX 9070 / 9070 XT (1002:7550): with these set, its copy engine hung 8 s into RE Requiem every time (sdma0
+  # timeout, GPU reset, VRAM lost, device off the bus; Legion Go 1, CachyOS, 0.7.203; the power tuning was already off),
+  # and the same card is stable under all-ways-eGPU, which sets neither. It gets Proton's defaults (that card only).
+  if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ "$NV_EGPU_GAMESCOPE_GENERIC_VK" = 1002:7550 ]; then
+    log "RX 9070 / 9070 XT: Proton's own buffer placement (no DXVK_CONFIG / VKD3D_CONFIG from EGPU Buddy)"
+  elif [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
     case "${DXVK_CONFIG:-}" in *cachedDynamicResources*) ;; *) export DXVK_CONFIG="${DXVK_CONFIG:+$DXVK_CONFIG; }d3d11.cachedDynamicResources = a" ;; esac
     case "${VKD3D_CONFIG:-}" in *upload_hvv*) ;; *) export VKD3D_CONFIG="${VKD3D_CONFIG:+$VKD3D_CONFIG,}no_upload_hvv" ;; esac
     export NV_EGPU_GENERIC_SYSMEM=1
