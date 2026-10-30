@@ -94,7 +94,7 @@ Verified on that rig in one session:
 No benchmarks or performance figures are recorded for any rig: what is tracked here is whether the eGPU attaches,
 renders, survives a cable pull and comes back.
 
-## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.9)
+## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.9; Legion Go 1 + RX 9070 XT, CachyOS)
 
 Tested on the device by **RetroMann** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), SteamOS 3.9 (build 20261023.100), AOOSTAR AG02
 over USB4 (ASMedia 246x), AMD Radeon RX 6800 XT, MSI MP275 over HDMI. The AMD / Intel install (`./install.sh --amd`,
@@ -109,6 +109,18 @@ and runs only on that install, so it cannot affect an NVIDIA setup.
 | Performance | some games starved on the USB4 cable (CALX: 24-37 fps, GPU 20 % busy); fix in 0.7.188 being confirmed |
 | Sleep | the eGPU could stay gone after waking (0.7.184), slow picture after waking (0.7.187), freeze when sleeping during a game (0.7.186): being confirmed |
 | Sleep on the desktop | being looked at |
+
+### Second AMD card: Legion Go 1 + RX 9070 XT, CachyOS (0.7.195-0.7.199)
+
+Tested on the device by **zergpoop** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), CachyOS (Deckify, kernel
+7.2.9-cachyos-deckify), AMD Radeon RX 9070 XT (Navi 48) in a USB4 dock (Micro Computer (HK) Tech. TBGAA, 2 x 20 Gb/s),
+Samsung TV over HDMI.
+
+| Tested on the device | Result |
+|---|---|
+| Plug in, Game Mode on the eGPU screen | working |
+| A game on the eGPU (RE Requiem) | **crashed** after 5-30 min (GPU reset, pink / green screens): the AMD tuning switched the card to manual power management, which it does not support like the RX 6800 XT; 0.7.199 leaves such a card on its own power management, being confirmed |
+| all-ways-eGPU installed before | the installers now offer to remove it on every install path (0.7.199) |
 
 If you try it, `/var/log/egpu-generic.log` is the file to attach to a report.
 
