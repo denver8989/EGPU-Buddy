@@ -1495,6 +1495,31 @@ def _support_report():
         lines += ["", f"## Other mods touching Game Mode, the desktop login or Steam ({len(om)})"] + (om or ["(none)"])
     except Exception as ex:  # noqa: BLE001
         lines += ["", f"## Other mods: could not be read ({ex})"]
+    # AMD / Intel install only: the graphics stack gamescope runs on, GPU tools that change the card's clocks and power
+    # (LACT, CoreCtrl), and how gamescope crashed (Legion Go 1 + RX 6750 XT, CachyOS: gamescope's shader thread crashed in
+    # the AMD Vulkan driver at every Game Mode start, and LACT crashed too; the report showed neither versions nor why)
+    if _installed_vendor() == "amd":
+        try:
+            al = []
+            if shutil.which("pacman"):
+                al.append("packages: " + _sh(["pacman", "-Q", "mesa", "vulkan-radeon", "gamescope", "lact", "corectrl"], 10)[1].replace("\n", " · "))
+            elif shutil.which("rpm"):
+                al.append("packages: " + _sh(["rpm", "-q", "mesa-vulkan-drivers", "gamescope", "lact", "corectrl"], 10)[1].replace("\n", " · "))
+            for u in ("lactd.service",):
+                st = _sh(["systemctl", "is-active", u], 5)[1]
+                if st and st != "inactive" and "could not be found" not in st:
+                    al.append(f"{u}: {st}")
+            for f in ("/etc/lact/config.yaml",):
+                if os.path.exists(f):
+                    al += [f"{f}:"] + ["    " + l[:200] for l in _read(f).splitlines() if l.strip()][:40]
+            if shutil.which("coredumpctl"):
+                ci = _sh(["coredumpctl", "info", "--no-pager", "-1", "gamescope"], 20)[1].splitlines()
+                keep = [l for l in ci if re.search(r"Timestamp|Signal|Command Line|Stack trace|#\d+ ", l)]
+                if keep:
+                    al += ["last gamescope crash:"] + ["    " + l.strip()[:200] for l in keep[:40]]
+            lines += ["", "## AMD graphics stack (AMD / Intel install)"] + (al or ["(nothing found)"])
+        except Exception as ex:  # noqa: BLE001
+            lines += ["", f"## AMD graphics stack: could not be read ({ex})"]
     try:
         lines += _system_report()
     except Exception as ex:  # noqa: BLE001  (the report itself must never fail over one section)
