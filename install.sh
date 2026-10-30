@@ -252,7 +252,8 @@ for d in "$USER_HOME"/homebrew/plugins/EGPU-Buddy.bak*; do [ -d "$d" ] && { sudo
 say "== installing user files"
 for f in "${FILES[@]}"; do case "$f" in user/*) ;; *) continue;; esac
   d=$(map_dest "$f"); umkdir "$(dirname "$d")"
-  if [ -e "$d" ] && differs "$f" "$d"; then cp -a "$d" "$d.bak-egpu-buddy-$TS"; fi
+  # (no backup in Plasma's logout-script folder: Plasma runs every file there, a backup copy too)
+  case "$f" in user/.config/plasma-workspace/shutdown/*) ;; *) if [ -e "$d" ] && differs "$f" "$d"; then cp -a "$d" "$d.bak-egpu-buddy-$TS"; fi ;; esac
   templ < "$ROOT/$f" > "$d"; chmod --reference="$ROOT/$f" "$d" 2>/dev/null || true; uown "$d"
 done
 if want session; then
