@@ -1516,8 +1516,13 @@ def _support_report():
     decky_logs = sorted(glob.glob(f"{USER_HOME}/homebrew/logs/{os.path.basename(PLUGIN_DIR)}/*.log"), key=os.path.getmtime)[-1:]
     for p in sorted(set(glob.glob("/var/log/egpu-*.log") + glob.glob("/tmp/egpu-buddy-*.log") + glob.glob("/tmp/nv-egpu-*.log")) - seen) + decky_logs:
         tail = _read(p).splitlines()[-30:]
+        # AMD / Intel install only (egpu-generic.log exists nowhere else): a storm of parallel attach calls each logs
+        # "another instance running - skip", and the last 30 lines held nothing else, so the bring-up that actually ran
+        # (did the GPU appear?) was cut off (Legion Go 1 + AG02 report on 0.7.198). Those lines left out, 60 kept.
+        if p == "/var/log/egpu-generic.log":
+            tail = [t for t in _read(p).splitlines() if "another instance running" not in t][-60:]
         if tail:
-            lines += ["", f"## {p} (last 30)"] + [t[:300] for t in tail]
+            lines += ["", f"## {p} (last {len(tail) if p == '/var/log/egpu-generic.log' else 30})"] + [t[:300] for t in tail]
     return _redact("\n".join(lines))
 
 
