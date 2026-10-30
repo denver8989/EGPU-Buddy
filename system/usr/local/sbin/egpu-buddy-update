@@ -38,7 +38,9 @@ RO=$(command -v steamos-readonly || true); [ -n "$RO" ] && "$RO" disable
 rc=1; pct=20
 while IFS= read -r line; do printf '%s\n' "$line"
   case "$line" in __rc=*) rc=${line#__rc=} ;; *"== "*) [ $pct -lt 85 ] && pct=$((pct + 4)); st running $pct "${line#*== }" ;; esac
-done < <(cd "$SYSDIR" && env EGPU_TARGET_USER="$U" HOME="$H" EGPU_AUTO_YES=1 EGPU_COMPONENTS=core,session,gamescope,bootpolicy,desktopapp \
+# (set +e: under set -e a failing install.sh ended this before "__rc=" was echoed, so every failure, a staged update's 21
+# included, read as rc 1 - GitHub issue #4)
+done < <(set +e; cd "$SYSDIR" || exit; env EGPU_TARGET_USER="$U" HOME="$H" EGPU_AUTO_YES=1 EGPU_COMPONENTS=core,session,gamescope,bootpolicy,desktopapp \
   EGPU_PREBUILT_GAMESCOPE="$SYSDIR/prebuilt/gamescope-gbm" bash install.sh 2>&1 | sed -u 's/\x1b\[[0-9;]*m//g'; echo "__rc=${PIPESTATUS[0]}")
 [ -n "$RO" ] && "$RO" enable
 say "system integration: install.sh rc=$rc"

@@ -938,7 +938,7 @@ def _untested():
 
 def _accepted():
     """The untested-hardware notice was accepted explicitly in the dialog (an old or partial install does not count)."""
-    return bool(_settings().get("accepted_untested"))
+    return bool(_settings().get("accepted_untested")) or os.path.exists("/etc/nv-egpu-buddy/accepted-untested")
 
 
 def _unsupported():
@@ -1911,7 +1911,12 @@ class Plugin:
         return {"ok": not still, "message": " · ".join(msgs) + (" · a reboot is recommended before using the eGPU" if msgs else "")}
 
     async def accept_untested(self):
-        d = _settings(); d["accepted_untested"] = True; _save_settings(d); return {"ok": True, "message": "accepted"}
+        d = _settings(); d["accepted_untested"] = True; _save_settings(d)
+        try:   # recorded for every later update, whichever way it runs (desktop app, boot self-heal; GitHub issue #4)
+            os.makedirs("/etc/nv-egpu-buddy", exist_ok=True); open("/etc/nv-egpu-buddy/accepted-untested", "a").close()
+        except OSError:
+            pass
+        return {"ok": True, "message": "accepted"}
 
     async def uninstall_system(self):
         if not (_gpu_bdf() and os.path.exists("/sys/module/nvidia_drm")):

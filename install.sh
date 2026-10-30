@@ -74,12 +74,16 @@ STOCK=${STOCK_GAMESCOPE_SESSION:-}; [ -n "$STOCK" ] || for s in /usr/lib/steamos
 if [ "$MODE" = install ] && untested=$(bash "$ROOT/system/usr/local/sbin/egpu-detect" --untested 2>/dev/null); then
   echo; echo "*** THIS HARDWARE OR SYSTEM HAS NOT BEEN TESTED WITH SteamOS EGPU Buddy ***"
   printf '%s\n' "$untested" | sed 's/^/    /'
-  echo "    Everything here was verified on one machine only (see TESTED.md). On yours it may not work, may leave the"
+  echo "    Everything here was verified on the machines in TESTED.md. On yours it may not work, may leave the"
   echo "    screen dark, or may need a reboot to recover. You install and test it AT YOUR OWN RISK."
+  # the acceptance is recorded once (here, in the Game Mode plugin or the .run installer) and holds for every later update,
+  # whichever way it runs (the desktop app's Update, the plugin's auto-update, the boot self-heal; GitHub issue #4)
+  [ -e /etc/nv-egpu-buddy/accepted-untested ] && EGPU_ACCEPT_UNTESTED=1
   if [ "${EGPU_ACCEPT_UNTESTED:-0}" != 1 ]; then
     if [ -t 0 ]; then read -rp "    Type YES to continue: " r; [ "$r" = YES ] || { echo "aborted"; exit 1; }
     else echo "    (unattended run without EGPU_ACCEPT_UNTESTED=1: aborting)"; exit 1; fi
   fi
+  sudo mkdir -p /etc/nv-egpu-buddy && sudo touch /etc/nv-egpu-buddy/accepted-untested 2>/dev/null || true
   echo
 fi
 # stock SteamOS ships pacman without an initialised keyring: every package operation then fails ("keyring is not
