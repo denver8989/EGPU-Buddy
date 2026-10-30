@@ -1,3 +1,9 @@
+0.7.201 — Updates from the desktop app no longer abort on untested hardware or report a staged update as failed (GitHub issue #4).
+
+**Fixed** (every machine)
+- The desktop app's Update (and the plugin's automatic update) stopped on hardware that is not on the tested list, even after you had accepted the notice: the acceptance was not passed on. It is now recorded once, whichever way you accepted it (the plugin, the installer), and every later update uses it.
+- The desktop app reported every update that did not finish at once as failed, including a staged update that installs at the next boot as designed. The real result is shown now. Both found and reported in detail by **akamel001** (GitHub issue #4).
+
 0.7.200 — Installers: every install method sets up each supported system and GPU type correctly.
 
 **Installers** (every machine)
