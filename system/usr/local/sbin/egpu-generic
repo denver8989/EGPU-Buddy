@@ -41,7 +41,7 @@ as_deck(){ runuser -u "$UN" -- env $RUNENV "$@"; }
 [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] || exit 0
 verb=${1:-}; manual=0; force=""; boot=0
 for a in "${@:2}"; do case "$a" in --manual) manual=1 ;; --force) force=--force ;; --boot) boot=1 ;; esac; done
-SEEN=/var/lib/nvegpu/egpu-seen; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
+SEEN=/var/lib/nvegpu/egpu-seen; DROPS=/var/lib/nvegpu/generic-drops; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
 # resume waits its turn (the dock re-announces itself on wake at the same moment); every other verb skips a duplicate
 # (keep-tuned runs for as long as the eGPU is attached: it never takes the lock, or every attach / detach would be skipped)
 [ "$verb" = keep-tuned ] || [ "$verb" = presleep ] || { exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ]; then flock -w 60 9; else flock -n 9; fi; } || { log "another instance running — skip"; exit 0; }
@@ -155,6 +155,19 @@ bringup|attach)
   # a press of Attach always tries again unless the session really is on the card
   [ "$manual" = 1 ] && [ -e $MOVED ] && ! session_on_card "$card" && rm -f $MOVED
   [ -e $MOVED ] && exit 0
+  # A dock that keeps dropping off the bus (Legion Go 1 + Thunderbolt 3 enclosure, RX 6750 XT: "thunderbolt device
+  # disconnected" every 15 s to a few minutes) made every attach log the desktop out onto the card and every drop log it
+  # back: an endless black, restarting screen. After 3 drops in 10 minutes the session is no longer moved by itself;
+  # pressing Attach (or 10 quiet minutes) tries again.
+  if [ "$manual" = 1 ]; then rm -f $DROPS
+  else
+    n=$(awk -v t=$(( $(date +%s) - 600 )) '$1 > t' $DROPS 2>/dev/null | wc -l)
+    if [ "$n" -ge 3 ]; then
+      log "the eGPU dropped off the bus $n times in 10 minutes (dock, cable or power): the session stays on the built-in GPU; press Attach to try again"
+      status IDLE "The eGPU keeps disconnecting ($n times in 10 minutes): check the dock's power and the cable, then press Attach."
+      exit 0
+    fi
+  fi
   # platform guards first: the tunnel must be awake and its fatal errors masked BEFORE the card is
   # touched, or a link event during bring-up can take the whole machine down with a fabric flood.
   platform_guards
@@ -280,6 +293,7 @@ surprise)
   for _ in $(seq 1 20); do egpu_find >/dev/null || break; sleep 0.5; done
   egpu_find >/dev/null && { log "remove event, but the eGPU is still on the bus: a function of it went away, nothing to recover"; exit 0; }
   log "surprise removal of $(cat $MARK)"; rm -f $MARK $MOVED; clear_boot_vga; user_env_igpu
+  mkdir -p /var/lib/nvegpu; { tail -n 9 $DROPS 2>/dev/null; date +%s; } > $DROPS.t && mv -f $DROPS.t $DROPS
   /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1
   panel_output_back; audio restore
   # Steam dies with the session that was rendering on the card, and the display manager's relogin races
