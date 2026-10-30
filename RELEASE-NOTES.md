@@ -1,3 +1,10 @@
+0.7.197 — SteamOS 3.9.5: "Return to Gaming Mode" and "Switch to Desktop" with an NVIDIA eGPU on every SteamOS machine.
+
+**Fixed** (SteamOS with the NVIDIA install; Bazzite, CachyOS and the AMD / Intel install unchanged)
+- The two SteamOS 3.9.5 fixes made for the ROG Ally / XG Mobile now apply to every SteamOS machine with an NVIDIA eGPU (Legion Go 1 / 2 and others):
+  - "Return to Gaming Mode" from the desktop with the eGPU attached no longer comes back to the desktop (from 0.7.196). SteamOS 3.9.5 only logs out; EGPU Buddy's "return to the desktop after a cable pull" setting is now released when you leave the desktop yourself.
+  - "Switch to Desktop" with the NVIDIA eGPU attached starts the Wayland desktop even when SteamOS 3.9.5 asks for the X11 one (from 0.7.192), which restarted in a loop on the ROG Ally.
+
 0.7.196 — ROG Ally / XG Mobile: "Return to Gaming Mode" from the desktop with the eGPU attached on SteamOS 3.9.5.
 
 **Fixed** (ROG Ally / XG Mobile on SteamOS only; every other machine unchanged)

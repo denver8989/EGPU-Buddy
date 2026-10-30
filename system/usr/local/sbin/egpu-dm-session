@@ -95,18 +95,22 @@ case "${1:-show}" in
     # boot), and "Return to Gaming Mode" removes it and logs out, so the system default (Game Mode) applies - which our
     # desktop pin outranks whatever its name. So: once that file has been seen and then goes (or turns to Game Mode), the
     # user asked for Game Mode: the pin goes too. A cable pull leaves the file alone, so it still returns to the desktop.
-    [ $BZ = 0 ] && [ "$DROP" = zzs-egpu-buddy-session.conf ] || exit 0
+    # SteamOS with the NVIDIA install (0.7.197: every SteamOS machine for the X11 swap below; the rest stays Ally / XG Mobile)
+    [ $BZ = 0 ] && command -v steamos-readonly >/dev/null 2>&1 && [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] || exit 0
     d=$(dm_dir) || exit 0; T=$d/zzt-steamos-temp-login.conf; S=/run/nvegpu/steamos-desktop-switch
+    if [ "$DROP" = zzs-egpu-buddy-session.conf ]; then
     # what the login directory holds at every change (targeted record: SteamOS 3.9 switches through steamos-manager and
     # did not use the 3.8 file names - ROG Xbox Ally X report on 0.7.189, the pin never released)
     { printf '%s' "$(date '+%F %T')"; for f in "$d"/*.conf /usr/lib/sddm/sddm.conf.d/*.conf; do [ -f "$f" ] || continue
         printf ' | %s %s %s' "$f" "$(stat -c %Y "$f" 2>/dev/null)" "$(sed -n 's/^Session=//p' "$f" | tail -1)"; done; echo; } >> /var/log/egpu-dm-watch.log 2>/dev/null
     tail -n 200 /var/log/egpu-dm-watch.log > /var/log/egpu-dm-watch.log.t 2>/dev/null && mv -f /var/log/egpu-dm-watch.log.t /var/log/egpu-dm-watch.log
+    fi
     # SteamOS 3.9.5: "Switch to Desktop" writes zzt-holo-temp-login.conf asking for plasmax11.desktop, the X11 desktop.
     # Until 0.7.189 our stuck Wayland pin overrode it, so the desktop was always Wayland - the desktop the NVIDIA-only
     # routing is built for. With the pin released, X11 started with the NVIDIA eGPU attached: 30 s to come up, then the
     # session died and restarted until a forced restart (ROG Xbox Ally X report on 0.7.191). While the NVIDIA eGPU is on
     # the bus, that one-off request is turned into the Wayland desktop it always was. Without the eGPU it is left alone.
+    # (Widened to every SteamOS machine with the NVIDIA install in 0.7.197, at the owner's request.)
     if lspci -Dn 2>/dev/null | grep -qE ' 03(00|02): 10de:'; then
       for f in "$d"/zzt-*temp-login.conf; do
         [ -f "$f" ] && grep -qs '^Session=plasmax11' "$f" || continue
@@ -114,6 +118,7 @@ case "${1:-show}" in
         sed -i "s/^Session=plasmax11.*/Session=$w/" "$f" && logger -t egpu-buddy "Switch to Desktop with the NVIDIA eGPU attached: $(basename "$f") set to $w (Wayland) instead of the X11 desktop" 2>/dev/null
       done
     fi
+    [ "$DROP" = zzs-egpu-buddy-session.conf ] || exit 0   # from here on: ROG Ally / XG Mobile only
     # SteamOS 3.9 (steamos-manager): "Return to Gaming Mode" writes a temporary login override asking for Game Mode. Any
     # login file other than ours, written after our pin and asking for a gamescope session, is that request: step aside.
     if [ -f "$d/$DROP" ]; then

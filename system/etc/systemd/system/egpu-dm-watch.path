@@ -1,5 +1,5 @@
 [Unit]
-Description=SteamOS EGPU Buddy: notice "Return to Gaming Mode" (ROG Ally / XG Mobile under SteamOS only)
+Description=SteamOS EGPU Buddy: watch the login settings SteamOS writes for "Switch to Desktop" / "Return to Gaming Mode" (SteamOS only)
 
 [Path]
 PathChanged=/etc/sddm.conf.d
