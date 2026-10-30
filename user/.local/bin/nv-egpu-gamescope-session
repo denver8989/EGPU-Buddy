@@ -773,6 +773,14 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # NVIDIA ICD pinning: stock gamescope, pointed at the eGPU's DRM card, games on the same GPU via DRI_PRIME.
   clear_egpu_env
   clear_session_env
+  # RX 9070 / 9070 XT (1002:7550) on the AMD / Intel install only: its full memory window, while nothing has the card open
+  # yet (egpu-generic rebar: a 256 MiB window behind the USB4 dock hung its copy engine; Legion Go 1 + TBGAA, CachyOS)
+  if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] &&
+     [ "$(cat "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cat "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)" = 0x1002:0x7550 ]; then
+    timeout 150 sudo -n /usr/local/sbin/egpu-generic rebar >/dev/null 2>&1 || true
+    gen_card=$(ls "/sys/bus/pci/devices/$gen_bdf/drm" 2>/dev/null | grep -m1 '^card' || echo "$gen_card")
+    log "RX 9070 / 9070 XT: memory window $(lspci -vs "$gen_bdf" 2>/dev/null | sed -n 's/.*Region 0:.*\[size=\([^]]*\)\].*/\1/p' | head -1) ($gen_card)"
+  fi
   # the screen picked in the plugin goes first. "|| true": with no screen ever picked the file does not exist, and under
   # set -e the failed cat ended this script, so every Game Mode start on an AMD eGPU died here (black screen, restart loop;
   # first real AMD eGPU, Legion Go 1 + RX 6800 XT, 2026-10-24)

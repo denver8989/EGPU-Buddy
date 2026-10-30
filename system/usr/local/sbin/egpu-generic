@@ -3,8 +3,8 @@
 # EXPERIMENTAL: written without test hardware. The NVIDIA path (egpu-hotplug-mount.sh, egpu-safe-detach,
 # egpu-gamemode-detach, egpu-surprise-recover) is separate and is never entered from here.
 # What differs from NVIDIA: the kernel driver is shared with the built-in GPU, so nothing is loaded or
-# unloaded; no BAR resize / link pin / FLR; detach = move the session to the panel, then PCI-remove the eGPU only.
-#   egpu-generic attach [--manual] [--force] | bringup [--boot] | resume | detach | surprise | keep-tuned | presleep
+# unloaded; no BAR resize (except an RX 9070 behind a dock: rebar_navi48) / link pin / FLR; detach = move the session to the panel, then PCI-remove the eGPU only.
+#   egpu-generic attach [--manual] [--force] | bringup [--boot] | resume | detach | surprise | keep-tuned | presleep | rebar
 # Portable by construction: GPUs, DRM cards, the panel connector and the desktop user are detected, not assumed.
 set -u
 . /usr/local/sbin/egpu-detect                              # also reads /etc/nv-egpu-buddy/egpu.conf (EGPU_USER, EGPU_PCI_BDF)
@@ -44,7 +44,7 @@ for a in "${@:2}"; do case "$a" in --manual) manual=1 ;; --force) force=--force 
 SEEN=/var/lib/nvegpu/egpu-seen; DROPS=/var/lib/nvegpu/generic-drops; TB3N22=/var/lib/nvegpu/generic-tb3-navi22; SYSPCI=${EGPU_SYSPCI:-/sys/bus/pci/devices}; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
 # resume waits its turn (the dock re-announces itself on wake at the same moment); every other verb skips a duplicate
 # (keep-tuned runs for as long as the eGPU is attached: it never takes the lock, or every attach / detach would be skipped)
-[ "$verb" = keep-tuned ] || [ "$verb" = presleep ] || [ "$verb" = devcoredump ] || { exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ]; then flock -w 60 9; else flock -n 9; fi; } || { log "another instance running — skip"; exit 0; }
+[ "$verb" = keep-tuned ] || [ "$verb" = presleep ] || [ "$verb" = devcoredump ] || { exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ] || [ "$verb" = rebar ]; then flock -w 60 9; else flock -n 9; fi; } || { log "another instance running — skip"; exit 0; }
 
 game_mode(){ pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1; }
 igpu_card(){ basename "$(ls -d /sys/bus/pci/devices/"$(egpu_igpu_bdf)"/drm/card[0-9]* 2>/dev/null | head -1)"; }
@@ -116,6 +116,45 @@ amd_tune(){ local D=/sys/bus/pci/devices/$1 top idx
 # frame rate swinging between 60 and 20). A small keeper puts it back whenever it was reset, for as long as the eGPU is
 # attached; it ends by itself on unplug, Safe Detach or a cable pull.
 start_keeper(){ systemd-run --no-block --collect --quiet --unit=egpu-amd-tune-keeper /usr/local/sbin/egpu-generic keep-tuned >/dev/null 2>&1 || true; }
+# RX 9070 / 9070 XT (Navi 48, 1002:7550) only: the full memory window (BAR0). amdgpu asks for it at probe (16 GiB + its
+# 2 MiB doorbell), but behind a USB4 dock the three EMPTY downstream ports beside the card each hold a hot-plug reserve
+# (pci=hpmemprefsize=16G), the 64 GiB above the dock is gone, and the card is left at 256 MiB ("bridge window [mem size
+# 0x400200000]: can't assign; no space"; Legion Go 1 + TBGAA dock + RX 9070 XT, CachyOS). The driver then hung in its own
+# copy engine (sdma0 timeouts, pasid 0) moving memory through that 256 MiB. Fix, at the Game Mode start (the session
+# wrapper, "egpu-generic rebar") and only while NOTHING has the card open:
+# remove those empty ports (no device behind them), let amdgpu probe again so it resizes, then rescan to bring them back.
+# Once per boot; never again on this machine after a failed re-probe. Every other card and setup is unchanged.
+REBARFAIL=/var/lib/nvegpu/generic-rebar-failed
+rebar_navi48(){ local b=$1 D=$SYSPCI/$1 st en sz vram nodes p a s empties="" parents="" _
+  [ "$(cat "$D/vendor" 2>/dev/null):$(cat "$D/device" 2>/dev/null)" = 0x1002:0x7550 ] || return 1
+  [ -e "$ST/generic-rebar-$b" ] && return 1
+  [ -e $REBARFAIL ] && { log "RX 9070: full memory window not tried (a re-probe failed here before)"; return 1; }
+  read -r st en _ < "$D/resource" || return 1; sz=$(( en - st + 1 )); vram=$(cat "$D/mem_info_vram_total" 2>/dev/null || echo 0)
+  [ "$sz" -gt 0 ] && [ "$sz" -lt "$vram" ] || return 1
+  # the empty bridges beside the card's path, inside the dock only (never beside the host's root port)
+  p=$(readlink -f "$D") || return 1
+  while a=${p%/*}; [ -e "$a/vendor" ] && [ -e "${a%/*}/vendor" ]; do
+    for s in "${a%/*}"/0000:*; do
+      [ "$s" = "$a" ] && continue; case "$(cat "$s/class" 2>/dev/null)" in 0x0604*) ;; *) continue ;; esac
+      ls -d "$s"/0000:* >/dev/null 2>&1 && continue          # something behind it: left alone
+      empties="$empties $s"; case " $parents " in *" ${a%/*} "*) ;; *) parents="$parents ${a%/*}" ;; esac
+    done; p=$a; done
+  [ -n "$empties" ] || { log "RX 9070: memory window $((sz>>20)) MiB, no empty dock port holding the space: left as is"; return 1; }
+  nodes=$(for n in "$D"/drm/card* "$D"/drm/renderD*; do [ -e "$n" ] && echo "/dev/dri/${n##*/}"; done)
+  if [ -n "$nodes" ] && fuser $nodes >/dev/null 2>&1; then
+    log "RX 9070: memory window $((sz>>20)) MiB; the card is in use ($(fuser $nodes 2>/dev/null | tr -s ' ')): not resized now"; return 1; fi
+  : > "$ST/generic-rebar-$b"
+  log "RX 9070: memory window $((sz>>20)) MiB of $((vram>>20)) MiB; freeing the empty dock ports: $(for s in $empties; do printf '%s ' "${s##*/}"; done)"
+  for s in $empties; do echo 1 2>/dev/null > "$s/remove"; done
+  timeout 30 sh -c "echo $b > $D/driver/unbind" 2>/dev/null
+  timeout 60 sh -c "echo $b > /sys/bus/pci/drivers/amdgpu/bind" 2>/dev/null
+  for _ in $(seq 1 30); do ls -d "$D"/drm/card* >/dev/null 2>&1 && break; sleep 1; done
+  for a in $parents; do for s in "$a"/pci_bus/*/rescan; do echo 1 2>/dev/null > "$s"; done; done   # the empty ports back
+  if ! ls -d "$D"/drm/card* >/dev/null 2>&1; then
+    mkdir -p /var/lib/nvegpu; : > $REBARFAIL
+    log "RX 9070: amdgpu did not come back on $b (not tried again on this machine): unplug the eGPU and plug it in again"
+    status IDLE "The eGPU did not restart. Unplug it and plug it in again."; return 0; fi
+  read -r st en _ < "$D/resource"; log "RX 9070: memory window now $(( (en - st + 1) >> 20 )) MiB"; return 0; }
 session_on_card(){ local p; for p in $(pgrep -x 'gamescope(-wl)?') $(pgrep -U "$U" -x kwin_wayland); do
     ls -l "/proc/$p/fd" 2>/dev/null | grep -qE "/dev/dri/$1\$" && return 0; done; return 1; }
 # The NVIDIA path's dock bring-up (egpu-hotplug-mount.sh / egpu-boot-enumerate.sh), minus everything NVIDIA: authorize a
@@ -264,6 +303,11 @@ presleep)
   idx=$(awk '/BOOTUP_DEFAULT/{gsub(/[^0-9]/,"",$1); print $1; exit}' "$D/pp_power_profile_mode" 2>/dev/null)
   [ -n "$idx" ] && echo "$idx" > "$D/pp_power_profile_mode" 2>/dev/null
   log "before sleep: $bdf back to its own power management ($(cat "$D/power_dpm_force_performance_level" 2>/dev/null))"
+  ;;
+rebar)
+  # from the Game Mode session wrapper, before gamescope opens the card (RX 9070 / 9070 XT only; see rebar_navi48)
+  read -r bdf vendor card < <(egpu_find) || exit 0; [ "$vendor" = amd ] || exit 0
+  rebar_navi48 "$bdf" || true
   ;;
 devcoredump)
   # An AMD GPU reset: amdgpu leaves its own crash dump (the hung ring, its packets, every block's state) in

@@ -1,3 +1,8 @@
+0.7.207 — RX 9070 / 9070 XT behind a USB4 dock: the card's full memory window.
+
+**Game Mode** (AMD / Intel install, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)
+- The card was left with a 256 MB memory window instead of 16 GB: the dock's empty USB4 ports reserved all the free address space, so the driver's resize failed. At the Game Mode start, while nothing has the card open, the empty dock ports are freed, the driver reloads the card with its full window, and the ports come back. Done once per boot; never tried again on a machine where the reload failed.
+
 0.7.206 — Support report: the part of the AMD crash dump that matters.
 
 **Support report** (AMD / Intel install only)
