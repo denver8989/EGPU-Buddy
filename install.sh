@@ -276,6 +276,9 @@ rm -f /etc/udev/rules.d/60-egpu-nvidia-powerpin.rules   # pre-0.7.80 name: ran B
 chmod 0755 /usr/local/sbin/egpu-* /usr/local/sbin/nv-egpu-buddy-* /usr/local/bin/nv-egpu-offset-helper 2>/dev/null || true
 [ -x /usr/local/sbin/egpu-dm-session ] && /usr/local/sbin/egpu-dm-session migrate >/dev/null 2>&1
 mkdir -p /etc/nv-egpu-buddy /var/lib/nvegpu; rm -f /var/lib/nvegpu/handheld-screen.json; echo '$VER' > /etc/nv-egpu-buddy/version; echo '$GPU_VENDOR' > /etc/nv-egpu-buddy/gpu-vendor
+# ROG Ally / XG Mobile only: the boot attach (egpu-mount) waits for the early-boot bring-up (egpu-boot-enumerate) instead of
+# resetting and removing the same GPU in the middle of it (GitHub issue #3: ~45 s added to every eGPU boot on a ROG Xbox Ally X)
+D=/etc/systemd/system/egpu-mount.service.d; if [ \"\$(/usr/local/sbin/egpu-detect --device 2>/dev/null)\" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; then mkdir -p \$D; printf '%s\\n' '# EGPU Buddy (ROG Ally / XG Mobile): attach after the early-boot bring-up, never alongside it' '[Unit]' 'After=egpu-boot-enumerate.service' > \$D/10-egpu-buddy-after-boot-enumerate.conf; else rm -f \$D/10-egpu-buddy-after-boot-enumerate.conf; rmdir \$D 2>/dev/null || true; fi
 # reloads are conveniences (a reboot applies everything); they have nothing to talk to in a chroot/container
 udevadm control --reload >/dev/null 2>&1 || true; udevadm trigger --subsystem-match=pci --action=change >/dev/null 2>&1 || true
 systemctl daemon-reload >/dev/null 2>&1 || true

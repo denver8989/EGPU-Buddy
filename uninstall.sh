@@ -86,6 +86,7 @@ fi
 # ever. The SDDM pin zzs-egpu-buddy-session.conf was missed too: "egpu-dm-session unpin" below runs after that script is
 # deleted, and its fallback list has only the old names.
 if [ "$AX" = 1 ]; then
+  sudo rm -f /etc/systemd/system/egpu-mount.service.d/10-egpu-buddy-after-boot-enumerate.conf; sudo rmdir /etc/systemd/system/egpu-mount.service.d 2>/dev/null
   rm -f "$USER_HOME/.config/systemd/user/gamescope-session.service.d/zzz-nv-egpu-buddy-ally.conf"
   sudo rm -f /etc/sddm.conf.d/zzs-egpu-buddy-session.conf
 fi
