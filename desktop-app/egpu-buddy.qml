@@ -53,6 +53,13 @@ ApplicationWindow {
     property bool updSeen: false
     readonly property var upd: (s.update || {})
     readonly property bool updRunning: upd.state === "running"
+    // what the Update button says (GitHub issue #5): the installed version, and whether anything newer exists
+    function vt(v) { var m = String(v || "").match(/\d+/g) || []; return [+(m[0] || 0), +(m[1] || 0), +(m[2] || 0)] }
+    function newer(a, b) { var x = vt(a), y = vt(b); for (var i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false }
+    readonly property string updLabel: updRunning ? "Updating…"
+        : s.staged ? "Update " + s.staged + " finishes at the next reboot"
+        : (s.latest && s.installed && !newer(s.latest, s.installed)) ? "Up to date (" + s.installed + ")"
+        : s.latest ? "Update to " + s.latest : "Update"
 
     function num(v, d) { var x = parseFloat(v); return isNaN(x) ? "–" : x.toFixed(d || 0) }
     function call(method, path, body, cb) {
@@ -122,7 +129,7 @@ ApplicationWindow {
             Platform.MenuItem { text: "Safe Detach…"; enabled: !!win.s.present; onTriggered: { win.show(); win.raise(); confirmDetach.open() } }
             Platform.MenuItem { text: "Re-attach"; enabled: !(win.s.present && win.s.driver_loaded); onTriggered: win.act("attach") }
             Platform.MenuSeparator {}
-            Platform.MenuItem { text: win.updRunning ? "Updating… (show progress)" : "Update EGPU Buddy…"; onTriggered: { win.show(); win.raise(); win.requestActivate(); updateDlg.open() } }
+            Platform.MenuItem { text: win.updRunning ? "Updating… (show progress)" : (win.updLabel === "Update" ? "Update EGPU Buddy…" : win.updLabel); onTriggered: { win.show(); win.raise(); win.requestActivate(); updateDlg.open() } }
             Platform.MenuSeparator {}
             Platform.MenuItem { text: "Quit"; onTriggered: Qt.quit() }
         }
@@ -170,7 +177,9 @@ ApplicationWindow {
         onOpened: { askedAt = 0; win.loadNotes() }
         ColumnLayout { width: parent.width; spacing: 10
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: updateDlg.phase === "confirm" ? "Installed: " + (win.s.installed || "unknown") + ".\nDownload the latest release and update the system integration and the Game Mode plugin? The NVIDIA driver is not changed. The eGPU can stay attached; this window shows the progress."
+                text: updateDlg.phase === "confirm" ? (win.s.staged ? "Installed: " + (win.s.installed || "unknown") + ". Version " + win.s.staged + " is already downloaded and finishes installing at the next reboot.\nRun the update again now anyway?"
+                    : (win.s.latest && win.s.installed && !win.newer(win.s.latest, win.s.installed)) ? "Installed: " + win.s.installed + ". This is the latest release; nothing newer to install.\nReinstall it anyway (repairs the system integration and the Game Mode plugin)?"
+                    : "Installed: " + (win.s.installed || "unknown") + (win.s.latest ? ". Latest: " + win.s.latest : "") + ".\nDownload the latest release and update the system integration and the Game Mode plugin? The NVIDIA driver is not changed. The eGPU can stay attached; this window shows the progress.")
                     : updateDlg.phase === "starting" ? "Starting…" : (win.upd.step || "")
                 color: updateDlg.phase === "result" && win.upd.state === "failed" ? "#e05555" : palette.windowText }
             // release notes from GitHub: what the update brings (before it), the installed version's notes (after it)
@@ -183,7 +192,7 @@ ApplicationWindow {
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: updateDlg.phase === "running"
                 text: "EGPU Buddy restarts itself when the update is done." }
             RowLayout { Layout.alignment: Qt.AlignRight
-                Button { text: "Update"; visible: updateDlg.phase === "confirm"; onClicked: { updateDlg.askedAt = Date.now() / 1000 - 2; win.act("update") } }
+                Button { text: (win.s.latest && win.s.installed && !win.newer(win.s.latest, win.s.installed)) || win.s.staged ? "Reinstall" : "Update"; visible: updateDlg.phase === "confirm"; onClicked: { updateDlg.askedAt = Date.now() / 1000 - 2; win.act("update") } }
                 Button { text: updateDlg.phase === "running" || updateDlg.phase === "starting" ? "Hide" : "Close"; onClicked: updateDlg.close() } }
         }
     }
@@ -232,6 +241,7 @@ ApplicationWindow {
                 Cell { value: win.g["pcie.link.gen.current"] ? "Gen" + win.g["pcie.link.gen.current"] + " x" + win.g["pcie.link.width.current"] : "–"; label: "PCIe link" }
             }
             Flow { Layout.fillWidth: true; spacing: 14
+                Label { text: "EGPU Buddy  <b>" + (win.s.installed || "—") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "Driver  <b>" + (win.g.driver_version || "—") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "Bus  <b>" + (win.s.bdf || "—") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "VRAM  <b>" + (win.g["memory.total"] ? win.num(win.g["memory.total"] / 1024) + " GB" : "—") + "</b>"; textFormat: Text.StyledText }
@@ -314,7 +324,7 @@ ApplicationWindow {
                 Button { text: "Safe Detach"; Layout.fillWidth: true; enabled: !!win.s.present; opacity: enabled ? 1 : 0.4; onClicked: confirmDetach.open() }
                 Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); opacity: enabled ? 1 : 0.4; onClicked: win.act("attach") }
                 Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.clkTouched = false; win.ptTouched = false; win.offTouched = false; win.act("reset-clocks") } }
-                Button { text: win.updRunning ? "Updating…" : "Update"; Layout.fillWidth: true; onClicked: updateDlg.open() }
+                Button { text: win.updLabel; Layout.fillWidth: true; onClicked: updateDlg.open() }
             }
             Frame { Layout.fillWidth: true
                 Label { width: parent.width; wrapMode: Text.WordWrap; text: win.msg; color: win.msgErr ? "#e05555" : palette.windowText } }

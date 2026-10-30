@@ -87,7 +87,19 @@ def status():
     return {"present": bool(bdf), "bdf": bdf, "vendor": vendor, "dock": _DOCK[1], "xgm": xgm, "driver_loaded": driver, "tunnel": tunnel, "game_mode": game_mode,
             "gpu": gpu, "displays": displays, "panel_enabled": (panel[0] == "enabled") if panel else None,
             "detach": jread(f"{RUN}/safe-detach-status.json"),
-            "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0]}
+            "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0],
+            **update_state(read("/etc/nv-egpu-buddy/version"))}
+
+def update_state(installed):
+    """For the Update button (GitHub issue #5): the newest release (from the release-notes cache, refreshed in the
+    background so the status never waits on GitHub) and a staged update (a newer payload that installs at the next boot)."""
+    if time.time() - _NOTES.get("try", 0) > 600:
+        import threading
+        _NOTES["try"] = time.time(); threading.Thread(target=release_notes, daemon=True).start()
+    vs = [r["version"] for r in _NOTES["rels"]]
+    latest = max(vs, key=vt) if vs else ""
+    pv = read(os.path.expanduser("~/.local/share/steamos-egpu-buddy/VERSION"))
+    return {"latest": latest, "staged": pv if pv and installed and vt(pv) > vt(installed) else ""}
 
 # Long actions run in the background, but their RESULT is kept and shown by the page: a button that fails must say so
 # (Re-attach used to discard all output, so a refused attach looked like a dead button).
