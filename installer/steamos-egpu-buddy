@@ -20,6 +20,11 @@ ask(){ if [ $GUI = 1 ]; then zenity --question --title="SteamOS EGPU Buddy" --wi
 
 . /etc/os-release 2>/dev/null; DISTRO=${ID:-unknown}; LIKE=${ID_LIKE:-}
 ARCH_LIKE=0; case "$DISTRO $LIKE" in *arch*|*cachyos*|*steamos*) ARCH_LIKE=1;; esac
+# the systems EGPU Buddy supports, each with its own install path in install.sh: SteamOS, CachyOS / Arch (pacman build),
+# Bazzite (the driver built in a Fedora container). DRIVER_OK: the patched NVIDIA driver can be built here.
+IS_BAZZITE=0; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) IS_BAZZITE=1;; esac
+DRIVER_OK=$ARCH_LIKE; [ $IS_BAZZITE = 1 ] && DRIVER_OK=1
+SUPPORTED=0; { [ $ARCH_LIKE = 1 ] || [ $IS_BAZZITE = 1 ]; } && SUPPORTED=1
 IMMUTABLE=0; command -v steamos-readonly >/dev/null 2>&1 && IMMUTABLE=1
 STOCK_SESSION=""; for s in /usr/lib/steamos/gamescope-session /usr/bin/gamescope-session /usr/bin/gamescope-session-plus; do [ -f "$s" ] && { STOCK_SESSION=$s; break; }; done
 HAS_TOOLCHAIN=0; command -v meson >/dev/null && command -v ninja >/dev/null && command -v cc >/dev/null && command -v cmake >/dev/null && HAS_TOOLCHAIN=1
@@ -33,7 +38,7 @@ Game Mode session script: ${STOCK_SESSION:-NOT FOUND}
 NVIDIA GPU on the bus now: ${GPU:-none}
 Build toolchain: $([ $HAS_TOOLCHAIN = 1 ] && echo present || echo missing)   Decky Loader: $([ $HAS_DECKY = 1 ] && echo present || echo missing)
 
-Tested only on CachyOS Deckify + Legion Go 2 + RTX 5060 Ti. SteamOS and Bazzite are UNTESTED.
+Supported: SteamOS, CachyOS (Deckify) / Arch and Bazzite (tested hardware: see TESTED.md).$([ $SUPPORTED = 1 ] || printf '\nThis system (%s) is NOT one of them.' "$DISTRO")
 This changes udev, systemd, sudoers and your Game Mode session. Everything replaced is backed up.
 Log: $LOG"
 
@@ -64,6 +69,15 @@ Remove SteamOS EGPU Buddy and restore the backed-up originals?" || exit 0
   exit 0
 fi
 
+# ---------------------------------------------------------------- an unsupported Linux distribution: explicit go-ahead first
+if [ "$ACTION" != uninstall ] && [ $SUPPORTED = 0 ]; then
+  ask "THIS LINUX DISTRIBUTION IS NOT SUPPORTED ($DISTRO${LIKE:+, like $LIKE})
+
+EGPU Buddy supports SteamOS, CachyOS (Deckify) / Arch and Bazzite. Here the NVIDIA driver cannot be built, Game Mode may not be set up, and parts of the install may fail.
+
+Install anyway, AT YOUR OWN RISK?" || exit 0
+fi
+
 # ---------------------------------------------------------------- untested hardware: explicit acceptance first
 if untested=$(bash "$ROOT/system/usr/local/sbin/egpu-detect" --untested 2>/dev/null); then
   ask "NOT TESTED ON THIS HARDWARE
@@ -92,11 +106,11 @@ if [ -z "${EGPU_GPU_VENDOR:-}" ] && [ ! -s /etc/nv-egpu-buddy/gpu-vendor ]; then
 fi
 
 # ---------------------------------------------------------------- component choice
-ALL="core,session,gamescope,decky,bootpolicy,desktopapp$([ $ARCH_LIKE = 1 ] && echo ,driver)"
+ALL="core,session,gamescope,decky,bootpolicy,desktopapp$([ $DRIVER_OK = 1 ] && echo ,driver)"
 if [ $ADV = 0 ]; then
   ask "$banner
 
-Install everything now? Hot-plug core, Game Mode session integration, GBM-scanout gamescope, Decky plugin$([ $HAS_DECKY = 1 ] || echo ' (skipped: Decky Loader not found)'), boot policy, desktop app$([ $ARCH_LIKE = 1 ] && echo ', the patched hot-unplug driver (built with makepkg, several minutes) with the NVIDIA userspace pinned to the matching version'). Missing NVIDIA packages and kernel parameters are written automatically (backups kept). Afterwards: reboot with the eGPU disconnected, then plug it in." || exit 0
+Install everything now? Hot-plug core, Game Mode session integration, GBM-scanout gamescope, Decky plugin$([ $HAS_DECKY = 1 ] || echo ' (skipped: Decky Loader not found)'), boot policy, desktop app$([ $DRIVER_OK = 1 ] && echo ', the patched hot-unplug NVIDIA driver (built on this device, several minutes; not with an AMD / Intel eGPU)'). Missing NVIDIA packages and kernel parameters are written automatically (backups kept). Afterwards: reboot with the eGPU disconnected, then plug it in." || exit 0
   sel=$ALL; export EGPU_AUTO_YES=1
 elif [ $GUI = 1 ]; then
   zenity --info --title="SteamOS EGPU Buddy" --width=560 --text="$banner" || exit 0
@@ -108,12 +122,12 @@ elif [ $GUI = 1 ]; then
       $([ $HAS_DECKY = 1 ] && echo TRUE || echo FALSE) decky "EGPU Buddy Decky plugin" "$([ $HAS_DECKY = 1 ] && echo 'Decky Loader found' || echo 'Decky Loader not found')" \
       $([ $HAS_PLASMALOGIN = 1 ] && echo TRUE || echo FALSE) bootpolicy "Boot into Game Mode with the eGPU attached" "$([ $HAS_PLASMALOGIN = 1 ] && echo 'plasmalogin autologin policy' || echo 'CachyOS/plasmalogin only')" \
       TRUE  desktopapp "EGPU Buddy desktop app"          "status, power limit, safe detach, re-attach (GTK/WebKit window, browser fallback)" \
-      FALSE driver    "Patched nvidia-open driver (surprise-unplug fix)" "$([ $ARCH_LIKE = 1 ] && echo 'builds DKMS modules; Arch-based only; needs kernel headers' || echo 'not available on this distro')") || exit 0
+      FALSE driver    "Patched nvidia-open driver (surprise-unplug fix)" "$([ $DRIVER_OK = 1 ] && echo 'built on this device (SteamOS, Arch / CachyOS, Bazzite)' || echo 'not available on this distro')") || exit 0
 else
   echo "$banner"; echo; echo "Components: core session gamescope decky bootpolicy desktopapp driver"; read -rp "Install which? (comma list, default core,session,gamescope,decky,bootpolicy,desktopapp): " sel; sel=${sel:-core,session,gamescope,decky,bootpolicy,desktopapp}
 fi
 want(){ case ",$sel," in *",$1,"*) return 0;; *) return 1;; esac; }
-want driver && [ $ARCH_LIKE = 0 ] && { err "The patched driver can only be built on Arch-based distros. Deselect it."; exit 1; }
+want driver && [ $DRIVER_OK = 0 ] && { err "The patched driver can only be built on SteamOS, Arch / CachyOS and Bazzite. Deselect it."; exit 1; }
 [ -z "$STOCK_SESSION" ] && want session && { err "No gamescope-session script found; the Game Mode integration cannot be installed here."; exit 1; }
 
 # ---------------------------------------------------------------- other eGPU tools (all-ways-eGPU, egpu-switcher)
