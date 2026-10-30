@@ -1,3 +1,8 @@
+0.7.196 — ROG Ally / XG Mobile: "Return to Gaming Mode" from the desktop with the eGPU attached on SteamOS 3.9.5.
+
+**Fixed** (ROG Ally / XG Mobile on SteamOS only; every other machine unchanged)
+- "Return to Gaming Mode" with the eGPU attached came back to the desktop (ROG Xbox Ally X + XG Mobile, SteamOS 3.9.5). On the desktop with the eGPU, EGPU Buddy keeps the next login on the desktop so a cable pull returns there. SteamOS 3.9.5's "Return to Gaming Mode" writes no login setting at all, it only logs out, so that setting sent it straight back to the desktop. Plasma now runs a small EGPU Buddy logout step before the session ends: when you leave the desktop yourself with the eGPU still attached, the setting is released and SteamOS's own default (Game Mode) applies. A cable pull and EGPU Buddy's own restarts (attach, Safe Detach) still return to the desktop. Logging out of the desktop with the eGPU attached now goes to Game Mode, as on stock SteamOS.
+
 0.7.195 — Bazzite: the NVIDIA Game Mode picture fix is rebuilt after a Bazzite update again.
 
 **Fixed** (Bazzite only; SteamOS and CachyOS unchanged)
