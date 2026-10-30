@@ -1,3 +1,8 @@
+0.7.204 — AMD eGPUs: RX 9070 / 9070 XT games run with Proton's own settings.
+
+**Fixed** (AMD / Intel install only, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)
+- An RX 9070 XT froze a few seconds into RE Requiem every time (the card's copy engine hung, then the GPU reset and dropped off; Legion Go 1, CachyOS), with EGPU Buddy's power tuning already off, while the same card is stable with all-ways-eGPU. Game Mode on an RX 9070 / 9070 XT no longer adds the buffer-placement settings for Proton (DXVK_CONFIG / VKD3D_CONFIG) from 0.7.188, which change how game data is copied to the eGPU; the card runs games with Proton's defaults. The RX 6800 XT, where those settings were tested and helped, keeps them.
+
 0.7.203 — AMD eGPUs: the disconnect guard only on the hardware it was made for; the support report shows the AMD graphics stack.
 
 **Changed** (AMD / Intel install only; NVIDIA unchanged)
