@@ -1525,7 +1525,14 @@ def _support_report():
             # the GPU's own crash dump of the last eGPU reset (saved by egpu-generic devcoredump; gone from the kernel at reboot)
             dc = sorted(glob.glob("/var/log/egpu-buddy/amdgpu-devcoredump-*.txt"), key=os.path.getmtime)
             if dc:
-                al += [f"last amdgpu crash dump ({len(dc)} kept): {os.path.basename(dc[-1])}"] + ["    " + l[:200] for l in _read(dc[-1]).splitlines()[:150]]
+                # its head (what, when, which process) and then only the lines about the hung work: the hardware inventory in
+                # between filled the first 150 lines and cut the ring state off (RX 9070 XT report on 0.7.205)
+                dl = _read(dc[-1]).splitlines()
+                head = dl[:dl.index("SOC Information")] if "SOC Information" in dl else dl[:8]
+                key = [l for l in dl if re.search(r"timed out|timeout|IP Type|Ring Name|ring name|[Rr]ptr|[Wr]ptr|process|PID|pasid|vmid|VRAM is lost|guilty|fault|SDMA.*(STATUS|CNTL|RB_|IB_)|regSDMA|PROTECTION|status", l)]
+                vis = [l for l in dl if "vram size" in l]
+                al += [f"last amdgpu crash dump ({len(dc)} kept, {len(dl)} lines): {os.path.basename(dc[-1])}"] + \
+                      ["    " + l[:200] for l in head + vis + ["--- the hung work ---"] + key[:220]]
             lines += ["", "## AMD graphics stack (AMD / Intel install)"] + (al or ["(nothing found)"])
         except Exception as ex:  # noqa: BLE001
             lines += ["", f"## AMD graphics stack: could not be read ({ex})"]
