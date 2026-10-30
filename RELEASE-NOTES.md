@@ -1,3 +1,11 @@
+0.7.203 — AMD eGPUs: the disconnect guard only on the hardware it was made for; the support report shows the AMD graphics stack.
+
+**Changed** (AMD / Intel install only; NVIDIA unchanged)
+- The guard from 0.7.202 that keeps the session on the handheld when the eGPU keeps disconnecting now applies only to the hardware it was seen on: an RX 6700 / 6750 XT behind an Intel Titan Ridge Thunderbolt 3 enclosure. Every other AMD setup behaves exactly as before 0.7.202.
+
+**Support report** (AMD / Intel install only)
+- A new section lists the graphics stack Game Mode runs on (Mesa, the AMD Vulkan driver, gamescope), whether LACT is running and its settings (it changes the card's clocks and power), and how gamescope last crashed. On a Legion Go 1 + RX 6750 XT, gamescope crashed inside the AMD Vulkan driver at every Game Mode start on the eGPU, and the report could not show why.
+
 0.7.202 — AMD eGPUs: a dock that keeps disconnecting no longer loops the desktop; the desktop app shows the installed version.
 
 **Fixed** (AMD / Intel install only; NVIDIA unchanged)
