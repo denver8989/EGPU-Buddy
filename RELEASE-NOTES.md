@@ -1,3 +1,9 @@
+0.7.205 — Support report: the AMD GPU's own crash dump, and any other eGPU tool still installed.
+
+**Support report**
+- AMD / Intel install only: when the AMD eGPU resets, the driver's own crash dump (which part of the GPU hung and what it was doing) is kept and shown in the report. It used to be lost at the next boot, so reports only showed "ring timeout".
+- Every install: a section lists anything left of all-ways-eGPU or egpu-switcher, which change the same things as EGPU Buddy (read-only).
+
 0.7.204 — AMD eGPUs: RX 9070 / 9070 XT games run with Proton's own settings.
 
 **Fixed** (AMD / Intel install only, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)
