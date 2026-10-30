@@ -122,6 +122,31 @@ else
   CMDLINE_MISSING=1
 fi
 
+# ---- other eGPU tools (all-ways-eGPU, egpu-switcher) ---------------------------------------------
+# They change the same things (primary GPU at boot, the Game Mode session) and the two together crash (seen with
+# all-ways-eGPU on a Legion Go 1 + RX 9070 XT). The Game Mode plugin offers to remove them before it installs; the same
+# offer here for every other way in (the one-line installer, the .run, install.sh by hand). Never at boot (the self-heal
+# runs this without a terminal: a warning only), never without the user's yes.
+OT_TOOL="$ROOT/packaging/other-egpu-tools.sh"
+if [ "$MODE" = install ] && [ -f "$OT_TOOL" ] && OT=$(bash "$OT_TOOL" detect 2>/dev/null); then
+  OT_NAMES=$(printf '%s\n' "$OT" | awk '{sub(/:$/,"",$2); print $2}' | paste -sd, -)
+  if [ "${EGPU_REMOVE_OTHER_TOOLS:-0}" = 1 ]; then
+    say "== removing $OT_NAMES (its own uninstaller first)"; sudo bash "$OT_TOOL" remove || echo "warning: $OT_NAMES could not be removed completely"
+  elif [ "${EGPU_KEEP_OTHER_TOOLS:-0}" = 1 ]; then
+    echo "note: $OT_NAMES kept at your request (not supported alongside EGPU Buddy)"
+  elif [ -t 0 ]; then
+    printf '%s is installed. It changes the same things as EGPU Buddy (primary GPU at boot, the Game Mode session),\nand the two together cause crashes. Remove it now with its own uninstaller? [Y/n] ' "$OT_NAMES"
+    read -r _r || _r=y
+    case "${_r,,}" in
+      n*) printf 'Install EGPU Buddy alongside it anyway (not supported)? [y/N] '; read -r _r2 || _r2=n
+          [ "${_r2,,}" = y ] || { echo "Nothing was changed."; exit 0; } ;;
+      *) say "== removing $OT_NAMES (its own uninstaller first)"; sudo bash "$OT_TOOL" remove || echo "warning: $OT_NAMES could not be removed completely" ;;
+    esac
+  else
+    echo "warning: $OT_NAMES is installed and conflicts with EGPU Buddy; remove it (the Game Mode plugin offers to) - continuing"
+  fi
+fi
+
 # ---- file map ------------------------------------------------------------------------------------
 map_dest(){ case "$1" in system/*) echo "/${1#system/}";; user/*) echo "$USER_HOME/${1#user/}";; esac; }
 in_scope(){ # component gating by path

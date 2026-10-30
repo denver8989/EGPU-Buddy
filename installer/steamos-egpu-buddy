@@ -101,6 +101,17 @@ want(){ case ",$sel," in *",$1,"*) return 0;; *) return 1;; esac; }
 want driver && [ $ARCH_LIKE = 0 ] && { err "The patched driver can only be built on Arch-based distros. Deselect it."; exit 1; }
 [ -z "$STOCK_SESSION" ] && want session && { err "No gamescope-session script found; the Game Mode integration cannot be installed here."; exit 1; }
 
+# ---------------------------------------------------------------- other eGPU tools (all-ways-eGPU, egpu-switcher)
+# the same offer the Game Mode plugin makes before it installs (install.sh carries out the answer)
+if OT=$(bash "$ROOT/packaging/other-egpu-tools.sh" detect 2>/dev/null); then
+  OT_NAMES=$(printf '%s\n' "$OT" | awk '{sub(/:$/,"",$2); print $2}' | paste -sd, -)
+  if ask "$OT_NAMES is installed. It changes the same things as EGPU Buddy (primary GPU at boot, the Game Mode session), and the two together cause crashes.
+
+Remove it now with its own uninstaller? (recommended)"; then export EGPU_REMOVE_OTHER_TOOLS=1
+  elif ask "Install EGPU Buddy alongside $OT_NAMES anyway? This is not supported."; then export EGPU_KEEP_OTHER_TOOLS=1
+  else msg "Nothing was changed."; exit 0; fi
+fi
+
 # ---------------------------------------------------------------- install with progress
 run_install(){
   say "== SteamOS EGPU Buddy $VERSION install: $sel"
