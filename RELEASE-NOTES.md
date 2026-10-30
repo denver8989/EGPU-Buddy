@@ -1,3 +1,8 @@
+0.7.206 — Support report: the part of the AMD crash dump that matters.
+
+**Support report** (AMD / Intel install only)
+- The AMD GPU's crash dump is shown by its header and the lines about the work that hung (which engine, its position, the process, faults), instead of its first 150 lines, which were only the card's hardware inventory.
+
 0.7.205 — Support report: the AMD GPU's own crash dump, and any other eGPU tool still installed.
 
 **Support report**
