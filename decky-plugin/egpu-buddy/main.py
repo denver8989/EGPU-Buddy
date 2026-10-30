@@ -1490,6 +1490,11 @@ def _support_report():
         lines += ["", f"## Other Decky plugins ({len(dp)})"] + (dp or ["(none)"])
     except Exception as ex:  # noqa: BLE001
         lines += ["", f"## Other Decky plugins: could not be read ({ex})"]
+    try:   # other eGPU tools (all-ways-eGPU, egpu-switcher) or their leftovers: every install path offers their removal
+        ot = _sh(["bash", f"{SYSDIR}/packaging/other-egpu-tools.sh", "detect"], 10)[1].splitlines() if os.path.exists(f"{SYSDIR}/packaging/other-egpu-tools.sh") else []
+        lines += ["", "## Other eGPU tools still installed (all-ways-eGPU, egpu-switcher)"] + (ot or ["(none)"])
+    except Exception as ex:  # noqa: BLE001
+        lines += ["", f"## Other eGPU tools: could not be read ({ex})"]
     try:
         om = _other_mods()
         lines += ["", f"## Other mods touching Game Mode, the desktop login or Steam ({len(om)})"] + (om or ["(none)"])
@@ -1517,6 +1522,10 @@ def _support_report():
                 keep = [l for l in ci if re.search(r"Timestamp|Signal|Command Line|Stack trace|#\d+ ", l)]
                 if keep:
                     al += ["last gamescope crash:"] + ["    " + l.strip()[:200] for l in keep[:40]]
+            # the GPU's own crash dump of the last eGPU reset (saved by egpu-generic devcoredump; gone from the kernel at reboot)
+            dc = sorted(glob.glob("/var/log/egpu-buddy/amdgpu-devcoredump-*.txt"), key=os.path.getmtime)
+            if dc:
+                al += [f"last amdgpu crash dump ({len(dc)} kept): {os.path.basename(dc[-1])}"] + ["    " + l[:200] for l in _read(dc[-1]).splitlines()[:150]]
             lines += ["", "## AMD graphics stack (AMD / Intel install)"] + (al or ["(nothing found)"])
         except Exception as ex:  # noqa: BLE001
             lines += ["", f"## AMD graphics stack: could not be read ({ex})"]

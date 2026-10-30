@@ -1,0 +1,3 @@
+# EGPU Buddy, AMD / Intel install only (egpu-generic exits at once on any other install): keep amdgpu's crash dump of an
+# eGPU reset for the support report (it is gone at the next boot).
+ACTION=="add", SUBSYSTEM=="devcoredump", RUN+="/usr/bin/systemd-run --no-block /usr/local/sbin/egpu-generic devcoredump %k"
