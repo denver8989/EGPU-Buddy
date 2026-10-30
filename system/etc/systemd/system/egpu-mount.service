@@ -2,6 +2,9 @@
 Description=Session-independent eGPU compute mount
 Documentation=file:/home/deck/NV-EGPU-Buddy/docs/HANDOFF.md
 After=local-fs.target systemd-udevd.service bolt.service
+# never alongside the early-boot bring-up: both reset the same GPU and this one removed it in the middle of the other's work
+# (GitHub issue #3, akamel001: ~45 s added to every boot with the eGPU attached; 58.5 s -> 14.5 s userspace with the order)
+After=egpu-boot-enumerate.service
 Before=display-manager.service
 Wants=bolt.service
 ConditionPathExists=/usr/local/sbin/nv-egpu-buddy-privileged

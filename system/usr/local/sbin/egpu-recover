@@ -34,6 +34,9 @@ detect_egpu_bdf(){ local d igpu; igpu=$(_internal_gpu_bdf || true)
   done; return 1; }
 GPU=${EGPU_GPU_BDF:-$(detect_egpu_bdf || true)}
 GPU=${GPU:-0000:62:00.0}
+# the fallback can be a device that is not a GPU (the SD card reader on a ROG Xbox Ally X): the refusal below would then stop
+# every recovery. Treat it as "no eGPU on the bus yet" instead (GitHub issue #3; same as nv-egpu-buddy-privileged)
+[ -z "${EGPU_GPU_BDF:-}" ] && [ "$GPU" = 0000:62:00.0 ] && [ -e /sys/bus/pci/devices/$GPU ] && ! _is_display_class "/sys/bus/pci/devices/$GPU" && GPU=0000:ff:1f.7
 if [ -e "/sys/bus/pci/devices/$GPU" ]; then
   _is_display_class "/sys/bus/pci/devices/$GPU" || { echo "$GPU is not a GPU — refusing to touch it"; exit 2; }
   [ "$GPU" != "$(_internal_gpu_bdf || true)" ] || { echo "$GPU is the built-in GPU — refusing to touch it"; exit 2; }

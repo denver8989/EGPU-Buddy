@@ -1,3 +1,12 @@
+0.7.198 — Faster, reliable boot with the eGPU attached (GitHub issue #3); Game Mode no longer goes black on a stuck eGPU (ROG Ally / XG Mobile).
+
+**Fixed** (every machine)
+- Boot with the eGPU attached took about 45 s longer than needed and could end with the eGPU unused (ROG Xbox Ally X: 58.5 s to 14.5 s). Two boot steps brought up the same GPU at the same time, and one removed it from the bus in the middle of the other's work. The boot attach now waits for the early bring-up. Found, measured and reported in detail by **akamel001** (GitHub issue #3).
+- When no GPU was found, EGPU Buddy's system helper fell back to a fixed PCI address. On a ROG Xbox Ally X that address is the SD card reader, which the helper correctly refuses to touch, so every call failed, including the bus rescan that brings an eGPU back. The same in the recovery tool. An address with no device is used instead now (GitHub issue #3).
+
+**Fixed** (ROG Ally / XG Mobile only; every other machine unchanged)
+- After the eGPU dropped and its GPU got stuck while starting, Game Mode on the handheld screen still loaded the NVIDIA graphics driver, waited on the stuck card and failed to start three times: black screen until a forced restart (ROG Xbox Ally X). Game Mode now uses only the handheld's own GPU while the eGPU does not answer.
+
 0.7.197 — SteamOS 3.9.5: "Return to Gaming Mode" and "Switch to Desktop" with an NVIDIA eGPU on every SteamOS machine.
 
 **Fixed** (SteamOS with the NVIDIA install; Bazzite, CachyOS and the AMD / Intel install unchanged)
