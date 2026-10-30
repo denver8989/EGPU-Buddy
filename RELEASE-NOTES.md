@@ -1,3 +1,12 @@
+0.7.202 — AMD eGPUs: a dock that keeps disconnecting no longer loops the desktop; the desktop app shows the installed version.
+
+**Fixed** (AMD / Intel install only; NVIDIA unchanged)
+- A Thunderbolt 3 enclosure that kept disconnecting (Legion Go 1 + RX 6750 XT, CachyOS) left an endless black, restarting screen: every reconnect moved the desktop onto the eGPU and every drop moved it back. After three drops in 10 minutes the session now stays on the handheld's own GPU with a message to check the dock's power and cable; Attach (or 10 quiet minutes) tries again.
+
+**Desktop app** (every machine)
+- The installed version is shown in the main window, and the Update button says "Up to date", "Update to <version>" or that an update finishes at the next reboot (GitHub issue #5, akamel001).
+- When an update is staged because the NVIDIA driver could not be unloaded with the eGPU already off the bus, the message says so instead of "the eGPU is in use" (GitHub issue #4, akamel001).
+
 0.7.201 — Updates from the desktop app no longer abort on untested hardware or report a staged update as failed (GitHub issue #4).
 
 **Fixed** (every machine)
