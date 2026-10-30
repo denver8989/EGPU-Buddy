@@ -1,3 +1,16 @@
+0.7.199 — AMD eGPUs: RX 9000 cards keep their own power management; every installer offers to remove all-ways-eGPU; the one-line install sets up everything.
+
+**Fixed** (AMD / Intel install only; NVIDIA unchanged)
+- An RX 9070 XT crashed under load after 5-30 minutes, with pink or green screens (Legion Go 1 + RX 9070 XT in a USB4 dock, CachyOS). EGPU Buddy switched AMD cards to manual power management to hold the PCIe link at full speed, which was only tested on an RX 6800 XT; the RX 9070 XT does not report the PCIe levels this relies on. A card like that now keeps its own power management. The RX 6800 XT is tuned as before.
+
+**Installers** (every machine)
+- The one-line install, the .run installer (graphical or terminal) and install.sh in a terminal now find all-ways-eGPU and egpu-switcher and offer to remove them with their own uninstaller, as the Game Mode plugin already did. The two tools change the same things as EGPU Buddy and crash together. Nothing is removed without a yes.
+- The one-line install installs everything, including Decky Loader with its official installer when it is missing, so the Game Mode plugin is always set up (EGPU_NO_DECKY=1 skips Decky Loader).
+- The .run installer asks NVIDIA or AMD / Intel itself on a first install; the question was hidden behind the progress window.
+
+**Support report** (AMD / Intel install only)
+- The AMD log leaves out the repeated "another instance running" lines, which had pushed out the lines showing whether the eGPU came up.
+
 0.7.198 — Faster, reliable boot with the eGPU attached (GitHub issue #3); Game Mode no longer goes black on a stuck eGPU (ROG Ally / XG Mobile).
 
 **Fixed** (every machine)
