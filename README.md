@@ -115,8 +115,8 @@ This builds on other people's work. Full details, with links and licenses: [CRED
 
 - **SilverplayerX** (Discord): on-device testing and development on the ROG Xbox Ally X with the ASUS XG Mobile.
 - **1khanfusion** (Discord): on-device testing of Bazzite on the Legion Go 2.
-- **RetroMann** (Discord): on-device testing of the AMD eGPU path (Legion Go 1, AOOSTAR AG02, RX 6800 XT).
-- **zergpoop** (Discord): on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 9070 XT in a USB4 dock).
+- **RetroMann** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path (Legion Go 1, AOOSTAR AG02, RX 6800 XT).
+- **zergpoop** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 9070 XT in a USB4 dock).
 - **seerge ([G-Helper](https://github.com/seerge/g-helper)), RomanYazvinsky** and
   **[Handheld Daemon](https://github.com/hhd-dev/hhd):** the XG Mobile's USB control protocol (fan, lights).
 - **matt-schwartz:** found the root cause of the NVIDIA Game Mode corruption.

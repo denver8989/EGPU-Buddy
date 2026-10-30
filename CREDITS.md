@@ -9,7 +9,10 @@ say where it came from.
   2025 (GC34, RTX 5070 Ti Laptop GPU): the XG Mobile releases were run on that device, and the support reports from it
   found the desktop Safe Detach, cable-pull, re-attach, power and fan, and Return to Gaming Mode issues
   fixed here. The screenshot of the desktop app uses that device's readings.
-- **zergpoop** (Discord) — on-device testing of the AMD eGPU path on CachyOS: Legion Go 1 with an AMD RX 9070 XT in a
+- **RetroMann** (Discord) — AMD eGPU tester: on-device testing of the AMD eGPU path on SteamOS 3.9: Legion Go 1 with an
+  AOOSTAR AG02 and an AMD RX 6800 XT. That device's support reports found the USB4 performance starvation (fixed in
+  0.7.188), the sleep and resume issues, and drove the AMD tuning of the link and power profile.
+- **zergpoop** (Discord) — AMD eGPU tester: on-device testing of the AMD eGPU path on CachyOS: Legion Go 1 with an AMD RX 9070 XT in a
   USB4 dock. That device's support report found the AMD tuning crashing RX 9000 cards under load (fixed in 0.7.199) and
   led to every installer offering to remove all-ways-eGPU.
 
