@@ -84,7 +84,7 @@ if untested=$(bash "$ROOT/system/usr/local/sbin/egpu-detect" --untested 2>/dev/n
 
 $untested
 
-SteamOS EGPU Buddy was verified on one machine only (Legion Go 2 + RTX 5060 Ti on CachyOS; see TESTED.md). On this system it may not work, may leave the screen dark, or may need a reboot to recover.
+SteamOS EGPU Buddy was verified on Legion Go 1 and 2 and the ROG Xbox Ally X, with RTX 30 / 50 and RX 6800 XT / RX 9070 XT eGPUs, on CachyOS, SteamOS and Bazzite (see TESTED.md). On this system it may not work, may leave the screen dark, or may need a reboot to recover.
 
 You install and test it AT YOUR OWN RISK. Continue?" || exit 0
   export EGPU_ACCEPT_UNTESTED=1
@@ -93,16 +93,27 @@ fi
 # ---------------------------------------------------------------- GPU type (first install only)
 # install.sh asks this in a terminal, but here its output goes to the progress window, where nobody would see the
 # question: ask it here, as the Game Mode plugin does. An update keeps the type chosen before.
+# The eGPU plugged in right now, if any, is the suggested answer; a choice that does not match it is asked again (an NVIDIA
+# install with an AMD card on the bus runs the wrong path entirely).
+_det=$(bash "$ROOT/system/usr/local/sbin/egpu-detect" 2>/dev/null | awk '{print $2}'); case "$_det" in nvidia) ;; amd|intel) _det=amd ;; *) _det= ;; esac
 if [ -z "${EGPU_GPU_VENDOR:-}" ] && [ ! -s /etc/nv-egpu-buddy/gpu-vendor ]; then
+  _n=TRUE; _a=FALSE; _d=1; [ "$_det" = amd ] && { _n=FALSE; _a=TRUE; _d=2; }
+  _seen=""; [ -n "$_det" ] && _seen=" (found plugged in now: $([ "$_det" = amd ] && echo 'AMD / Intel' || echo NVIDIA))"
   if [ $GUI = 1 ]; then
-    _v=$(zenity --list --radiolist --title="SteamOS EGPU Buddy" --width=520 --height=260 --text="Which GPU will be in the eGPU?" \
+    _v=$(zenity --list --radiolist --title="SteamOS EGPU Buddy" --width=560 --height=270 --text="Which GPU will be in the eGPU?$_seen" \
          --column=" " --column=Key --column="GPU" --hide-column=2 --print-column=2 \
-         TRUE nvidia "NVIDIA (builds the NVIDIA driver, several minutes)" FALSE amd "AMD / Intel (no driver build)") || exit 0
+         $_n nvidia "NVIDIA (builds the NVIDIA driver, several minutes)" $_a amd "AMD / Intel (no driver build)") || exit 0
   else
-    printf 'Which GPU will be in the eGPU?\n  1) NVIDIA (builds the NVIDIA driver, several minutes)\n  2) AMD / Intel (no driver build)\nChoice [1/2]: '
-    read -r _c || _c=1; case "$_c" in 2) _v=amd ;; *) _v=nvidia ;; esac
+    printf 'Which GPU will be in the eGPU?%s\n  1) NVIDIA (builds the NVIDIA driver, several minutes)\n  2) AMD / Intel (no driver build)\nChoice [1/2, default %s]: ' "$_seen" "$_d"
+    read -r _c || _c=$_d; case "${_c:-$_d}" in 2) _v=amd ;; *) _v=nvidia ;; esac
   fi
-  export EGPU_GPU_VENDOR=${_v:-nvidia}
+  _v=${_v:-nvidia}
+  if [ -n "$_det" ] && [ "$_v" != "$_det" ]; then
+    ask "The eGPU plugged in now is $([ "$_det" = amd ] && echo 'an AMD / Intel card' || echo 'an NVIDIA card'), but you chose $([ "$_v" = amd ] && echo 'AMD / Intel' || echo NVIDIA). The wrong choice leaves Game Mode on a black screen.
+
+Use $([ "$_det" = amd ] && echo 'AMD / Intel' || echo NVIDIA) instead? (recommended)" && _v=$_det
+  fi
+  export EGPU_GPU_VENDOR=$_v
 fi
 
 # ---------------------------------------------------------------- component choice

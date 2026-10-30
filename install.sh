@@ -41,8 +41,10 @@ for a in "$@"; do case "$a" in --check) MODE=check;; --amd|--no-nvidia) GPU_VEND
 # first install from a terminal with no choice made (no flag, no earlier install): ask, as the plugin does
 if [ -z "${EGPU_GPU_VENDOR:-}" ] && [ ! -s /etc/nv-egpu-buddy/gpu-vendor ] && [ "${MODE:-install}" = install ] && [ -t 0 ] \
    && ! printf ' %s ' "$@" | grep -qE ' --(amd|no-nvidia|nvidia) '; then
-  printf 'Which GPU type will you use?\n  1) NVIDIA (builds the NVIDIA driver, several minutes)\n  2) AMD / Intel (untested; no driver build)\nChoice [1/2]: '
-  read -r _c || _c=1; case "$_c" in 2) GPU_VENDOR=amd ;; *) GPU_VENDOR=nvidia ;; esac; echo "-> $GPU_VENDOR"
+  # the eGPU plugged in now, if any, is the default (an NVIDIA install with an AMD card runs the wrong path entirely)
+  _d=1; case "$(bash "$ROOT/system/usr/local/sbin/egpu-detect" 2>/dev/null | awk '{print $2}')" in amd|intel) _d=2 ;; esac
+  printf 'Which GPU type will you use?\n  1) NVIDIA (builds the NVIDIA driver, several minutes)\n  2) AMD / Intel (no driver build)\nChoice [1/2, default %s]: ' "$_d"
+  read -r _c || _c=$_d; case "${_c:-$_d}" in 2) GPU_VENDOR=amd ;; *) GPU_VENDOR=nvidia ;; esac; echo "-> $GPU_VENDOR"
 fi
 want(){ case ",$COMPONENTS," in *",$1,"*) return 0;; *) return 1;; esac; }
 if [ "$GPU_VENDOR" = amd ]; then

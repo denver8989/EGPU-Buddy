@@ -112,18 +112,23 @@ egpu_asus_power() {
 }
 
 # The one configuration this project has been verified on. Anything else is untested and the user must be told so.
-TESTED_DEVICE="Legion Go 8ASP2"; TESTED_GPU_ID="0x2d04"; TESTED_GPU_NAME="NVIDIA GeForce RTX 5060 Ti"; TESTED_DISTRO="cachyos"
+# The hardware this project was verified on (TESTED.md): Legion Go 2 (8ASP2, 8AHP2), Legion Go 1 (8APU1), ROG Xbox Ally X;
+# RTX 5060 Ti, RTX 3080, RTX 5070 Ti Laptop (XG Mobile), RX 6800 XT, RX 9070 XT; CachyOS, SteamOS, Bazzite. Anything else
+# gets the "not tested on this hardware" acceptance before an install.
+TESTED_GPU_IDS="0x10de:0x2d04 0x10de:0x2f80 0x10de:0x2206 0x10de:0x2216 0x10de:0x2f18 0x1002:0x73bf 0x1002:0x7550"
+TESTED_DISTROS="cachyos steamos bazzite"
 egpu_untested() {
   local r=1 fam gpu vend id name distro
   fam=$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/product_family 2>/dev/null); fam=${fam:-$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/product_name 2>/dev/null)}
-  [ "$fam" = "$TESTED_DEVICE" ] || { echo "device: ${fam:-unknown} (tested: Lenovo Legion Go 2)"; r=0; }
+  case "$fam" in Legion\ Go\ 8ASP2|Legion\ Go\ 8AHP2|Legion\ Go\ 8APU1|ROG\ Xbox\ Ally*) ;; *)
+    echo "device: ${fam:-unknown} (tested: Legion Go 1 and 2, ROG Xbox Ally X)"; r=0 ;; esac
   if read -r gpu vend _ < <(egpu_find 2>/dev/null); then
     id=$(cat "$EGPU_SYSFS_ROOT/sys/bus/pci/devices/$gpu/vendor" 2>/dev/null):$(cat "$EGPU_SYSFS_ROOT/sys/bus/pci/devices/$gpu/device" 2>/dev/null)
     name=$(lspci -s "$gpu" 2>/dev/null | sed 's/^[^:]*: //; s/ (rev.*//'); name=${name:-$id}
-    [ "$id" = "0x10de:$TESTED_GPU_ID" ] || { echo "eGPU: $name (tested: $TESTED_GPU_NAME)"; r=0; }
+    case " $TESTED_GPU_IDS " in *" $id "*) ;; *) echo "eGPU: $name (tested: RTX 5060 Ti, RTX 3080, RTX 5070 Ti Laptop, RX 6800 XT, RX 9070 XT)"; r=0 ;; esac
   fi
   distro=$(. "$EGPU_SYSFS_ROOT"/etc/os-release 2>/dev/null; echo "${ID:-unknown}")
-  [ "$distro" = "$TESTED_DISTRO" ] || { echo "distro: $distro (tested: CachyOS)"; r=0; }
+  case " $TESTED_DISTROS " in *" $distro "*) ;; *) echo "distro: $distro (tested: CachyOS, SteamOS, Bazzite)"; r=0 ;; esac
   return $r
 }
 

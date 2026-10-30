@@ -262,7 +262,7 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.199";
+const PLUGIN_VERSION = "0.7.200";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -438,7 +438,7 @@ function Content() {
       return;
     }
     const time = ` Expected time: ${su?.expect ?? "several minutes"}.` + (su?.slow_build ? " The driver is built on /home; the system partition is not touched. Keep the charger connected and the eGPU unplugged." : "") + " You can close the menu meanwhile; a notification appears when it is done.";
-    const disclaimer = needAccept ? `NOT TESTED ON THIS HARDWARE: ${su!.untested!.split("\n").join("; ")}. This project was verified on one machine only (Legion Go 2, RTX 5060 Ti, CachyOS). Here it may not work, may leave the screen dark, or may need a reboot to recover. You install and test it at your own risk.\n\n` : "";
+    const disclaimer = needAccept ? `NOT TESTED ON THIS HARDWARE: ${su!.untested!.split("\n").join("; ")}. This project was verified on Legion Go 1 and 2 and the ROG Xbox Ally X, with RTX 30 / 50 and RX 6800 XT / RX 9070 XT eGPUs, on CachyOS, SteamOS and Bazzite (TESTED.md). Here it may not work, may leave the screen dark, or may need a reboot to recover. You install and test it at your own risk.\n\n` : "";
     showModal(<ConfirmModal strTitle={needAccept ? `${title} (untested hardware)` : title} strDescription={disclaimer + WHAT + time} strOKButtonText={needAccept ? "I accept the risk" : "Continue"}
       onOK={() => run(async () => { if (needAccept) await acceptUntested(); return go(); })} />);
   };
@@ -458,8 +458,8 @@ function Content() {
     const bus = su?.egpu_on_bus;
     const seen = bus === "nvidia" ? " An NVIDIA eGPU is connected right now." : (bus === "amd" || bus === "intel") ? ` An ${bus === "amd" ? "AMD" : "Intel"} eGPU is connected right now.` : "";
     showModal(<ConfirmModal strTitle="Which GPU type will you use?"
-      strDescription={`NVIDIA: builds the NVIDIA driver (several minutes). AMD / Intel: no driver build; untested so far.${seen} The eGPU does not need to be plugged in. You can switch later in Setup & updates.`}
-      strOKButtonText="NVIDIA" strMiddleButtonText="AMD / Intel (untested)" strCancelButtonText="Cancel"
+      strDescription={`NVIDIA: builds the NVIDIA driver (several minutes). AMD / Intel: no driver build (beta).${seen} The eGPU does not need to be plugged in. You can switch later in Setup & updates.`}
+      strOKButtonText="NVIDIA" strMiddleButtonText="AMD / Intel (beta)" strCancelButtonText="Cancel"
       onOK={() => installFor("nvidia")} onMiddleButton={() => installFor("amd")} />);
   };
   // An AMD or Intel eGPU needs neither the patched nvidia-open build (the long part of an install)
@@ -488,7 +488,7 @@ function Content() {
           )}
           {needsInstall && su && !su.busy && su.rc !== 0 && (
             <>
-              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.installed_version && !su.helpers_present ? "System files are missing (OS update)." : behind ? `Plugin ${su.payload_version} is in; its system files finish installing by themselves (after any running game is closed), or press Update system integration.` : driverMissing ? "The NVIDIA driver is not installed. Keep the eGPU unplugged." : su.installed_version ? "Setup is incomplete." : "Not installed yet. Install asks which GPU type you use: NVIDIA, or AMD / Intel (untested)."}</div></PanelSectionRow>
+              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.installed_version && !su.helpers_present ? "System files are missing (OS update)." : behind ? `Plugin ${su.payload_version} is in; its system files finish installing by themselves (after any running game is closed), or press Update system integration.` : driverMissing ? "The NVIDIA driver is not installed. Keep the eGPU unplugged." : su.installed_version ? "Setup is incomplete." : "Not installed yet. Install asks which GPU type you use: NVIDIA, or AMD / Intel (beta)."}</div></PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => installClick()}>{behind && su.helpers_present ? "Update system integration" : su.installed_version ? "Repair system integration" : "Install system integration"}</ButtonItem></PanelSectionRow>
             </>
           )}
@@ -738,7 +738,7 @@ function Content() {
 
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => installFor("amd")}>
-              {su?.installed_version ? (su.installed_vendor === "amd" ? "Reinstall / update (AMD / Intel, untested)" : "Switch to the AMD / Intel install (untested; removes the NVIDIA driver)") : "AMD / Intel eGPU (untested) - install (no driver build)"}
+              {su?.installed_version ? (su.installed_vendor === "amd" ? "Reinstall / update (AMD / Intel, beta)" : "Switch to the AMD / Intel install (beta; removes the NVIDIA driver)") : "AMD / Intel eGPU (beta) - install (no driver build)"}
             </ButtonItem>
           </PanelSectionRow>
           <PanelSectionRow>

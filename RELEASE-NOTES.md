@@ -1,3 +1,11 @@
+0.7.200 — Installers: every install method sets up each supported system and GPU type correctly.
+
+**Installers** (every machine)
+- The one-line install and the .run installer now install the patched NVIDIA driver on Bazzite too (they offered it on Arch-based systems only, so a Bazzite install from them had no driver). The Game Mode plugin was not affected.
+- The GPU-type question (NVIDIA or AMD / Intel) suggests the eGPU that is plugged in, and asks again when the choice does not match it: an NVIDIA install with an AMD card runs the wrong path and can leave Game Mode on a black screen.
+- On a Linux distribution other than SteamOS, CachyOS / Arch and Bazzite, the installer says so and asks before going ahead.
+- The "not tested on this hardware" warning now knows every tested machine (Legion Go 1 and 2, ROG Xbox Ally X; RTX 5060 Ti, RTX 3080, RTX 5070 Ti Laptop, RX 6800 XT, RX 9070 XT; CachyOS, SteamOS, Bazzite); it said only the Legion Go 2 + RTX 5060 Ti on CachyOS was tested. AMD / Intel is labelled beta, no longer untested.
+
 0.7.199 — AMD eGPUs: RX 9000 cards keep their own power management; every installer offers to remove all-ways-eGPU; the one-line install sets up everything.
 
 **Fixed** (AMD / Intel install only; NVIDIA unchanged)
