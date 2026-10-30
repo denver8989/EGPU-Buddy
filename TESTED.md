@@ -8,9 +8,14 @@ repeatedly and behaved as described.
 Lenovo Legion Go 2 (83N1, AMD Ryzen Z2), **Bazzite 44** handheld image (bazzite-deck, Fedora Atomic, read-only /usr,
 SELinux enforcing; no NVIDIA driver of its own), kernel 7.2.9-ogc3.1, gamescope 3.16.31-ogc2 (Open Gaming Collective),
 OpenGamepadUI + Steam, **Gigabyte AORUS RTX 5060 Ti AI Box** (USB4 2 x 20 Gb/s), Samsung Odyssey G95SC over HDMI. Tested
-on the device by **1khanfusion** (Discord); read from that device's support reports. **Tested: all good as of 0.7.181.** On Bazzite this project builds its
+on the device by **1khanfusion** (Discord); read from that device's support reports. **Status: fully working (100 %).** Every
+feature below was verified on the device by 0.7.181: Game Mode and the desktop on the eGPU, the NVIDIA picture fix, games,
+plug-in in Game Mode and on the desktop, Safe Detach and cable pull in both, screen switch, sleep, "Return to Gaming Mode",
+boot with and without the eGPU, and Bazzite updates. On Bazzite this project builds its
 patched NVIDIA driver 615.78.08 on the device (Fedora container) as a system extension, and builds the NVIDIA picture
 fix into the gamescope version Bazzite ships.
+
+First round, as found (0.7.157); every failure in it was fixed and retested working, see below the table.
 
 | Tested on the device (0.7.157, 2026-10-23) | Result |
 |---|---|
@@ -40,6 +45,9 @@ either, plug in and Safe Detach on the desktop, sleep in Game Mode and on the de
 (Bazzite only): sleep (SELinux kept the NVIDIA driver from saving video memory, 0.7.176), Safe Detach in Game Mode
 (the performance overlay held the eGPU, 0.7.176 / 0.7.179), Safe Detach on the desktop (SDDM restarted the session
 under it, 0.7.176), the desktop compositor on both GPUs (sluggish desktop, 0.7.180 / 0.7.181).
+
+A Bazzite update that changes its gamescope version (44.20261026: 3.16.31 to 3.17.0) needs the picture fix rebuilt for the
+new version; EGPU Buddy does this on its own in the background (0.7.195 makes that rebuild reliable).
 
 Not tested on the device: Secure Boot (MOK enrollment).
 
