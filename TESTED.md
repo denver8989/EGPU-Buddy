@@ -47,7 +47,8 @@ either, plug in and Safe Detach on the desktop, sleep in Game Mode and on the de
 under it, 0.7.176), the desktop compositor on both GPUs (sluggish desktop, 0.7.180 / 0.7.181).
 
 A Bazzite update that changes its gamescope version (44.20261026: 3.16.31 to 3.17.0) needs the picture fix rebuilt for the
-new version; EGPU Buddy does this on its own in the background (0.7.195 makes that rebuild reliable).
+new version; EGPU Buddy does this on its own in the background (0.7.195 makes that rebuild reliable). Confirmed on the
+device by 1khanfusion: after 0.7.195 the picture fix was rebuilt into gamescope 3.17.0-ogc1 and is back in Game Mode.
 
 Not tested on the device: Secure Boot (MOK enrollment).
 
