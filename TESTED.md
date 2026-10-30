@@ -94,7 +94,7 @@ Verified on that rig in one session:
 No benchmarks or performance figures are recorded for any rig: what is tracked here is whether the eGPU attaches,
 renders, survives a cable pull and comes back.
 
-## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.9; Legion Go 1 + RX 9070 XT, CachyOS)
+## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.9; Legion Go 1 + RX 9070 XT, CachyOS; Legion Go 1 + RX 6750 XT, CachyOS)
 
 Tested on the device by **RetroMann** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), SteamOS 3.9 (build 20261023.100), AOOSTAR AG02
 over USB4 (ASMedia 246x), AMD Radeon RX 6800 XT, MSI MP275 over HDMI. The AMD / Intel install (`./install.sh --amd`,
@@ -121,6 +121,18 @@ Samsung TV over HDMI.
 | Plug in, Game Mode on the eGPU screen | working |
 | A game on the eGPU (RE Requiem) | **crashed** after 5-30 min (GPU reset, pink / green screens): the AMD tuning switched the card to manual power management, which it does not support like the RX 6800 XT; 0.7.199 leaves such a card on its own power management, being confirmed |
 | all-ways-eGPU installed before | the installers now offer to remove it on every install path (0.7.199) |
+
+### Third AMD card: Legion Go 1 + RX 6750 XT in a Thunderbolt 3 enclosure, CachyOS (0.7.198-0.7.203)
+
+Tested on the device by **Ivan C.nunes** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), CachyOS (Deckify, kernel
+7.2.9-cachyos-deckify), AMD Radeon RX 6750 XT (Navi 22) in a Thunderbolt 3 enclosure (Intel JHL7440 Titan Ridge), monitor
+over HDMI. The same setup works on Windows.
+
+| Tested on the device | Result |
+|---|---|
+| Desktop with the eGPU | working (as on Windows) |
+| Game Mode on the eGPU | **failing**: gamescope crashes inside the AMD Vulkan driver at every start (black screen); being looked at, 0.7.203 adds what the report needs to find out why |
+| Connection | the enclosure disconnected repeatedly; from 0.7.202 the session stays on the handheld screen instead of restarting in a loop |
 
 If you try it, `/var/log/egpu-generic.log` is the file to attach to a report.
 
