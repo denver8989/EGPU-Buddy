@@ -1,5 +1,5 @@
 #!/bin/bash
-# egpu-kernel-cmdline --check | --written | --pending | --repair | --apply [--dry-run]
+# egpu-kernel-cmdline --check | --written | --pending | --repair | --apply [--dry-run] | --remove
 # The kernel parameters the eGPU path needs (README "Kernel command line"), and how to persist them per bootloader.
 # --check prints the parameters missing from the RUNNING kernel (exit 1 if any). --apply writes them into the
 # bootloader config (backup kept) and regenerates it; a reboot is needed afterwards.
@@ -39,6 +39,15 @@ fi
 if (. /etc/os-release 2>/dev/null; case "${ID:-} ${NAME:-}" in *[Bb]azzite*) exit 0 ;; esac; exit 1); then
   WANT="$WANT rd.driver.blacklist=nouveau modprobe.blacklist=nouveau"
 fi
+# AMD / Intel install with an RX 9070 / 9070 XT (1002:7550) recorded on this machine by egpu-generic: none of the above.
+# These parameters were tuned for NVIDIA cards; with them the card got a 256 MiB BAR behind a USB4 dock (16 GiB hot-plug
+# reserves on the dock's empty ports) and its copy engine hung in games, still after the full BAR was restored (0.7.210),
+# while the same Legion Go 1 + Minisforum DEG2 + RX 9070 XT on CachyOS's own parameters (all-ways-eGPU) is stable.
+# --remove takes our line back out (Limine; see below). Every other machine keeps exactly its parameters.
+NAVI48=/var/lib/nvegpu/generic-navi48
+if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ -e $NAVI48 ]; then
+  WANT=""
+fi
 # The boot-verbosity parameters SteamOS's own configuration carries. Regenerating the GRUB config
 # puts them where steamenv_boot strips them, so we re-add them somewhere it does not touch.
 QUIET="loglevel=3 quiet splash plymouth.ignore-serial-consoles"
@@ -70,7 +79,32 @@ fi
 if [ "$MODE" = --written ]; then written && { echo "kernel parameters persisted"; exit 0; }; echo "kernel parameters are NOT in the bootloader configuration"; exit 1; fi
 if [ "$MODE" = --pending ]; then [ -n "$(missing)" ] && written && { echo "kernel parameters written; reboot to activate"; exit 0; }; exit 1; fi
 if [ "$MODE" = --check ]; then m=$(missing); [ -z "$m" ] && { echo "kernel command line: ok"; exit 0; }; echo "missing kernel parameters: $m"; exit 1; fi
-[ "$MODE" = --apply ] || { echo "usage: $0 --check | --apply [--dry-run]"; exit 2; }
+# --remove (the RX 9070 case above only): take our marked Limine line back out. Only the form that APPENDS to a line of
+# the user's that carries root= - removing the full-line form would leave Limine without root= (0.7.141). Backup kept;
+# the regenerated entries are checked for root= and the backup goes back if one has none.
+if [ "$MODE" = --remove ]; then
+  [ -z "$WANT" ] || { echo "not an RX 9070 AMD install: parameters kept"; exit 0; }
+  [ "$(id -u)" = 0 ] || { echo "--remove needs root"; exit 1; }
+  L=/etc/default/limine; MARK='# SteamOS EGPU Buddy: eGPU kernel parameters'
+  [ -f $L ] && grep -qxF "$MARK" $L || { echo "no EGPU Buddy kernel parameters in the bootloader configuration"; exit 0; }
+  [ "$(grep -A1 -xF "$MARK" $L | sed -n 2p | cut -c1-26)" = 'KERNEL_CMDLINE[default]+="' ] ||
+    { echo "our Limine line is a full command line, not an addition: left as it is"; exit 0; }
+  grep -vxF "$MARK" $L | grep -E '^KERNEL_CMDLINE\[default\]\+?=.*root=' | grep -qvF 'hpmemprefsize' ||
+    { echo "no other Limine line carries root=: left as it is"; exit 0; }
+  TS=$(date +%Y%m%d-%H%M%S); B="$L.bak-egpu-buddy-$TS"; cp -a $L "$B"
+  awk -v mark="$MARK" '$0==mark {skip=1; next} skip {skip=0; next} {print}' "$B" > $L
+  regen=""; for c in limine-update limine-mkinitcpio; do command -v $c >/dev/null 2>&1 && timeout 300 $c >/dev/null 2>&1 && { regen=$c; break; }; done
+  esp=$(sed -n 's/^ESP_PATH="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' $L | tail -1)
+  conf=$(find ${esp:-} /boot /efi /boot/efi -maxdepth 4 -iname limine.conf 2>/dev/null | head -1)
+  if [ -z "$regen" ] || [ -z "$conf" ] || grep -iE '^[[:space:]]*(kernel_)?cmdline:' "$conf" | grep -qv 'root='; then
+    cp -a "$B" $L; for c in limine-update limine-mkinitcpio; do command -v $c >/dev/null 2>&1 && timeout 300 $c >/dev/null 2>&1 && break; done
+    echo "the Limine entries could not be regenerated cleanly (${regen:-no tool}): $L put back, parameters kept"; exit 1
+  fi
+  echo "removed the EGPU Buddy kernel parameters from $L (backup $B), Limine entries regenerated ($regen): restart once to use them"
+  exit 0
+fi
+[ "$MODE" = --apply ] || { echo "usage: $0 --check | --apply [--dry-run] | --remove"; exit 2; }
+[ -n "$WANT" ] || { echo "no kernel parameters to add on this machine"; exit 0; }
 [ "$(id -u)" = 0 ] || { echo "--apply needs root"; exit 1; }
 TS=$(date +%Y%m%d-%H%M%S); did=0
 edit(){ # $1 file, $2 sed script

@@ -1,3 +1,8 @@
+0.7.211 — RX 9070 / 9070 XT: the system's own kernel parameters.
+
+**Boot settings** (AMD / Intel install with an RX 9070 / 9070 XT, CachyOS Limine; every other card, machine and NVIDIA unchanged)
+- The kernel parameters EGPU Buddy adds were tuned for NVIDIA cards. On an RX 9070 / 9070 XT they are now taken out again, so the system uses its own parameters (as under all-ways-eGPU, where the same setup is stable). The first Game Mode start after the update removes them (backup kept; if the boot entries cannot be rebuilt cleanly, the old settings are put back). Restart once afterwards.
+
 0.7.210 — RX 9070 / 9070 XT memory window fix now actually runs.
 
 **Game Mode** (AMD / Intel install, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)
