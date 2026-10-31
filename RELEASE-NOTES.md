@@ -1,3 +1,9 @@
+0.7.212 — RX 9070 / 9070 XT: kernel parameters back.
+
+**Boot settings** (AMD / Intel install with an RX 9070 / 9070 XT; every other card, machine and NVIDIA unchanged)
+- 0.7.211 removed EGPU Buddy's kernel parameters on this card; the crashes stayed the same, so they are back. The next Game Mode start writes them again (backup kept); restart once afterwards.
+- The crashes in games on an RX 9070 / 9070 XT over USB4 match an open AMD driver problem with this GPU generation over Thunderbolt / USB4, reported with other docks and computers too. The card's full 16 GB memory window (0.7.210) stays.
+
 0.7.211 — RX 9070 / 9070 XT: the system's own kernel parameters.
 
 **Boot settings** (AMD / Intel install with an RX 9070 / 9070 XT, CachyOS Limine; every other card, machine and NVIDIA unchanged)

@@ -157,16 +157,16 @@ rebar_navi48(){ local b=$1 D=$SYSPCI/$1 st en sz vram nodes p a s empties="" par
     log "RX 9070: amdgpu did not come back on $b (not tried again on this machine): unplug the eGPU and plug it in again"
     status IDLE "The eGPU did not restart. Unplug it and plug it in again."; return 0; fi
   read -r st en _ < "$D/resource"; log "RX 9070: memory window now $(( (en - st + 1) >> 20 )) MiB"; return 0; }
-# RX 9070 / 9070 XT only: record the card on this machine (egpu-kernel-cmdline then wants none of the NVIDIA-tuned kernel
-# parameters) and take our Limine line out, in the background (regenerating the boot entries takes a while). Once: the
-# marked line is gone afterwards. The new parameters apply from the next restart.
+# RX 9070 / 9070 XT only: 0.7.211 took the kernel parameters out for this card; that changed nothing (the card still hung,
+# the same RDNA4-over-USB4 hang other docks and hosts report upstream), so 0.7.212 puts them back: written again in the
+# background at the next Game Mode start, active from the next restart. Nothing happens when they are already written.
 navi48_cmdline(){
   [ "$(cat "$SYSPCI/$1/vendor" 2>/dev/null):$(cat "$SYSPCI/$1/device" 2>/dev/null)" = 0x1002:0x7550 ] || return 0
-  mkdir -p /var/lib/nvegpu; : > /var/lib/nvegpu/generic-navi48
-  grep -qxF '# SteamOS EGPU Buddy: eGPU kernel parameters' /etc/default/limine 2>/dev/null || return 0
-  log "RX 9070: taking the NVIDIA-tuned kernel parameters out (CachyOS's own parameters from the next restart)"
+  rm -f /var/lib/nvegpu/generic-navi48
+  /usr/local/sbin/egpu-kernel-cmdline --written >/dev/null 2>&1 && return 0
+  log "RX 9070: writing the kernel parameters back (active from the next restart)"
   systemd-run --no-block --collect --quiet --unit=egpu-navi48-cmdline /bin/sh -c \
-    '/usr/local/sbin/egpu-kernel-cmdline --remove 2>&1 | sed "s/^/$(date "+%F %T") navi48-cmdline: /" >> /var/log/egpu-generic.log' >/dev/null 2>&1 || true; }
+    '/usr/local/sbin/egpu-kernel-cmdline --apply 2>&1 | sed "s/^/$(date "+%F %T") navi48-cmdline: /" >> /var/log/egpu-generic.log' >/dev/null 2>&1 || true; }
 session_on_card(){ local p; for p in $(pgrep -x 'gamescope(-wl)?') $(pgrep -U "$U" -x kwin_wayland); do
     ls -l "/proc/$p/fd" 2>/dev/null | grep -qE "/dev/dri/$1\$" && return 0; done; return 1; }
 # The NVIDIA path's dock bring-up (egpu-hotplug-mount.sh / egpu-boot-enumerate.sh), minus everything NVIDIA: authorize a
