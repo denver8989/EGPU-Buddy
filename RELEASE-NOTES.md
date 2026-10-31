@@ -1,3 +1,8 @@
+0.7.208 — Desktop: no monitor blink after a screen-off on the ROG Ally / XG Mobile.
+
+**Desktop** (ROG Ally / XG Mobile only; every other machine unchanged)
+- After KDE turned the screen off and on, a DisplayPort monitor on the XG Mobile went black for a moment every few seconds: the screen watcher read the monitor's EDID over its cable every 5 s. With one external screen it now reads the connection state the kernel already has and only talks to the monitor when a screen is plugged in or removed. Two or more screens: unchanged. (GitHub issue #6, thanks akamel001.)
+
 0.7.207 — RX 9070 / 9070 XT behind a USB4 dock: the card's full memory window.
 
 **Game Mode** (AMD / Intel install, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)
