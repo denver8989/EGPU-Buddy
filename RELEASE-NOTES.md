@@ -1,3 +1,8 @@
+0.7.215 — Support report: which AMD card model it is.
+
+**Support report** (AMD / Intel install only; NVIDIA unchanged)
+- Shows the card's board maker id and VBIOS version, and its lowest allowed power limit. Linux names the RX 9070 XT, 9070 and 9070 GRE alike; these tell them apart.
+
 0.7.214 — RX 9070 / 9070 XT: no launch options needed.
 
 **Game Mode** (AMD / Intel install, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)

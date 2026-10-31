@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.214"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.215"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1543,6 +1543,12 @@ def _support_report():
                 al.append(f"power limit {w('power1_cap')} (default {w('power1_cap_default')}, highest allowed {w('power1_cap_max')})"
                           f" · now {w('power1_average') if os.path.exists(hw + '/power1_average') else w('power1_input')}"
                           f" · power level {_read(dv + '/power_dpm_force_performance_level').strip() or '?'}")
+                # which board this is: 1002:7550 is the RX 9070 XT, 9070 and 9070 GRE alike, so the model shows only in the
+                # board maker's subsystem id and the VBIOS (a 230 W limit read as "9070 XT" until this was asked, 0.7.214)
+                sub = [l.strip() for l in _sh(["lspci", "-vnns", eb], 5)[1].splitlines() if "Subsystem:" in l][:1]
+                al.append("board: " + (sub[0] if sub else "?") + f" · VBIOS {_read(dv + '/vbios_version').strip() or '?'}"
+                          + (f" · {_read(dv + '/product_name').strip()}" if _read(dv + '/product_name').strip() else "")
+                          + f" · lowest allowed power limit {w('power1_cap_min')}")
                 for f in ("pp_dpm_sclk", "pp_dpm_mclk", "pp_dpm_pcie"):
                     if os.path.exists(f"{dv}/{f}"):
                         al.append(f"{f}: " + " | ".join(l.strip() for l in _read(f"{dv}/{f}").splitlines() if l.strip()))
