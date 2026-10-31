@@ -779,7 +779,7 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
      [ "$(cat "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cat "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)" = 0x1002:0x7550 ]; then
     timeout 150 sudo -n /usr/local/sbin/egpu-generic rebar >/dev/null 2>&1 || true
     gen_card=$(ls "/sys/bus/pci/devices/$gen_bdf/drm" 2>/dev/null | grep -m1 '^card' || echo "$gen_card")
-    log "RX 9070 / 9070 XT: memory window $(lspci -vs "$gen_bdf" 2>/dev/null | sed -n 's/.*Region 0:.*\[size=\([^]]*\)\].*/\1/p' | head -1) ($gen_card)"
+    log "RX 9070 / 9070 XT: memory window $( { read -r a b _ && echo "$(( (b - a + 1) >> 20 )) MiB"; } < "/sys/bus/pci/devices/$gen_bdf/resource" 2>/dev/null || true) ($gen_card)"
   fi
   # the screen picked in the plugin goes first. "|| true": with no screen ever picked the file does not exist, and under
   # set -e the failed cat ended this script, so every Game Mode start on an AMD eGPU died here (black screen, restart loop;

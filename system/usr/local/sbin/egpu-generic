@@ -134,9 +134,11 @@ rebar_navi48(){ local b=$1 D=$SYSPCI/$1 st en sz vram nodes p a s empties="" par
   # the empty bridges beside the card's path, inside the dock only (never beside the host's root port)
   p=$(readlink -f "$D") || return 1
   while a=${p%/*}; [ -e "$a/vendor" ] && [ -e "${a%/*}/vendor" ]; do
-    for s in "${a%/*}"/0000:*; do
+    # PCI functions only: a port's own services (0000:64:01.0:pcie004, hot-plug) sit in its folder too and are not a
+    # device behind it (0.7.207 read every empty port as occupied and never ran; RX 9070 + TBGAA report, 0.7.209)
+    for s in "${a%/*}"/0000:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-7]; do
       [ "$s" = "$a" ] && continue; case "$(cat "$s/class" 2>/dev/null)" in 0x0604*) ;; *) continue ;; esac
-      ls -d "$s"/0000:* >/dev/null 2>&1 && continue          # something behind it: left alone
+      ls -d "$s"/0000:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-7] >/dev/null 2>&1 && continue   # a device behind it: left alone
       empties="$empties $s"; case " $parents " in *" ${a%/*} "*) ;; *) parents="$parents ${a%/*}" ;; esac
     done; p=$a; done
   [ -n "$empties" ] || { log "RX 9070: memory window $((sz>>20)) MiB, no empty dock port holding the space: left as is"; return 1; }

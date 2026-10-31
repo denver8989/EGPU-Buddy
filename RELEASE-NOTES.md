@@ -1,3 +1,8 @@
+0.7.210 — RX 9070 / 9070 XT memory window fix now actually runs.
+
+**Game Mode** (AMD / Intel install, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)
+- The full memory window fix from 0.7.207 never ran: it counted each empty dock port's own hot-plug service as a device behind the port, so every port looked in use and the card stayed at 256 MB. It now looks only at real devices. The Game Mode log shows the card's window size after the start.
+
 0.7.209 — Desktop: the one-screen monitor blink fix on every machine.
 
 **Desktop** (every machine, owner's request; was ROG Ally / XG Mobile only in 0.7.208)
