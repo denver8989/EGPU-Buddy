@@ -807,7 +807,10 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # timeout, GPU reset, VRAM lost, device off the bus; Legion Go 1, CachyOS, 0.7.203; the power tuning was already off),
   # and the same card is stable under all-ways-eGPU, which sets neither. It gets Proton's defaults (that card only).
   if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ "$NV_EGPU_GAMESCOPE_GENERIC_VK" = 1002:7550 ]; then
-    log "RX 9070 / 9070 XT: Proton's own buffer placement (no DXVK_CONFIG / VKD3D_CONFIG from EGPU Buddy)"
+    # set but empty, exactly what the launch option "VKD3D_CONFIG= DXVK_CONFIG= %command%" did, so no game needs it (the
+    # tester's RE Requiem froze the machine at launch once he removed it, 0.7.213); a value the user set is kept
+    export VKD3D_CONFIG="${VKD3D_CONFIG-}" DXVK_CONFIG="${DXVK_CONFIG-}"
+    log "RX 9070 / 9070 XT: Proton's own buffer placement (DXVK_CONFIG='$DXVK_CONFIG' VKD3D_CONFIG='$VKD3D_CONFIG', set for every game)"
   elif [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
     case "${DXVK_CONFIG:-}" in *cachedDynamicResources*) ;; *) export DXVK_CONFIG="${DXVK_CONFIG:+$DXVK_CONFIG; }d3d11.cachedDynamicResources = a" ;; esac
     case "${VKD3D_CONFIG:-}" in *upload_hvv*) ;; *) export VKD3D_CONFIG="${VKD3D_CONFIG:+$VKD3D_CONFIG,}no_upload_hvv" ;; esac

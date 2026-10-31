@@ -1,3 +1,8 @@
+0.7.214 — RX 9070 / 9070 XT: no launch options needed.
+
+**Game Mode** (AMD / Intel install, RX 9070 / 9070 XT only; every other card and NVIDIA unchanged)
+- Games start exactly as with the launch option `VKD3D_CONFIG= DXVK_CONFIG= %command%`, so no game needs it any more. A value set by the user is kept.
+
 0.7.213 — Support report: is the AMD eGPU using the power it may use?
 
 **Support report** (AMD / Intel install only; NVIDIA unchanged)
