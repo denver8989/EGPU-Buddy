@@ -110,16 +110,17 @@ and runs only on that install, so it cannot affect an NVIDIA setup.
 | Sleep | the eGPU could stay gone after waking (0.7.184), slow picture after waking (0.7.187), freeze when sleeping during a game (0.7.186): being confirmed |
 | Sleep on the desktop | being looked at |
 
-### Second AMD card: Legion Go 1 + RX 9070 XT, CachyOS (0.7.195-0.7.199)
+### Second AMD card: Legion Go 1 + RX 9070 XT, CachyOS (0.7.195-0.7.210)
 
 Tested on the device by **zergpoop** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), CachyOS (Deckify, kernel
 7.2.9-cachyos-deckify), AMD Radeon RX 9070 XT (Navi 48) in a USB4 dock (Micro Computer (HK) Tech. TBGAA, 2 x 20 Gb/s),
-Samsung TV over HDMI.
+Samsung TV over HDMI. Stable on the same machine under all-ways-eGPU.
 
 | Tested on the device | Result |
 |---|---|
 | Plug in, Game Mode on the eGPU screen | working |
-| A game on the eGPU (RE Requiem) | **crashed** after 5-30 min (GPU reset, pink / green screens): the AMD tuning switched the card to manual power management, which it does not support like the RX 6800 XT; 0.7.199 leaves such a card on its own power management, being confirmed |
+| A game on the eGPU (RE Requiem) | **crashing** (GPU hang and reset, pink / green screens, sometimes a full freeze). Steps so far: the AMD power tuning left off on this card (0.7.199); EGPU Buddy's DXVK / vkd3d buffer settings left off on this card (0.7.204: crash came later, 2 min instead of 8 s); the GPU's own crash dump kept for the report (0.7.205-0.7.206); with the Thunderbolt 5 cable from his DEG2 the game ran about 15 min before crashing |
+| Cause found in the crash dumps | the card got only a **256 MB** window into its 16 GB of memory: the dock's empty USB4 ports reserved the free address space, so the driver's resize to 16 GB failed and its copy engine hung moving memory through the small window. 0.7.207 added the fix (free the empty ports at Game Mode start, reload the card with its full window); it did not run until **0.7.210**, being confirmed |
 | all-ways-eGPU installed before | the installers now offer to remove it on every install path (0.7.199) |
 
 ### Third AMD card: Legion Go 1 + RX 6750 XT in a Thunderbolt 3 enclosure, CachyOS (0.7.198-0.7.203)

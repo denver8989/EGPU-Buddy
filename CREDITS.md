@@ -16,8 +16,9 @@ say where it came from.
   RX 6750 XT in a Thunderbolt 3 enclosure. That device's support report found the session restart loop on a dock that keeps
   disconnecting (0.7.202) and the Game Mode crash on that card being looked at.
 - **zergpoop** (Discord) — AMD eGPU tester: on-device testing of the AMD eGPU path on CachyOS: Legion Go 1 with an AMD RX 9070 XT in a
-  USB4 dock. That device's support report found the AMD tuning crashing RX 9000 cards under load (fixed in 0.7.199) and
-  led to every installer offering to remove all-ways-eGPU.
+  USB4 dock. That device's support reports found the AMD tuning crashing RX 9000 cards under load (fixed in 0.7.199),
+  led to every installer offering to remove all-ways-eGPU and to the AMD crash dump in the report, and found the card's
+  256 MB memory window behind the dock (fix in 0.7.210, being confirmed).
 - **akamel001** (GitHub) — bug reports with measured root causes and suggested fixes, from a ROG Xbox Ally X (RC73XA)
   with an ASUS XG Mobile (RTX 5070 Ti Laptop GPU) on SteamOS 3.9.5 beta:
   - [#3](https://github.com/denver8989/EGPU-Buddy/issues/3): two boot services bringing up the eGPU at once, about 45 s
