@@ -76,7 +76,10 @@ while :; do
     D=/sys/bus/pci/devices/$egpu; hw=$(ls -d "$D"/hwmon/hwmon* 2>/dev/null | head -1)
     sclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_sclk" 2>/dev/null); mclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_mclk" 2>/dev/null)
     pw=$(( $(cat "$hw/power1_average" 2>/dev/null || cat "$hw/power1_input" 2>/dev/null || echo 0) / 1000000 )); tp=$(( $(cat "$hw/temp1_input" 2>/dev/null || echo 0) / 1000 ))
-    line="$line gpu=$egpu util=$(cat "$D/gpu_busy_percent" 2>/dev/null || echo ?)/$(cat "$D/mem_busy_percent" 2>/dev/null || echo ?)% clk=${sclk:-?}/${mclk:-?} pw=${pw}W t=${tp}C perf=$(cat "$D/power_dpm_force_performance_level" 2>/dev/null || echo ?) link=$(sed 's/ PCIe//; s/ //g' "$D/current_link_speed" 2>/dev/null)x$(cat "$D/current_link_width" 2>/dev/null) load=$(cut -d' ' -f1 /proc/loadavg)"
+    # the card's limits next to the readings: is it held back by its power limit or its top core clock, or waiting on the
+    # link? (an RX 9070 XT at 100-170 W of ~300 W while 99 % busy; the report had no limit to compare with, 0.7.212)
+    cap=$(( $(cat "$hw/power1_cap" 2>/dev/null || echo 0) / 1000000 )); smax=$(sed -n 's/.*: *\([0-9]*\)Mhz.*/\1/p' "$D/pp_dpm_sclk" 2>/dev/null | sort -n | tail -1)
+    line="$line gpu=$egpu util=$(cat "$D/gpu_busy_percent" 2>/dev/null || echo ?)/$(cat "$D/mem_busy_percent" 2>/dev/null || echo ?)% clk=${sclk:-?}/${mclk:-?} pw=${pw}W cap=${cap}W sclkmax=${smax:-?}Mhz t=${tp}C perf=$(cat "$D/power_dpm_force_performance_level" 2>/dev/null || echo ?) link=$(sed 's/ PCIe//; s/ //g' "$D/current_link_speed" 2>/dev/null)x$(cat "$D/current_link_width" 2>/dev/null) load=$(cut -d' ' -f1 /proc/loadavg)"
     # While a game runs on the AMD eGPU: why the card waits. Its busiest thread (% of one CPU core over half a second: near
     # 100 = the game is limited by that thread, not by the GPU or the link) and Game Mode's frame limit (Steam's FPS limit;
     # 0 = off). A low, perfectly steady frame rate with the GPU mostly idle is one of these two or the USB4 link (Legion Go 1

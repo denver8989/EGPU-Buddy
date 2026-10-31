@@ -1,3 +1,9 @@
+0.7.213 — Support report: is the AMD eGPU using the power it may use?
+
+**Support report** (AMD / Intel install only; NVIDIA unchanged)
+- The flight recorder logs the card's power limit and its top core clock next to its power and clock readings.
+- The report shows the card's power limit (default and highest allowed), its clock and PCIe levels, and a summary of the gaming samples: the most power and the highest clock the card reached while it was 90 %+ busy, against its limits.
+
 0.7.212 — RX 9070 / 9070 XT: kernel parameters back.
 
 **Boot settings** (AMD / Intel install with an RX 9070 / 9070 XT; every other card, machine and NVIDIA unchanged)

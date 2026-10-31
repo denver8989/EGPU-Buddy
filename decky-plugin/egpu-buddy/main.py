@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.212"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.213"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1533,6 +1533,29 @@ def _support_report():
                 vis = [l for l in dl if "vram size" in l]
                 al += [f"last amdgpu crash dump ({len(dc)} kept, {len(dl)} lines): {os.path.basename(dc[-1])}"] + \
                       ["    " + l[:200] for l in head + vis + ["--- the hung work ---"] + key[:220]]
+            # Is the card using the power it may use? Its limits as amdgpu reports them now, and the peak of the flight
+            # recorder's samples while it was 90 %+ busy (RX 9070 XT owner: "it only does 100 W in games", 0.7.212)
+            eb = (_sh(["/usr/local/sbin/egpu-detect"], 5)[1].split() or [""])[0]
+            dv = f"/sys/bus/pci/devices/{eb}"
+            hw = (glob.glob(f"{dv}/hwmon/hwmon*") or [""])[0]
+            if eb and hw:
+                w = lambda f: (str(int(_read(f"{hw}/{f}").strip() or 0) // 1000000) + " W") if _read(f"{hw}/{f}").strip() else "?"
+                al.append(f"power limit {w('power1_cap')} (default {w('power1_cap_default')}, highest allowed {w('power1_cap_max')})"
+                          f" · now {w('power1_average') if os.path.exists(hw + '/power1_average') else w('power1_input')}"
+                          f" · power level {_read(dv + '/power_dpm_force_performance_level').strip() or '?'}")
+                for f in ("pp_dpm_sclk", "pp_dpm_mclk", "pp_dpm_pcie"):
+                    if os.path.exists(f"{dv}/{f}"):
+                        al.append(f"{f}: " + " | ".join(l.strip() for l in _read(f"{dv}/{f}").splitlines() if l.strip()))
+            busy = []
+            for l in [l for l in fl if " S " in l and " cap=" in l]:
+                m = re.search(r"util=(\d+)/\S* clk=(\d+)Mhz\S* pw=(\d+)W cap=(\d+)W sclkmax=(\d+)Mhz", l)
+                if m and int(m.group(1)) >= 90:
+                    busy.append(tuple(int(x) for x in m.groups()))
+            if busy:
+                pk = max(b[2] for b in busy); cap = busy[-1][3]; near = sum(1 for b in busy if b[3] and b[2] >= 0.9 * b[3])
+                al.append(f"while 90 %+ busy ({len(busy)} samples): power peak {pk} W of a {cap} W limit, average "
+                          f"{sum(b[2] for b in busy) // len(busy)} W, at 90 %+ of the limit in {near}; core clock peak "
+                          f"{max(b[1] for b in busy)} MHz of {busy[-1][4]} MHz")
             lines += ["", "## AMD graphics stack (AMD / Intel install)"] + (al or ["(nothing found)"])
         except Exception as ex:  # noqa: BLE001
             lines += ["", f"## AMD graphics stack: could not be read ({ex})"]
