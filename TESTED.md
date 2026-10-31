@@ -113,7 +113,7 @@ and runs only on that install, so it cannot affect an NVIDIA setup.
 ### Second AMD card: Legion Go 1 + RX 9070 XT, CachyOS (0.7.195-0.7.210)
 
 Tested on the device by **zergpoop** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), CachyOS (Deckify, kernel
-7.2.9-cachyos-deckify), AMD Radeon RX 9070 XT (Navi 48) in a USB4 dock (Micro Computer (HK) Tech. TBGAA, 2 x 20 Gb/s),
+7.2.9-cachyos-deckify), AMD Radeon RX 9070 XT (Navi 48) in a Minisforum DEG2 (Thunderbolt 5 dock; reports itself as Micro Computer (HK) Tech. TBGAA; runs at 2 x 20 Gb/s on the Legion Go 1's USB4 port),
 Samsung TV over HDMI. Stable on the same machine under all-ways-eGPU.
 
 | Tested on the device | Result |

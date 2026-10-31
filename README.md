@@ -73,7 +73,7 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 | | Legion Go 2 | Legion Go 2 (Ryzen Z2) | Legion Go 1 | ROG Xbox Ally X | Legion Go 1 (AMD eGPU) | Legion Go 1 (AMD eGPU) | Legion Go 1 (AMD eGPU) |
 |---|---|---|---|---|---|---|---|
 | OS | CachyOS (Deckify) | Bazzite 44 (handheld image, bazzite-deck) | SteamOS 3.8 | SteamOS 3.8 | SteamOS 3.9 | CachyOS (Deckify) | CachyOS (Deckify) |
-| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | AOOSTAR AG02, AMD RX 6800 XT | USB4 dock (TBGAA), AMD RX 9070 XT | Thunderbolt 3 enclosure (Intel JHL7440), AMD RX 6750 XT |
+| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | AOOSTAR AG02, AMD RX 6800 XT | Minisforum DEG2 (Thunderbolt 5 dock, on USB4), AMD RX 9070 XT | Thunderbolt 3 enclosure (Intel JHL7440), AMD RX 6750 XT |
 | Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) | MSI MP275 (HDMI) | Samsung TV (HDMI) | monitor (HDMI) |
 | Status | Tested | **Fully working**: every feature verified on the device (on-device testing: 1khanfusion) | Tested | Tested (on-device testing and development: SilverplayerX) | **Testing in progress** (on-device testing: RetroMann): plug-in, unplug and games work; sleep and performance fixes being confirmed ([TESTED.md](TESTED.md)) | **Testing in progress** (on-device testing: zergpoop): plug-in and Game Mode work; RE Requiem still crashes after 10 s to 15 min. Cause found: the card got only a 256 MB memory window behind the dock (fixed in 0.7.210, being confirmed) ([TESTED.md](TESTED.md)) | **Testing in progress** (on-device testing: Ivan C.nunes): desktop works; Game Mode on the eGPU being looked at ([TESTED.md](TESTED.md)) |
 
@@ -118,7 +118,7 @@ This builds on other people's work. Full details, with links and licenses: [CRED
 - **RetroMann** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path (Legion Go 1, AOOSTAR AG02, RX 6800 XT).
 - **Ivan C.nunes** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 6750 XT in a Thunderbolt 3 enclosure).
 - **akamel001** (GitHub): detailed bug reports with root causes and fixes from a ROG Xbox Ally X with the ASUS XG Mobile: the 45-second boot race ([#3](https://github.com/denver8989/EGPU-Buddy/issues/3)), the desktop app's update and version display ([#4](https://github.com/denver8989/EGPU-Buddy/issues/4), [#5](https://github.com/denver8989/EGPU-Buddy/issues/5)) and the monitor blinking after a screen-off ([#6](https://github.com/denver8989/EGPU-Buddy/issues/6)).
-- **zergpoop** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 9070 XT in a USB4 dock).
+- **zergpoop** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 9070 XT in a Minisforum DEG2).
 - **seerge ([G-Helper](https://github.com/seerge/g-helper)), RomanYazvinsky** and
   **[Handheld Daemon](https://github.com/hhd-dev/hhd):** the XG Mobile's USB control protocol (fan, lights).
 - **matt-schwartz:** found the root cause of the NVIDIA Game Mode corruption.
