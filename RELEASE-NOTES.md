@@ -1,3 +1,8 @@
+0.7.209 — Desktop: the one-screen monitor blink fix on every machine.
+
+**Desktop** (every machine, owner's request; was ROG Ally / XG Mobile only in 0.7.208)
+- With one external screen, the screen watcher no longer reads the monitor over its cable every 5 s; it reads it only when a screen is plugged in, swapped or removed. This stops the monitor going black for a moment every few seconds after KDE turns the screen off and on. Waking a newly plugged-in screen and switching it to the eGPU still works. Two or more screens: unchanged.
+
 0.7.208 — Desktop: no monitor blink after a screen-off on the ROG Ally / XG Mobile.
 
 **Desktop** (ROG Ally / XG Mobile only; every other machine unchanged)

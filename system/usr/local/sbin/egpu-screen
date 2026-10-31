@@ -391,33 +391,22 @@ def _connected():
     return tuple(out)
 
 
-def _ally_xgm():
-    """ROG Ally / ASUS XG Mobile (the CLAUDE.md gate)."""
-    try:
-        dev = subprocess.run(["/usr/local/sbin/egpu-detect", "--device"], capture_output=True, text=True,
-                             timeout=10).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        dev = ""
-    return dev == "rog-ally" or os.path.exists("/var/lib/nvegpu/xg-mobile-seen")
-
-
 def watch():
     """Desktop (KWin) only - Game Mode picks its screens at attach (nv-egpu-buddy-mount)."""
     names, last, ours = set(), {}, set()
     if subprocess.run(["which", "kscreen-doctor"], capture_output=True).returncode:
         print("no kscreen-doctor (not KDE Plasma): desktop screen rule off", flush=True); return
-    # ROG Ally / XG Mobile only: with one external screen, no I2C in the 5 s loop. After a desktop screen-off / wake, every
-    # EDID read on the monitor's bus blanked a Dell U3415W on DisplayPort for a moment (XG Mobile RTX 5070 Ti Laptop,
+    # With one external screen, no I2C in the 5 s loop (every machine; first seen on the XG Mobile). After a desktop
+    # screen-off / wake, every EDID read on the monitor's bus blanked a Dell U3415W on DisplayPort for a moment (XG Mobile RTX 5070 Ti Laptop,
     # NVIDIA 610.57.04 open, SteamOS 3.9.5; GitHub issue #6 by akamel001). The kernel's connector status and EDID are read
     # each pass instead, and the I2C scan runs only when that set changes. Two or more screens: unchanged.
-    ax, seen = _ally_xgm(), None
+    seen = None
     while True:
         if os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") != 0:
-            if ax:
-                cur = _connected()
-                if cur == seen and len(cur) <= 1:
-                    time.sleep(5); continue
-                seen = cur
+            cur = _connected()
+            if cur == seen and len(cur) <= 1:
+                time.sleep(5); continue
+            seen = cur
             found = list(screens())
             now = {f[0] for f in found}
             if now - names:
