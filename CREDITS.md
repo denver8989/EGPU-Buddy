@@ -18,6 +18,16 @@ say where it came from.
 - **zergpoop** (Discord) — AMD eGPU tester: on-device testing of the AMD eGPU path on CachyOS: Legion Go 1 with an AMD RX 9070 XT in a
   USB4 dock. That device's support report found the AMD tuning crashing RX 9000 cards under load (fixed in 0.7.199) and
   led to every installer offering to remove all-ways-eGPU.
+- **akamel001** (GitHub) — bug reports with measured root causes and suggested fixes, from a ROG Xbox Ally X (RC73XA)
+  with an ASUS XG Mobile (RTX 5070 Ti Laptop GPU) on SteamOS 3.9.5 beta:
+  - [#3](https://github.com/denver8989/EGPU-Buddy/issues/3): two boot services bringing up the eGPU at once, about 45 s
+    added to every eGPU boot (userspace boot 58.5 s → 14.5 s), and the helper aiming at a non-GPU device (fixed in 0.7.198).
+  - [#4](https://github.com/denver8989/EGPU-Buddy/issues/4): the desktop app's Update aborting on untested hardware and
+    reporting staged updates as failed (fixed in 0.7.201 / 0.7.202).
+  - [#5](https://github.com/denver8989/EGPU-Buddy/issues/5): the desktop app showing the installed version and "Up to date"
+    (fixed in 0.7.202).
+  - [#6](https://github.com/denver8989/EGPU-Buddy/issues/6): the screen watcher's EDID reads making a DisplayPort monitor
+    blink after a screen-off (fixed in 0.7.208, every machine in 0.7.209).
 
 ## ASUS XG Mobile
 

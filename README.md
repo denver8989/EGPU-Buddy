@@ -117,6 +117,7 @@ This builds on other people's work. Full details, with links and licenses: [CRED
 - **1khanfusion** (Discord): on-device testing of Bazzite on the Legion Go 2.
 - **RetroMann** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path (Legion Go 1, AOOSTAR AG02, RX 6800 XT).
 - **Ivan C.nunes** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 6750 XT in a Thunderbolt 3 enclosure).
+- **akamel001** (GitHub): detailed bug reports with root causes and fixes from a ROG Xbox Ally X with the ASUS XG Mobile: the 45-second boot race ([#3](https://github.com/denver8989/EGPU-Buddy/issues/3)), the desktop app's update and version display ([#4](https://github.com/denver8989/EGPU-Buddy/issues/4), [#5](https://github.com/denver8989/EGPU-Buddy/issues/5)) and the monitor blinking after a screen-off ([#6](https://github.com/denver8989/EGPU-Buddy/issues/6)).
 - **zergpoop** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 9070 XT in a USB4 dock).
 - **seerge ([G-Helper](https://github.com/seerge/g-helper)), RomanYazvinsky** and
   **[Handheld Daemon](https://github.com/hhd-dev/hhd):** the XG Mobile's USB control protocol (fan, lights).
