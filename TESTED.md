@@ -110,17 +110,19 @@ and runs only on that install, so it cannot affect an NVIDIA setup.
 | Sleep | the eGPU could stay gone after waking (0.7.184), slow picture after waking (0.7.187), freeze when sleeping during a game (0.7.186): being confirmed |
 | Sleep on the desktop | being looked at |
 
-### Second AMD card: Legion Go 1 + RX 9070 XT, CachyOS (0.7.195-0.7.210)
+### Second AMD card: Legion Go 1 + RX 9070 XT, CachyOS (0.7.195-0.7.212)
 
 Tested on the device by **zergpoop** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), CachyOS (Deckify, kernel
-7.2.9-cachyos-deckify), AMD Radeon RX 9070 XT (Navi 48) in a Minisforum DEG2 (Thunderbolt 5 dock; reports itself as Micro Computer (HK) Tech. TBGAA; runs at 2 x 20 Gb/s on the Legion Go 1's USB4 port),
-Samsung TV over HDMI. Stable on the same machine under all-ways-eGPU.
+7.2.9-cachyos-deckify, Mesa 26.2.5), AMD Radeon RX 9070 XT (Navi 48) in a Minisforum DEG2 (Thunderbolt 5 dock; reports
+itself as Micro Computer (HK) Tech. TBGAA; runs at 2 x 20 Gb/s on the Legion Go 1's USB4 port), powered by a Corsair SF750
+with each of the card's two 8-pin connectors on its own cable. Samsung TV over HDMI.
 
 | Tested on the device | Result |
 |---|---|
 | Plug in, Game Mode on the eGPU screen | working |
-| A game on the eGPU (RE Requiem) | **crashing** (GPU hang and reset, pink / green screens, sometimes a full freeze). Steps so far: the AMD power tuning left off on this card (0.7.199); EGPU Buddy's DXVK / vkd3d buffer settings left off on this card (0.7.204: crash came later, 2 min instead of 8 s); the GPU's own crash dump kept for the report (0.7.205-0.7.206); with the Thunderbolt 5 cable from his DEG2 the game ran about 15 min before crashing |
-| Cause found in the crash dumps | the card got only a **256 MB** window into its 16 GB of memory: the dock's empty USB4 ports reserved the free address space, so the driver's resize to 16 GB failed and its copy engine hung moving memory through the small window. 0.7.207 added the fix (free the empty ports at Game Mode start, reload the card with its full window); it did not run until **0.7.210**, being confirmed |
+| Full memory window (16 GB) | **working from 0.7.210**: the dock's empty USB4 ports had reserved the free address space and left the card at 256 MB; they are now freed at the Game Mode start and the card is reloaded with its full window |
+| A game on the eGPU (RE Requiem) | **crashes** after a few minutes to about 30 min: GPU hang (graphics or copy engine) and reset, sometimes a full freeze. Ruled out on the device: the AMD power tuning (off on this card since 0.7.199), EGPU Buddy's DXVK / vkd3d settings (off since 0.7.204), the 256 MB memory window (fixed, crashes stayed), EGPU Buddy's kernel parameters (removed in 0.7.211, crashes stayed, back in 0.7.212), the cable (Thunderbolt 5 cable from the DEG2) and the power supply (Corsair SF750, separate 8-pin cables). The card runs 99-100 % busy at about 2.1 GHz and 50 °C before the hang |
+| Cause | matches an open AMD driver problem with RX 9000 cards (RX 9070 XT, RX 9060 XT, Radeon AI PRO R9700) over Thunderbolt / USB4 on Linux, reported with other docks and computers ([Bazzite #4164](https://github.com/ublue-os/bazzite/issues/4164)); needs a fix in amdgpu |
 | all-ways-eGPU installed before | the installers now offer to remove it on every install path (0.7.199) |
 
 ### Third AMD card: Legion Go 1 + RX 6750 XT in a Thunderbolt 3 enclosure, CachyOS (0.7.198-0.7.203)
