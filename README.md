@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="SteamOS EGPU Buddy — connect, switch, optimise, play" width="100%">
+  <img src="docs/assets/banner.png" alt="EGPU Buddy — connect, switch, optimise, play" width="100%">
 </p>
 
 <p align="center">
   <a href="https://discord.gg/r3dhqAqnW"><img src="https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord"></a>
 </p>
 
-# SteamOS EGPU Buddy
+# EGPU Buddy
 
 Use an eGPU with a Linux gaming handheld in **Game Mode**, the way it works on Windows: plug it in and Game Mode
 moves to your monitor or TV; unplug it, safely or by pulling the cable, and it goes back to the handheld screen;
@@ -42,31 +42,40 @@ are supported in beta (an RX 6800 XT is being tested now).
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/assets/screenshot-main.png" alt="EGPU Buddy main page: Game Mode on the handheld screen with games on the eGPU, switch to XR glasses, the TV or a monitor, Safe Detach" width="260" valign="top">
-  &nbsp;
-  <img src="docs/assets/screenshot-details.png" alt="EGPU Buddy details: GPU, driver, PCIe and USB4 link, screens, telemetry, support report" width="260" valign="top">
-  &nbsp;
-  <img src="docs/assets/screenshot-setup.png" alt="EGPU Buddy setup: system integration, beta driver, game screen, games, updates, extras" width="260" valign="top">
-</p>
-<p align="center"><em>Main page (switch between the handheld, XR glasses, TV and monitor; Safe Detach), details (GPU, link, screens, telemetry) and setup (game screen, best resolution, updates, extras).</em></p>
-
-<p align="center">
-  <img src="docs/assets/screenshot-xg-mobile.png" alt="EGPU Buddy plugin in Game Mode with an ASUS XG Mobile: details with the 115 W cap and the fan mode, then the XG Mobile section with power target, fan mode, lights and clock offsets" width="260" valign="top">
-  &nbsp;
-  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="560" valign="top">
-</p>
-<p align="center"><em>ASUS XG Mobile (RTX 5070 Ti Laptop GPU) on a ROG Xbox Ally X, in the Game Mode plugin (left) and the desktop app (right):
-power and its 115 W cap, a power target, the XG Mobile's fan mode and custom curve, its lights and clock offsets.
-Readings from SilverplayerX's device.</em></p>
+### The NVIDIA Game Mode fix
 
 <p align="center">
   <img src="docs/assets/nvidia-before-after.png" alt="Before: Steam Game Mode interface corrupted on an NVIDIA GPU. After: clean Game Mode." width="100%">
 </p>
-<p align="center"><em>The NVIDIA Game Mode bug EGPU Buddy fixes. Before: photo by bernhard.berger,
+<p align="center"><sub>Before: photo by bernhard.berger,
 <a href="https://forums.developer.nvidia.com/t/display-modes-above-2560x1440p-120hz-with-hdr-enabled-cause-flickering-corruption-within-gamescope-session/295314">NVIDIA developer forum</a>.
 After: image by Valve, <a href="https://www.steamdeck.com/en/software">steamdeck.com</a>.
-Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause found by matt-schwartz (see <a href="CREDITS.md">CREDITS.md</a>).</em></p>
+Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause found by matt-schwartz (see <a href="CREDITS.md">CREDITS.md</a>).</sub></p>
+
+### The Decky plugin in Game Mode
+
+<table align="center">
+  <tr>
+    <th width="25%" valign="top">Main page<br><sub>Switch Game Mode between the handheld, XR glasses, a TV and a monitor; Safe Detach.</sub></th>
+    <th width="25%" valign="top">Details<br><sub>GPU, driver, PCIe and USB4 link, screens, live readings, support report.</sub></th>
+    <th width="25%" valign="top">Setup<br><sub>System integration, beta driver, game screen, best resolution, updates, extras.</sub></th>
+    <th width="25%" valign="top">ASUS XG Mobile<br><sub>RTX 5070 Ti Laptop GPU on a ROG Xbox Ally X: power target, fan mode, lights, clock offsets.</sub></th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshot-main.png" alt="EGPU Buddy main page: Game Mode on the handheld screen with games on the eGPU, switch to XR glasses, the TV or a monitor, Safe Detach" width="200"></td>
+    <td valign="top"><img src="docs/assets/screenshot-details.png" alt="EGPU Buddy details: GPU, driver, PCIe and USB4 link, screens, telemetry, support report" width="200"></td>
+    <td valign="top"><img src="docs/assets/screenshot-setup.png" alt="EGPU Buddy setup: system integration, beta driver, game screen, games, updates, extras" width="200"></td>
+    <td valign="top"><img src="docs/assets/screenshot-xg-mobile.png" alt="EGPU Buddy plugin in Game Mode with an ASUS XG Mobile: details with the 115 W cap and the fan mode, then the XG Mobile section with power target, fan mode, lights and clock offsets" width="200"></td>
+  </tr>
+</table>
+
+### The desktop app
+
+<p align="center">
+  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="700">
+</p>
+<p align="center"><sub>The same controls on the desktop, here with an ASUS XG Mobile: GPU readings, power target and its 115 W cap,
+fan modes and custom curve, lights and clock offsets. Readings from SilverplayerX's device.</sub></p>
 
 ## Tested hardware
 
