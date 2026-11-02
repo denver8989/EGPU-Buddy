@@ -1,3 +1,8 @@
+0.7.218 — AMD / Intel install: no NVIDIA driver build at boot.
+
+**Boot** (AMD / Intel install only; NVIDIA unchanged)
+- The boot self-repair tried to rebuild the NVIDIA driver on AMD / Intel installs too (CachyOS and other Arch-based systems). It ran before the network was up, so it only failed ("Could not resolve host" for every package mirror in the report), but with the network up it would have installed NVIDIA build tools for nothing. It now runs on the NVIDIA install only.
+
 0.7.217 — The desktop follows the screen you picked, and the desktop app can pick it too.
 
 **Desktop** (NVIDIA eGPU on SteamOS and CachyOS; Bazzite, ROG Ally / XG Mobile and AMD / Intel unchanged)

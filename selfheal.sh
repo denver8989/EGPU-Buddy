@@ -64,7 +64,9 @@ if [ -n "$ro" ] && [ -x "$SX" ] && [ -d /home/.egpu-buddy ]; then
   fi
 fi
 # patched driver package: restore from cache (done above) or rebuild from the payload's PKGBUILD (source cached)
-if [ -z "$ro" ] && command -v pacman >/dev/null 2>&1 && ! pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1 && [ -x "$DRVDIR/install-patched-nvidia.sh" ] && [ -f "/usr/lib/modules/$(uname -r)/build/Makefile" ]; then
+# Never on the AMD / Intel install: it has no NVIDIA driver to restore, and every boot tried to build one - its download of
+# dkms / lld ran before the network was up and filled this log with "Could not resolve host" (Legion Go 1 + RX 9070, CachyOS)
+if [ -z "$ro" ] && [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && command -v pacman >/dev/null 2>&1 && ! pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1 && [ -x "$DRVDIR/install-patched-nvidia.sh" ] && [ -f "/usr/lib/modules/$(uname -r)/build/Makefile" ]; then
   log "patched driver package missing: rebuilding from the payload"; [ -n "$ro" ] && $ro disable >/dev/null 2>&1
   EGPU_TARGET_USER=$USER_NAME bash "$DRVDIR/install-patched-nvidia.sh" >>$SLOG 2>&1 && log "driver package rebuilt" || log "driver rebuild failed (see $SLOG)"
   [ -n "$ro" ] && $ro enable >/dev/null 2>&1
