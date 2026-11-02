@@ -61,6 +61,12 @@ log "=== TEST-MODE autostart start (session=$XDG_SESSION_DESKTOP) ==="
 # that always exists — so this guard used to PASS on a machine with no eGPU at all. On a handheld with ordinary USB-C
 # display glasses (which appear as a DisplayPort output on the built-in GPU) this script must do absolutely nothing.
 [ -n "$GPU" ] && [ -e "$GDEV/drm" ] || { log "eGPU absent — no-op"; exit 0; }
+# the handheld's screen picked (Game Mode plugin / desktop app): the desktop started on the handheld's GPU only (the plasma env
+# script), so there is no eGPU monitor to bring up and the panel must stay on
+if [ -s "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-desktop-handheld" ]; then
+  log "screen picked: $(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-desktop-handheld") (handheld) - desktop stays on the handheld screen, games on the eGPU"
+  exit 0
+fi
 w=$(cat "$GDEV/current_link_width" 2>/dev/null)
 [ "$w" = "63" ] && { log "GPU link width=63 (zombie) — refusing to poke"; exit 0; }
 cfg0=$(xxd -l4 "$GDEV/config" 2>/dev/null | awk '{print $2$3}')
@@ -94,6 +100,9 @@ for kind in DP HDMI; do
   done
 done
 EXTS=$(echo $EXTS | xargs)
+# the eGPU screen picked in the Game Mode plugin / desktop app goes first (the primary)
+_pick=$(cat /var/lib/nvegpu/game-screen 2>/dev/null)
+case " $EXTS " in *" $_pick "*) [ -n "$_pick" ] && EXTS=$(echo "$_pick $(printf '%s\n' $EXTS | grep -vx "$_pick")" | xargs) ;; esac
 [ -n "$EXTS" ] || { log "no usable eGPU external (connected + EDID) — no-op"; exit 0; }
 TV=${EXTS%% *}                       # primary = first (DP preferred); kept for existing verify/log lines
 log "usable eGPU externals: $EXTS (first = primary)"

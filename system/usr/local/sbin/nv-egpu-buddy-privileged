@@ -514,6 +514,16 @@ case "$action" in
       die "NVIDIA DRM card exists; refusing unbind" 2
     echo "$GPU" > /sys/bus/pci/drivers/nvidia/unbind
     ;;
+  set-game-screen)
+    # The screen picked in the desktop app (the Game Mode plugin writes the same file as root itself): Game Mode and the
+    # desktop both start there. Only a connector this machine has right now (a card's connector in sysfs, connected).
+    [ "$#" -eq 1 ] || die "set-game-screen takes one connector"
+    case "$1" in *[!A-Za-z0-9-]*|""|-*) die "set-game-screen: not a connector name" 2 ;; esac
+    _gs_ok=0; for _gs in /sys/class/drm/card[0-9]*-"$1"/status; do [ "$(cat "$_gs" 2>/dev/null)" = connected ] && _gs_ok=1; done
+    [ "$_gs_ok" = 1 ] || die "set-game-screen: $1 is not a connected screen" 2
+    mkdir -p /var/lib/nvegpu; printf '%s\n' "$1" > /var/lib/nvegpu/game-screen; chmod 644 /var/lib/nvegpu/game-screen
+    printf 'screen: %s\n' "$1"
+    ;;
   session-fallback)
     # Point the login manager's autologin at the session type that is actually running, so that if
     # that session dies the machine comes back to the same place. This is the whole reason a cable

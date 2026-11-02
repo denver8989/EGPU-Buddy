@@ -144,6 +144,17 @@ ApplicationWindow {
         onAccepted: win.act("safe-detach")
     }
 
+    Dialog {
+        id: confirmScreen
+        property var pick: ({})
+        title: "Move the desktop"; modal: true; anchors.centerIn: parent; width: Math.min(win.width - 80, 520)
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        Label { width: parent.width; wrapMode: Text.WordWrap
+            text: "The desktop restarts on " + (confirmScreen.pick.label || "") + (confirmScreen.pick.kind === "handheld" ? ", running on the handheld's GPU with games on the eGPU" : ", running on the eGPU alone")
+                  + ". Open apps are closed: save your work first. Continue?" }
+        onAccepted: win.act("set-screen", { connector: confirmScreen.pick.name })
+    }
+
     // XG Mobile custom fan curve: 8 points, checked by egpu-xgm (temperatures rising, duty not falling, the last >= 60 %)
     Dialog {
         id: curveDlg
@@ -248,6 +259,17 @@ ApplicationWindow {
                 Label { text: "Displays  <b>" + ((win.s.displays || []).map(function(d) { return d.name + (d.enabled ? "" : " (off)") }).join(", ") || "none") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "Handheld panel  <b>" + (win.s.panel_enabled == null ? "—" : win.s.panel_enabled ? "on" : "off") + "</b>"; textFormat: Text.StyledText }
             }
+            // NVIDIA install: the screen for the desktop and Game Mode, as in the plugin ("Show Game Mode on ..."). Moving between
+            // the handheld's GPU and the eGPU restarts the desktop on that GPU alone (no crosstalk, no copies between GPUs)
+            Label { text: "Screen"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: (win.s.screens || []).length > 0 }
+            Flow { Layout.fillWidth: true; spacing: 8; visible: (win.s.screens || []).length > 0
+                Repeater { model: win.s.screens || []
+                    Button { text: modelData.label + (win.s.screen_pick === modelData.name ? "  ✓" : ""); highlighted: win.s.screen_pick === modelData.name
+                             onClicked: { var moves = !win.s.game_mode && win.s.present && win.s.driver_loaded && modelData.kind !== win.s.desktop_on
+                                          if (moves) { confirmScreen.pick = modelData; confirmScreen.open() } else win.act("set-screen", { connector: modelData.name }) } } }
+            }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: (win.s.screens || []).length > 0
+                text: "The desktop and Game Mode both start on the screen picked here (or in the plugin). On the handheld's screen the games still render on the eGPU." }
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11 }
             // ASUS XG Mobile: power target (W), fan mode and lights
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && win.xg && !win.plOk

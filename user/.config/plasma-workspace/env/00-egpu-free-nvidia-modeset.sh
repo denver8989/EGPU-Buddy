@@ -227,6 +227,30 @@ _egpu_stage_desktop_kwin() {
     fi
     return 0
   fi
+  # The handheld's own screen (or a screen on its USB-C port, e.g. XR glasses) picked as THE screen, in the Game Mode plugin
+  # or the desktop app (/var/lib/nvegpu/game-screen): the desktop starts there too, as Game Mode does. KWin on the handheld's
+  # GPU only (no second GPU in the compositor = no crosstalk), games through Vulkan on the eGPU, NVAPI on. Before this the
+  # desktop always went to the eGPU monitor, whatever was picked (Legion Go 2 + RTX 5060 Ti, CachyOS, 0.7.216).
+  local _hh_pref _hh_card _hh_pcard
+  _hh_pref=$(cat /var/lib/nvegpu/game-screen 2>/dev/null)
+  _hh_pcard=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"${EGPU_PANEL_CONNECTOR:-eDP-1}" 2>/dev/null | head -1)"); _hh_pcard=${_hh_pcard%%-*}
+  igpu_pci=${IGPU_PCI:-$(_egpu_panel_pci || _egpu_detect_amd_gpu_bdf)}
+  igpu_card=$(_egpu_card_for_pci "$igpu_pci" || true)
+  # (the NVIDIA reference path only: Bazzite and the ROG Ally / XG Mobile route their desktops their own way, unchanged)
+  if [ "$_egpu_bz" = 0 ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ ! -e /var/lib/nvegpu/xg-mobile-seen ] &&
+     [ -n "$_hh_pref" ] && [ -n "$igpu_card" ] && [ -n "$_hh_pcard" ] &&
+     { case "$_hh_pref" in eDP-*) true ;; *) [ "$(cat "/sys/class/drm/$_hh_pcard-$_hh_pref/status" 2>/dev/null)" = connected ] ;; esac; }; then
+    export KWIN_DRM_DEVICES="$igpu_card"
+    export KWIN_RENDER_NODES="$(_egpu_render_for_card "$igpu_card")"
+    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+    export __GLX_VENDOR_LIBRARY_NAME=mesa
+    export VK_DRIVER_FILES="$_egpu_nv_icd" VK_ICD_FILENAMES="$_egpu_nv_icd"
+    export PROTON_ENABLE_NVAPI=1 DXVK_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0
+    [ -n "${XDG_RUNTIME_DIR:-}" ] && printf '%s\n' "$_hh_pref" > "$XDG_RUNTIME_DIR/egpu-desktop-handheld" 2>/dev/null
+    _egpu_emlog "Plasma pre-compositor: screen picked = $_hh_pref (handheld) -> KWin on the handheld GPU only ($igpu_card), games on the eGPU (Vulkan $_egpu_nv_icd)"
+    return 0
+  fi
+  [ -n "${XDG_RUNTIME_DIR:-}" ] && rm -f "$XDG_RUNTIME_DIR/egpu-desktop-handheld"
   if [ -z "$outputs" ]; then
     _egpu_emlog "Plasma pre-compositor: NVIDIA card present but no connected external output; leaving KWin default"
     return 0

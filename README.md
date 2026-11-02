@@ -27,7 +27,9 @@ are supported in beta (an RX 6800 XT is being tested now).
 - **Safe Detach:** one button moves Game Mode back to the handheld screen; then unplug.
 - **Cable pulls survive:** the handheld recovers to its own screen within seconds, and plugging in again re-attaches.
 - **Multiple displays:** switch Game Mode between connected screens from the plugin. A new screen brings up a prompt,
-  and each screen shows its name, port, resolution and refresh rate.
+  and each screen shows its name, port, resolution and refresh rate. The desktop follows the same choice, and the
+  desktop app has the same screen picker (SteamOS and CachyOS with an NVIDIA eGPU): on the handheld's screen the
+  desktop runs on the handheld's GPU alone and games still render on the eGPU.
 - **Best picture by default:** each screen's native resolution at its highest refresh rate.
 - **Screens wake and switch input** where they support it (DDC/CI or HDMI-CEC).
 - **GPU details and controls:** temperature, power, clocks, VRAM, power limit and clock offset.

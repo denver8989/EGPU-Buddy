@@ -887,6 +887,31 @@ fi
 # Only a running desktop session may pin the autologin to the desktop (the NVIDIA-only re-login must come back to
 # it). At boot, before any session exists, the boot policy (egpu-conditional-session: Game Mode) decides. 2026-09-16.
 pgrep -U 1000 -x kwin_wayland >/dev/null 2>&1 && set_autologin_plasma
+# The handheld's screen picked (Game Mode plugin / desktop app): the desktop stays on the handheld's GPU (the plasma env script
+# routes it there) and only needs a re-login when its games are not on the eGPU yet (a session started without the eGPU has
+# Vulkan pinned to the handheld GPU). Never the NVIDIA-only re-login and never the monitor takeover.
+desk_handheld(){ local p c; p=$(cat /var/lib/nvegpu/game-screen 2>/dev/null)
+  # the NVIDIA reference path only (as the plasma env script): Bazzite and the ROG Ally / XG Mobile keep their own desktop routing
+  grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && return 1
+  { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && return 1
+  case "$p" in eDP-*) return 0 ;; "") return 1 ;; esac
+  c=$(basename "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)"); c=${c%%-*}
+  [ -n "$c" ] && [ "$(cat "/sys/class/drm/$c-$p/status" 2>/dev/null)" = connected ]; }
+if [ -n "$kw" ] && desk_handheld; then
+  if tr '\0' '\n' </proc/"$kw"/environ 2>/dev/null | grep -q '^VK_DRIVER_FILES=.*nvidia'; then
+    log "desktop on the picked handheld screen ($(cat /var/lib/nvegpu/game-screen)) with games on the eGPU already - leave as-is"
+  elif gpu_healthy; then
+    log "desktop on the picked handheld screen ($(cat /var/lib/nvegpu/game-screen)): re-login so its games render on the eGPU (KWin stays on the handheld GPU)"
+    runenv="XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+    runuser -u deck -- env $runenv qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null \
+      || runuser -u deck -- env $runenv qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null
+    force_logout_if_blocked "$runenv" &
+    # the pin only had to carry this re-login: KWin on the handheld GPU does not die with the cable, nothing to fall back from
+    ( for _t in $(seq 1 45); do sleep 2; _k=$(pgrep -U 1000 -x kwin_wayland | head -1); [ -n "$_k" ] && [ "$_k" != "$kw" ] && break; done
+      /usr/local/sbin/egpu-dm-session unpin >/dev/null 2>&1; log "handheld-screen desktop back (kwin ${_k:-?}); login pin released" ) &
+  fi
+  wait; exit 0
+fi
 if [ "$crosstalk" = 1 ]; then
   log "eGPU display up + iGPU desktop (crosstalk) -> re-login for NVIDIA-only"; sleep 2; gpu_healthy && relogin_session
 else

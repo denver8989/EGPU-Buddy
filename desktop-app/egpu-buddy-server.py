@@ -56,6 +56,16 @@ def xgm_state():
     s = jread("/var/lib/nvegpu/xgm.json") or {}; live = jread("/run/nvegpu/xgm-powercap.json") or {}
     return dict(s, fan=s.get("fan", "auto"), live=live if time.time() - (live.get("t") or 0) < 5 else {})
 
+# the screen picker is for the NVIDIA reference path (SteamOS / CachyOS); Bazzite and the ROG Ally / XG Mobile route their
+# desktops their own way and do not get it (looked up once: os-release and the device do not change while the app runs)
+_REF = [None]
+def ref_path():
+    if _REF[0] is None:
+        bz = "bazzite" in read("/etc/os-release").lower()
+        ally = sh(["/usr/local/sbin/egpu-detect", "--device"])[1] == "rog-ally" or os.path.exists("/var/lib/nvegpu/xg-mobile-seen")
+        _REF[0] = not bz and not ally
+    return _REF[0]
+
 _DOCK = [None, ""]   # [bdf it was looked up for, label]: egpu-detect is a script, not run on every poll
 
 def status():
@@ -88,7 +98,38 @@ def status():
             "gpu": gpu, "displays": displays, "panel_enabled": (panel[0] == "enabled") if panel else None,
             "detach": jread(f"{RUN}/safe-detach-status.json"),
             "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0],
-            **update_state(read("/etc/nv-egpu-buddy/version"))}
+            **update_state(read("/etc/nv-egpu-buddy/version")), **(screens(bdf if driver else "") if vendor in ("", "nvidia") and ref_path() else {})}
+
+def edid_name(conn_dir):
+    try: e = open(conn_dir + "/edid", "rb").read()[:128]
+    except OSError: return ""
+    i = e.find(b"\0\0\0\xfc\0")
+    return e[i + 5:i + 18].split(b"\n")[0].decode(errors="ignore").strip() if i >= 0 else ""
+
+def screens(bdf):
+    """NVIDIA install: the screens the desktop (and Game Mode) can be put on, as in the plugin: the handheld's own screen, a
+    screen on the handheld's USB-C port (XR glasses), the eGPU's monitors. "desktop_on": where KWin runs now."""
+    import glob
+    out = []; ecard = ""
+    pnl = (glob.glob("/sys/class/drm/card*-eDP-*") or [""])[0]; pcard = os.path.basename(pnl).split("-")[0] if pnl else ""
+    if bdf:
+        ecard = next((c for c in os.listdir(f"/sys/bus/pci/devices/{bdf}/drm") if re.match(r"card\d+$", c)), "") if os.path.isdir(f"/sys/bus/pci/devices/{bdf}/drm") else ""
+    for d in sorted(glob.glob("/sys/class/drm/card*-*")):
+        card, conn = os.path.basename(d).split("-", 1)
+        if read(d + "/status") != "connected" or conn.startswith("Writeback"): continue
+        if card == pcard:
+            out.append({"name": conn, "kind": "handheld", "label": "Handheld screen" if conn.startswith("eDP") else (edid_name(d) or conn) + " (USB-C)"})
+        elif card == ecard and not conn.startswith("eDP"):
+            out.append({"name": conn, "kind": "egpu", "label": edid_name(d) or conn})
+    out.sort(key=lambda x: x["kind"] != "handheld")
+    on = ""
+    _, k, _ = sh(["pgrep", "-u", str(UID), "-x", "kwin_wayland"])
+    if k:
+        try: env = dict(l.split("=", 1) for l in open(f"/proc/{k.split()[0]}/environ").read().split("\0") if "=" in l)
+        except OSError: env = {}
+        dev = env.get("KWIN_DRM_DEVICES", "")
+        on = "egpu" if ecard and f"/dev/dri/{ecard}" in dev.split(":")[:1] else ("handheld" if dev else "")
+    return {"screens": out, "screen_pick": read("/var/lib/nvegpu/game-screen"), "desktop_on": on}
 
 def update_state(installed):
     """For the Update button (GitHub issue #5): the newest release (from the release-notes cache, refreshed in the
@@ -145,6 +186,26 @@ def action(p):
         return {"ok": rc == 0, "out": o or e}
     if a == "xgm-intro-seen":   # the XG Mobile intro animation was shown in this app (it plays once here, once in the plugin)
         rc, o, e = sh(["sudo", "-n", PRIV, "xgm-intro-seen", "desktop"], 10); return {"ok": rc == 0, "silent": True}
+    if a == "set-screen":   # NVIDIA install: the screen for the desktop and Game Mode (the plugin's "Show Game Mode on ...")
+        c = str((p or {}).get("connector", ""))
+        if s["vendor"] not in ("", "nvidia") or "screens" not in s: return {"ok": False, "error": "screen choice is for the NVIDIA install on SteamOS / CachyOS"}
+        pick = next((x for x in s.get("screens", []) if x["name"] == c), None)
+        if not pick: return {"ok": False, "error": f"{c} is not a connected screen"}
+        rc, o, e = sh(["sudo", "-n", PRIV, "set-game-screen", c], 10)
+        if rc != 0: return {"ok": False, "out": o or e}
+        if s["game_mode"]: return {"ok": True, "out": f"{pick['label']} picked: Game Mode uses it at its next start."}
+        if not (s["present"] and s["driver_loaded"]):
+            return {"ok": True, "out": f"{pick['label']} picked: the desktop and Game Mode use it once the eGPU is attached."}
+        if pick["kind"] == s.get("desktop_on"):
+            # same GPU as now: only the primary screen changes (the built-in screen is always there on the handheld GPU)
+            if not pick["name"].startswith("eDP"):
+                sh(["kscreen-doctor", f"output.{c}.enable", f"output.{c}.priority.1"], 15)
+            return {"ok": True, "out": f"The desktop is on {pick['label']}."}
+        # the other GPU: KWin re-starts on it (one GPU at a time: no crosstalk); the login comes back to the desktop
+        sh(["sudo", "-n", PRIV, "session-fallback", "desktop"], 10)
+        subprocess.Popen(OWN_UNIT + ["/bin/sh", "-c", "sleep 2; qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout || qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return {"ok": True, "out": f"The desktop restarts on {pick['label']} (a few seconds)."}
     if a == "reset-clocks":
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}

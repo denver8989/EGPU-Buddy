@@ -1,3 +1,12 @@
+0.7.217 — The desktop follows the screen you picked, and the desktop app can pick it too.
+
+**Desktop** (NVIDIA eGPU on SteamOS and CachyOS; Bazzite, ROG Ally / XG Mobile and AMD / Intel unchanged)
+- Switching from Game Mode to the desktop now keeps the screen picked in the plugin. With the handheld's screen picked (or a screen on its USB-C port), the desktop runs on the handheld's GPU alone and games still render on the eGPU; before, the desktop always went to the eGPU's monitor.
+- Plugging the eGPU in on the desktop respects the pick too.
+
+**Desktop app** (same scope)
+- New Screen row: the handheld's screen, USB-C screens and the eGPU's monitors, the same choice as the plugin's. Moving between the handheld's GPU and the eGPU restarts the desktop on that GPU alone (it asks first); moving between two eGPU monitors just changes the main screen.
+
 0.7.216 — RX 9070 / 9070 XT: the AMD power tuning is never applied.
 
 **Power** (AMD / Intel install, RX 9070 / 9070 XT / 9070 GRE only; every other card and NVIDIA unchanged)
