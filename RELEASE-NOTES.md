@@ -1,3 +1,8 @@
+0.7.216 — RX 9070 / 9070 XT: the AMD power tuning is never applied.
+
+**Power** (AMD / Intel install, RX 9070 / 9070 XT / 9070 GRE only; every other card and NVIDIA unchanged)
+- The AMD power tuning (power level held, PCIe link held, 3D full-screen profile) was meant to stay off on these cards since 0.7.199, but the check it used was not reliable on them and it was still switched on at some attaches. It is now never applied to these cards, by their PCI id, and a card it was already applied to is handed back to its own power management.
+
 0.7.215 — Support report: which AMD card model it is.
 
 **Support report** (AMD / Intel install only; NVIDIA unchanged)

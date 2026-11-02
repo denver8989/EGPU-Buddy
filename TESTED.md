@@ -94,7 +94,7 @@ Verified on that rig in one session:
 No benchmarks or performance figures are recorded for any rig: what is tracked here is whether the eGPU attaches,
 renders, survives a cable pull and comes back.
 
-## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.9; Legion Go 1 + RX 9070 XT, CachyOS; Legion Go 1 + RX 6750 XT, CachyOS)
+## AMD / Intel eGPU: testing in progress (Legion Go 1 + AOOSTAR AG02 + RX 6800 XT, SteamOS 3.9; Legion Go 1 + RX 9070, CachyOS; Legion Go 1 + RX 6750 XT, CachyOS)
 
 Tested on the device by **RetroMann** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), SteamOS 3.9 (build 20261023.100), AOOSTAR AG02
 over USB4 (ASMedia 246x), AMD Radeon RX 6800 XT, MSI MP275 over HDMI. The AMD / Intel install (`./install.sh --amd`,
@@ -110,10 +110,10 @@ and runs only on that install, so it cannot affect an NVIDIA setup.
 | Sleep | the eGPU could stay gone after waking (0.7.184), slow picture after waking (0.7.187), freeze when sleeping during a game (0.7.186): being confirmed |
 | Sleep on the desktop | being looked at |
 
-### Second AMD card: Legion Go 1 + RX 9070 XT, CachyOS (0.7.195-0.7.212)
+### Second AMD card: Legion Go 1 + RX 9070, CachyOS (0.7.195-0.7.216)
 
 Tested on the device by **zergpoop** (Discord): Lenovo Legion Go 1 (83E1, Ryzen Z1 Extreme), CachyOS (Deckify, kernel
-7.2.9-cachyos-deckify, Mesa 26.2.5), AMD Radeon RX 9070 XT (Navi 48) in a Minisforum DEG2 (Thunderbolt 5 dock; reports
+7.2.9-cachyos-deckify, Mesa 26.2.5), PowerColor AMD Radeon RX 9070 16 GB (Navi 48, board 148C:2436, 230 W power limit, 245 W highest) in a Minisforum DEG2 (Thunderbolt 5 dock; reports
 itself as Micro Computer (HK) Tech. TBGAA; runs at 2 x 20 Gb/s on the Legion Go 1's USB4 port), powered by a Corsair SF750
 with each of the card's two 8-pin connectors on its own cable. Samsung TV over HDMI.
 
@@ -123,6 +123,7 @@ with each of the card's two 8-pin connectors on its own cable. Samsung TV over H
 | Full memory window (16 GB) | **working from 0.7.210**: the dock's empty USB4 ports had reserved the free address space and left the card at 256 MB; they are now freed at the Game Mode start and the card is reloaded with its full window |
 | A game on the eGPU (RE Requiem) | **crashes** after a few minutes to about 30 min: GPU hang (graphics or copy engine) and reset, sometimes a full freeze. Ruled out on the device: the AMD power tuning (off on this card since 0.7.199), EGPU Buddy's DXVK / vkd3d settings (off since 0.7.204), the 256 MB memory window (fixed, crashes stayed), EGPU Buddy's kernel parameters (removed in 0.7.211, crashes stayed, back in 0.7.212), the cable (Thunderbolt 5 cable from the DEG2) and the power supply (Corsair SF750, separate 8-pin cables). The card runs 99-100 % busy at about 2.1 GHz and 50 °C before the hang |
 | Cause | matches an open AMD driver problem with RX 9000 cards (RX 9070 XT, RX 9060 XT, Radeon AI PRO R9700) over Thunderbolt / USB4 on Linux, reported with other docks and computers ([Bazzite #4164](https://github.com/ublue-os/bazzite/issues/4164)); needs a fix in amdgpu |
+| AMD power tuning | meant to be off on this card since 0.7.199, but its check was unreliable and still switched it on in 5 of 12 attaches; from **0.7.216** it is never applied to an RX 9070 / 9070 XT (crashes happened with and without it) |
 | all-ways-eGPU installed before | the installers now offer to remove it on every install path (0.7.199) |
 
 ### Third AMD card: Legion Go 1 + RX 6750 XT in a Thunderbolt 3 enclosure, CachyOS (0.7.198-0.7.203)
