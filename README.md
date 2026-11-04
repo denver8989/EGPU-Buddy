@@ -33,6 +33,9 @@ are supported in beta (an RX 6800 XT is being tested now).
 - **Best picture by default:** each screen's native resolution at its highest refresh rate.
 - **Screens wake and switch input** where they support it (DDC/CI or HDMI-CEC).
 - **GPU details and controls:** temperature, power, clocks, VRAM, power limit and clock offset.
+- **NVIDIA settings (experimental):** the Windows NVIDIA control panel's global settings (low latency, V-sync, frame
+  limit, anisotropic filtering, sharpening, shader cache size, power mode) for games on the NVIDIA eGPU, in the desktop
+  app and the plugin, plus Steam's own live Game Mode settings (frame limit, tearing, VRR, sharpness).
 - **ASUS XG Mobile support** (ROG Xbox Ally X tested): attach, Safe Detach and cable pulls in both modes, plus
   XG Mobile controls in the plugin and the desktop app: a power target in watts, fan modes and a custom fan curve, the
   dock's lights, and core and memory clock offsets.

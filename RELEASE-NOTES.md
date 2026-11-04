@@ -1,3 +1,19 @@
+0.7.219 — NVIDIA settings (experimental): the Windows control panel's global settings, for games on the NVIDIA eGPU.
+
+**New: NVIDIA settings** (NVIDIA eGPU only: desktop app tab "NVIDIA settings", plugin Setup > NVIDIA settings; AMD / Intel unchanged)
+- Experimental. Every setting starts on "no change", so nothing changes until you pick something.
+- Low latency mode, power management mode, vertical sync, max frame rate, anisotropic filtering, image sharpening, shader cache size (Driver default / 1 / 5 / 10 GB / Unlimited) and threaded optimization.
+- When they apply: power management at once; the others the next time a game starts (a running game keeps its settings until it is started again). The first time only, Steam (desktop) or Game Mode restarts once.
+- Only games that render on the NVIDIA eGPU get them, including non-Steam games added to Steam; games on the handheld's own GPU never do. A game's own launch options and its own dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. "Turn off completely" removes it from games.
+- Ultra low latency needs a recent Proton: the page offers to install the latest GE-Proton (checksum checked), then you pick it in Steam.
+- Prefer maximum performance holds the GPU clock up only while a game runs; not with a GPU clock limit or on an ASUS XG Mobile.
+
+**New: System settings (live)** (plugin, Game Mode)
+- Frame limit, allow tearing, variable refresh rate and upscaling sharpness: Steam's own Game Mode settings, changed instantly, also during a game. Turning variable refresh rate on asks to keep it and switches back by itself after 15 s without an answer (also if the screen goes black).
+
+**Fixed**
+- Uninstall also removes the NVIDIA settings files and releases a clock hold.
+
 0.7.218 — AMD / Intel install: no NVIDIA driver build at boot.
 
 **Boot** (AMD / Intel install only; NVIDIA unchanged)
