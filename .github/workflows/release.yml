@@ -72,17 +72,6 @@ jobs:
             else echo "::warning::the Bazzite QML runner build failed; this release ships $(cat prebuilt/bazzite-qml-runner/BUILD-ID 2>/dev/null || echo none)"; fi
           fi
 
-      - name: NVIDIA settings loader (64- and 32-bit, built in an old Debian so it loads inside Steam's runtime too)
-        run: |
-          NWANT=$(cat packaging/nvt-shim/egpu-nvt.c packaging/nvt-shim/build.sh | sha256sum | cut -c1-16)
-          if [ "$(cat prebuilt/nvt/SRC-ID 2>/dev/null)" != "$NWANT" ]; then
-            mkdir -p /tmp/nvt
-            docker run --rm -v "$PWD/packaging/nvt-shim":/n:ro -v /tmp/nvt:/out debian:bullseye bash /n/build.sh /out
-            sudo rm -rf prebuilt/nvt; sudo cp -a /tmp/nvt prebuilt/nvt; echo "$NWANT" | sudo tee prebuilt/nvt/SRC-ID >/dev/null
-            sudo chown -R "$(id -u):$(id -g)" prebuilt
-          fi
-          test -r prebuilt/nvt/lib64/libegpu-nvt.so && test -r prebuilt/nvt/lib32/libegpu-nvt.so
-
       - name: Build
         run: ./build-release.sh
 
