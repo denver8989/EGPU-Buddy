@@ -10,6 +10,8 @@ what Linux has. Shared by the desktop app, the Game Mode plugin and both session
   egpu-nvidia-tweaks perf-watch          "Prefer maximum performance": hold the clocks up only while a game runs
   egpu-nvidia-tweaks live-get            Game Mode: Steam's own live settings (frame limit, tearing, VRR, sharpness)
   egpu-nvidia-tweaks live-set KEY VALUE  Game Mode: change one of them now (gamescope applies it at once)
+  egpu-nvidia-tweaks live-set-confirm KEY VALUE   ...and put it back in 15 s unless live-confirm (VRR)
+  egpu-nvidia-tweaks proton-status | proton-install   Proton for Ultra low latency (latest GE-Proton, checksum checked)
 
 How the settings reach games (nothing changes until a setting is moved off its default, and nothing outside this
 user's own files):
@@ -413,6 +415,110 @@ def live_set(key, value):
     return r.returncode == 0, (r.stderr.strip() or f"{key} = {v}")
 
 
+REVERT_UNIT = "egpu-nvt-live-revert"
+
+
+def live_set_confirm(key, value, seconds=15):
+    """Change a live setting that could leave Game Mode unusable (VRR): the previous value is put back by a systemd timer
+    after `seconds` unless live-confirm cancels it. The timer runs outside the plugin, so it still fires when the screen
+    is black or the Quick Access menu cannot be reached."""
+    old = (live_get() or {}).get(key)
+    ok, msg = live_set(key, value)
+    if not ok:
+        return ok, msg
+    subprocess.run(["systemctl", "--user", "stop", REVERT_UNIT + ".timer", REVERT_UNIT + ".service"], capture_output=True)
+    r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", f"--unit={REVERT_UNIT}", f"--on-active={int(seconds)}",
+                        os.path.realpath(__file__), "live-set", key, str(int(old or 0))], capture_output=True, text=True)
+    if r.returncode != 0:   # no timer, no risky change: put it back right away
+        live_set(key, int(old or 0))
+        return False, "could not start the safety timer, so nothing was changed"
+    return True, f"{key} = {value}: keep it within {int(seconds)} s or it goes back to {int(old or 0)}"
+
+
+def live_confirm():
+    subprocess.run(["systemctl", "--user", "stop", REVERT_UNIT + ".timer"], capture_output=True)
+    return True, "kept"
+
+
+# ---- Proton for "Ultra" low latency (DXVK latency sleep needs DXVK 2.6+: Proton 10, GE-Proton 10, Proton Experimental) --
+STEAM = next((p for p in (os.path.join(HOME, ".local/share/Steam"), os.path.join(HOME, ".steam/steam")) if os.path.isdir(p)), os.path.join(HOME, ".local/share/Steam"))
+COMPAT = os.path.join(STEAM, "compatibilitytools.d")
+PSTATE = os.path.join(HOME, ".cache/egpu-buddy/proton-install.json")
+
+
+def proton_status():
+    tools = []
+    for d in sorted(glob.glob(os.path.join(COMPAT, "*"))):
+        n = os.path.basename(d)
+        m = re.match(r"GE-Proton(\d+)-(\d+)", n)
+        if m and os.path.exists(os.path.join(d, "proton")):
+            tools.append({"name": n, "ok": int(m.group(1)) >= 10})
+    for lib in libraries():
+        for d in sorted(glob.glob(os.path.join(lib, "common", "Proton*"))):
+            n = os.path.basename(d)
+            m = re.match(r"Proton (\d+)", n)
+            if os.path.exists(os.path.join(d, "proton")):
+                tools.append({"name": n, "ok": "Experimental" in n or bool(m and int(m.group(1)) >= 10)})
+    try:
+        st = json.load(open(PSTATE))
+    except (OSError, ValueError):
+        st = {}
+    return {"tools": tools, "ready": any(t["ok"] for t in tools), "install": st}
+
+
+def _pstate(**kw):
+    os.makedirs(os.path.dirname(PSTATE), exist_ok=True)
+    json.dump(dict(kw, t=time.time()), open(PSTATE, "w"))
+
+
+def proton_install():
+    """Latest GE-Proton from its GitHub releases, checked against the release's own SHA-512, into compatibilitytools.d.
+    Nothing of Steam's own is changed; Steam lists it after its next start."""
+    import hashlib, shutil, tarfile, urllib.request
+    try:
+        _pstate(state="running", message="Looking up the latest GE-Proton…")
+        rel = json.load(urllib.request.urlopen(urllib.request.Request(
+            "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest", headers={"User-Agent": "EGPU-Buddy"}), timeout=30))
+        assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", [])}
+        tgz = next(n for n in assets if n.endswith(".tar.gz"))
+        name = tgz[:-len(".tar.gz")]
+        if not re.fullmatch(r"GE-Proton\d+-\d+", name):
+            raise ValueError(f"unexpected release name {name}")
+        if os.path.exists(os.path.join(COMPAT, name, "proton")):
+            _pstate(state="done", message=f"{name} is already installed."); return
+        if shutil.disk_usage(os.path.dirname(COMPAT) if os.path.isdir(os.path.dirname(COMPAT)) else HOME).free < (3 << 30):
+            raise OSError("needs about 3 GB of free space")
+        want = urllib.request.urlopen(urllib.request.Request(assets[name + ".sha512sum"], headers={"User-Agent": "EGPU-Buddy"}), timeout=30).read().decode().split()[0]
+        tmp = os.path.join(HOME, ".cache/egpu-buddy", tgz + ".part")
+        os.makedirs(os.path.dirname(tmp), exist_ok=True)
+        h = hashlib.sha512()
+        with urllib.request.urlopen(urllib.request.Request(assets[tgz], headers={"User-Agent": "EGPU-Buddy"}), timeout=60) as r, open(tmp, "wb") as f:
+            total, got = int(r.headers.get("Content-Length") or 0), 0
+            while True:
+                b = r.read(1 << 20)
+                if not b:
+                    break
+                f.write(b); h.update(b); got += len(b)
+                if total and got % (32 << 20) < (1 << 20):
+                    _pstate(state="running", message=f"Downloading {name}: {got * 100 // total} %")
+        if h.hexdigest() != want:
+            os.remove(tmp); raise ValueError("the download does not match the release's checksum")
+        _pstate(state="running", message=f"Unpacking {name}…")
+        os.makedirs(COMPAT, exist_ok=True)
+        stage = os.path.join(COMPAT, f".{name}.unpacking")
+        shutil.rmtree(stage, ignore_errors=True)
+        with tarfile.open(tmp) as t:
+            for m in t.getmembers():   # nothing outside its own folder
+                if not os.path.realpath(os.path.join(stage, m.name)).startswith(os.path.realpath(stage) + os.sep):
+                    raise ValueError(f"unsafe path in the archive: {m.name}")
+            t.extractall(stage)
+        os.replace(os.path.join(stage, name), os.path.join(COMPAT, name))
+        shutil.rmtree(stage, ignore_errors=True); os.remove(tmp)
+        _pstate(state="done", message=f"{name} installed. Steam lists it after its next start: pick it in a game's Properties > Compatibility, or in Settings > Compatibility for every game.")
+    except Exception as e:   # noqa: BLE001
+        _pstate(state="failed", message=f"GE-Proton was not installed: {e}")
+
+
 def shutil_which(x):
     import shutil
     return shutil.which(x)
@@ -452,6 +558,20 @@ def main(a):
                 pass
         subprocess.run(["systemctl", "--user", "stop", "egpu-nvidia-perf.service"], capture_output=True)
         print(json.dumps({"ok": True, "message": "Off: games get nothing from now on, and the next session does not load it."}))
+    elif cmd == "live-set-confirm":
+        ok, msg = live_set_confirm(a[2], int(a[3])) if len(a) > 3 and a[3].isdigit() else (False, "usage: live-set-confirm KEY VALUE")
+        print(json.dumps({"ok": ok, "message": msg})); return 0 if ok else 1
+    elif cmd == "live-confirm":
+        ok, msg = live_confirm(); print(json.dumps({"ok": ok, "message": msg}))
+    elif cmd == "proton-status":
+        print(json.dumps(proton_status()))
+    elif cmd == "proton-install":
+        if (proton_status().get("install") or {}).get("state") == "running" and time.time() - proton_status()["install"].get("t", 0) < 120:
+            print(json.dumps({"ok": True, "message": "already running"})); return 0
+        r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", "--unit=egpu-nvt-proton-install", os.path.realpath(__file__), "proton-install-now"], capture_output=True, text=True)
+        print(json.dumps({"ok": r.returncode == 0, "message": "Downloading the latest GE-Proton in the background (about 500 MB)." if r.returncode == 0 else r.stderr.strip()}))
+    elif cmd == "proton-install-now":
+        proton_install()
     elif cmd == "live-get":
         print(json.dumps(live_get()))
     elif cmd == "live-set":

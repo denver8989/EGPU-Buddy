@@ -212,6 +212,11 @@ def action(p):
         try: r = json.loads(o)
         except ValueError: r = {"ok": False, "message": e or o}
         return {"ok": bool(r.get("ok")), "out": ("Saved: games get them at their next launch." if nvidia_settings().get("loader") == "loaded" else "Saved. Restart Steam once (button below) for games to get them.") if r.get("ok") else r.get("message")}
+    if a == "proton-install":
+        rc, o, e = sh([NVT, "proton-install"], 20)
+        try: r = json.loads(o)
+        except ValueError: r = {"ok": False, "message": e or o}
+        return {"ok": bool(r.get("ok")), "out": r.get("message")}
     if a == "nvidia-off":
         rc, o, e = sh([NVT, "off"], 20)
         try: r = json.loads(o)
@@ -231,8 +236,11 @@ def action(p):
 NVT = os.path.expanduser("~/.local/bin/egpu-nvidia-tweaks")
 def nvidia_settings():
     rc, o, e = sh([NVT, "get"], 20)
-    try: return json.loads(o)
+    try: d = json.loads(o)
     except ValueError: return {"error": e or "the NVIDIA settings could not be read"}
+    try: d["proton"] = json.loads(sh([NVT, "proton-status"], 20)[1])
+    except ValueError: d["proton"] = {}
+    return d
 
 REPO = "denver8989/EGPU-Buddy"
 _NOTES = {"t": 0.0, "rels": []}

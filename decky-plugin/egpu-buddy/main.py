@@ -2210,6 +2210,25 @@ class Plugin:
         _spawn_root_job("switch", [SWITCH])
         return {"ok": True, "message": "Game Mode restarts once with the NVIDIA settings loader (dark for a few seconds)."}
 
+    async def confirm_live_setting(self):
+        rc, out, err = self._nvt("live-confirm")
+        return {"ok": rc == 0, "message": "Kept."}
+
+    async def get_proton_status(self):
+        rc, out, err = self._nvt("proton-status")
+        try:
+            return json.loads(out)
+        except ValueError:
+            return {"tools": [], "ready": False, "install": {}}
+
+    async def install_proton(self):
+        rc, out, err = self._nvt("proton-install")
+        try:
+            r = json.loads(out)
+        except ValueError:
+            r = {"ok": False, "message": err or out}
+        return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
+
     async def nvidia_off(self):
         rc, out, err = self._nvt("off")
         try:
@@ -2229,7 +2248,11 @@ class Plugin:
     async def set_live_setting(self, key: str, value: int):
         if key not in ("fps", "tearing", "vrr", "sharpness"):
             return {"ok": False, "message": "unknown setting"}
-        rc, out, err = self._nvt("live-set", key, str(int(value)))
+        # turning VRR ON can leave the screen unusable: it goes back by itself in 15 s unless kept (confirm_live_setting).
+        # Turning it off (or "Switch back now") cancels any pending timer first, so nothing turns it on again later.
+        if key == "vrr" and not int(value):
+            self._nvt("live-confirm")
+        rc, out, err = self._nvt("live-set-confirm" if key == "vrr" and int(value) else "live-set", key, str(int(value)))
         try:
             r = json.loads(out)
         except ValueError:

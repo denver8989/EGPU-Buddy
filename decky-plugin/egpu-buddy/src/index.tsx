@@ -17,6 +17,17 @@ type NvSettings = { available: boolean; error?: string; active?: boolean; enable
   games?: { game: string; overridden: string[] }[] };
 type LiveSettings = { available: boolean; fps?: number | null; tearing?: number | null; vrr?: number | null; sharpness?: number | null };
 const nvidiaOff = callable<[], Result>("nvidia_off");
+const confirmLive = callable<[], Result>("confirm_live_setting");
+type ProtonStatus = { tools: { name: string; ok: boolean }[]; ready: boolean; install: { state?: string; message?: string } };
+const getProton = callable<[], ProtonStatus>("get_proton_status");
+const installProton = callable<[], Result>("install_proton");
+// VRR keep-or-revert: the revert itself is a timer outside the plugin (it fires even if this menu cannot be reached)
+function KeepVrr({ closeModal, onDone }: { closeModal?: () => void; onDone: (kept: boolean) => void }) {
+  const [left, setLeft] = useState(15);
+  useEffect(() => { const t = setInterval(() => setLeft((l) => { if (l <= 1) { clearInterval(t); onDone(false); closeModal?.(); return 0; } return l - 1; }), 1000); return () => clearInterval(t); }, []);
+  return <ConfirmModal strTitle="Keep variable refresh rate?" strDescription={`If the screen flickers, goes black or stops responding, do nothing: it switches back by itself in ${left} s.`}
+    strOKButtonText="Keep" strCancelButtonText="Switch back now" onOK={() => { onDone(true); closeModal?.(); }} onCancel={() => { onDone(false); closeModal?.(); }} closeModal={closeModal} />;
+}
 const getLive = callable<[], LiveSettings>("get_live_settings");
 const setLive = callable<[string, number], Result>("set_live_setting");
 const getNvidia = callable<[], NvSettings>("get_nvidia_settings");
@@ -355,6 +366,7 @@ function Content() {
   const [nv, setNv] = useState<NvSettings | null>(null);
   const [nvEdit, setNvEdit] = useState<Record<string, string | number> | null>(null);
   const [live, setLive_] = useState<LiveSettings | null>(null);
+  const [pr, setPr] = useState<ProtonStatus | null>(null);
   const [logOpen, setLogOpen] = useState<"" | "setup" | "trial">("");   // logs stay folded away unless asked for
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
@@ -384,6 +396,7 @@ function Content() {
   // NVIDIA settings: read when Setup or the page opens (they also scan the Steam library for games' own dxvk.conf)
   useEffect(() => { if (visible && (tab === "setup" || tab === "nvidia")) getNvidia().then((n) => { setNv(n); if (tab === "setup") setNvEdit(null); }).catch(() => setNv(null)); }, [visible, tab]);
   useEffect(() => { if (visible && tab === "nvidia" && s?.game_mode) getLive().then(setLive_).catch(() => setLive_(null)); }, [visible, tab, s?.game_mode]);
+  useEffect(() => { if (visible && tab === "nvidia") getProton().then(setPr).catch(() => setPr(null)); }, [visible, tab]);
   // DDC/CI reads are slow-ish and some screens dislike polling: read once when details open
   useEffect(() => { if (visible && tab === "details") getScreens().then(setScr).catch(() => setScr(null)); }, [visible, tab]);
   useEffect(() => { if (!visible) return; refresh(); const t = setInterval(refresh, su?.busy ? 1000 : 3000); return () => clearInterval(t); }, [visible, su?.busy]);
@@ -849,6 +862,11 @@ function Content() {
           {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={busy}
             selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
             onChange={(o) => setNvEdit({ ...cur, [r.key]: o.data })} /></PanelSectionRow>)}
+          {cur.low_latency === "ultra" && pr && !pr.ready && <>
+            <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: {pr.tools.map((t) => t.name).join(", ") || "none found"}). {pr.install?.message ?? ""}</div></PanelSectionRow>
+            <PanelSectionRow><ButtonItem layout="below" disabled={busy || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
+              {pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton"}</ButtonItem></PanelSectionRow></>}
+          {cur.low_latency === "ultra" && pr?.ready && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Ultra: pick {pr.tools.filter((t) => t.ok).map((t) => t.name).join(" or ")} for the game (Properties &gt; Compatibility), or for every game in Steam Settings &gt; Compatibility. {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
           {(() => { const once = s?.game_mode && nv.loader !== "loaded";   // the loader is not in this Game Mode yet: one restart
             return <PanelSectionRow><ButtonItem layout="below" disabled={busy || !dirty || (once && gameUp)} onClick={() => run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return once ? applyNvidia() : { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; })}>
               {once ? (gameUp ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>; })()}
@@ -867,8 +885,10 @@ function Content() {
             onChange={(o) => run(async () => { const r = await setLive("fps", o.data); setLive_(await getLive()); return r; })} /></PanelSectionRow>
           <PanelSectionRow><ToggleField label="Allow tearing" description="System setting · instant. Vertical sync off for the whole screen." checked={!!live.tearing}
             onChange={(v) => run(async () => { const r = await setLive("tearing", v ? 1 : 0); setLive_(await getLive()); return r; })} /></PanelSectionRow>
-          <PanelSectionRow><ToggleField label="Variable refresh rate" description="System setting · instant, on screens that support it (testing on NVIDIA)." checked={!!live.vrr}
-            onChange={(v) => run(async () => { const r = await setLive("vrr", v ? 1 : 0); setLive_(await getLive()); return r; })} /></PanelSectionRow>
+          <PanelSectionRow><ToggleField label="Variable refresh rate" description="System setting · instant, on screens that support it (testing on NVIDIA). Turning it on asks to keep it; without an answer it switches back in 15 s." checked={!!live.vrr}
+            onChange={(v) => run(async () => { const was = live.vrr ?? 0; const r = await setLive("vrr", v ? 1 : 0); setLive_(await getLive());
+              if (r.ok && v) showModal(<KeepVrr onDone={async (kept) => { if (kept) await confirmLive(); else await setLive("vrr", was); setLive_(await getLive()); setMsg(kept ? "Variable refresh rate kept." : "Variable refresh rate switched back."); }} />);
+              return r; })} /></PanelSectionRow>
           <PanelSectionRow><SliderField label="Upscaling sharpness" description="System setting · instant, with Steam's FSR or NIS scaling filter (0 = sharpest)." value={live.sharpness ?? 2} min={0} max={20} step={1}
             onChange={(v) => run(async () => { const r = await setLive("sharpness", v); setLive_(await getLive()); return r; })} /></PanelSectionRow>
         </PanelSection>

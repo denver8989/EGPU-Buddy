@@ -275,6 +275,16 @@ ApplicationWindow {
                     Button { text: "Apply"; highlighted: win.nvDirty; enabled: win.nvDirty; onClicked: { win.act("nvidia-set", { settings: win.nvEdit }); win.nvDirty = false; win.nvSaved = true; win.loadNv() } } }
                 NvRow { key: "low_latency"; title: "Low latency mode"; desc: "Frames queued ahead of the screen (DirectX 9-12 games). Ultra adds NVIDIA's latency pacing in DirectX 11 games."
                         opts: [["off", "Off (game decides)"], ["on", "On"], ["ultra", "Ultra"]] }
+                // Ultra needs a recent Proton (DXVK 2.6+): offer the latest GE-Proton when none is installed
+                Frame { Layout.fillWidth: true; padding: 10; visible: win.nvEdit.low_latency === "ultra"
+                    RowLayout { anchors.fill: parent; spacing: 10
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12
+                            text: (win.nv.proton || {}).ready
+                                  ? "Ultra: pick " + ((win.nv.proton.tools || []).filter(function(t) { return t.ok }).map(function(t) { return t.name }).join(" or ")) + " for the game (Properties > Compatibility), or for every game in Steam Settings > Compatibility."
+                                  : "Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: " + (((win.nv.proton || {}).tools || []).map(function(t) { return t.name }).join(", ") || "none found") + "). " + (((win.nv.proton || {}).install || {}).message || "") }
+                        Button { text: (((win.nv.proton || {}).install || {}).state === "running") ? "Installing…" : "Install latest GE-Proton"
+                                 visible: !(win.nv.proton || {}).ready; enabled: (((win.nv.proton || {}).install || {}).state !== "running")
+                                 onClicked: { win.act("proton-install"); win.loadNv() } } } }
                 NvRow { key: "power"; when: "Instant"; title: "Power management mode"; desc: "Prefer maximum performance holds the GPU clock up while a game runs, and lets go when it closes. Not with a GPU clock limit or on an ASUS XG Mobile."
                         opts: [["adaptive", "Adaptive (driver)"], ["max", "Prefer maximum performance"]] }
                 NvRow { key: "vsync"; title: "Vertical sync"; desc: "Waits for the screen refresh to avoid tearing (DirectX 9-12 and OpenGL games). Game Mode tears only with Steam's Allow tearing."
