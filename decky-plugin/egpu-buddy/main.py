@@ -2175,6 +2175,40 @@ class Plugin:
                         "handheld": bool(now[c].get("handheld")), "xr": bool(now[c].get("xr")), "brand": now[c].get("brand", "")}
         return {}
 
+    # Setup > NVIDIA settings (experimental): egpu-nvidia-tweaks keeps them in the user's home and hands them to the
+    # sessions whose games render on the NVIDIA eGPU; here they are only shown, saved and applied (Game Mode restart)
+    def _nvt(self, *args):
+        return _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], f"HOME={USER_HOME}",
+                    f"{USER_HOME}/.local/bin/egpu-nvidia-tweaks", *args], 30)
+
+    async def get_nvidia_settings(self):
+        if _installed_vendor() == "amd" or not os.path.exists(f"{USER_HOME}/.local/bin/egpu-nvidia-tweaks"):
+            return {"available": False}
+        rc, out, err = self._nvt("get")
+        try:
+            d = json.loads(out)
+        except ValueError:
+            return {"available": False, "error": err or out}
+        return {"available": True, **d}
+
+    async def set_nvidia_settings(self, settings: dict):
+        if _installed_vendor() == "amd":
+            return {"ok": False, "message": "NVIDIA settings are for the NVIDIA install."}
+        rc, out, err = self._nvt("set", json.dumps(settings or {}))
+        try:
+            r = json.loads(out)
+        except ValueError:
+            r = {"ok": False, "message": err or out}
+        return {"ok": bool(r.get("ok")), "message": "Saved. Apply restarts Game Mode so games get them." if r.get("ok") else r.get("message", "?")}
+
+    async def apply_nvidia_settings(self):
+        if _game_running():
+            return {"ok": False, "message": "Close the running game first: applying restarts Game Mode."}
+        if not _gamescope_running():
+            return {"ok": False, "message": "On the desktop, use the desktop app's Restart Steam."}
+        _spawn_root_job("switch", [SWITCH])
+        return {"ok": True, "message": "Game Mode restarts with the NVIDIA settings (dark for a few seconds)."}
+
     async def set_game_screen(self, connector: str):
         if not re.fullmatch(r"[A-Za-z]+(-[A-Za-z0-9]+)+", connector or ""):
             return {"ok": False, "message": "Unknown screen."}

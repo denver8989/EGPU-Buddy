@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""egpu-nvidia-tweaks - NVIDIA graphics settings (EXPERIMENTAL): the Windows control panel's global settings, done with
+what Linux has. Shared by the desktop app, the Game Mode plugin and both session starts. Runs as the desktop user.
+
+  egpu-nvidia-tweaks get                 settings, choices and the games that ship their own dxvk.conf (JSON)
+  egpu-nvidia-tweaks set '<json>'        save (validated); unknown keys and values are refused
+  egpu-nvidia-tweaks env                 shell exports for a session whose games render on the NVIDIA eGPU
+  egpu-nvidia-tweaks restart-steam       desktop: restart Steam with the current settings (refused while a game runs)
+  egpu-nvidia-tweaks perf-watch          "Prefer maximum performance": hold the clocks up only while a game runs
+
+Nothing is changed until a setting is moved off its default ("no change"), and nothing outside this user's own files:
+- the values reach games through the environment of a session that renders on the eGPU (the Game Mode session wrapper
+  and the plasma env script call `env` only on their NVIDIA routes), so a game started on the handheld's own GPU gets
+  none of them, and there is nothing to undo when a game closes;
+- DXVK values go in DXVK_CONFIG, which DXVK reads after a game's own dxvk.conf. For every game that ships one, a
+  "[game.exe]" section re-asserts that game's own values (DXVK's own per-executable syntax), so its file keeps working;
+- the clock hold ("power") is set when a game starts and reset when it ends, never under a user clock limit or on an
+  ASUS XG Mobile (its power target uses the same clock control).
+"""
+import glob, json, os, re, shlex, subprocess, sys, time
+
+HOME = os.path.expanduser("~")
+CFG = os.path.join(HOME, ".config/egpu-buddy/nvidia-tweaks.json")
+APPLIED = os.path.join(HOME, ".config/egpu-buddy/nvidia-tweaks.applied.json")   # what `env` exported last (for restart-steam)
+SCAN = os.path.join(HOME, ".cache/egpu-buddy/dxvk-conf-scan.json")
+PRIV = "/usr/local/sbin/nv-egpu-buddy-privileged"
+
+# key -> (default, allowed values). The default always means "no change".
+CHOICES = {
+    "shader_cache": ("default", ["default", "1", "5", "10", "unlimited"]),
+    "low_latency": ("off", ["off", "on", "ultra"]),
+    "power": ("adaptive", ["adaptive", "max"]),
+    "vsync": ("app", ["app", "off", "on"]),
+    "fps_limit": (0, [0, 30, 40, 45, 60, 72, 90, 120, 144, 165]),
+    "aniso": (0, [0, 2, 4, 8, 16]),
+    "sharpen": (0, [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
+    "gl_threaded": ("auto", ["auto", "on", "off"]),
+}
+DXVK_KEYS = ("dxgi.maxFrameLatency", "d3d9.maxFrameLatency", "dxvk.latencySleep", "dxgi.syncInterval",
+             "d3d9.presentInterval", "dxgi.maxFrameRate", "d3d9.maxFrameRate", "d3d11.samplerAnisotropy",
+             "d3d9.samplerAnisotropy")
+ENV_KEYS = ("__GL_SHADER_DISK_CACHE_SIZE", "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "__GL_SYNC_TO_VBLANK",
+            "VKD3D_SWAPCHAIN_PRESENT_MODE", "VKD3D_FRAME_RATE", "__GL_LOG_MAX_ANISO", "__GL_SHARPEN_ENABLE",
+            "__GL_SHARPEN_VALUE", "__GL_THREADED_OPTIMIZATIONS")
+
+
+def load():
+    s = {k: d for k, (d, _) in CHOICES.items()}
+    try:
+        for k, v in json.load(open(CFG)).items():
+            if k in CHOICES and v in CHOICES[k][1]:
+                s[k] = v
+    except (OSError, ValueError, AttributeError):
+        pass
+    return s
+
+
+def save(s):
+    os.makedirs(os.path.dirname(CFG), exist_ok=True)
+    t = CFG + ".tmp"
+    json.dump(s, open(t, "w"), indent=1)
+    os.replace(t, CFG)
+
+
+def wanted(s):
+    """-> (dxvk options, environment values) for the current settings; empty when everything is on its default."""
+    dx, ev = {}, {}
+    if s["shader_cache"] == "unlimited":
+        ev["__GL_SHADER_DISK_CACHE_SIZE"] = str(100 << 30)
+        ev["__GL_SHADER_DISK_CACHE_SKIP_CLEANUP"] = "1"
+    elif s["shader_cache"] != "default":
+        ev["__GL_SHADER_DISK_CACHE_SIZE"] = str(int(s["shader_cache"]) << 30)
+    if s["low_latency"] in ("on", "ultra"):
+        dx["dxgi.maxFrameLatency"] = dx["d3d9.maxFrameLatency"] = "1"
+    if s["low_latency"] == "ultra":
+        dx["dxvk.latencySleep"] = "True"
+    if s["vsync"] != "app":
+        v = "1" if s["vsync"] == "on" else "0"
+        dx["dxgi.syncInterval"] = dx["d3d9.presentInterval"] = v
+        ev["__GL_SYNC_TO_VBLANK"] = v
+        ev["VKD3D_SWAPCHAIN_PRESENT_MODE"] = "FIFO" if v == "1" else "IMMEDIATE"
+    if s["fps_limit"]:
+        dx["dxgi.maxFrameRate"] = dx["d3d9.maxFrameRate"] = str(s["fps_limit"])
+        ev["VKD3D_FRAME_RATE"] = str(s["fps_limit"])
+    if s["aniso"]:
+        dx["d3d11.samplerAnisotropy"] = dx["d3d9.samplerAnisotropy"] = str(s["aniso"])
+        ev["__GL_LOG_MAX_ANISO"] = str({2: 1, 4: 2, 8: 3, 16: 4}[s["aniso"]])
+    if s["sharpen"]:
+        ev["__GL_SHARPEN_ENABLE"] = "1"
+        ev["__GL_SHARPEN_VALUE"] = str(s["sharpen"])
+    if s["gl_threaded"] != "auto":
+        ev["__GL_THREADED_OPTIMIZATIONS"] = "1" if s["gl_threaded"] == "on" else "0"
+    return dx, ev
+
+
+# ---- games that ship their own dxvk.conf --------------------------------------------------------------------------
+def libraries():
+    roots = []
+    for base in (os.path.join(HOME, ".local/share/Steam"), os.path.join(HOME, ".steam/steam")):
+        try:
+            txt = open(os.path.join(base, "steamapps/libraryfolders.vdf"), errors="ignore").read()
+        except OSError:
+            continue
+        roots += [os.path.join(base, "steamapps")] + [os.path.join(p.replace("\\\\", "\\"), "steamapps") for p in re.findall(r'"path"\s+"([^"]+)"', txt)]
+    out = []
+    for r in roots:
+        r = os.path.realpath(r)
+        if r not in out and os.path.isdir(os.path.join(r, "common")):
+            out.append(r)
+    return out
+
+
+def parse_conf(path):
+    """A dxvk.conf the way DXVK reads it: (section exe or None, key, value)."""
+    items, sec = [], None
+    try:
+        for line in open(path, errors="ignore"):
+            t = line.split("#", 1)[0].strip()
+            if t.startswith("[") and "]" in t:
+                sec = t[1:t.rindex("]")].strip()
+            elif "=" in t:
+                k, v = (x.strip() for x in t.split("=", 1))
+                if re.fullmatch(r"[A-Za-z0-9._]+", k) and v and not re.search(r'[;\[\]]', v):
+                    items.append((sec, k, v.strip('"')))
+    except OSError:
+        pass
+    return items
+
+
+def scan(fresh=False):
+    """Games with their own dxvk.conf (cached 10 min; at most 5 s of searching, 4 folders deep)."""
+    try:
+        if not fresh and time.time() - os.path.getmtime(SCAN) < 600:
+            return json.load(open(SCAN))
+    except (OSError, ValueError):
+        pass
+    games, t0 = [], time.time()
+    for lib in libraries():
+        for game in sorted(glob.glob(os.path.join(lib, "common", "*"))):
+            if time.time() - t0 > 5:
+                break
+            for root, dirs, files in os.walk(game):
+                if root[len(game):].count(os.sep) >= 4:
+                    dirs[:] = []
+                if "dxvk.conf" in files:
+                    exes = sorted(f for f in files if f.lower().endswith(".exe"))
+                    games.append({"game": os.path.basename(game), "conf": os.path.join(root, "dxvk.conf"), "exes": exes,
+                                  "keys": sorted({k for _, k, _ in parse_conf(os.path.join(root, "dxvk.conf"))})})
+    try:
+        os.makedirs(os.path.dirname(SCAN), exist_ok=True)
+        json.dump(games, open(SCAN, "w"))
+    except OSError:
+        pass
+    return games
+
+
+def dxvk_line(dx, base=""):
+    """DXVK_CONFIG: what was there (minus our keys), our values, then each game's own values back for that game."""
+    keep = [p.strip() for p in base.split(";") if p.strip() and p.split("=", 1)[0].strip() not in DXVK_KEYS]
+    parts = keep + [f"{k} = {v}" for k, v in dx.items()]
+    for g in scan() if dx else []:
+        own = parse_conf(g["conf"])
+        for exe in g["exes"]:
+            back = [(k, v) for sec, k, v in own if k in dx and sec in (None, exe)]
+            if back:
+                parts += [f"[{exe}]"] + [f"{k} = {v}" for k, v in back]
+    # (the game sections come last: DXVK has no way back to "every program" after a section - "[]" matches nothing)
+    return "; ".join(parts)
+
+
+def env_exports():
+    s = load()
+    dx, ev = wanted(s)
+    out = []
+    for k, v in ev.items():
+        out.append(f"export {k}={shlex.quote(v)}")
+    line = dxvk_line(dx, os.environ.get("DXVK_CONFIG", "")) if dx else ""
+    if line:
+        out.append(f"export DXVK_CONFIG={shlex.quote(line)}")
+    try:
+        os.makedirs(os.path.dirname(APPLIED), exist_ok=True)
+        json.dump({"env": ev, "dxvk": dx, "t": time.time()}, open(APPLIED, "w"))
+    except OSError:
+        pass
+    return out, s
+
+
+# ---- desktop: restart Steam with the current values ---------------------------------------------------------------
+def pids(name):
+    try:
+        return [int(p) for p in subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", name], capture_output=True, text=True).stdout.split()]
+    except (OSError, ValueError):
+        return []
+
+
+def game_running():
+    return subprocess.run(["/usr/local/sbin/egpu-game-running"], capture_output=True).returncode == 0
+
+
+def restart_steam():
+    if game_running():
+        return False, "Close the running game first."
+    st = pids("steam")
+    env = dict(os.environ)
+    if st:   # Steam's own environment, exactly as its session gave it, minus the values we exported last time
+        try:
+            env = dict(l.split("=", 1) for l in open(f"/proc/{st[0]}/environ").read().split("\0") if "=" in l)
+        except OSError:
+            pass
+    try:
+        last = json.load(open(APPLIED))
+    except (OSError, ValueError):
+        last = {}
+    for k, v in (last.get("env") or {}).items():
+        if env.get(k) == v:
+            env.pop(k, None)
+    if "DXVK_CONFIG" in env:
+        base = env["DXVK_CONFIG"].split("; [")[0] if (last.get("dxvk")) else env["DXVK_CONFIG"]
+        env["DXVK_CONFIG"] = "; ".join(p.strip() for p in base.split(";") if p.strip() and p.split("=", 1)[0].strip() not in DXVK_KEYS)
+        if not env["DXVK_CONFIG"]:
+            env.pop("DXVK_CONFIG")
+    os.environ.clear(); os.environ.update(env)
+    exports, _ = env_exports()
+    for e in exports:
+        k, v = e[len("export "):].split("=", 1)
+        env[k] = shlex.split(v)[0]
+    if st:
+        subprocess.run(["steam", "-shutdown"], capture_output=True, timeout=30)
+        for _ in range(60):
+            if not pids("steam"):
+                break
+            time.sleep(0.5)
+    subprocess.Popen(["steam"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    return True, "Steam restarts with the new settings."
+
+
+# ---- "Prefer maximum performance" ----------------------------------------------------------------------------------
+def priv(*a):
+    return subprocess.run(["sudo", "-n", PRIV, *a], capture_output=True, text=True, timeout=30)
+
+
+def perf_watch():
+    locked = False
+    while True:
+        on = load()["power"] == "max"
+        game = on and game_running()
+        if game and not locked:
+            r = priv("nvidia-perf", "lock")
+            locked = r.returncode == 0
+            print(f"game started: {r.stdout.strip() or r.stderr.strip()}", flush=True)
+            if not locked:   # refused (a clock limit, an XG Mobile, no NVIDIA eGPU): no retry loop
+                time.sleep(30)
+        elif not game and (locked or os.path.exists("/run/nvegpu/perf-lock")):
+            r = priv("nvidia-perf", "reset")
+            print(f"game ended: {r.stdout.strip() or r.stderr.strip()}", flush=True)
+            locked = False
+        if not on:
+            return
+        time.sleep(3)
+
+
+def start_watch():
+    if load()["power"] != "max":
+        return
+    subprocess.run(["systemd-run", "--user", "--collect", "--quiet", "--unit=egpu-nvidia-perf", os.path.realpath(__file__), "perf-watch"],
+                   capture_output=True)   # refused when it already runs: fine
+
+
+def main(a):
+    cmd = a[1] if len(a) > 1 else "get"
+    if cmd == "get":
+        dx, ev = wanted(load())
+        games = scan()
+        print(json.dumps({"settings": load(), "defaults": {k: d for k, (d, _) in CHOICES.items()},
+                          "choices": {k: c for k, (_, c) in CHOICES.items()}, "active": bool(dx or ev),
+                          "games": [dict(g, overridden=sorted(set(g["keys"]) & set(dx))) for g in games]}))
+    elif cmd == "set":
+        new = json.loads(a[2]) if len(a) > 2 else {}
+        s = load()
+        for k, v in new.items():
+            if k not in CHOICES or v not in CHOICES[k][1]:
+                print(json.dumps({"ok": False, "message": f"not a setting: {k}={v}"})); return 2
+            s[k] = v
+        save(s)
+        if s["power"] == "max":
+            start_watch()
+        print(json.dumps({"ok": True}))
+    elif cmd == "env":
+        exports, _ = env_exports()
+        print("\n".join(exports))
+        start_watch()
+    elif cmd == "restart-steam":
+        ok, msg = restart_steam(); print(json.dumps({"ok": ok, "message": msg})); return 0 if ok else 1
+    elif cmd == "perf-watch":
+        perf_watch()
+    elif cmd == "scan":
+        print(json.dumps(scan(fresh=True), indent=1))
+    else:
+        print(__doc__); return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -13,6 +13,22 @@ type Status = {
 };
 type Result = { ok: boolean; message: string; rc?: number };
 
+type NvSettings = { available: boolean; error?: string; active?: boolean; settings?: Record<string, string | number>; defaults?: Record<string, string | number>;
+  games?: { game: string; overridden: string[] }[] };
+const getNvidia = callable<[], NvSettings>("get_nvidia_settings");
+const setNvidia = callable<[Record<string, string | number>], Result>("set_nvidia_settings");
+const applyNvidia = callable<[], Result>("apply_nvidia_settings");
+// NVIDIA settings (experimental): the Windows control panel's global settings that Linux can do (same list as the desktop app)
+const NV_ROWS: { key: string; label: string; desc: string; opts: [string | number, string][] }[] = [
+  { key: "low_latency", label: "Low latency mode", desc: "Frames queued ahead of the screen (DirectX 9-12 games). Ultra adds NVIDIA's latency pacing in DirectX 11 games.", opts: [["off", "Off (game decides)"], ["on", "On"], ["ultra", "Ultra"]] },
+  { key: "power", label: "Power management mode", desc: "Prefer maximum performance holds the GPU clock up while a game runs and lets go when it closes. Not with a GPU clock limit or on an ASUS XG Mobile.", opts: [["adaptive", "Adaptive (driver)"], ["max", "Prefer maximum performance"]] },
+  { key: "vsync", label: "Vertical sync", desc: "DirectX 9-12 and OpenGL games. Tearing in Game Mode also needs Steam's Allow tearing.", opts: [["app", "Use the program setting"], ["off", "Off"], ["on", "On"]] },
+  { key: "fps_limit", label: "Max frame rate", desc: "DirectX 9-12 games. Steam's own frame limit works too; the lower one wins.", opts: [[0, "Off"], [30, "30"], [40, "40"], [45, "45"], [60, "60"], [72, "72"], [90, "90"], [120, "120"], [144, "144"], [165, "165"]] },
+  { key: "aniso", label: "Anisotropic filtering", desc: "DirectX 9-11 and OpenGL games.", opts: [[0, "Program-controlled"], [2, "2x"], [4, "4x"], [8, "8x"], [16, "16x"]] },
+  { key: "sharpen", label: "Image sharpening", desc: "The NVIDIA driver's own sharpening (Vulkan and OpenGL games).", opts: [[0, "Off"], [20, "Low"], [50, "Medium"], [80, "High"], [100, "Maximum"]] },
+  { key: "shader_cache", label: "Shader cache size", desc: "Disk space for compiled shaders; larger means less stutter in big games (driver default 1 GB).", opts: [["default", "Driver default"], ["1", "1 GB"], ["5", "5 GB"], ["10", "10 GB"], ["unlimited", "Unlimited"]] },
+  { key: "gl_threaded", label: "Threaded optimization", desc: "OpenGL games only.", opts: [["auto", "Auto"], ["on", "On"], ["off", "Off"]] },
+];
 const getStatus = callable<[], Status>("get_status");
 const attach = callable<[boolean], Result>("attach");
 const safeDetach = callable<[], Result>("safe_detach");
@@ -331,7 +347,9 @@ const maybeShowTrial = async () => {
 
 function Content() {
   const visible = useQuickAccessVisible();
-  const [tab, setTab] = useState<"main" | "details" | "setup">("main");
+  const [tab, setTab] = useState<"main" | "details" | "setup" | "nvidia">("main");
+  const [nv, setNv] = useState<NvSettings | null>(null);
+  const [nvEdit, setNvEdit] = useState<Record<string, string | number> | null>(null);
   const [logOpen, setLogOpen] = useState<"" | "setup" | "trial">("");   // logs stay folded away unless asked for
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
@@ -358,6 +376,8 @@ function Content() {
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
+  // NVIDIA settings: read when Setup or the page opens (they also scan the Steam library for games' own dxvk.conf)
+  useEffect(() => { if (visible && (tab === "setup" || tab === "nvidia")) getNvidia().then((n) => { setNv(n); if (tab === "setup") setNvEdit(null); }).catch(() => setNv(null)); }, [visible, tab]);
   // DDC/CI reads are slow-ish and some screens dislike polling: read once when details open
   useEffect(() => { if (visible && tab === "details") getScreens().then(setScr).catch(() => setScr(null)); }, [visible, tab]);
   useEffect(() => { if (!visible) return; refresh(); const t = setInterval(refresh, su?.busy ? 1000 : 3000); return () => clearInterval(t); }, [visible, su?.busy]);
@@ -808,6 +828,28 @@ function Content() {
           <PanelSectionRow><ToggleField label="Best resolution and refresh rate on every screen" description="On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are." checked={gr.enabled} onChange={(v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
+      {tab === "setup" && nv?.available && (
+        <PanelSection title="NVIDIA settings (experimental)">
+          <PanelSectionRow><ButtonItem layout="below" onClick={() => { setNvEdit(null); setTab("nvidia"); }}>Open NVIDIA settings</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.active ? "Some settings are changed from their defaults." : "All on their defaults: nothing is changed."}</div></PanelSectionRow>
+        </PanelSection>
+      )}
+      {tab === "nvidia" && nv?.available && (() => {
+        const cur = nvEdit ?? nv.settings ?? {};
+        const dirty = !!nvEdit && JSON.stringify(nvEdit) !== JSON.stringify(nv.settings);
+        return (<PanelSection title="NVIDIA settings (experimental)">
+          <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("setup")}>Back to setup</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing.</div></PanelSectionRow>
+          {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem label={r.label} description={r.desc} disabled={busy}
+            selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
+            onChange={(o) => setNvEdit({ ...cur, [r.key]: o.data })} /></PanelSectionRow>)}
+          <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp || !dirty} onClick={() => run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return s?.game_mode ? applyNvidia() : r; } return r; })}>
+            {gameUp ? "Exit the game to apply" : s?.game_mode ? "Apply (restarts Game Mode)" : "Save"}</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => setNvEdit({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
+          {!!nv.games?.length && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.games.length} game(s) ship their own dxvk.conf and keep it: {nv.games.map((g) => g.game + (g.overridden.length ? ` (own ${g.overridden.join(", ")})` : "")).join(" · ")}</div></PanelSectionRow>}
+          <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options and NVIDIA's clock control. A game's own launch options always win. Not yet: variable refresh rate (Steam's own toggle), FXAA, texture filtering quality, page flipping.</div></PanelSectionRow>
+        </PanelSection>);
+      })()}
       {tab === "setup" && (
         <PanelSection title="Updates">
           <PanelSectionRow><ToggleField label="Automatic updates" description="Off (default): a new release is only announced here and you decide when to install it. On: it installs by itself when no game is running." checked={!!up?.auto_update} onChange={(v) => run(() => setAutoUpdate(v))} /></PanelSectionRow>

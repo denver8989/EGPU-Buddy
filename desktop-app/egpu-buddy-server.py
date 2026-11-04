@@ -206,9 +206,28 @@ def action(p):
         subprocess.Popen(OWN_UNIT + ["/bin/sh", "-c", "sleep 2; qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout || qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return {"ok": True, "out": f"The desktop restarts on {pick['label']} (a few seconds)."}
+    if a == "nvidia-set":   # NVIDIA settings (experimental): save; games started afterwards on the eGPU get them
+        if s["vendor"] not in ("", "nvidia"): return {"ok": False, "error": "NVIDIA settings are for the NVIDIA install"}
+        rc, o, e = sh([NVT, "set", json.dumps((p or {}).get("settings") or {})], 20)
+        try: r = json.loads(o)
+        except ValueError: r = {"ok": False, "message": e or o}
+        return {"ok": bool(r.get("ok")), "out": "Saved. Restart Steam (button below) for games to get them." if r.get("ok") else r.get("message")}
+    if a == "nvidia-restart-steam":
+        if s["game_mode"]: return {"ok": False, "error": "in Game Mode the plugin applies them (it restarts Game Mode)"}
+        rc, o, e = sh([NVT, "restart-steam"], 60)
+        try: r = json.loads(o)
+        except ValueError: r = {"ok": False, "message": e or o}
+        return {"ok": bool(r.get("ok")), "out": r.get("message")}
     if a == "reset-clocks":
         rc, o, e = sh(["sudo", "-n", PRIV, "reset-gpu-clocks"], 20); return {"ok": rc == 0, "out": o or e}
     return {"ok": False, "error": f"unknown action {a}"}
+
+# NVIDIA settings (experimental): egpu-nvidia-tweaks keeps them; the desktop app only shows and changes them
+NVT = os.path.expanduser("~/.local/bin/egpu-nvidia-tweaks")
+def nvidia_settings():
+    rc, o, e = sh([NVT, "get"], 20)
+    try: return json.loads(o)
+    except ValueError: return {"error": e or "the NVIDIA settings could not be read"}
 
 REPO = "denver8989/EGPU-Buddy"
 _NOTES = {"t": 0.0, "rels": []}
@@ -240,6 +259,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         p = self.path.split("?")[0]
         if p == "/api/status": return self._json(status())
         if p == "/api/notes": return self._json(release_notes())
+        if p == "/api/nvidia": return self._json(nvidia_settings())
         return super().do_GET()
     def do_POST(self):
         p = self.path.split("?")[0]; n = int(self.headers.get("content-length", 0)); b = json.loads(self.rfile.read(n) or b"{}")

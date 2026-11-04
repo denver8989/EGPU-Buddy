@@ -514,6 +514,30 @@ case "$action" in
       die "NVIDIA DRM card exists; refusing unbind" 2
     echo "$GPU" > /sys/bus/pci/drivers/nvidia/unbind
     ;;
+  nvidia-perf)
+    # NVIDIA settings (experimental) "Prefer maximum performance": while a game runs, the GPU clock is held between the
+    # card's base clock and its top clock (NVIDIA's locked clocks, as LACT does); reset when the game ends. Never over a
+    # clock limit the user or the XG Mobile power target set (/run/nvegpu/clock-limit): reset would clear that limit too.
+    [ "$#" -eq 1 ] || die "nvidia-perf takes lock or reset"
+    case "$1" in
+      lock)
+        [ -e /run/nvegpu/clock-limit ] && die "a GPU clock limit is set (Power controls / XG Mobile power target): left as it is" 2
+        [ -e /var/lib/nvegpu/xg-mobile-seen ] && die "ASUS XG Mobile: its power target uses this clock control, left as it is" 2
+        require_gpu_alive "nvidia-perf lock"
+        _np=$(nvidia-smi -i "$GPU" --query-gpu=clocks.default_applications.graphics,clocks.max.graphics --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
+        _nmin=${_np%%,*}; _nmax=${_np##*,}
+        case "$_nmin$_nmax" in ""|*[!0-9]*) die "the GPU did not report its clocks ($_np)" 2 ;; esac
+        [ "$_nmin" -ge 210 ] && [ "$_nmax" -gt "$_nmin" ] || die "unexpected clocks $_nmin / $_nmax MHz" 2
+        nvidia-smi -i "$GPU" -lgc "$_nmin,$_nmax" >/dev/null || die "locking the clocks failed" 1
+        mkdir -p /run/nvegpu; echo "$GPU $_nmin $_nmax" > /run/nvegpu/perf-lock
+        printf 'GPU clock held at %s-%s MHz while the game runs\n' "$_nmin" "$_nmax" ;;
+      reset)
+        [ -e /run/nvegpu/perf-lock ] || { echo "nothing held"; exit 0; }
+        [ -e /run/nvegpu/clock-limit ] || nvidia-smi -i "$GPU" -rgc >/dev/null 2>&1 || true
+        rm -f /run/nvegpu/perf-lock; echo "GPU clock back to the driver's own management" ;;
+      *) die "nvidia-perf takes lock or reset" 2 ;;
+    esac
+    ;;
   set-game-screen)
     # The screen picked in the desktop app (the Game Mode plugin writes the same file as root itself): Game Mode and the
     # desktop both start there. Only a connector this machine has right now (a card's connector in sysfs, connected).

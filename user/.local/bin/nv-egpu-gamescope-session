@@ -854,6 +854,19 @@ else
   fi
 fi
 
+# NVIDIA settings (experimental, Setup > NVIDIA settings): only on a route whose games render on the NVIDIA eGPU (Vulkan
+# pinned to NVIDIA's driver); a session on the handheld's own GPU gets none of it. Prints nothing while every setting is
+# on its default, and nothing here can stop the session.
+# (if-blocks, never a bare && at the end: under this script's set -e a false test there ended the session)
+_nvt=""
+case "${VK_DRIVER_FILES:-}" in
+  *nvidia_icd*)
+    if [ -x "$HOME/.local/bin/egpu-nvidia-tweaks" ]; then _nvt=$(timeout 10 "$HOME/.local/bin/egpu-nvidia-tweaks" env 2>/dev/null) || _nvt=""; fi ;;
+esac
+if [ -n "$_nvt" ]; then
+  eval "$_nvt" 2>/dev/null || true
+  log "NVIDIA settings: $(printf '%s\n' "$_nvt" | sed 's/^export //; s/=.*//' | tr '\n' ' ')" || true
+fi
 if [ "${1:-}" = "--print-env" ] || [ "${NV_EGPU_GAMESCOPE_SESSION_PRINT_ENV:-0}" = "1" ]; then
   printf 'EGPU_PCI=%s\n' "$EGPU_PCI"
   printf 'BAR1_BYTES=%s\n' "$bar1_bytes"

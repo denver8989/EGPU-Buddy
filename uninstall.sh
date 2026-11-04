@@ -32,7 +32,10 @@ runtime_leftovers(){
     /var/lib/nvegpu \
     "$USER_HOME/.local/gamescope-gbm" \
     "$USER_HOME/.local/lib/nv-egpu-buddy" \
-    "$USER_HOME/.config/environment.d/10-egpu-gamescope-output.conf"
+    "$USER_HOME/.config/environment.d/10-egpu-gamescope-output.conf" \
+    "$USER_HOME/.config/egpu-buddy/nvidia-tweaks.json" \
+    "$USER_HOME/.config/egpu-buddy/nvidia-tweaks.applied.json" \
+    "$USER_HOME/.cache/egpu-buddy/dxvk-conf-scan.json"
 }
 
 # ROG Ally / XG Mobile: decided now, while egpu-detect and the XG Mobile marker still exist (both are removed below)
@@ -90,6 +93,9 @@ if [ "$AX" = 1 ]; then
   sudo rm -f /etc/sddm.conf.d/zzs-egpu-buddy-session.conf
 fi
 userctl disable --now egpu-display-failover.service egpu-wake-guard.service egpu-screen-watch.service egpu-buddy-tray.service 2>/dev/null
+# the experimental NVIDIA settings' clock hold back to the driver, while the helper is still here (normally it ends with the game)
+userctl stop egpu-nvidia-perf.service >/dev/null 2>&1 || true
+[ -e /run/nvegpu/perf-lock ] && sudo /usr/local/sbin/nv-egpu-buddy-privileged nvidia-perf reset >/dev/null 2>&1
 cd "$ROOT"; find user -type f | while read -r f; do restore_or_remove "$(map_dest "$f")"; done
 sudo bash -c "$(declare -f restore_or_remove); systemctl disable egpu-mount.service egpu-boot-enumerate.service egpu-conditional-session.service egpu-buddy-selfheal.service egpu-buddy-resume.service egpu-amd-presleep.service egpu-dm-watch.path egpu-buddy-shutdown.service egpu-driver-trial-boot.service egpu-decky-guard.service egpu-flight-recorder.service egpu-buddy-gamescope-repair.path egpu-buddy-gamescope-repair.service egpu-driver-prebuild.timer egpu-driver-prebuild.service 2>/dev/null; $(cd "$ROOT" && find system -type f | while read -r f; do printf 'restore_or_remove %q\n' "$(map_dest "$f")"; done); udevadm control --reload; systemctl daemon-reload"
 [ "${EGPU_KEEP_PLUGIN:-0}" = 1 ] || sudo rm -rf "$USER_HOME/homebrew/plugins/EGPU-Buddy"

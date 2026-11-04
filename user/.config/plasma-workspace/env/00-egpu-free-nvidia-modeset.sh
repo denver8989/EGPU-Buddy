@@ -298,6 +298,17 @@ unset _v _p
 
 _egpu_pci=${EGPU_PCI_BDF:-$(_egpu_detect_nvidia_gpu_bdf)}
 _egpu_stage_desktop_kwin
+# NVIDIA settings (experimental): only when this desktop's games render on the NVIDIA eGPU (Vulkan pinned to it above)
+_nvt=""
+case "${VK_DRIVER_FILES:-}" in
+  *nvidia_icd*)
+    if [ -x "$HOME/.local/bin/egpu-nvidia-tweaks" ]; then _nvt=$(timeout 10 "$HOME/.local/bin/egpu-nvidia-tweaks" env 2>/dev/null) || _nvt=""; fi ;;
+esac
+if [ -n "$_nvt" ]; then
+  eval "$_nvt" 2>/dev/null || true
+  _egpu_emlog "NVIDIA settings: $(printf '%s\n' "$_nvt" | sed 's/^export //; s/=.*//' | tr '\n' ' ')" || true
+fi
+unset _nvt
 
 if [ -n "$_egpu_pci" ] && [ -e "/sys/bus/pci/devices/$_egpu_pci" ] && { pgrep -x steamwebhelper >/dev/null 2>&1 || pgrep -x steam >/dev/null 2>&1; }; then
   _egpu_emlog "Plasma pre-compositor: eGPU present + Steam alive -> freeing /dev/nvidia-modeset before KWin"
