@@ -211,7 +211,12 @@ def action(p):
         rc, o, e = sh([NVT, "set", json.dumps((p or {}).get("settings") or {})], 20)
         try: r = json.loads(o)
         except ValueError: r = {"ok": False, "message": e or o}
-        return {"ok": bool(r.get("ok")), "out": "Saved. Restart Steam (button below) for games to get them." if r.get("ok") else r.get("message")}
+        return {"ok": bool(r.get("ok")), "out": ("Saved: games get them at their next launch." if nvidia_settings().get("loader") == "loaded" else "Saved. Restart Steam once (button below) for games to get them.") if r.get("ok") else r.get("message")}
+    if a == "nvidia-off":
+        rc, o, e = sh([NVT, "off"], 20)
+        try: r = json.loads(o)
+        except ValueError: r = {"ok": False, "message": e or o}
+        return {"ok": bool(r.get("ok")), "out": r.get("message")}
     if a == "nvidia-restart-steam":
         if s["game_mode"]: return {"ok": False, "error": "in Game Mode the plugin applies them (it restarts Game Mode)"}
         rc, o, e = sh([NVT, "restart-steam"], 60)

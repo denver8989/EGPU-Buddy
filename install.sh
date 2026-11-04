@@ -456,6 +456,19 @@ elif want gamescope; then
   done
 fi
 
+# NVIDIA settings (experimental): the per-game loader, 64- and 32-bit. Sessions load it as LD_PRELOAD=<dir>/$LIB/... and
+# the loader picks the build by the program's own ABI, under the name its glibc uses: Arch (SteamOS, CachyOS) lib / lib32,
+# Fedora (Bazzite) lib64 / lib, and Steam's runtime containers (Debian) lib/x86_64-linux-gnu / lib/i386-linux-gnu.
+# Only files in the user's home; nothing loads it until the user saves NVIDIA settings (egpu-nvidia-tweaks env).
+if [ "$GPU_VENDOR" != amd ] && [ -r "$ROOT/prebuilt/nvt/lib64/libegpu-nvt.so" ] && [ -r "$ROOT/prebuilt/nvt/lib32/libegpu-nvt.so" ]; then
+  ND="$USER_HOME/.local/lib/nv-egpu-buddy/nvt"; umkdir "$ND/lib/x86_64-linux-gnu" "$ND/lib/i386-linux-gnu" "$ND/lib64" "$ND/lib32"
+  cp -f "$ROOT/prebuilt/nvt/lib64/libegpu-nvt.so" "$ND/lib64/"; cp -f "$ROOT/prebuilt/nvt/lib32/libegpu-nvt.so" "$ND/lib32/"
+  cp -f "$ROOT/prebuilt/nvt/lib64/libegpu-nvt.so" "$ND/lib/x86_64-linux-gnu/"; cp -f "$ROOT/prebuilt/nvt/lib32/libegpu-nvt.so" "$ND/lib/i386-linux-gnu/"
+  if [ -e /usr/lib64/libc.so.6 ] && [ ! -L /usr/lib64 ]; then cp -f "$ROOT/prebuilt/nvt/lib32/libegpu-nvt.so" "$ND/lib/"   # Fedora: lib = 32-bit
+  else cp -f "$ROOT/prebuilt/nvt/lib64/libegpu-nvt.so" "$ND/lib/"; fi                                                      # Arch: lib = 64-bit
+  uown "$ND"; say "== installed the NVIDIA settings loader ($(cat "$ROOT/prebuilt/nvt/BUILD-ID" 2>/dev/null))"
+fi
+
 # ---- desktop app ----------------------------------------------------------------------------------
 if want desktopapp; then
   say "== installing the EGPU Buddy desktop app"

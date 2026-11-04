@@ -2,20 +2,26 @@
 """egpu-nvidia-tweaks - NVIDIA graphics settings (EXPERIMENTAL): the Windows control panel's global settings, done with
 what Linux has. Shared by the desktop app, the Game Mode plugin and both session starts. Runs as the desktop user.
 
-  egpu-nvidia-tweaks get                 settings, choices and the games that ship their own dxvk.conf (JSON)
-  egpu-nvidia-tweaks set '<json>'        save (validated); unknown keys and values are refused
-  egpu-nvidia-tweaks env                 shell exports for a session whose games render on the NVIDIA eGPU
-  egpu-nvidia-tweaks restart-steam       desktop: restart Steam with the current settings (refused while a game runs)
+  egpu-nvidia-tweaks get                 settings, choices, games with their own dxvk.conf, loader state (JSON)
+  egpu-nvidia-tweaks set '<json>'        save (validated) and rewrite the files the loader reads
+  egpu-nvidia-tweaks env                 shell lines for a session whose games render on the NVIDIA eGPU
+  egpu-nvidia-tweaks off                 switch the whole feature off (no loader in the next sessions)
+  egpu-nvidia-tweaks restart-steam       desktop: restart Steam once, so it starts with the loader
   egpu-nvidia-tweaks perf-watch          "Prefer maximum performance": hold the clocks up only while a game runs
+  egpu-nvidia-tweaks live-get            Game Mode: Steam's own live settings (frame limit, tearing, VRR, sharpness)
+  egpu-nvidia-tweaks live-set KEY VALUE  Game Mode: change one of them now (gamescope applies it at once)
 
-Nothing is changed until a setting is moved off its default ("no change"), and nothing outside this user's own files:
-- the values reach games through the environment of a session that renders on the eGPU (the Game Mode session wrapper
-  and the plasma env script call `env` only on their NVIDIA routes), so a game started on the handheld's own GPU gets
-  none of them, and there is nothing to undo when a game closes;
-- DXVK values go in DXVK_CONFIG, which DXVK reads after a game's own dxvk.conf. For every game that ships one, a
-  "[game.exe]" section re-asserts that game's own values (DXVK's own per-executable syntax), so its file keeps working;
+How the settings reach games (nothing changes until a setting is moved off its default, and nothing outside this
+user's own files):
+- the loader (packaging/nvt-shim, LD_PRELOAD) is added to a session only on its NVIDIA routes and only after the user
+  saved NVIDIA settings once. At every game launch it reads nvidia-tweaks.env / nvidia-tweaks.dxvk.conf (written here),
+  so a change applies at the next launch of the game, with no Steam or Game Mode restart (only the very first time);
+- it acts in games Steam starts (Steam games and non-Steam games added to Steam) and only when they render on NVIDIA;
+  a value already set (launch option, the user's own) is never replaced, and a game's own dxvk.conf still wins;
+- without the loader (not installed) the older way is used: the values in the session environment (Steam restart);
 - the clock hold ("power") is set when a game starts and reset when it ends, never under a user clock limit or on an
-  ASUS XG Mobile (its power target uses the same clock control).
+  ASUS XG Mobile (its power target uses the same clock control);
+- live-*: Steam's own Game Mode settings, the very ones its Performance menu sets (gamescope root window properties).
 """
 import glob, json, os, re, shlex, subprocess, sys, time
 
@@ -23,6 +29,9 @@ HOME = os.path.expanduser("~")
 CFG = os.path.join(HOME, ".config/egpu-buddy/nvidia-tweaks.json")
 APPLIED = os.path.join(HOME, ".config/egpu-buddy/nvidia-tweaks.applied.json")   # what `env` exported last (for restart-steam)
 SCAN = os.path.join(HOME, ".cache/egpu-buddy/dxvk-conf-scan.json")
+ENVF = os.path.join(HOME, ".config/egpu-buddy/nvidia-tweaks.env")          # read by the loader at every game launch
+DXVKF = os.path.join(HOME, ".config/egpu-buddy/nvidia-tweaks.dxvk.conf")
+SHIM = os.path.join(HOME, ".local/lib/nv-egpu-buddy/nvt")                  # <SHIM>/$LIB/libegpu-nvt.so
 PRIV = "/usr/local/sbin/nv-egpu-buddy-privileged"
 
 # key -> (default, allowed values). The default always means "no change".
@@ -55,11 +64,44 @@ def load():
     return s
 
 
+def _write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    t = path + ".tmp"
+    open(t, "w").write(text)
+    os.replace(t, path)
+
+
 def save(s):
-    os.makedirs(os.path.dirname(CFG), exist_ok=True)
-    t = CFG + ".tmp"
-    json.dump(s, open(t, "w"), indent=1)
-    os.replace(t, CFG)
+    _write(CFG, json.dumps(s, indent=1))
+    write_loader_files(s)
+
+
+def write_loader_files(s):
+    """What the loader hands to each game: plain KEY=VALUE lines and DXVK options (empty when all are defaults)."""
+    dx, ev = wanted(s)
+    _write(ENVF, "".join(f"{k}={v}\n" for k, v in ev.items()))
+    _write(DXVKF, "".join(f"{k} = {v}\n" for k, v in dx.items()))
+
+
+def shim_ok():
+    return all(os.path.exists(os.path.join(SHIM, d, "libegpu-nvt.so")) for d in ("lib", "lib64", "lib32", "lib/x86_64-linux-gnu", "lib/i386-linux-gnu"))
+
+
+def steam_env():
+    for pid in pids("steam"):
+        try:
+            return dict(l.split("=", 1) for l in open(f"/proc/{pid}/environ").read().split("\0") if "=" in l)
+        except OSError:
+            pass
+    return None
+
+
+def loader_state():
+    """'loaded': the running Steam has the loader (changes apply at the next game launch); 'restart': it does not yet."""
+    e = steam_env()
+    if e is None:
+        return "no-steam"
+    return "loaded" if "libegpu-nvt.so" in e.get("LD_PRELOAD", "") else "restart"
 
 
 def wanted(s):
@@ -170,6 +212,13 @@ def dxvk_line(dx, base=""):
 
 def env_exports():
     s = load()
+    if shim_ok() and os.path.exists(CFG):
+        # the loader: values are read at each game launch from the files below, not frozen into this session
+        write_loader_files(s)
+        lib = os.path.join(SHIM, "$LIB", "libegpu-nvt.so")
+        cur = os.environ.get("LD_PRELOAD", "")
+        out = [] if "libegpu-nvt.so" in cur else [f"export LD_PRELOAD={shlex.quote(lib)}{shlex.quote(':' + cur) if cur else ''}"]
+        return out, s
     dx, ev = wanted(s)
     out = []
     for k, v in ev.items():
@@ -266,6 +315,45 @@ def start_watch():
                    capture_output=True)   # refused when it already runs: fine
 
 
+# ---- Game Mode: Steam's own live settings (its Performance menu writes the same gamescope properties) --------------------
+LIVE = {"fps": ("GAMESCOPE_FPS_LIMIT", 0, 240), "tearing": ("GAMESCOPE_ALLOW_TEARING", 0, 1),
+        "vrr": ("GAMESCOPE_VRR_ENABLED", 0, 1), "sharpness": ("GAMESCOPE_SHARPNESS", 0, 20)}
+
+
+def _gs_display():
+    e = steam_env() or {}
+    return e.get("DISPLAY") if subprocess.run(["pgrep", "-x", "gamescope(-wl)?"], capture_output=True).returncode == 0 else None
+
+
+def live_get():
+    d = _gs_display()
+    if not d or not shutil_which("xprop"):
+        return {"available": False}
+    out = {"available": True}
+    for k, (atom, _, _) in LIVE.items():
+        r = subprocess.run(["xprop", "-root", "-display", d, atom], capture_output=True, text=True, timeout=5).stdout
+        m = re.search(r"=\s*(\d+)", r)
+        out[k] = int(m.group(1)) if m else None
+    return out
+
+
+def live_set(key, value):
+    d = _gs_display()
+    if key not in LIVE or not d or not shutil_which("xprop"):
+        return False, "only in Game Mode"
+    atom, lo, hi = LIVE[key]
+    v = int(value)
+    if not lo <= v <= hi:
+        return False, f"{key}: {lo}-{hi}"
+    r = subprocess.run(["xprop", "-root", "-display", d, "-f", atom, "32c", "-set", atom, str(v)], capture_output=True, text=True, timeout=5)
+    return r.returncode == 0, (r.stderr.strip() or f"{key} = {v}")
+
+
+def shutil_which(x):
+    import shutil
+    return shutil.which(x)
+
+
 def main(a):
     cmd = a[1] if len(a) > 1 else "get"
     if cmd == "get":
@@ -273,6 +361,7 @@ def main(a):
         games = scan()
         print(json.dumps({"settings": load(), "defaults": {k: d for k, (d, _) in CHOICES.items()},
                           "choices": {k: c for k, (_, c) in CHOICES.items()}, "active": bool(dx or ev),
+                          "loader": loader_state() if shim_ok() else "none", "enabled": os.path.exists(CFG),
                           "games": [dict(g, overridden=sorted(set(g["keys"]) & set(dx))) for g in games]}))
     elif cmd == "set":
         new = json.loads(a[2]) if len(a) > 2 else {}
@@ -289,6 +378,21 @@ def main(a):
         exports, _ = env_exports()
         print("\n".join(exports))
         start_watch()
+    elif cmd == "off":
+        s = {k: d for k, (d, _) in CHOICES.items()}
+        write_loader_files(s)                       # the loader (until the next session) hands games nothing
+        for f in (CFG, APPLIED):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        subprocess.run(["systemctl", "--user", "stop", "egpu-nvidia-perf.service"], capture_output=True)
+        print(json.dumps({"ok": True, "message": "Off: games get nothing from now on, and the next session does not load it."}))
+    elif cmd == "live-get":
+        print(json.dumps(live_get()))
+    elif cmd == "live-set":
+        ok, msg = live_set(a[2] if len(a) > 2 else "", a[3] if len(a) > 3 else "x") if len(a) > 3 and a[3].lstrip("-").isdigit() else (False, "usage: live-set KEY VALUE")
+        print(json.dumps({"ok": ok, "message": msg})); return 0 if ok else 1
     elif cmd == "restart-steam":
         ok, msg = restart_steam(); print(json.dumps({"ok": ok, "message": msg})); return 0 if ok else 1
     elif cmd == "perf-watch":

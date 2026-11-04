@@ -2202,12 +2202,39 @@ class Plugin:
         return {"ok": bool(r.get("ok")), "message": "Saved. Apply restarts Game Mode so games get them." if r.get("ok") else r.get("message", "?")}
 
     async def apply_nvidia_settings(self):
+        # only needed once: after it, Steam has the loader and every change applies at the next game launch
         if _game_running():
-            return {"ok": False, "message": "Close the running game first: applying restarts Game Mode."}
+            return {"ok": False, "message": "Close the running game first: this one-time step restarts Game Mode."}
         if not _gamescope_running():
             return {"ok": False, "message": "On the desktop, use the desktop app's Restart Steam."}
         _spawn_root_job("switch", [SWITCH])
-        return {"ok": True, "message": "Game Mode restarts with the NVIDIA settings (dark for a few seconds)."}
+        return {"ok": True, "message": "Game Mode restarts once with the NVIDIA settings loader (dark for a few seconds)."}
+
+    async def nvidia_off(self):
+        rc, out, err = self._nvt("off")
+        try:
+            r = json.loads(out)
+        except ValueError:
+            r = {"ok": False, "message": err or out}
+        return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
+
+    # Game Mode: Steam's own live settings (the gamescope properties its Performance menu sets), instant
+    async def get_live_settings(self):
+        rc, out, err = self._nvt("live-get")
+        try:
+            return json.loads(out)
+        except ValueError:
+            return {"available": False}
+
+    async def set_live_setting(self, key: str, value: int):
+        if key not in ("fps", "tearing", "vrr", "sharpness"):
+            return {"ok": False, "message": "unknown setting"}
+        rc, out, err = self._nvt("live-set", key, str(int(value)))
+        try:
+            r = json.loads(out)
+        except ValueError:
+            r = {"ok": False, "message": err or out}
+        return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
 
     async def set_game_screen(self, connector: str):
         if not re.fullmatch(r"[A-Za-z]+(-[A-Za-z0-9]+)+", connector or ""):

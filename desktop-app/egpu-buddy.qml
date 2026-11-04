@@ -225,10 +225,14 @@ ApplicationWindow {
     }
     component NvRow: Frame {
         property string key; property string title; property string desc; property var opts: []
+        property string when: "Next game launch"   // when a change takes effect (shown on the row)
         Layout.fillWidth: true; padding: 10
         RowLayout { anchors.fill: parent; spacing: 12
             ColumnLayout { Layout.fillWidth: true; spacing: 2
-                Label { text: title; font.pixelSize: 14 }
+                RowLayout { spacing: 8
+                    Label { text: title; font.pixelSize: 14 }
+                    Label { text: when; font.pixelSize: 10; opacity: 0.85; color: when === "Instant" ? "#5fd35f" : palette.highlight
+                            padding: 2; leftPadding: 6; rightPadding: 6; background: Rectangle { radius: 8; color: "transparent"; border.color: parent.color } } }
                 Label { Layout.fillWidth: true; text: desc; wrapMode: Text.WordWrap; opacity: 0.65; font.pixelSize: 11 } }
             ComboBox { Layout.preferredWidth: 250; model: opts.map(function(o) { return o[1] })
                 currentIndex: Math.max(0, opts.map(function(o) { return String(o[0]) }).indexOf(String(win.nvEdit[key] === undefined ? opts[0][0] : win.nvEdit[key])))
@@ -271,7 +275,7 @@ ApplicationWindow {
                     Button { text: "Apply"; highlighted: win.nvDirty; enabled: win.nvDirty; onClicked: { win.act("nvidia-set", { settings: win.nvEdit }); win.nvDirty = false; win.nvSaved = true; win.loadNv() } } }
                 NvRow { key: "low_latency"; title: "Low latency mode"; desc: "Frames queued ahead of the screen (DirectX 9-12 games). Ultra adds NVIDIA's latency pacing in DirectX 11 games."
                         opts: [["off", "Off (game decides)"], ["on", "On"], ["ultra", "Ultra"]] }
-                NvRow { key: "power"; title: "Power management mode"; desc: "Prefer maximum performance holds the GPU clock up while a game runs, and lets go when it closes. Not with a GPU clock limit or on an ASUS XG Mobile."
+                NvRow { key: "power"; when: "Instant"; title: "Power management mode"; desc: "Prefer maximum performance holds the GPU clock up while a game runs, and lets go when it closes. Not with a GPU clock limit or on an ASUS XG Mobile."
                         opts: [["adaptive", "Adaptive (driver)"], ["max", "Prefer maximum performance"]] }
                 NvRow { key: "vsync"; title: "Vertical sync"; desc: "Waits for the screen refresh to avoid tearing (DirectX 9-12 and OpenGL games). Game Mode tears only with Steam's Allow tearing."
                         opts: [["app", "Use the program setting"], ["off", "Off"], ["on", "On"]] }
@@ -285,16 +289,22 @@ ApplicationWindow {
                         opts: [["default", "Driver default"], ["1", "1 GB"], ["5", "5 GB"], ["10", "10 GB"], ["unlimited", "Unlimited"]] }
                 NvRow { key: "gl_threaded"; title: "Threaded optimization"; desc: "Spreads driver work over several CPU cores (OpenGL games only; Vulkan and Proton games already do)."
                         opts: [["auto", "Auto"], ["on", "On"], ["off", "Off"]] }
-                RowLayout { Layout.fillWidth: true; visible: win.nvSaved || !!(win.nv.active)
-                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: "Games get changed settings when Steam starts again." }
-                    Button { text: "Restart Steam"; enabled: !win.s.game_mode; onClicked: { win.act("nvidia-restart-steam"); win.nvSaved = false } } }
+                // when changes take effect: with the loader in Steam, at the next game launch; before that, one Steam restart
+                Frame { Layout.fillWidth: true; padding: 10
+                    RowLayout { anchors.fill: parent; spacing: 10
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap
+                            text: win.nv.loader === "loaded" ? "Changes apply the next time a game starts: no Steam restart. A game that is running keeps its settings until it is started again."
+                                : win.nv.loader === "restart" || win.nv.loader === "no-steam" ? "One-time step: restart Steam so it starts with EGPU Buddy's settings loader. After that, changes apply at the next game launch."
+                                : "Games get changed settings when Steam starts again." }
+                        Button { text: "Restart Steam"; visible: win.nv.loader !== "loaded"; enabled: !win.s.game_mode; onClicked: { win.act("nvidia-restart-steam"); win.nvSaved = false } }
+                        Button { text: "Turn off"; visible: !!win.nv.enabled; onClicked: { win.act("nvidia-off"); win.loadNv() } } } }
                 Label { text: "Games with their own dxvk.conf (" + ((win.nv.games || []).length) + ")"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: (win.nv.games || []).length > 0 }
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: (win.nv.games || []).length > 0
-                    text: "Their own file keeps working: for each of these games its own values come back for that game only. "
+                    text: "Their own file keeps working: each game gets EGPU Buddy's settings first and its own file after them, so its own options win. "
                           + (win.nv.games || []).map(function(g) { return "<b>" + g.game + "</b>" + (g.overridden.length ? " (keeps its own " + g.overridden.join(", ") + ")" : "") }).join(" · ")
                     textFormat: Text.StyledText }
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11
-                    text: "* Experimental. Done with what Linux offers rather than NVIDIA's control panel: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options, and NVIDIA's clock control. A game's own launch options always win. Not available yet: variable refresh rate (KDE's display settings / Steam's own toggle), FXAA, texture filtering quality and page flipping." } }
+                    text: "* Experimental. Done with what Linux offers rather than NVIDIA's control panel: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options, and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and its own dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Turn off removes it from games completely. In Game Mode the plugin also has Steam's own live settings (frame limit, tearing, VRR, sharpness). Not available yet: FXAA, texture filtering quality, page flipping." } }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.page === 0 || !win.nvShow
             GridLayout { Layout.fillWidth: true; columns: 4; columnSpacing: 8; rowSpacing: 8
                 Cell { value: win.num(win.g["temperature.gpu"]); unit: "°C"; label: "GPU temp" }
