@@ -9,9 +9,27 @@
 out=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-kwin.env
 s=$HOME/.config/plasma-workspace/env/00-egpu-free-nvidia-modeset.sh
 [ -r "$s" ] || { : > "$out"; exit 0; }
-XDG_CURRENT_DESKTOP=KDE bash -c '. "$1" >/dev/null 2>&1
+# NVIDIA settings (experimental): the script also decides whether the desktop's games get EGPU Buddy's settings loader
+# (LD_PRELOAD, only on the NVIDIA route and once settings were saved). KWin does not need it - Steam and the games do,
+# and they start from Plasma's shell and autostart, which take their environment from the systemd user session when
+# they start (after this). So it goes there, and comes out again when it no longer applies. Our entry only: anything
+# else in LD_PRELOAD is kept as it was.
+pre_other=$(printf '%s' "${LD_PRELOAD-}" | tr ':' '\n' | grep -v 'libegpu-nvt\.so' | paste -sd: -)
+LD_PRELOAD="$pre_other" XDG_CURRENT_DESKTOP=KDE bash -c '. "$1" >/dev/null 2>&1
   for v in KWIN_DRM_DEVICES KWIN_RENDER_NODES VK_DRIVER_FILES VK_ICD_FILENAMES __EGL_VENDOR_LIBRARY_FILENAMES __GLX_VENDOR_LIBRARY_NAME; do
     eval "x=\${$v-}"; [ -z "$x" ] || printf "%s=%s\n" "$v" "$x"
-  done; :' _ "$s" > "$out.tmp" 2>/dev/null && mv -f "$out.tmp" "$out"
-printf '%s [kwin-env] compositor starts with: %s\n' "$(date '+%F %T')" "$(tr '\n' ' ' < "$out" 2>/dev/null)" >> "$HOME/.egpu-desktop-display.log"
+  done
+  case "${LD_PRELOAD-}" in *libegpu-nvt.so*) printf "EGPU_NVT_PRELOAD=%s\n" "$LD_PRELOAD" ;; esac; :' _ "$s" > "$out.tmp" 2>/dev/null && {
+  nvt=$(sed -n 's/^EGPU_NVT_PRELOAD=//p' "$out.tmp"); sed -i '/^EGPU_NVT_PRELOAD=/d' "$out.tmp"; mv -f "$out.tmp" "$out"
+  um=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^LD_PRELOAD=//p')
+  if [ -n "$nvt" ]; then
+    systemctl --user set-environment "LD_PRELOAD=$nvt" 2>/dev/null
+  else
+    case "$um" in *libegpu-nvt.so*)
+      um_other=$(printf '%s' "$um" | tr ':' '\n' | grep -v 'libegpu-nvt\.so' | paste -sd: -)
+      if [ -n "$um_other" ]; then systemctl --user set-environment "LD_PRELOAD=$um_other" 2>/dev/null
+      else systemctl --user unset-environment LD_PRELOAD 2>/dev/null; fi ;;
+    esac
+  fi; }
+printf '%s [kwin-env] compositor starts with: %s%s\n' "$(date '+%F %T')" "$(tr '\n' ' ' < "$out" 2>/dev/null)" "${nvt:+ (NVIDIA settings loader for desktop games)}" >> "$HOME/.egpu-desktop-display.log"
 exit 0

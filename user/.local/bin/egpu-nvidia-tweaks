@@ -325,26 +325,90 @@ def _gs_display():
     return e.get("DISPLAY") if subprocess.run(["pgrep", "-x", "gamescope(-wl)?"], capture_output=True).returncode == 0 else None
 
 
+class _X11:
+    """Steam's own gamescope settings live on the root window of gamescope's X display. Set straight through libX11 (it is
+    on every system that runs Steam: Steam and Xwayland need it), so no xprop is needed; xprop only as a fallback."""
+    def __init__(self, display):
+        import ctypes, ctypes.util
+        self.c = ctypes
+        name = ctypes.util.find_library("X11") or "libX11.so.6"
+        self.x = x = ctypes.CDLL(name)
+        x.XOpenDisplay.restype = ctypes.c_void_p; x.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        x.XDefaultRootWindow.restype = ctypes.c_ulong; x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+        x.XInternAtom.restype = ctypes.c_ulong; x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+        x.XGetWindowProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_long, ctypes.c_long, ctypes.c_int,
+                                         ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int),
+                                         ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_void_p)]
+        x.XChangeProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_int, ctypes.c_int,
+                                      ctypes.c_void_p, ctypes.c_int]
+        x.XFree.argtypes = [ctypes.c_void_p]; x.XFlush.argtypes = [ctypes.c_void_p]; x.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        self.d = x.XOpenDisplay(display.encode())
+        if not self.d:
+            raise OSError(f"cannot open display {display}")
+        self.root = x.XDefaultRootWindow(self.d)
+
+    def get(self, atom):
+        c, x = self.c, self.x
+        t, f, n, rest, data = c.c_ulong(), c.c_int(), c.c_ulong(), c.c_ulong(), c.c_void_p()
+        a = x.XInternAtom(self.d, atom.encode(), 1)   # only_if_exists: never creates an atom just by looking
+        if not a or x.XGetWindowProperty(self.d, self.root, a, 0, 1, 0, 6, c.byref(t), c.byref(f), c.byref(n), c.byref(rest), c.byref(data)) != 0:
+            return None
+        try:
+            return int(c.cast(data, c.POINTER(c.c_ulong))[0]) if n.value and f.value == 32 and data.value else None
+        finally:
+            if data.value:
+                x.XFree(data)
+
+    def set(self, atom, value):
+        c, x = self.c, self.x
+        v = (c.c_ulong * 1)(value)   # format 32 data is passed as C longs
+        x.XChangeProperty(self.d, self.root, x.XInternAtom(self.d, atom.encode(), 0), 6, 32, 0, c.cast(v, c.c_void_p), 1)
+        x.XFlush(self.d)
+
+    def close(self):
+        self.x.XCloseDisplay(self.d)
+
+
+def _xconn(d):
+    try:
+        return _X11(d)
+    except Exception:   # noqa: BLE001  no libX11 / no display: xprop, if it is there
+        return None
+
+
 def live_get():
     d = _gs_display()
-    if not d or not shutil_which("xprop"):
+    if not d:
         return {"available": False}
-    out = {"available": True}
+    xc, out = _xconn(d), {"available": True}
+    if not xc and not shutil_which("xprop"):
+        return {"available": False}
     for k, (atom, _, _) in LIVE.items():
-        r = subprocess.run(["xprop", "-root", "-display", d, atom], capture_output=True, text=True, timeout=5).stdout
-        m = re.search(r"=\s*(\d+)", r)
-        out[k] = int(m.group(1)) if m else None
+        if xc:
+            out[k] = xc.get(atom)
+        else:
+            r = subprocess.run(["xprop", "-root", "-display", d, atom], capture_output=True, text=True, timeout=5).stdout
+            m = re.search(r"=\s*(\d+)", r)
+            out[k] = int(m.group(1)) if m else None
+    if xc:
+        xc.close()
     return out
 
 
 def live_set(key, value):
     d = _gs_display()
-    if key not in LIVE or not d or not shutil_which("xprop"):
+    if key not in LIVE or not d:
         return False, "only in Game Mode"
     atom, lo, hi = LIVE[key]
     v = int(value)
     if not lo <= v <= hi:
         return False, f"{key}: {lo}-{hi}"
+    xc = _xconn(d)
+    if xc:
+        xc.set(atom, v); xc.close()
+        return True, f"{key} = {v}"
+    if not shutil_which("xprop"):
+        return False, "no X11 library and no xprop on this system"
     r = subprocess.run(["xprop", "-root", "-display", d, "-f", atom, "32c", "-set", atom, str(v)], capture_output=True, text=True, timeout=5)
     return r.returncode == 0, (r.stderr.strip() or f"{key} = {v}")
 
