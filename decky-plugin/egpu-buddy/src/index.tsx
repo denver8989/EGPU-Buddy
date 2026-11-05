@@ -118,10 +118,11 @@ async function updateInPlace(version: string): Promise<Result> {
   return { ok: true, message: `Confirm in Decky's prompt: the plugin updates in place to ${version}, then its system files install (no restart).` };
 }
 const popNotice = callable<[], string>("pop_notice");
-type Trial = { available: boolean; beta: string; tested: string; installed: string; state: string; message: string; running: boolean; log: string; started: number; progress: number; step: string; acked: boolean; switch_offer?: boolean };
+type Trial = { available: boolean; main: string; beta: string; old: string; current: "old" | "main" | "beta"; to: string; from: string; installed: string; state: string; message: string; running: boolean; log: string; started: number; progress: number; step: string; acked: boolean; switch_offer?: boolean };
 const getTrial = callable<[], Trial>("get_driver_trial");
 const startTrial = callable<[], Result>("start_driver_trial");
 const revertTrial = callable<[], Result>("revert_driver_trial");
+const startBetaTrial = callable<[], Result>("start_beta_trial");
 const ackTrial = callable<[], Result>("ack_driver_trial");
 type Screen = { connector: string; name: string; state: string; ddc: boolean };
 const getScreens = callable<[], Screen[]>("get_screens");
@@ -293,7 +294,7 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.220";
+const PLUGIN_VERSION = "0.7.221";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -346,7 +347,7 @@ function TrialModal({ closeModal }: { closeModal?: () => void }) {
   const back = !!t && (t.state === "reverting" || t.state === "reverted");
   const close = () => { trialOpen = false; if (done) ackTrial(); closeModal?.(); };
   return (
-    <ConfirmModal strTitle={!t ? "NVIDIA driver" : done ? (t.state === "kept" ? `Driver ${t.beta} installed` : t.state === "reverted" ? `Back on the previous driver ${t.tested}` : "Driver switch failed") : back ? `Returning to the previous driver ${t.tested}` : `Installing driver ${t.beta}`}
+    <ConfirmModal strTitle={!t ? "NVIDIA driver" : done ? (t.state === "kept" ? `Driver ${t.to} installed` : t.state === "reverted" ? `Back on driver ${t.from}` : "Driver switch failed") : back ? `Returning to driver ${t.from}` : `Installing driver ${t.to}`}
       strDescription={!t ? "…" : done
         ? <div style={{ fontSize: "14px", color: t.state === "kept" ? "#4caf50" : t.state === "failed" ? "#ff6b6b" : "#f0b429" }}>{t.message}</div>
         : <Progress pct={t.progress} title={back ? "Reverting" : "Installing"} step={t.step} started={t.started} expect={back ? "3-5 minutes" : "5-20 minutes"} />}
@@ -362,8 +363,8 @@ const maybeShowTrial = async () => {
   // the eGPU's screen with no game running (the backend checks that); any outcome of the switch ends the asking.
   if (t.switch_offer && !switchAsked) {
     switchAsked = true; trialOpen = true;
-    showModal(<ConfirmModal strTitle={`Switch to NVIDIA driver ${t.beta}?`}
-      strDescription={`Driver ${t.beta} is now EGPU Buddy's main driver: most testers run it without problems. The eGPU is safely detached, the driver is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed), then the eGPU is attached with it and checked. If it does not come up, your current driver ${t.tested} is put back and attached again by itself, also after a reset or hang. Keep the charger and the eGPU connected. Later: asked again next time; you can also switch any time in Setup & updates.`}
+    showModal(<ConfirmModal strTitle={`Switch to NVIDIA driver ${t.main}?`}
+      strDescription={`Driver ${t.main} is now EGPU Buddy's main driver: most testers run it without problems. The eGPU is safely detached, the driver is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed), then the eGPU is attached with it and checked. If it does not come up, your current driver ${t.old} is put back and attached again by itself, also after a reset or hang. Keep the charger and the eGPU connected. Later: asked again next time; you can also switch any time in Setup & updates.`}
       strOKButtonText="Switch now" strCancelButtonText="Later"
       onOK={async () => { trialOpen = false; const r = await startTrial(); toaster.toast({ title: "EGPU Buddy", body: r.message, duration: 10000 }); }}
       onCancel={() => { trialOpen = false; }} />);
@@ -825,19 +826,26 @@ function Content() {
       {tab === "setup" && tr?.available && (
         <PanelSection title="NVIDIA driver">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>
-            Main driver: {tr.beta}. Previous driver: {tr.tested} (kept as the way back). Running now: {tr.installed || "not installed"}.
+            Main driver: {tr.main}. Beta: {tr.beta || "none"} (for testers, tried from {tr.main}). Previous: {tr.old}. Running now: {tr.installed || "not installed"}.
           </div></PanelSectionRow>
           {tr.message && <PanelSectionRow><div style={{ fontSize: "12px", color: tr.state === "failed" ? "#ff6b6b" : tr.state === "kept" ? "#4caf50" : "#f0b429" }}>{tr.message}</div></PanelSectionRow>}
-          {tr.state !== "kept" && (
+          {tr.current === "old" && (
             <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || !!su?.busy || gameUp || !s?.game_mode}
-              onClick={() => showModal(<ConfirmModal strTitle={`Switch to driver ${tr.beta}`}
-                strDescription={`The eGPU is safely detached, the NVIDIA driver ${tr.beta} is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the previous driver ${tr.tested} is put back and attached again by itself. If the machine resets or hangs during the switch, it is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`}
-                strOKButtonText="Switch now" bDestructiveWarning onOK={() => run(startTrial)} />)}>Switch to driver {tr.beta}</ButtonItem></PanelSectionRow>
+              onClick={() => showModal(<ConfirmModal strTitle={`Switch to driver ${tr.main}`}
+                strDescription={`The eGPU is safely detached, the NVIDIA driver ${tr.main} is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the previous driver ${tr.old} is put back and attached again by itself. If the machine resets or hangs during the switch, it is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`}
+                strOKButtonText="Switch now" bDestructiveWarning onOK={() => run(startTrial)} />)}>Switch to driver {tr.main}</ButtonItem></PanelSectionRow>
           )}
-          {(tr.state === "kept" || (tr.installed && tr.installed !== tr.tested)) && (
+          {tr.current === "main" && !!tr.beta && (
+            <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || !!su?.busy || gameUp || !s?.game_mode}
+              onClick={() => showModal(<ConfirmModal strTitle={`Try beta driver ${tr.beta}`}
+                strDescription={`For testers. The eGPU is safely detached, the beta NVIDIA driver ${tr.beta} is downloaded from NVIDIA (about 550 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the main driver ${tr.main} is put back and attached again by itself. If the machine resets or hangs during the test, ${tr.main} is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`}
+                strOKButtonText="Try the beta driver" bDestructiveWarning onOK={() => run(startBetaTrial)} />)}>Try beta driver {tr.beta}</ButtonItem></PanelSectionRow>
+          )}
+          {tr.current !== "old" && (
             <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || gameUp || !s?.game_mode}
-              onClick={() => showModal(<ConfirmModal strTitle={`Return to ${tr.tested}`} strDescription={`The eGPU is safely detached, the previous driver ${tr.tested} is put back (offline, a few minutes) and the eGPU is attached again.`}
-                strOKButtonText="Return" onOK={() => run(revertTrial)} />)}>Return to the previous driver {tr.tested}</ButtonItem></PanelSectionRow>
+              onClick={() => { const back = tr.current === "beta" ? tr.main : tr.old;
+                showModal(<ConfirmModal strTitle={`Return to ${back}`} strDescription={`The eGPU is safely detached, the driver ${back} is put back (offline, a few minutes) and the eGPU is attached again.`}
+                  strOKButtonText="Return" onOK={() => run(revertTrial)} />); }}>{tr.current === "beta" ? `Return to the main driver ${tr.main}` : `Return to the previous driver ${tr.old}`}</ButtonItem></PanelSectionRow>
           )}
           {tr.log && <PanelSectionRow><ButtonItem layout="below" onClick={() => setLogOpen(logOpen === "trial" ? "" : "trial")}>{logOpen === "trial" ? "Hide driver log" : "Show driver log"}</ButtonItem></PanelSectionRow>}
           {tr.log && logOpen === "trial" && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{tr.log}</div></PanelSectionRow>}

@@ -589,7 +589,7 @@ fi
 # running, and runs it through egpu-driver-trial (Safe Detach, build, attach, health check, 610 back by itself on failure).
 if [ "$GPU_VENDOR" != amd ] && [ "$IS_BAZZITE" != 1 ] && [ "${DRIVER_FAILED:-0}" != 1 ] \
    && { [ -d /home/.egpu-buddy/sysext ] || pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1; } && [ -f "$ROOT/packaging/nvidia-open-egpu-615/PKGBUILD" ]; then
-  if [ "$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null)" = nvidia-open-egpu-615 ]; then sudo rm -f /var/lib/nvegpu/driver-switch-615
+  if grep -qxE 'nvidia-open-egpu-6(15|20)' /etc/nv-egpu-buddy/driver-dir 2>/dev/null; then sudo rm -f /var/lib/nvegpu/driver-switch-615   # on 615, or on the beta 620
   elif [ ! -e /var/lib/nvegpu/driver-switch-615-done ]; then sudo mkdir -p /var/lib/nvegpu && sudo touch /var/lib/nvegpu/driver-switch-615 && say "== driver 615 is now the main driver: the plugin offers the switch in Game Mode (eGPU on, no game running)"; fi
 fi
 

@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.220"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.221"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -635,6 +635,16 @@ def _trial():
     return d
 
 
+def _trial_block():
+    """Why a driver change cannot start now ('' = it can)."""
+    if _trial()["running"]: return "A driver change is already running."
+    if not _gamescope_running(): return "Start it from Game Mode."
+    if _game_running(): return "Close the running game first."
+    if not _gpu_bdf() and not os.path.exists("/sys/module/nvidia"):
+        return "Connect the eGPU first: the new driver is tested on it."
+    return ""
+
+
 # beta driver trial progress, read from its log the same way the install progress is: (line prefix, percent, label).
 # Percentages follow the measured 615 run on a Legion Go 2 (detach 40 s, compile 85 s / ~13,700 lines, DKMS 100 s, attach 15 s).
 TRIAL_STAGES = (("Safe Detach (", 3, "Safely detaching the eGPU"),
@@ -645,7 +655,7 @@ TRIAL_STAGES = (("Safe Detach (", 3, "Safely detaching the eGPU"),
     ("==> Starting build()", 36, "Compiling the patched driver"), ("==> Finished making: nvidia-open-egpu", 60, "Installing the driver"),
     ("==> dkms install", 64, "Building the modules for this kernel (1-2 minutes)"), ("installed: nvidia-open-egpu-dkms", 86, "Driver installed"),
     ("== assembling the system extension", 80, "Collecting the driver files"), ("== packing the extension image", 84, "Packing the driver image"),
-    ("[attempting]", 88, "Attaching the eGPU with driver 615"))
+    ("[attempting]", 88, "Attaching the eGPU with the new driver"))
 TRIAL_REVERT = (("[reverting]", 10, "Putting the previous driver back"), ("Safe Detach (", 15, "Safely detaching the eGPU"),
     ("==> dkms install", 40, "Rebuilding the previous driver's modules (1-2 minutes)"), ("the tested driver", 80, "Previous driver back; attaching the eGPU"),
     ("the previous driver", 80, "Previous driver back; attaching the eGPU"))   # 0.7.220 wording; the line above for older logs
@@ -658,7 +668,7 @@ def _trial_progress():
         lines = open(TRIAL_LOG, errors="replace").read().splitlines()
     except OSError:
         return 0, ""
-    start = max((i for i, l in enumerate(lines) if "==== beta driver trial" in l), default=0)
+    start = max((i for i, l in enumerate(lines) if l[20:].startswith("==== ") and "driver trial:" in l), default=0)
     table, pct, label, span, base, n, driver = TRIAL_STAGES, 0, "Starting", None, 0, 0, False
     for l in lines[start:]:
         body = l[20:] if l[:4].isdigit() else l   # strip the "YYYY-MM-DD HH:MM:SS " prefix the trial adds
@@ -1454,13 +1464,13 @@ def _support_report():
     # revert), not a tail: a failed trial is diagnosed from where in that run it went wrong
     trial = _read("/var/log/egpu-driver-trial.log").splitlines()
     if trial:
-        start = max((i for i, l in enumerate(trial) if "==== beta driver trial" in l), default=max(0, len(trial) - 200))
+        start = max((i for i, l in enumerate(trial) if l[20:].startswith("==== ") and "driver trial:" in l), default=max(0, len(trial) - 200))
         run = trial[start:]
-        lines += ["", "## Beta driver trial: state", _read("/var/lib/nvegpu/driver-trial") or "(no state file)",
-                  "", f"## Beta driver trial: last run ({len(run)} lines" + (", first 60 and last 240 shown" if len(run) > 300 else "") + ")"]
+        lines += ["", "## Driver trial: state", _read("/var/lib/nvegpu/driver-trial") or "(no state file)",
+                  "", f"## Driver trial: last run ({len(run)} lines" + (", first 60 and last 240 shown" if len(run) > 300 else "") + ")"]
         lines += [t[:300] for t in (run if len(run) <= 300 else run[:60] + ["  ... (build output cut) ..."] + run[-240:])]
         if start > 0:
-            lines += ["", "## Beta driver trial: earlier entries (last 20 before that run)"] + [t[:300] for t in trial[max(0, start - 20):start]]
+            lines += ["", "## Driver trial: earlier entries (last 20 before that run)"] + [t[:300] for t in trial[max(0, start - 20):start]]
     log = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
                "egpu|nv-egpu|nvidia|NVRM|thunderbolt|pcieport|gamescope.*(drm|vulkan)"], 20)[1].splitlines()
     kept, burst = [], 0   # a GPU hang prints hundreds of NVRM lines in one go: keep the first 8 of each run
@@ -2343,20 +2353,25 @@ class Plugin:
 
     async def get_driver_trial(self):
         t = _trial()
-        beta = _read(f"{SYSDIR}/packaging/nvidia-open-egpu-615/PKGBUILD"); tested = _read(f"{SYSDIR}/packaging/nvidia-open-egpu/PKGBUILD")
-        pv = lambda txt: next((l.split("=", 1)[1] for l in txt.splitlines() if l.startswith("pkgver=")), "")
+        pv = lambda d: next((l.split("=", 1)[1] for l in _read(f"{SYSDIR}/packaging/{d}/PKGBUILD").splitlines() if l.startswith("pkgver=")), "")
+        main, beta, old = pv("nvidia-open-egpu-615"), pv("nvidia-open-egpu-620"), pv("nvidia-open-egpu")
+        # the driver this machine is on, as the trial records it (/etc/nv-egpu-buddy/driver-dir; absent = 610)
+        cur = {"nvidia-open-egpu-615": "main", "nvidia-open-egpu-620": "beta"}.get(_read("/etc/nv-egpu-buddy/driver-dir").strip(), "old")
         tail = ""
         try:
             with open(TRIAL_LOG) as f: tail = "".join(f.readlines()[-12:])
         except OSError: pass
-        return {"available": bool(pv(beta)) and os.path.exists(TRIAL) and _installed_vendor() == "nvidia",
-                "beta": pv(beta), "tested": pv(tested), "installed": _sh(["modinfo", "-F", "version", "nvidia"], 5)[1],
+        return {"available": bool(main) and os.path.exists(TRIAL) and _installed_vendor() == "nvidia",
+                # main = 615 (main driver since 0.7.220), beta = 620 (since 0.7.221, tried from 615 only), old = 610
+                "main": main, "beta": beta, "old": old, "current": cur,
+                "to": t.get("target", "") or main, "from": t.get("from", "") or old,
+                "installed": _sh(["modinfo", "-F", "version", "nvidia"], 5)[1],
                 "state": t.get("state", ""), "message": t.get("message", ""), "running": t["running"], "log": tail,
                 "started": int(t.get("started", "0") or 0), "progress": _trial_progress()[0], "step": _trial_progress()[1],
                 "acked": _settings().get("trial_ack", "") == t.get("started", ""),
                 # 0.7.220: 615 is the main driver; install.sh marks 610 machines and the switch is offered once, only in
                 # Game Mode on the eGPU's screen with no game running (NVIDIA install, not Bazzite: it builds 615 already)
-                "switch_offer": os.path.exists("/var/lib/nvegpu/driver-switch-615") and not IS_BAZZITE and not t["running"]
+                "switch_offer": os.path.exists("/var/lib/nvegpu/driver-switch-615") and not IS_BAZZITE and not t["running"] and cur == "old"
                     and _installed_vendor() == "nvidia" and os.path.exists(TRIAL) and _gamescope_running() and not _game_running()
                     and os.path.exists("/sys/module/nvidia") and _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] not in ("", "*")
                     and not _gamescope_env("OUTPUT_CONNECTOR").startswith("eDP")}
@@ -2367,20 +2382,27 @@ class Plugin:
         d = _settings(); d["trial_ack"] = _trial().get("started", ""); _save_settings(d); return {"ok": True, "message": "ok"}
 
     async def start_driver_trial(self):
-        if _trial()["running"]: return {"ok": False, "message": "A driver trial is already running."}
-        if not _gamescope_running(): return {"ok": False, "message": "Start it from Game Mode."}
-        if _game_running(): return {"ok": False, "message": "Close the running game first."}
-        if not _gpu_bdf() and not os.path.exists("/sys/module/nvidia"):
-            return {"ok": False, "message": "Connect the eGPU first: the switch attaches it to test driver 615."}
+        """610 -> 615, the main driver."""
+        why = _trial_block()
+        if why: return {"ok": False, "message": why}
         _spawn_root_job("driver-trial", [TRIAL, "start"])
         return {"ok": True, "message": "Switching to driver 615: Safe Detach, then the build (10-20 minutes), then the eGPU is attached with it. If it does not come up, 610 comes back by itself. You can close this menu."}
 
+    async def start_beta_trial(self):
+        """615 -> 620, the beta driver (only from 615; 615 comes back by itself if 620 fails)."""
+        why = _trial_block()
+        if why: return {"ok": False, "message": why}
+        _spawn_root_job("driver-trial", [TRIAL, "start-beta"])
+        return {"ok": True, "message": "Trying beta driver 620: Safe Detach, then the build (10-20 minutes), then the eGPU is attached with it. If it does not come up, 615 comes back by itself. You can close this menu."}
+
     async def revert_driver_trial(self):
-        if _trial()["running"]: return {"ok": False, "message": "A driver switch is running; it goes back by itself if driver 615 fails."}
+        """Back one step: 620 -> 615, or 615 -> 610."""
+        if _trial()["running"]: return {"ok": False, "message": "A driver change is running; it goes back by itself if the new driver fails."}
         if not _gamescope_running(): return {"ok": False, "message": "Start it from Game Mode."}
         if _game_running(): return {"ok": False, "message": "Close the running game first."}
         _spawn_root_job("driver-trial", [TRIAL, "revert"])
-        return {"ok": True, "message": "Returning to the previous driver: Safe Detach, driver 610 is put back, then the eGPU is attached again."}
+        back = "615" if _read("/etc/nv-egpu-buddy/driver-dir").strip() == "nvidia-open-egpu-620" else "610"
+        return {"ok": True, "message": f"Returning to driver {back}: Safe Detach, the driver is put back, then the eGPU is attached again."}
 
     async def set_power_limit(self, watts: int):
         rc, out, err = _sh([PRIV, "set-gpu-power-limit", str(int(watts))], 20)

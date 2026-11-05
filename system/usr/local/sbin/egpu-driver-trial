@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
-# egpu-driver-trial — switch the eGPU to NVIDIA driver 615 (EGPU Buddy's main driver since 0.7.220), and go back to the
-# previous one (610) by itself if it fails.
+# egpu-driver-trial — move the eGPU to another NVIDIA driver, and go back to the one before by itself if it fails.
+#   610 -> 615 (EGPU Buddy's main driver since 0.7.220), and 615 -> 620 (the beta driver since 0.7.221).
 #
-#   egpu-driver-trial start    (Decky "Switch to 615") Safe Detach, build + install 615, attach, health check;
-#                              healthy -> 615 is kept; anything else -> 610 is put back and attached again
-#   egpu-driver-trial revert   (Decky "Return to 610") Safe Detach, put 610 back, attach again
-#   egpu-driver-trial boot     (egpu-driver-trial-boot.service, before ANY eGPU bring-up) a trial that never reached
-#                              "kept" means the machine restarted during it (hard reset, hang, power button): put 610 back
+#   egpu-driver-trial start       (Decky "Switch to 615", on 610) Safe Detach, build + install 615, attach, health check;
+#                                 healthy -> 615 is kept; anything else -> 610 is put back and attached again
+#   egpu-driver-trial start-beta  (Decky "Try beta driver 620", on 615 only) the same, 615 -> 620; failure -> 615 back
+#   egpu-driver-trial revert      (Decky "Return to ...") Safe Detach, put the driver before back, attach again:
+#                                 on 620 -> 615, on 615 -> 610
+#   egpu-driver-trial boot        (egpu-driver-trial-boot.service, before ANY eGPU bring-up) a trial that never reached
+#                                 "kept" means the machine restarted during it (hard reset, hang, power button): put the
+#                                 driver before it back (recorded in the state file as olddir)
 #   egpu-driver-trial status
 #
 # Nothing here is new teardown or attach logic: it calls the same Safe Detach and Attach the plugin buttons use, and the
-# same driver installers the install uses (packaging/nvidia-open-egpu for 610, packaging/nvidia-open-egpu-615 for 615).
-# CachyOS/Arch: the driver is pacman packages; the exact 610 package files are kept in the package cache before anything
-#   changes, and a revert installs those files again (offline).
-# SteamOS: the driver is a system-extension image on /home; 615 gets its own image next to 610's, a revert links 610's back.
+# same driver installers the install uses (packaging/nvidia-open-egpu for 610, -615 for 615, -620 for 620).
+# CachyOS/Arch: the driver is pacman packages; the exact package files of the driver in use are kept in the package cache
+#   before anything changes, and a revert installs those files again (offline).
+# SteamOS: the driver is a system-extension image on /home; every version has its own image, a revert links the one before back.
 # The driver that should be used after a reinstall or self-heal is /etc/nv-egpu-buddy/driver-dir (absent = 610).
 set -u
 STATE=/var/lib/nvegpu/driver-trial; SWITCH=/var/lib/nvegpu/driver-switch-615; LOG=/var/log/egpu-driver-trial.log; SEL=/etc/nv-egpu-buddy/driver-dir
-PAY=/home/deck/.local/share/steamos-egpu-buddy/packaging; OLD=$PAY/nvidia-open-egpu; NEW=$PAY/nvidia-open-egpu-615
+PAY=/home/deck/.local/share/steamos-egpu-buddy/packaging
+CUR=$(cat "$SEL" 2>/dev/null); CUR=${CUR:-nvidia-open-egpu}   # the driver this machine is on (absent = 610)
+pick(){ # <old dir> <new dir>: the driver to go back to, and the one to try
+  OLDN=$1; NEWN=$2; OLD=$PAY/$1; NEW=$PAY/$2
+  TPV=$(sed -n 's/^pkgver=//p' "$NEW/PKGBUILD" 2>/dev/null); OPV=$(sed -n 's/^pkgver=//p' "$OLD/PKGBUILD" 2>/dev/null); }
 PERSIST=/home/deck/.local/share/steamos-egpu-buddy; U=$(stat -c %U "$PERSIST" 2>/dev/null || echo deck)
 DETACH=/usr/local/sbin/egpu-gamemode-detach; REATTACH=/usr/local/sbin/egpu-reattach
 PKGS="nvidia-utils lib32-nvidia-utils nvidia-open-egpu-dkms"
@@ -26,14 +33,13 @@ mkdir -p "$(dirname "$STATE")" /etc/nv-egpu-buddy
 log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; sync -d "$LOG" 2>/dev/null || true; }
 get(){ sed -n "s/^$1=//p" "$STATE" 2>/dev/null | tail -1; }
 # state + one line for the plugin; written and flushed at every step so a hard reset leaves the true last step on disk
-put(){ local st=$1; shift; { echo "state=$st"; echo "message=$*"; echo "target=${TPV:-}"; echo "prev=$(get prev)"; echo "started=$(get started)"; echo "time=$(date +%s)"; } > "$STATE.new"
+put(){ local st=$1; shift; { echo "state=$st"; echo "message=$*"; echo "target=${TPV:-}"; echo "from=${OPV:-}"; echo "olddir=${OLDN:-}"; echo "newdir=${NEWN:-}"; echo "prev=$(get prev)"; echo "started=$(get started)"; echo "time=$(date +%s)"; } > "$STATE.new"
   mv -f "$STATE.new" "$STATE"; sync -f "$STATE" 2>/dev/null || sync; log "[$st] $*"
   case "$st" in reverting|failed) /usr/local/sbin/egpu-snapshot "driver-trial-$st" >/dev/null 2>&1 ;; esac
   # the switch to 615 the update offers (install.sh writes the "pending" marker on 610 machines): asked once. Any outcome
   # (kept, put back, failed) answers it; the buttons in Setup & updates stay for a later change of mind.
   case "$st" in kept|reverted|failed) touch "$SWITCH-done" 2>/dev/null; rm -f "$SWITCH" ;; esac; }
 steamos(){ command -v steamos-readonly >/dev/null 2>&1; }
-TPV=$(sed -n 's/^pkgver=//p' "$NEW/PKGBUILD" 2>/dev/null); OPV=$(sed -n 's/^pkgver=//p' "$OLD/PKGBUILD" 2>/dev/null)
 modver(){ modinfo -F version nvidia 2>/dev/null | head -1; }
 gpu_on_bus(){ lspci -Dn 2>/dev/null | grep -qE ' 0300: 10de:'; }
 gamescope(){ pgrep -n -x 'gamescope(-wl)?'; }
@@ -61,7 +67,7 @@ healthy(){  # the driver that answers is the one we installed, and Game Mode cam
     [ "$v" = "$1" ] && on_egpu && return 0; sleep 3; done
   log "health check: nvidia-smi says '${v:-no answer}', Game Mode on the eGPU display: $(on_egpu && echo yes || echo no)"; return 1; }
 
-report(){   # what the 615 driver looks like on this machine, for the user and for bug reports
+report(){   # what the new driver looks like on this machine, for the user and for bug reports
   { echo "---- report $(date '+%F %T') ----"
     nvidia-smi --query-gpu=name,driver_version,pcie.link.gen.current,pcie.link.width.current,memory.total,power.limit --format=csv 2>&1
     nvidia-smi -q -d MEMORY 2>/dev/null | sed -n '/BAR1/,/Free/p'
@@ -89,23 +95,24 @@ install_new(){
   if steamos; then bash "$NEW/install-steamos-sysext.sh" >>"$LOG" 2>&1
   else EGPU_TARGET_USER=$U bash "$NEW/install-patched-nvidia.sh" >>"$LOG" 2>&1; fi; }
 
-restore_old(){   # put 610 back; offline on both systems
+restore_old(){   # put the driver before back ($OLD); offline on both systems
   if steamos; then
     bash "$NEW/install-steamos-sysext.sh" --remove >>"$LOG" 2>&1 || true   # first: it unlinks the extension name
     bash "$OLD/install-steamos-sysext.sh" --activate >>"$LOG" 2>&1 || return 1
   else
-    local prev; prev=$(get prev); [ -n "$prev" ] || { log "no recorded 610 package files"; return 1; }
+    local prev; prev=$(get prev); [ -n "$prev" ] || { log "no recorded $OPV package files"; return 1; }
     # shellcheck disable=SC2086
     pacman_u $prev || return 1
-    rm -f "$PERSIST"/pkgcache/*"$TPV"-*.pkg.tar.* 2>/dev/null   # the 615 packages (about 500 MB); a new trial rebuilds them
+    rm -f "$PERSIST"/pkgcache/*"$TPV"-*.pkg.tar.* 2>/dev/null   # the new driver's packages (about 500 MB); a new trial rebuilds them
   fi
-  rm -f "$SEL"; [ "$(modver)" = "$OPV" ] || { log "after the revert the installed module is '$(modver)', not $OPV"; return 1; }
+  if [ "$OLDN" = nvidia-open-egpu ]; then rm -f "$SEL"; else echo "$OLDN" > "$SEL"; fi
+  [ "$(modver)" = "$OPV" ] || { log "after the revert the installed module is '$(modver)', not $OPV"; return 1; }
   log "the previous driver $OPV is back"; }
 
 revert_and_attach(){ # <reason>
   put reverting "$1 Putting the previous driver $OPV back."
   if ! detach && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
-    # ROG Ally / XG Mobile: the 615 driver did not come up AND the eGPU will not detach, i.e. it is not answering. Swapping
+    # ROG Ally / XG Mobile: the new driver did not come up AND the eGPU will not detach, i.e. it is not answering. Swapping
     # the driver image under a loaded, stuck driver and attaching again is the black-screen path. The state stays
     # "reverting": the boot step puts the previous driver back before the eGPU is touched (egpu-driver-trial-boot.service).
     /usr/local/sbin/egpu-panel on >/dev/null 2>&1 || true
@@ -119,6 +126,18 @@ revert_and_attach(){ # <reason>
 
 exec 9>/run/egpu-driver-trial.lock; flock -n 9 || { echo "a driver trial is already running"; exit 3; }
 
+# which two drivers this run is about
+case "${1:-status}" in
+  start) [ "$CUR" = nvidia-open-egpu ] || { echo "already on $CUR (the main driver 615 or the beta)"; exit 0; }
+    pick nvidia-open-egpu nvidia-open-egpu-615 ;;
+  start-beta) [ "$CUR" = nvidia-open-egpu-615 ] || { echo "the beta driver is tried from the main driver 615: switch to 615 first"; exit 2; }
+    pick nvidia-open-egpu-615 nvidia-open-egpu-620 ;;
+  revert) case "$CUR" in nvidia-open-egpu-620) pick nvidia-open-egpu-615 nvidia-open-egpu-620 ;;
+                         *) pick nvidia-open-egpu nvidia-open-egpu-615 ;; esac ;;
+  boot) o=$(get olddir); n=$(get newdir); pick "${o:-nvidia-open-egpu}" "${n:-nvidia-open-egpu-615}" ;;   # older state files: 610 -> 615
+  *) pick nvidia-open-egpu nvidia-open-egpu-615 ;;
+esac
+
 case "${1:-status}" in
   status) cat "$STATE" 2>/dev/null || echo "state=none"; echo "installed=$(modver)"; exit 0 ;;
 
@@ -126,19 +145,19 @@ case "${1:-status}" in
     st=$(get state); case "$st" in building|attempting|reverting)
       log "boot: the machine restarted during the driver trial (last step: $st)"
       /usr/local/sbin/egpu-snapshot "driver-trial-interrupted-$st" >/dev/null 2>&1 || true   # with the previous boot's journal tail
-      if restore_old; then put reverted "The machine restarted during the switch to driver 615 (last step: $st). The previous driver $OPV was put back before the eGPU was used."
-      else put failed "The machine restarted during the switch to driver 615 and the previous driver could not be put back automatically. Details: $LOG"; fi ;;
+      if restore_old; then put reverted "The machine restarted while switching to driver $TPV (last step: $st). The previous driver $OPV was put back before the eGPU was used."
+      else put failed "The machine restarted while switching to driver $TPV and the previous driver could not be put back automatically. Details: $LOG"; fi ;;
     esac; exit 0 ;;
 
-  start)
-    [ -n "$TPV" ] && [ -n "$OPV" ] || { echo "the 615 driver files are not installed"; exit 2; }
+  start|start-beta)
+    [ -n "$TPV" ] && [ -n "$OPV" ] || { echo "the driver files ($NEWN) are not installed"; exit 2; }
     [ "$(modver)" = "$TPV" ] && [ "$(get state)" = kept ] && { echo "the driver $TPV is already in use"; exit 0; }
     gamescope >/dev/null || { echo "start it from Game Mode"; exit 2; }
     /usr/local/sbin/egpu-game-running && { echo "close the running game first"; exit 2; }
     gpu_on_bus || [ -d /sys/module/nvidia ] || { echo "connect the eGPU first: the trial attaches it to test the driver"; exit 2; }
     free=$(df -Pm /home | awk 'NR==2{print $4}'); [ "${free:-0}" -ge 6000 ] || { echo "not enough space on /home: ${free} MB free, 6000 MB needed while building"; exit 2; }
     : > "$STATE"; echo "started=$(date +%s)" >> "$STATE"
-    log "==== beta driver trial: $OPV -> $TPV ($(steamos && echo SteamOS || echo pacman)) ===="
+    log "==== driver trial: $OPV -> $TPV ($(steamos && echo SteamOS || echo pacman)) ===="
     steamos || remember_prev || { put failed "Nothing was changed: the previous driver's package files are not in the package cache, so a revert could not be guaranteed."; exit 4; }
     steamos && { bash "$OLD/install-steamos-sysext.sh" --status >/dev/null 2>&1 || { put failed "Nothing was changed: the previous driver's image is not in place."; exit 4; }; }
     put building "Safe Detach, then downloading and building the driver $TPV (10-20 minutes)."
@@ -157,15 +176,15 @@ case "${1:-status}" in
       revert_and_attach "The driver $TPV did not build or install (installed module: '$(modver)')."; finish; exit 6; fi
     put attempting "Driver $TPV installed; attaching the eGPU with it."
     attach; if healthy "$TPV"; then
-      echo "nvidia-open-egpu-615" > "$SEL"; put kept "Driver $TPV is running the eGPU. You can return to $OPV at any time in Setup & updates."; report; finish; exit 0; fi
+      echo "$NEWN" > "$SEL"; put kept "Driver $TPV is running the eGPU. You can return to $OPV at any time in Setup & updates."; report; finish; exit 0; fi
     report; revert_and_attach "The eGPU did not come up with the driver $TPV."; finish; exit 7 ;;
 
   revert)
-    [ "$(modver)" = "$OPV" ] && [ ! -e "$SEL" ] && { echo "already on the previous driver $OPV"; exit 0; }
+    [ "$CUR" = nvidia-open-egpu ] && [ "$(modver)" = "$OPV" ] && { echo "already on driver $OPV"; exit 0; }
     gamescope >/dev/null || { echo "start it from Game Mode"; exit 2; }
     /usr/local/sbin/egpu-game-running && { echo "close the running game first"; exit 2; }
     sed -i '/^started=/d' "$STATE" 2>/dev/null; echo "started=$(date +%s)" >> "$STATE"   # a new operation: the plugin shows its result once
     revert_and_attach "Return to the previous driver requested."; finish; exit 0 ;;
 
-  *) echo "usage: egpu-driver-trial start|revert|boot|status"; exit 1 ;;
+  *) echo "usage: egpu-driver-trial start|start-beta|revert|boot|status"; exit 1 ;;
 esac

@@ -40,6 +40,7 @@ are supported in beta (an RX 6800 XT is being tested now).
   XG Mobile controls in the plugin and the desktop app: a power target in watts, fan modes and a custom fan curve, the
   dock's lights, and core and memory clock offsets.
 - **NVIDIA driver 615 (main):** offered once after the update on 610 machines, with an automatic return to 610 if it fails.
+- **Beta driver 620 (testers):** NVIDIA 620.70.06 with the same eGPU patches, tried from 615 with an automatic return to 615 if it fails.
 - **Keeps itself working:** Decky restarts if it stops, and the setup repairs itself after OS updates.
 - **Release notes when updating:** "What's new" in the plugin and in the desktop app's Update window, straight from
   GitHub: every version between the one you have and the update.

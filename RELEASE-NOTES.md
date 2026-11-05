@@ -1,3 +1,12 @@
+0.7.221 — Beta driver: NVIDIA 620.70.06.
+
+**Driver** (NVIDIA install on SteamOS, CachyOS and Arch only; Bazzite, AMD / Intel and the main driver 615 unchanged)
+- New beta driver 620.70.06 (released by NVIDIA this week), with all nine EGPU Buddy eGPU patches ported to it. It replaces 615 as the beta; 615 stays the main driver.
+- Setup & updates > NVIDIA driver: on 615, "Try beta driver 620". Safe Detach, build (10-20 minutes), attach, health check; if the eGPU does not come up, or the machine resets or hangs, 615 comes back by itself.
+- On 620: "Return to the main driver 615". On 615: "Return to the previous driver 610", as before.
+- Checked here: every patch applies exactly to NVIDIA's 620 source, and all five modules compile and link for SteamOS (6.18 and 7.2 kernels) and CachyOS (7.3). Not yet run on hardware.
+- Uninstall also removes the 620 build files.
+
 0.7.220 — NVIDIA driver 615 is now the main driver.
 
 **Driver** (NVIDIA install on SteamOS, CachyOS and Arch; Bazzite already builds 615; AMD / Intel unchanged)
