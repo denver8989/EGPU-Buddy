@@ -1,3 +1,9 @@
+0.7.222 — Plugin: settings no longer jump back to the top (ROG Ally / XG Mobile).
+
+**Plugin** (ROG Ally / XG Mobile only; every other machine unchanged)
+- Changing a setting (XG Mobile fan, lights, power target, clock offsets, power and clock limits, NVIDIA settings) jumped the menu back to the top, so you had to find your way back after every change. The control you pressed now stays selected, and the plugin stays on the page you were on.
+- Pressing again while a change is still being applied is ignored instead of greying the menu out.
+
 0.7.221 — Beta driver: NVIDIA 620.70.06.
 
 **Driver** (NVIDIA install on SteamOS, CachyOS and Arch only; Bazzite, AMD / Intel and the main driver 615 unchanged)

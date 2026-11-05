@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.221"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.222"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -633,6 +633,18 @@ def _trial():
         if "=" in line: k, v = line.split("=", 1); d[k] = v
     d["running"] = d.get("state", "") in ("building", "attempting", "reverting")
     return d
+
+
+_ALLY_XGM = None
+def _ally_xgm():
+    """ROG Ally / ASUS XG Mobile, by the project's gate: egpu-detect says rog-ally, or an XG Mobile was seen. Cached once true
+    (the marker only ever appears); egpu-detect is asked at most once a minute while false."""
+    global _ALLY_XGM
+    if _ALLY_XGM is True: return True
+    if os.path.exists("/var/lib/nvegpu/xg-mobile-seen"): _ALLY_XGM = True; return True
+    if _ALLY_XGM is None or time.time() - _ALLY_XGM > 60:
+        _ALLY_XGM = True if _sh(["/usr/local/sbin/egpu-detect", "--device"], 5)[1].strip() == "rog-ally" else time.time()
+    return _ALLY_XGM is True
 
 
 def _trial_block():
@@ -2038,6 +2050,8 @@ class Plugin:
             # USB-C screens on the handheld itself (XR glasses, portable monitors): offered only while an eGPU is attached
             "handheld_displays": [d for d in _handheld_screens() if not d["builtin"]] if bdf else [],
             "output": output,
+            # ROG Ally / XG Mobile (CLAUDE.md gate): the plugin keeps its page and the focused control while a setting is applied
+            "ally_xgm": _ally_xgm(),
             "gm_status": _json(GM_STATUS), "desktop_status": _json(DESKTOP_STATUS),
             # Strip NULs and control characters: a hardware reset can leave this file NUL-padded
             # (data written but never flushed), and the raw bytes rendered as a row of boxes in the

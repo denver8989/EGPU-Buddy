@@ -6,7 +6,7 @@ import qrcode from "qrcode-generator";
 
 type Status = {
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean; ogui?: boolean;
-  attach_pending: boolean; on_egpu: boolean; dock?: string; xgm?: { intro_seen_plugin?: boolean; fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
+  attach_pending: boolean; on_egpu: boolean; ally_xgm?: boolean; dock?: string; xgm?: { intro_seen_plugin?: boolean; fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
   link: { speed: string; width: string }; displays: { name: string; enabled: boolean; model: string; detail: string; state: string }[]; audio_sink: string;
   telemetry: Record<string, string>; ts: number; resets?: { count: number; last: string };
@@ -294,7 +294,7 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.221";
+const PLUGIN_VERSION = "0.7.222";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -372,9 +372,13 @@ const maybeShowTrial = async () => {
 };
 let switchAsked = false;   // per plugin load: a new Game Mode session (Steam restart) asks again
 
+// ROG Ally / XG Mobile: the page (main, details, setup, NVIDIA settings) is kept for the plugin's lifetime, so a re-render
+// of the panel does not drop the user back on the main page. Set from the status (ally_xgm); elsewhere it always opens on main.
+const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" } = { on: false, tab: "main" };
 function Content() {
   const visible = useQuickAccessVisible();
-  const [tab, setTab] = useState<"main" | "details" | "setup" | "nvidia">("main");
+  const [tab, setTab_] = useState<"main" | "details" | "setup" | "nvidia">(keepPage.on ? keepPage.tab : "main");
+  const setTab = (t: "main" | "details" | "setup" | "nvidia") => { keepPage.tab = t; setTab_(t); };
   const [nv, setNv] = useState<NvSettings | null>(null);
   const [nvEdit, setNvEdit] = useState<Record<string, string | number> | null>(null);
   const [live, setLive_] = useState<LiveSettings | null>(null);
@@ -401,7 +405,7 @@ function Content() {
   const [intro, setIntro] = useState<{ src: string; fading: boolean } | null>(null);   // XG Mobile intro, once
   const introAsked = useRef(false);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
 
-  const refresh = async () => { try { setS(await getStatus()); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
+  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -415,7 +419,14 @@ function Content() {
 
   // Bazzite: with OpenGamepadUI running, Steam's running-app entry can be OpenGamepadUI itself; there the backend's check decides
   const gameUp = !!(s?.game_running || (!s?.ogui && Router.MainRunningApp));
-  const run = async (fn: () => Promise<Result>) => { setBusy(true); try { const r = await fn(); setMsg(r.message); } catch (e) { setMsg(`${e}`); } finally { setBusy(false); refresh(); } };
+  // ROG Ally / XG Mobile (s.ally_xgm, the CLAUDE.md gate): a setting's control stays enabled while it is applied. Disabling the
+  // control the controller is on moves Steam's focus to the top of the panel, so after every change the user had to scroll
+  // back (SilverplayerX, 0.7.221). A second press while one runs is ignored instead. Everywhere else: as before.
+  const keepFocus = !!s?.ally_xgm;
+  const lock = busy && !keepFocus;
+  const running = useRef(false);
+  const run = async (fn: () => Promise<Result>) => { if (keepFocus && running.current) return; running.current = true;
+    setBusy(true); try { const r = await fn(); setMsg(r.message); } catch (e) { setMsg(`${e}`); } finally { running.current = false; setBusy(false); refresh(); } };
 
   const tel = s?.telemetry ?? {};
   const plMin = Number(tel["power.min_limit"] ?? 100), plMax = Number(tel["power.max_limit"] ?? 320);
@@ -648,7 +659,7 @@ function Content() {
                 <Row key={x.connector} k={x.name || x.connector}
                   v={[screenState[x.state], x.connector.startsWith("HDMI") ? "HDMI" : x.connector.startsWith("DP") ? "DisplayPort" : x.connector].filter(Boolean).join(" · ")} />
               ))}
-              {scr?.some((x) => x.ddc) && <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => {}); return r; })}>Wake screens</ButtonItem></PanelSectionRow>}
+              {scr?.some((x) => x.ddc) && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => {}); return r; })}>Wake screens</ButtonItem></PanelSectionRow>}
               <Row k="Audio" v={audioName(s.audio_sink, s.bdf)} />
               <Row k="Temp" v={tel["temperature.gpu"] ? `${tel["temperature.gpu"]} °C` : ""} />
               <Row k="Power" v={tel["power.draw"] ? (Number.isFinite(Number(tel["power.limit"])) ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : xgLive.target ? `${Math.round(Number(tel["power.draw"]))} / ${xgLive.target} W target` : xgCap !== null ? `${Math.round(Number(tel["power.draw"]))} / ${xgCap} W cap` : `${Math.round(Number(tel["power.draw"]))} W`) : ""} />
@@ -661,7 +672,7 @@ function Content() {
           </PanelSection>
           {(
             <PanelSection title="Support report">
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={async () => { setReport(null); try { setReport(await makeReport()); } catch { setMsg("Could not make the report."); } }}>Save support report to Desktop</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={async () => { setReport(null); try { setReport(await makeReport()); } catch { setMsg("Could not make the report."); } }}>Save support report to Desktop</ButtonItem></PanelSectionRow>
               {report && (<>
                 <PanelSectionRow><div style={{ fontSize: "12px" }}>Scan with your phone to open a new GitHub issue with the report summary filled in. The full report is saved as <b>{report.file}</b>: attach it to the issue.</div></PanelSectionRow>
                 <PanelSectionRow><div style={{ width: "240px", margin: "0 auto", background: "#fff", borderRadius: "4px" }} dangerouslySetInnerHTML={{ __html: qrSvg(report.url) }} /></PanelSectionRow>
@@ -679,31 +690,31 @@ function Content() {
               <PanelSectionRow>
                 <SliderField label={ptNow >= xgTop ? "Power target: none" : "Power target (W)"} value={ptNow} min={40} max={xgTop} step={5} showValue onChange={setPt} />
               </PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy || pt === null} onClick={() => { const w = ptNow >= xgTop ? 0 : ptNow; setPt(null); run(() => xgmPower(w)); }}>Apply power target</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && pt === null)} onClick={() => { if (keepFocus && pt === null) return; const w = ptNow >= xgTop ? 0 : ptNow; setPt(null); run(() => xgmPower(w)); }}>Apply power target</ButtonItem></PanelSectionRow>
               </>)}
               <PanelSectionRow>
-                <DropdownItem label="Fan mode" selectedOption={s.xgm?.fan ?? "auto"} disabled={busy}
+                <DropdownItem label="Fan mode" selectedOption={s.xgm?.fan ?? "auto"} disabled={lock}
                   rgOptions={[["auto", "Auto (the XG Mobile's own)"], ["quiet", "Quiet"], ["balanced", "Balanced"], ["performance", "Performance"], ["max", "Max"],
                     ...(s.xgm?.curve ? [["custom", "Custom (made in the desktop app)"]] : [])].map(([data, label]) => ({ data, label }))}
                   onChange={(o) => run(() => xgmFan(String(o.data)))} />
               </PanelSectionRow>
-              <PanelSectionRow><ToggleField label="Lights" checked={lightOn} disabled={busy} onChange={(v) => run(() => xgmLight(v))} /></PanelSectionRow>
+              <PanelSectionRow><ToggleField label="Lights" checked={lightOn} disabled={lock} onChange={(v) => run(() => xgmLight(v))} /></PanelSectionRow>
               {lightOn && (<>
               <PanelSectionRow>
-                <DropdownItem label="Light effect" selectedOption={s.xgm?.effect ?? "static"} disabled={busy}
+                <DropdownItem label="Light effect" selectedOption={s.xgm?.effect ?? "static"} disabled={lock}
                   rgOptions={[["static", "Static"], ["breathe", "Breathe"], ["cycle", "Color cycle"], ["rainbow", "Rainbow"], ["strobe", "Strobe"]].map(([data, label]) => ({ data, label }))}
                   onChange={(o) => lightFx(String(o.data))} />
               </PanelSectionRow>
               <PanelSectionRow>
-                <DropdownItem label="Light color" selectedOption={s.xgm?.color ?? "ff0000"} disabled={busy}
+                <DropdownItem label="Light color" selectedOption={s.xgm?.color ?? "ff0000"} disabled={lock}
                   rgOptions={XGM_COLORS.map(([data, label]) => ({ data, label }))} onChange={(o) => lightFx("", String(o.data))} />
               </PanelSectionRow>
               <PanelSectionRow>
-                <DropdownItem label="Light speed" selectedOption={s.xgm?.speed ?? "normal"} disabled={busy}
+                <DropdownItem label="Light speed" selectedOption={s.xgm?.speed ?? "normal"} disabled={lock}
                   rgOptions={[["slow", "Slow"], ["normal", "Normal"], ["fast", "Fast"]].map(([data, label]) => ({ data, label }))} onChange={(o) => lightFx("", "", String(o.data))} />
               </PanelSectionRow>
               <PanelSectionRow>
-                <SliderField label="Light brightness" value={s.xgm?.brightness ?? 3} min={0} max={3} step={1} notchCount={4} notchTicksVisible showValue disabled={busy}
+                <SliderField label="Light brightness" value={s.xgm?.brightness ?? 3} min={0} max={3} step={1} notchCount={4} notchTicksVisible showValue disabled={lock}
                   onChange={(v) => run(() => xgmSet("brightness", String(v)))} />
               </PanelSectionRow>
               </>)}
@@ -713,7 +724,7 @@ function Content() {
               <PanelSectionRow>
                 <SliderField label="Memory clock offset (MHz)" value={xoffNow[1]} min={-1000} max={1500} step={50} showValue onChange={(v) => setXoff([xoffNow[0], v])} />
               </PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy || xoff === null} onClick={() => { const [c, m] = xoffNow; setXoff(null); run(() => xgmSet("offset", `${c}:${m}`)); }}>Apply clock offsets</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && xoff === null)} onClick={() => { if (keepFocus && xoff === null) return; const [c, m] = xoffNow; setXoff(null); run(() => xgmSet("offset", `${c}:${m}`)); }}>Apply clock offsets</ButtonItem></PanelSectionRow>
               {!controlsOk && msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
             </PanelSection>
           )}
@@ -723,7 +734,7 @@ function Content() {
               <PanelSectionRow>
                 <SliderField label="Power limit (W)" value={plNow} min={plMin} max={plMax} step={5} showValue onChange={setPl} />
               </PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy || pl === null} onClick={() => run(() => setPowerLimit(plNow))}>Apply power limit</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && pl === null)} onClick={() => (keepFocus && pl === null) ? undefined : run(() => setPowerLimit(plNow))}>Apply power limit</ButtonItem></PanelSectionRow>
               </>) : (
               <>
               {!xg && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This GPU does not take a power limit from the driver (a laptop-class GPU, as in an ASUS XG Mobile): the dock sets its power{xgCap !== null ? ` (cap now ${xgCap} W${Number.isFinite(plMax) ? `, at most ${Math.round(plMax)} W` : ""})` : ""}. Limit its clock instead to lower power and heat.</div></PanelSectionRow>}
@@ -731,7 +742,7 @@ function Content() {
               <PanelSectionRow>
                 <SliderField label="Max GPU clock (MHz)" value={clkNow} min={clkMin} max={clkMax} step={15} showValue onChange={setClk} />
               </PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy || clk === null} onClick={() => run(() => setClockLimit(clkNow))}>Apply clock limit</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && clk === null)} onClick={() => (keepFocus && clk === null) ? undefined : run(() => setClockLimit(clkNow))}>Apply clock limit</ButtonItem></PanelSectionRow>
               </>)}
               </>
               )}
@@ -739,9 +750,9 @@ function Content() {
               <PanelSectionRow>
                 <SliderField label="Core clock offset (MHz)" value={off} min={-300} max={300} step={15} showValue onChange={setOff} />
               </PanelSectionRow>
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(() => setCoreOffset(off))}>Apply offset</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => setCoreOffset(off))}>Apply offset</ButtonItem></PanelSectionRow>
               </>)}
-              <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setOff(0); setPl(null); setClk(null); setPt(null); setXoff(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => { setOff(0); setPl(null); setClk(null); setPt(null); setXoff(null); run(resetClocks); }}>Reset clocks</ButtonItem></PanelSectionRow>
               {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
             </PanelSection>
           ) : (
@@ -878,20 +889,20 @@ function Content() {
         return (<PanelSection title="NVIDIA settings (experimental)">
           <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("setup")}>Back to setup</ButtonItem></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing.</div></PanelSectionRow>
-          {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={busy}
+          {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={lock}
             selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
             onChange={(o) => setNvEdit({ ...cur, [r.key]: o.data })} /></PanelSectionRow>)}
           {cur.low_latency === "ultra" && pr && !pr.ready && <>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: {pr.tools.map((t) => t.name).join(", ") || "none found"}). {pr.install?.message ?? ""}</div></PanelSectionRow>
-            <PanelSectionRow><ButtonItem layout="below" disabled={busy || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
+            <PanelSectionRow><ButtonItem layout="below" disabled={lock || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
               {pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton"}</ButtonItem></PanelSectionRow></>}
           {cur.low_latency === "ultra" && pr?.ready && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Ultra: pick {pr.tools.filter((t) => t.ok).map((t) => t.name).join(" or ")} for the game (Properties &gt; Compatibility), or for every game in Steam Settings &gt; Compatibility. {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
           {(() => { const once = s?.game_mode && nv.loader !== "loaded";   // the loader is not in this Game Mode yet: one restart
-            return <PanelSectionRow><ButtonItem layout="below" disabled={busy || !dirty || (once && gameUp)} onClick={() => run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return once ? applyNvidia() : { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; })}>
+            return <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && !dirty) || (once && gameUp)} onClick={() => (keepFocus && !dirty) ? undefined : run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return once ? applyNvidia() : { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; })}>
               {once ? (gameUp ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>; })()}
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
-          <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => setNvEdit({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
-          {nv.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => run(async () => { const r = await nvidiaOff(); setNv(await getNvidia()); setNvEdit(null); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => setNvEdit({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
+          {nv.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvidiaOff(); setNv(await getNvidia()); setNvEdit(null); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
           {!!nv.games?.length && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.games.length} game(s) ship their own dxvk.conf; it is read after these settings, so its options win: {nv.games.map((g) => g.game + (g.overridden.length ? ` (own ${g.overridden.join(", ")})` : "")).join(" · ")}</div></PanelSectionRow>}
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Not yet: FXAA, texture filtering quality, page flipping.</div></PanelSectionRow>
         </PanelSection>);
@@ -927,7 +938,7 @@ function Content() {
           <PanelSectionRow><ToggleField label="TV control tricks" description="Off by default. Choosing the TV for Game Mode turns it on and switches it to the eGPU's HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now." checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
           {tv?.enabled && (<>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>
-            <PanelSectionRow><ButtonItem layout="below" disabled={busy} onClick={() => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }}>{tv.paired.length ? "Pair again" : "Find and pair TV"}</ButtonItem></PanelSectionRow>
+            <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }}>{tv.paired.length ? "Pair again" : "Find and pair TV"}</ButtonItem></PanelSectionRow>
           </>)}
         </PanelSection>
       )}
