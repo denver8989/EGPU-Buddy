@@ -124,7 +124,7 @@ if [ -d /home/.egpu-buddy ] || [ -L /etc/extensions/egpu-nvidia ] || [ -L /etc/e
   else sudo rm -f /etc/extensions/egpu-nvidia /etc/extensions/egpu-nvidia.raw; sudo systemd-sysext refresh >/dev/null 2>&1 || true; sudo ldconfig 2>/dev/null || true; sudo rm -rf /home/.egpu-buddy; fi
 fi
 # beta driver trial: its own image + build root (SteamOS, /home/.egpu-buddy-615) and its records
-sudo rm -rf /home/.egpu-buddy-615 /var/lib/nvegpu/driver-trial /etc/nv-egpu-buddy/driver-dir
+sudo rm -rf /home/.egpu-buddy-615 /var/lib/nvegpu/driver-trial /etc/nv-egpu-buddy/driver-dir /var/lib/nvegpu/driver-switch-615 /var/lib/nvegpu/driver-switch-615-done
 sudo /usr/local/sbin/egpu-dm-session unpin >/dev/null 2>&1 || sudo rm -f /etc/plasmalogin.conf.d/zz-egpu-buddy-session.conf /etc/sddm.conf.d/zz-egpu-buddy-session.conf /etc/plasmalogin.conf.d/zz-steamos-autologin.conf
 sudo rm -f /etc/sudoers.d/steamos-egpu-buddy /etc/sudoers.d/zz-steamos-egpu-buddy
 sudo rm -f /etc/atomic-update.conf.d/egpu-buddy.conf /etc/X11/xorg.conf.d/10-egpu-buddy-builtin-gpu.conf /etc/modprobe.d/zz-nvidia-egpu-pcie-gen3.conf /etc/modprobe.d/zz-egpu-xgm-no-nouveau.conf /var/lib/nvegpu/xg-mobile-seen

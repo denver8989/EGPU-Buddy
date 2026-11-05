@@ -39,7 +39,7 @@ are supported in beta (an RX 6800 XT is being tested now).
 - **ASUS XG Mobile support** (ROG Xbox Ally X tested): attach, Safe Detach and cable pulls in both modes, plus
   XG Mobile controls in the plugin and the desktop app: a power target in watts, fan modes and a custom fan curve, the
   dock's lights, and core and memory clock offsets.
-- **Beta driver button:** try NVIDIA's newest driver, with an automatic return to the tested one if it fails.
+- **NVIDIA driver 615 (main):** offered once after the update on 610 machines, with an automatic return to 610 if it fails.
 - **Keeps itself working:** Decky restarts if it stops, and the setup repairs itself after OS updates.
 - **Release notes when updating:** "What's new" in the plugin and in the desktop app's Update window, straight from
   GitHub: every version between the one you have and the update.
@@ -63,13 +63,13 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
   <tr>
     <th width="25%" valign="top">Main page<br><sub>Switch Game Mode between the handheld, XR glasses, a TV and a monitor; Safe Detach.</sub></th>
     <th width="25%" valign="top">Details<br><sub>GPU, driver, PCIe and USB4 link, screens, live readings, support report.</sub></th>
-    <th width="25%" valign="top">Setup<br><sub>System integration, beta driver, game screen, best resolution, updates, extras.</sub></th>
+    <th width="25%" valign="top">Setup<br><sub>System integration, NVIDIA driver, game screen, best resolution, updates, extras.</sub></th>
     <th width="25%" valign="top">ASUS XG Mobile<br><sub>RTX 5070 Ti Laptop GPU on a ROG Xbox Ally X: power target, fan mode, lights, clock offsets.</sub></th>
   </tr>
   <tr>
     <td valign="top"><img src="docs/assets/screenshot-main.png" alt="EGPU Buddy main page: Game Mode on the handheld screen with games on the eGPU, switch to XR glasses, the TV or a monitor, Safe Detach" width="200"></td>
     <td valign="top"><img src="docs/assets/screenshot-details.png" alt="EGPU Buddy details: GPU, driver, PCIe and USB4 link, screens, telemetry, support report" width="200"></td>
-    <td valign="top"><img src="docs/assets/screenshot-setup.png" alt="EGPU Buddy setup: system integration, beta driver, game screen, games, updates, extras" width="200"></td>
+    <td valign="top"><img src="docs/assets/screenshot-setup.png" alt="EGPU Buddy setup: system integration, NVIDIA driver, game screen, games, updates, extras" width="200"></td>
     <td valign="top"><img src="docs/assets/screenshot-xg-mobile.png" alt="EGPU Buddy plugin in Game Mode with an ASUS XG Mobile: details with the 115 W cap and the fan mode, then the XG Mobile section with power target, fan mode, lights and clock offsets" width="200"></td>
   </tr>
 </table>

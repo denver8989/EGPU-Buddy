@@ -1,3 +1,13 @@
+0.7.220 — NVIDIA driver 615 is now the main driver.
+
+**Driver** (NVIDIA install on SteamOS, CachyOS and Arch; Bazzite already builds 615; AMD / Intel unchanged)
+- 615.78.08 replaces 610.57.04 as EGPU Buddy's main driver: most testers ran it without problems.
+- Machines on 610 are asked once, in Game Mode with the eGPU on and no game running: "Switch now" or "Later" (asked again at the next Game Mode start). It never asks during a game.
+- The switch is the same safe one as the old beta button: Safe Detach, build (10-20 minutes), attach, health check. If the eGPU does not come up, 610 comes back by itself, also after a reset or hang.
+- Any outcome ends the asking. Setup & updates > NVIDIA driver keeps both buttons: switch to 615, return to 610.
+- New installs get 610 first and are offered the switch the same way, so every machine keeps a working driver to return to.
+- Uninstall removes the new markers.
+
 0.7.219 — NVIDIA settings (experimental): the Windows control panel's global settings, for games on the NVIDIA eGPU.
 
 **New: NVIDIA settings** (NVIDIA eGPU only: desktop app tab "NVIDIA settings", plugin Setup > NVIDIA settings; AMD / Intel unchanged)

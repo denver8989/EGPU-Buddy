@@ -345,7 +345,7 @@ Open an issue with your distro and kernel, the eGPU enclosure and GPU, the insta
 - attach: `/var/log/egpu-hotplug-mount.log`
 - Game Mode switch: `/var/log/egpu-gamemode.log`
 - plugin install: `/tmp/egpu-buddy-setup.log`
-- beta driver: `/var/log/egpu-driver-trial.log`
+- driver switch (610 -> 615): `/var/log/egpu-driver-trial.log`
 - AMD / Intel eGPU: `/var/log/egpu-generic.log`
 - kernel: `journalctl -k -b`, around the time of the problem
 - Game Mode: `journalctl --user -u gamescope-session.service -b`
