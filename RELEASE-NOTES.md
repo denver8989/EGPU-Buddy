@@ -1,3 +1,11 @@
+0.7.228 — NVIDIA settings fixes for every NVIDIA eGPU.
+
+**NVIDIA settings** (NVIDIA eGPU, every machine; AMD / Intel installs unchanged)
+- "Prefer maximum performance" works again on drivers 615 and newer (they no longer report the base clock).
+- The NVIDIA page shows what Apply did, and says when a running game keeps its settings until restarted.
+- Variable refresh switches back after 15 s as promised (it could take over a minute).
+- A wrong error message for an unknown live setting is fixed.
+
 0.7.227 — NVIDIA settings page keeps your choice on the ROG Ally.
 
 **NVIDIA settings** (ROG Ally / XG Mobile only; every other machine unchanged)

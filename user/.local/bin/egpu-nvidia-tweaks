@@ -399,7 +399,9 @@ def live_get():
 
 def live_set(key, value):
     d = _gs_display()
-    if key not in LIVE or not d:
+    if key not in LIVE:
+        return False, f"unknown setting {key}"
+    if not d:
         return False, "only in Game Mode"
     atom, lo, hi = LIVE[key]
     v = int(value)
@@ -427,7 +429,7 @@ def live_set_confirm(key, value, seconds=15):
     if not ok:
         return ok, msg
     subprocess.run(["systemctl", "--user", "stop", REVERT_UNIT + ".timer", REVERT_UNIT + ".service"], capture_output=True)
-    r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", f"--unit={REVERT_UNIT}", f"--on-active={int(seconds)}",
+    r = subprocess.run(["systemd-run", "--user", "--collect", "--quiet", f"--unit={REVERT_UNIT}", f"--on-active={int(seconds)}", "--timer-property=AccuracySec=1s",
                         os.path.realpath(__file__), "live-set", key, str(int(old or 0))], capture_output=True, text=True)
     if r.returncode != 0:   # no timer, no risky change: put it back right away
         live_set(key, int(old or 0))

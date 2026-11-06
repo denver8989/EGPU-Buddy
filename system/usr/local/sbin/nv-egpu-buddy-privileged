@@ -526,6 +526,9 @@ case "$action" in
         require_gpu_alive "nvidia-perf lock"
         _np=$(nvidia-smi -i "$GPU" --query-gpu=clocks.default_applications.graphics,clocks.max.graphics --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
         _nmin=${_np%%,*}; _nmax=${_np##*,}
+        # drivers 615+ report the base clock as "deprecated": hold from half the top clock instead
+        # ponytail: half of max sits below the base clock of desktop cards (65-80 % of max); the lock still yields to power/thermal limits
+        case "$_nmin" in ""|*[!0-9]*) case "$_nmax" in ""|*[!0-9]*) ;; *) _nmin=$((_nmax / 2)) ;; esac ;; esac
         case "$_nmin$_nmax" in ""|*[!0-9]*) die "the GPU did not report its clocks ($_np)" 2 ;; esac
         [ "$_nmin" -ge 210 ] && [ "$_nmax" -gt "$_nmin" ] || die "unexpected clocks $_nmin / $_nmax MHz" 2
         nvidia-smi -i "$GPU" -lgc "$_nmin,$_nmax" >/dev/null || die "locking the clocks failed" 1
