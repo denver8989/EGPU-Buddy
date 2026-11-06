@@ -69,7 +69,7 @@ runuser -u deck -- env $RUNENV bash -c 'systemctl --user reset-failed 2>/dev/nul
 runuser -u deck -- env $RUNENV bash -c '
   pat=$(printf "%s" "$1" | tr ":" "_")
   for _ in $(seq 1 20); do c=$(pactl list short cards 2>/dev/null | awk -v p="$pat" "index(\$2,p){print \$2; exit}"); [ -n "$c" ] && break; sleep 1; done
-  [ -n "$c" ] || exit 0; pactl set-card-profile "$c" HiFi >/dev/null 2>&1 || pactl set-card-profile "$c" pro-audio >/dev/null 2>&1; sleep 2
+  [ -n "$c" ] || exit 0; pactl set-card-profile "$c" HiFi >/dev/null 2>&1 || pactl set-card-profile "$c" output:hdmi-stereo >/dev/null 2>&1; sleep 2   # never pro-audio: WirePlumber keeps it and no screen port shows
   p=$(pactl list sinks | awk -v c="${c#alsa_card.}" "/Name: alsa_output\\./{n=\$2} n!=\"\" && index(n,c) && /\\[Out\\]/ && !/not available\\)/ && /available\\)\$/{print n; exit}")
   [ -n "$p" ] || p=$(pactl list short sinks | awk -v c="${c#alsa_card.}" "index(\$2,c){print \$2; exit}")
   [ -n "$p" ] && pactl set-default-sink "$p" >/dev/null 2>&1

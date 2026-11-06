@@ -175,6 +175,11 @@ UIDX=(); [ "$USER_UID" = 1000 ] || UIDX=(-e "s|/run/user/1000|/run/user/$USER_UI
 # Bazzite is Fedora: NVIDIA's 64-bit libraries are in /usr/lib64 (32-bit in /usr/lib, Arch's /usr/lib32), and the Vulkan
 # driver files are per architecture (nvidia_icd.x86_64.json / .i686.json; Mesa's radeon_icd.x86_64.json likewise).
 ICD=/usr/share/vulkan/icd.d
+# SteamOS and CachyOS (not Bazzite, which has its own below): every deliberate Game Mode restart (they all reset the
+# shim's crash counter first) also clears SteamOS's short-session tracker, whose "repair" after three Steam sessions under
+# a minute moves ~/.steam aside and loses the Steam login (it restores registry.vdf from the wrong path). Real crash
+# loops, which nobody restarts on purpose, are still counted.
+STX=(); [ "$IS_BAZZITE" = 1 ] || STX=(-e "s#\\(rm -f /run/user/[0-9]*/nv-egpu-buddy-gamescope-starts\\)#\\1 /tmp/steamos-short-session-tracker#g")
 BZX=(); [ "$IS_BAZZITE" = 1 ] && BZX=(
   # every deliberate Game Mode restart (they all reset the shim's crash counter first) also marks itself as ours, so
   # Bazzite's "5 short sessions -> desktop" fallback (packaging/bazzite/egpu-session-env) does not count it
@@ -185,7 +190,7 @@ BZX=(); [ "$IS_BAZZITE" = 1 ] && BZX=(
   -e "s#$ICD/nvidia_icd\\.json#$ICD/nvidia_icd.x86_64.json#g" -e "/radeon_icd\\.\\(\\*\\|x86_64\\)/!s#$ICD/radeon_icd\\.json#$ICD/radeon_icd.x86_64.json#g"
   -e "s#/usr/lib/libnvidia-ml#/usr/lib64/libnvidia-ml#g" -e "s#/usr/lib32/libnvidia-ml#/usr/lib/libnvidia-ml#g"
   -e "s#/usr/lib/gbm/nvidia-drm_gbm\\.so#/usr/lib64/gbm/nvidia-drm_gbm.so#g")
-templ(){ sed "${UIDX[@]}" "${BZX[@]}" -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -e "s|runuser -u deck |runuser -u $USER_NAME |g" -e "s|chown \\(-R \\)\\{0,1\\}deck:deck |chown \\1$USER_NAME:$USER_GROUP |g" -e "s|chown -R deck: |chown -R $USER_NAME: |g" -e "s|^Environment=STOCK_GAMESCOPE_SESSION=.*|Environment=STOCK_GAMESCOPE_SESSION=${STOCK:-/usr/lib/steamos/gamescope-session}|"; }
+templ(){ sed "${UIDX[@]}" "${STX[@]}" "${BZX[@]}" -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -e "s|runuser -u deck |runuser -u $USER_NAME |g" -e "s|chown \\(-R \\)\\{0,1\\}deck:deck |chown \\1$USER_NAME:$USER_GROUP |g" -e "s|chown -R deck: |chown -R $USER_NAME: |g" -e "s|^Environment=STOCK_GAMESCOPE_SESSION=.*|Environment=STOCK_GAMESCOPE_SESSION=${STOCK:-/usr/lib/steamos/gamescope-session}|"; }
 differs(){ [ -f "$2" ] || return 0; ! cmp -s <(templ < "$ROOT/$1") "$2"; }
 
 if [ "$MODE" = check ]; then

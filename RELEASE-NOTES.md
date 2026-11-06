@@ -1,3 +1,11 @@
+0.7.225 — eGPU sound comes back on the screen; no Steam sign-out after quick Game Mode restarts.
+
+**Sound** (NVIDIA eGPU)
+- The eGPU's sound card could stay on the "Pro Audio" profile, which hides which screen is plugged in: sound then stayed off the monitor or TV. Game Mode now puts the card back on its normal profile (re-probing it once if needed), and attaching on the desktop no longer falls back to "Pro Audio".
+
+**Steam sign-in** (SteamOS and CachyOS; Bazzite already had this)
+- Three Game Mode restarts within a minute each (attach, Safe Detach, screen switch) could trigger the system's Steam "repair", which signed Steam out. EGPU Buddy's own restarts no longer count towards it.
+
 0.7.224 — Big Art mode: menu fix for NVIDIA eGPUs (opt-in).
 
 **Steam menu fix for Big Art mode** (NVIDIA eGPU only, off by default; AMD / Intel eGPUs and the handheld's own GPU unchanged)

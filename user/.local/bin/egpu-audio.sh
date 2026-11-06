@@ -45,6 +45,50 @@ egpu_audio_bdfs() {
 
 # Pick the eGPU sink whose port is available. Prefer one that is already available over one that is
 # merely present, so a monitor that is awake wins over a second, dark output on the same card.
+# The eGPU's sound card on "Pro Audio" (or off) has no ports that say a screen is plugged in, so no output can be picked:
+# put it on its best normal profile (HiFi). When WirePlumber offers none but Pro Audio - it saved "pro-audio" as this
+# card's profile (an older reattach fell back to it) and then never probes the others - drop that saved entry and restart
+# WirePlumber once, so the card is probed again. Only the eGPU's cards; nothing changes on a card already on a normal profile.
+egpu_card_normal() {
+  local bdfs out; bdfs=$(egpu_audio_bdfs) || return 1; [ -n "$bdfs" ] || return 1
+  out=$(pactl -f json list cards 2>/dev/null | BDFS="$bdfs" python3 -c '
+import json, os, subprocess, sys
+want = {b.strip().replace(":", "_") for b in os.environ["BDFS"].split() if b.strip()}
+for c in json.load(sys.stdin):
+    name = c.get("name") or ""; path = ((c.get("properties") or {}).get("device.bus_path") or "").replace(":", "_")
+    if not any(w in path or w in name.replace(":", "_") for w in want) or c.get("active_profile") not in ("pro-audio", "off"):
+        continue
+    profs = [(v.get("priority", 0), k) for k, v in (c.get("profiles") or {}).items()
+             if k not in ("off", "pro-audio") and str(v.get("available", "")).lower() in ("yes", "true", "unknown")]
+    if profs:
+        subprocess.run(["pactl", "set-card-profile", name, max(profs)[1]], check=False); print("set", name, max(profs)[1])
+    elif c.get("active_profile") == "pro-audio":
+        print("stuck", name)
+' 2>/dev/null)
+  [ -n "$out" ] && echo "eGPU sound card: $out"
+  case "$out" in *stuck*) ;; *) return 0 ;; esac
+  local f="$HOME/.local/state/wireplumber/default-profile" card
+  for card in $(printf '%s\n' "$out" | awk '$1=="stuck"{print $2}'); do
+    [ -f "$f" ] && sed -i "/^${card//./\\.}=pro-audio\$/d" "$f"
+  done
+  systemctl --user restart wireplumber >/dev/null 2>&1 || return 1
+  sleep 4; echo "WirePlumber restarted to probe the eGPU sound card again"
+  egpu_card_normal_once
+}
+egpu_card_normal_once() {   # one more try after the restart, never a loop
+  local bdfs; bdfs=$(egpu_audio_bdfs) || return 1
+  pactl -f json list cards 2>/dev/null | BDFS="$bdfs" python3 -c '
+import json, os, subprocess, sys
+want = {b.strip().replace(":", "_") for b in os.environ["BDFS"].split() if b.strip()}
+for c in json.load(sys.stdin):
+    name = c.get("name") or ""; path = ((c.get("properties") or {}).get("device.bus_path") or "").replace(":", "_")
+    if not any(w in path or w in name.replace(":", "_") for w in want) or c.get("active_profile") not in ("pro-audio", "off"):
+        continue
+    profs = [(v.get("priority", 0), k) for k, v in (c.get("profiles") or {}).items()
+             if k not in ("off", "pro-audio") and str(v.get("available", "")).lower() in ("yes", "true", "unknown")]
+    if profs: subprocess.run(["pactl", "set-card-profile", name, max(profs)[1]], check=False)
+' 2>/dev/null; sleep 1
+}
 egpu_sink() {
   local bdfs; bdfs=$(egpu_audio_bdfs) || return 1
   [ -n "$bdfs" ] || return 1
@@ -82,6 +126,7 @@ move_streams() {   # follow the default: existing streams should not be left beh
 
 case "${1:-follow}" in
   follow)
+    egpu_card_normal || true
     sink=$(egpu_sink || true)
     [ -n "${sink:-}" ] || { echo "no eGPU audio output with an available port; leaving sound as it is"; exit 0; }
     current=$(pactl get-default-sink 2>/dev/null || true)
