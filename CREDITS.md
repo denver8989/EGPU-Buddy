@@ -155,6 +155,12 @@ say where it came from.
 
 If your work is used here and is not credited, open an issue and it will be fixed.
 
+## Handheld outlines in the screen picker
+
+- **[handheld-controller-glyphs](https://github.com/victor-borges/handheld-controller-glyphs)** by victor-borges (MIT,
+  commit a7eb5ef): the 28 handheld outlines in `decky-plugin/egpu-buddy/handhelds/`, recoloured at run time. Its Legion
+  Go pictures come from the SBP-Legion-Go-Theme. Licence: `decky-plugin/egpu-buddy/handhelds/LICENSE`.
+
 ## Images in the README
 
 - **bernhard.berger**: the "before" photo of the corrupted Game Mode interface, from

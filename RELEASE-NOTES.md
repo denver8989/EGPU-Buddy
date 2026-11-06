@@ -1,3 +1,12 @@
+0.7.229 — Screen picker shows your handheld, TV and ultrawide; new Keep awake switch.
+
+**Screen picker** (every machine)
+- The handheld screen shows your own handheld's outline (28 handhelds known; others keep the plain outline).
+- Monitors and TVs are drawn by shape: TV, 21:9 ultrawide, 32:9 super ultrawide, or a normal monitor.
+
+**Keep awake** (every machine, off by default: Setup > Sleep)
+- On: the machine never sleeps by itself, and Steam's Sleep button does nothing until you switch it off.
+
 0.7.228 — NVIDIA settings fixes for every NVIDIA eGPU.
 
 **NVIDIA settings** (NVIDIA eGPU, every machine; AMD / Intel installs unchanged)

@@ -29,9 +29,64 @@ USER = getattr(decky, "DECKY_USER", "") or "deck"
 USER_HOME = getattr(decky, "DECKY_USER_HOME", "") or f"/home/{USER}"
 UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
+
+# DMI "vendor product family" -> handhelds/<file>.svg, first match wins. Tested: Legion Go 2, Legion Go, ROG Xbox Ally X;
+# the rest are banked for when such a handheld turns up.
+# ponytail: untested DMI strings are best guesses from vendor naming; a miss just keeps the generic outline
+HANDHELD_ART = [
+    (r"Legion Go S", "lenovo-legion-go-s"), (r"Legion Go (2|8A.P2)", "lenovo-legion-go-2"), (r"Legion Go", "lenovo-legion-go"),
+    (r"RC73|Xbox Ally", "asus-rog-xbox-ally"), (r"RC71|RC72|ROG Ally", "asus-rog-ally"),
+    (r"Claw A8", "msi-claw-a8"), (r"Claw", "msi-claw"),
+    (r"AYANEO.*SLIDE", "ayaneo-slide"), (r"AYANEO.*KUN", "ayaneo-kun"), (r"AYANEO.*NEXT", "ayaneo-next"),
+    (r"AYANEO.*AIR", "ayaneo-air"), (r"AYANEO 3\b", "ayaneo-3"), (r"AYANEO 2", "ayaneo-2"), (r"AYA ?NEO.*(NEO|FOUNDER|2021)", "ayaneo-neo"),
+    (r"Loki", "ayn-loki"), (r"G1618-03", "gpd-win-3"), (r"G1618-04", "gpd-win-4"), (r"G1617", "gpd-win-mini"), (r"G1619", "gpd-win-max-2"),
+    (r"ONEXPLAYER F1", "onexplayer-f1"), (r"ONEXPLAYER G1", "onexplayer-g1"), (r"ONEXPLAYER X1", "onexplayer-x1"), (r"ONEXPLAYER 2", "onexplayer-2"),
+    (r"AOKZOE A1", "aokzoe-a1"), (r"Win600", "anbernic-win600"), (r"ZOTAC.*ZONE", "zotac-zone"),
+    (r"Pocket Go", "tecno-pocket-go"), (r"Zeenix", "tectoy-zeenix"),
+]
+
+
+# Keep awake (opt-in, every machine): a logind "sleep" block held by this root backend. Steam's idle sleep and its Sleep
+# button ask logind as the user; a lock held by another user (root) refuses them without an admin password.
+AWAKE_FLAG = "/var/lib/nvegpu/keep-awake"
+AWAKE_WHO = "EGPU Buddy keep awake"
+
+
+def _keep_awake_running():
+    return subprocess.run(["pgrep", "-f", f"who={AWAKE_WHO}"], capture_output=True).returncode == 0
+
+
+def _keep_awake(on):
+    if on:
+        os.makedirs(os.path.dirname(AWAKE_FLAG), exist_ok=True)
+        open(AWAKE_FLAG, "w").close()
+        if not _keep_awake_running():
+            subprocess.Popen(["systemd-inhibit", "--what=sleep:idle", f"--who={AWAKE_WHO}", "--why=Keep awake is on in EGPU Buddy",
+                              "--mode=block", "sleep", "infinity"], start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        try:
+            os.remove(AWAKE_FLAG)
+        except FileNotFoundError:
+            pass
+        subprocess.run(["pkill", "-f", f"who={AWAKE_WHO}"], capture_output=True)
+
+
+def _handheld_art(dmi=None):
+    if dmi is None:
+        dmi = " ".join(_read(f"/sys/class/dmi/id/{k}").strip() for k in ("sys_vendor", "product_name", "product_family"))
+    name = next((f for rx, f in HANDHELD_ART if re.search(rx, dmi, re.I)), "")
+    svg = _read(os.path.join(PLUGIN_DIR, "handhelds", name + ".svg")) if name else ""
+    if "<svg" not in svg:
+        return ""
+    svg = re.sub(r"((?:stroke|fill)\s*[=:]\s*\"?)#[0-9a-fA-F]{3,8}", r"\1currentColor", svg[svg.index("<svg"):])
+    svg = re.sub(r"<svg\b([^>]*?)\s(?:width|height)=\"[^\"]*\"", r"<svg\1", svg, count=1)
+    svg = re.sub(r"<svg\b([^>]*?)\s(?:width|height)=\"[^\"]*\"", r"<svg\1", svg, count=1)
+    return svg.replace("<svg", '<svg class="egpu-hh" width="96" height="40" preserveAspectRatio="xMidYMid meet"', 1).replace(
+        ">", '><style>.egpu-hh *{vector-effect:non-scaling-stroke;stroke-width:1px !important}</style>', 1)
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.228"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.229"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -2248,6 +2303,21 @@ class Plugin:
         d["pending"] = bool(d.get("available") and route and d.get("enabled") and not d.get("active"))  # on, Steam started without it
         return d
 
+    async def get_keep_awake(self):
+        return {"enabled": os.path.exists(AWAKE_FLAG), "active": _keep_awake_running()}
+
+    async def set_keep_awake(self, enabled: bool):
+        _keep_awake(bool(enabled))
+        await asyncio.sleep(0.5)
+        if bool(enabled) and not _keep_awake_running():
+            return {"ok": False, "message": "Could not hold the sleep block."}
+        return {"ok": True, "message": "Keep awake on: the machine does not sleep." if enabled else "Keep awake off: Steam's sleep settings apply again."}
+
+    async def get_handheld_art(self):
+        """Outline of this handheld for the screen picker (handheld-controller-glyphs, MIT, in handhelds/), or "" for the
+        generic one. Picked from the DMI names; recoloured to the menu's text colour, strokes 1 px at any size."""
+        return _handheld_art()
+
     async def get_steam_ui_fix(self):
         return self._sui_status()
 
@@ -2533,6 +2603,8 @@ class Plugin:
 
     async def _main(self):
         decky.logger.info("EGPU Buddy backend loaded")
+        if os.path.exists(AWAKE_FLAG):
+            _keep_awake(True)   # survives reboots and plugin restarts
         if os.path.realpath(PLUGIN_DIR) == os.path.realpath(PLUGIN_LIVE) and _drop_stray_plugin_copies():
             decky.logger.info("removed stray plugin copies from homebrew/plugins")
         await asyncio.sleep(8)
