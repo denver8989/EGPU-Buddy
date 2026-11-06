@@ -1,3 +1,10 @@
+0.7.224 — Big Art mode: menu fix for NVIDIA eGPUs (opt-in).
+
+**Steam menu fix for Big Art mode** (NVIDIA eGPU only, off by default; AMD / Intel eGPUs and the handheld's own GPU unchanged)
+- On an NVIDIA eGPU Steam's own interface compositor could not start, so in Big Art mode the main menu slid in over a black bar. The fix supplies what it is missing, on the NVIDIA GPU; no Steam file is changed.
+- The plugin asks once per Game Mode start while Big Art mode is on (also after a new attach), and offers a Game Mode restart when the fix is on but Steam started without it (after an update). Setup > Steam menu switches it on or off.
+- SteamOS, CachyOS and Bazzite; Steam and Steam-runtime updates are followed at every Game Mode start.
+
 0.7.223 — NVIDIA settings now reach Steam next to Ally Companion; menu logging (ROG Ally / XG Mobile only).
 
 **NVIDIA settings** (ROG Ally / XG Mobile only; every other machine unchanged)

@@ -100,6 +100,9 @@ const installSystem = callable<[boolean, string?], Result>("install_system");   
 const uninstallSystem = callable<[], Result>("uninstall_system");
 const rebootSystem = callable<[], Result>("reboot_system");
 const restartGamemode = callable<[], Result>("restart_gamemode");
+type SteamUi = { available: boolean; enabled?: boolean; bigart?: boolean; active?: boolean; route?: boolean; offer?: boolean; pending?: boolean };
+const getSteamUi = callable<[], SteamUi>("get_steam_ui_fix");
+const setSteamUi = callable<[boolean], Result & { restart?: boolean }>("set_steam_ui_fix");
 type Upd = { needs_detach?: boolean; auto_update: boolean; available: string; state: string; checked: number; last_error: string; installed: string };
 const getUpdate = callable<[], Upd>("get_update_status");
 const setAutoUpdate = callable<[boolean], Result>("set_auto_update");
@@ -375,6 +378,31 @@ const maybeShowTrial = async () => {
 };
 let switchAsked = false;   // per plugin load: a new Game Mode session (Steam restart) asks again
 
+// Steam menu fix for Big Art mode (NVIDIA eGPU only, opt-in): asked once per Game Mode start while Big Art is on and the
+// fix is off (an attach restarts Game Mode, so a new attach asks again); and when it is on but this Steam started without
+// it (after an update or an attach), a Game Mode restart is offered once. The backend decides: NVIDIA route, no game.
+let suiAsked = false, suiPendingAsked = false, suiOpen = false;
+const maybeOfferSteamUi = async () => {
+  if (suiOpen || trialOpen) return;
+  const o = await getSteamUi();
+  if (o.offer && !suiAsked) {
+    suiAsked = true; suiOpen = true;
+    showModal(<ConfirmModal strTitle="Fix the Big Art menu on the NVIDIA eGPU?"
+      strDescription="Big Art mode is on. On an NVIDIA eGPU, Steam's own interface compositor cannot start, so the main menu slides in over a black bar. EGPU Buddy can supply what it is missing (on the NVIDIA GPU, no Steam file is changed). Game Mode restarts once to apply it. You can switch it off any time in Setup."
+      strOKButtonText="Turn on and restart" strCancelButtonText="Not now"
+      onOK={async () => { suiOpen = false; const r = await setSteamUi(true); toaster.toast({ title: "EGPU Buddy", body: r.message });
+        if (r.ok && r.restart) { const g = await restartGamemode(); toaster.toast({ title: "EGPU Buddy", body: g.message }); } }}
+      onCancel={() => { suiOpen = false; }} />);
+  } else if (o.pending && !suiPendingAsked) {
+    suiPendingAsked = true; suiOpen = true;
+    showModal(<ConfirmModal strTitle="Steam menu fix: restart Game Mode?"
+      strDescription="The Steam menu fix for Big Art mode is on, but Steam was started without it (after an update or a new attach). Restarting Game Mode applies it."
+      strOKButtonText="Restart Game Mode" strCancelButtonText="Later"
+      onOK={async () => { suiOpen = false; const g = await restartGamemode(); toaster.toast({ title: "EGPU Buddy", body: g.message }); }}
+      onCancel={() => { suiOpen = false; }} />);
+  }
+};
+
 // ROG Ally / XG Mobile: the page (main, details, setup, NVIDIA settings) is kept for the plugin's lifetime, so a re-render
 // of the panel does not drop the user back on the main page. Set from the status (ally_xgm); elsewhere it always opens on main.
 const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" } = { on: false, tab: "main" };
@@ -396,6 +424,7 @@ function Content() {
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
   const [gr, setGr] = useState<{ enabled: boolean } | null>(null);
+  const [sui, setSui] = useState<SteamUi | null>(null);
   const [tr, setTr] = useState<Trial | null>(null);
   const staleChecked = useRef(false);
   const [s, setS] = useState<Status | null>(null);
@@ -410,7 +439,7 @@ function Content() {
   const [intro, setIntro] = useState<{ src: string; fading: boolean } | null>(null);   // XG Mobile intro, once
   const introAsked = useRef(false);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
 
-  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial());
+  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial()); setSui(await getSteamUi());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -883,6 +912,12 @@ function Content() {
           <PanelSectionRow><ToggleField label="Best resolution and refresh rate on every screen" description="On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are." checked={gr.enabled} onChange={(v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
+      {tab === "setup" && sui?.available && (
+        <PanelSection title="Steam menu">
+          <PanelSectionRow><ToggleField label="Big Art mode menu fix (NVIDIA eGPU)" description={`Off by default. On the NVIDIA eGPU Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: EGPU Buddy supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when Game Mode restarts.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`}
+            checked={!!sui.enabled} onChange={(v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) { const g = await restartGamemode(); return { ok: true, message: `${r.message} ${g.message}` }; } return r; })} /></PanelSectionRow>
+        </PanelSection>
+      )}
       {tab === "setup" && nv?.available && (
         <PanelSection title="NVIDIA settings (experimental)">
           <PanelSectionRow><ButtonItem layout="below" onClick={() => { setNvEdit(null); setTab("nvidia"); }}>Open NVIDIA settings</ButtonItem></PanelSectionRow>
@@ -958,6 +993,7 @@ export default definePlugin(() => {
   const notices = setInterval(async () => { try { const t = await popNotice(); if (t) toaster.toast({ title: "EGPU Buddy", body: t, duration: 15000 }); } catch { /* backend not up yet */ }
     try { await maybeShowTrial(); } catch { /* backend not up yet */ }
     try { await maybeOfferScreen(); } catch { /* backend not up yet */ }
+    try { await maybeOfferSteamUi(); } catch { /* backend not up yet */ }
     try { const ch = await gameResSync(); for (const [id, res] of Object.entries(ch)) (window as any).SteamClient?.Apps?.SetAppResolutionOverride(Number(id), res); } catch { /* backend not up yet */ } }, 5000);
   // a game starting: match its Steam game resolution to the screen Game Mode is on (Setup option, on by default)
   const sc = (window as any).SteamClient, details = () => (window as any).appDetailsStore;

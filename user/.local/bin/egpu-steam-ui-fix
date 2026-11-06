@@ -1,0 +1,78 @@
+#!/bin/bash
+# egpu-steam-ui-fix - Steam menu fix for Big Art mode on an NVIDIA eGPU (opt-in; NVIDIA install only, never AMD / Intel).
+#
+# On an NVIDIA eGPU Steam's own interface compositor cannot start (NVIDIA's GLX has no GLX_EXT_texture_from_pixmap under
+# gamescope's Xwayland), so Steam falls back to plain windows and in Big Art mode the main menu slides in over a black
+# bar. With the fix on, Steam's interface process loads EGPU Buddy's library (libegpu-steam-ui.so), which supplies that
+# extension on the NVIDIA GPU. It is loaded through Steam's own runtime override (STEAM_RUNTIME_STEAMRT): no Steam file
+# is changed. The override folder is rebuilt at every Game Mode start, so Steam and Steam-runtime updates are followed.
+#
+#   egpu-steam-ui-fix status   JSON: enabled, available (NVIDIA install + library), bigart (Steam setting), active (running Steam has it)
+#   egpu-steam-ui-fix on|off   the user's choice (Game Mode restart applies it)
+#   egpu-steam-ui-fix env      shell lines for a Game Mode session on the NVIDIA route (nothing unless on + available)
+set -u
+CFG="$HOME/.config/egpu-buddy/steam-ui-fix"
+D="$HOME/.local/lib/nv-egpu-buddy/steam-ui-fix"
+LIB="$D/libegpu-steam-ui.so"
+RTD="$D/rt"
+
+steam_root() {   # Steam's install (native and Bazzite: ~/.local/share/Steam; older: ~/.steam/steam)
+  local r
+  for r in "$HOME/.steam/root" "$HOME/.local/share/Steam" "$HOME/.steam/steam"; do
+    r=$(readlink -f "$r" 2>/dev/null) || continue
+    [ -d "$r/steamrt64/pv-runtime/steam-runtime-steamrt" ] && { printf '%s\n' "$r"; return 0; }
+  done
+  return 1
+}
+available() {   # the NVIDIA install only: never on the AMD / Intel install
+  [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && [ -r "$LIB" ] && steam_root >/dev/null
+}
+bigart() {   # Steam's "Big Art" home layout for the most recent Steam user (localconfig.vdf: "LibraryHomeBigArt" "1")
+  local r f; r=$(steam_root) || return 1
+  f=$(ls -t "$r"/userdata/*/config/localconfig.vdf 2>/dev/null | head -1)
+  [ -n "$f" ] && grep -qE '"LibraryHomeBigArt"[[:space:]]+"1"' "$f"
+}
+active() {   # the running Steam client was started with our runtime entry point
+  local p; for p in $(pgrep -u "$(id -u)" -x steam 2>/dev/null); do
+    tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "STEAM_RUNTIME_STEAMRT=$RTD" && return 0
+  done; return 1
+}
+prepare() {   # $RTD: every entry of Steam's runtime linked, except its entry point, which goes through ours
+  local real e n
+  real="$(steam_root)/steamrt64/pv-runtime/steam-runtime-steamrt"
+  [ -x "$real/_v2-entry-point" ] || return 1
+  mkdir -p "$RTD" || return 1
+  for e in "$RTD"/*; do [ -L "$e" ] && [ ! -e "$e" ] && rm -f "$e"; done   # entries a runtime update removed
+  for e in "$real"/* "$real"/.[!.]*; do
+    [ -e "$e" ] || continue; n=${e##*/}; [ "$n" = _v2-entry-point ] && continue
+    [ "$(readlink "$RTD/$n" 2>/dev/null)" = "$e" ] || ln -sfn "$e" "$RTD/$n"
+  done
+  cat > "$RTD/_v2-entry-point.new" <<EOT
+#!/bin/bash
+# EGPU Buddy (Steam menu fix, egpu-steam-ui-fix): Steam's interface goes through egpu-steam-ui-inner, which loads
+# libegpu-steam-ui.so inside the runtime container; everything else is Steam's own runtime, unchanged.
+a=(); for x in "\$@"; do case "\$x" in */steamwebhelper_sniper_wrap.sh) a+=("$D/egpu-steam-ui-inner" "\$x") ;; *) a+=("\$x") ;; esac; done
+exec "$real/_v2-entry-point" "\${a[@]}"
+EOT
+  cat > "$D/egpu-steam-ui-inner.new" <<EOT
+#!/bin/sh
+# runs inside Steam's runtime container: EGPU Buddy's Steam menu fix, then Steam's own webhelper script unchanged
+real="\$1"; shift
+export EGPU_TFP=1 LD_PRELOAD="$LIB\${LD_PRELOAD:+:\$LD_PRELOAD}"
+exec "\$real" "\$@"
+EOT
+  chmod 755 "$RTD/_v2-entry-point.new" "$D/egpu-steam-ui-inner.new" && mv -f "$RTD/_v2-entry-point.new" "$RTD/_v2-entry-point" \
+    && mv -f "$D/egpu-steam-ui-inner.new" "$D/egpu-steam-ui-inner"
+}
+json_bool() { if "$@"; then printf true; else printf false; fi; }
+
+case "${1:-}" in
+  status)
+    printf '{"enabled": %s, "available": %s, "bigart": %s, "active": %s}\n' \
+      "$(json_bool test -e "$CFG")" "$(json_bool available)" "$(json_bool bigart)" "$(json_bool active)" ;;
+  on)  available || { echo "not available here (NVIDIA install with Steam only)" >&2; exit 2; }
+       mkdir -p "${CFG%/*}" && touch "$CFG" && echo "on: applies at the next Game Mode start" ;;
+  off) rm -f "$CFG"; echo "off: Steam starts without it at the next Game Mode start" ;;
+  env) [ -e "$CFG" ] && available && prepare && printf 'export STEAM_RUNTIME_STEAMRT=%q\n' "$RTD" ;;
+  *) sed -n '2,15p' "$0" >&2; exit 2 ;;
+esac

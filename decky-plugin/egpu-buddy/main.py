@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.223"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.224"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -2222,6 +2222,43 @@ class Plugin:
         except ValueError:
             return {"available": False, "error": err or out}
         return {"available": True, **d}
+
+    # Steam menu fix for Big Art mode (opt-in): on the NVIDIA eGPU Steam's own interface compositor cannot start (NVIDIA's
+    # GLX has no texture-from-pixmap under gamescope), so the main menu slides in over a black bar. egpu-steam-ui-fix keeps
+    # the user's choice; the Game Mode session loads the fix on the NVIDIA route only. Never on the AMD / Intel install.
+    def _sui(self, *args):
+        return _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], f"HOME={USER_HOME}",
+                    f"{USER_HOME}/.local/bin/egpu-steam-ui-fix", *args], 20)
+
+    def _sui_status(self):
+        if _installed_vendor() == "amd" or not os.path.exists(f"{USER_HOME}/.local/bin/egpu-steam-ui-fix"):
+            return {"available": False}
+        try:
+            d = json.loads(self._sui("status")[1])
+        except ValueError:
+            return {"available": False}
+        # the route it is for: Game Mode with gamescope itself on the NVIDIA eGPU (not on the handheld's GPU, where Steam's
+        # interface is on Mesa and does not need it), no game running
+        route = (_gamescope_running() and os.path.exists("/sys/module/nvidia") and not _game_running()
+                 and _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") != "1"
+                 and _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] not in ("", "*")
+                 and not _gamescope_env("OUTPUT_CONNECTOR").startswith("eDP"))
+        d["route"] = bool(route)
+        d["offer"] = bool(d.get("available") and route and d.get("bigart") and not d.get("enabled"))   # ask: Big Art on, fix off
+        d["pending"] = bool(d.get("available") and route and d.get("enabled") and not d.get("active"))  # on, Steam started without it
+        return d
+
+    async def get_steam_ui_fix(self):
+        return self._sui_status()
+
+    async def set_steam_ui_fix(self, enabled: bool):
+        if _installed_vendor() == "amd":
+            return {"ok": False, "message": "The Steam menu fix is for NVIDIA eGPUs only."}
+        rc, out, err = self._sui("on" if enabled else "off")
+        if rc != 0:
+            return {"ok": False, "message": (err or out or "could not change it").strip()}
+        return {"ok": True, "message": ("Steam menu fix on." if enabled else "Steam menu fix off.") + " It applies when Game Mode restarts.",
+                "restart": _gamescope_running() and not _game_running()}
 
     async def set_nvidia_settings(self, settings: dict):
         if _installed_vendor() == "amd":

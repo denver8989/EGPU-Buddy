@@ -2465,6 +2465,8 @@ const installSystem = callable("install_system"); // vendor: "nvidia" | "amd" | 
 const uninstallSystem = callable("uninstall_system");
 const rebootSystem = callable("reboot_system");
 const restartGamemode = callable("restart_gamemode");
+const getSteamUi = callable("get_steam_ui_fix");
+const setSteamUi = callable("set_steam_ui_fix");
 const getUpdate = callable("get_update_status");
 const setAutoUpdate = callable("set_auto_update");
 const checkUpdate = callable("check_update");
@@ -2816,6 +2818,33 @@ const maybeShowTrial = async () => {
     }
 };
 let switchAsked = false; // per plugin load: a new Game Mode session (Steam restart) asks again
+// Steam menu fix for Big Art mode (NVIDIA eGPU only, opt-in): asked once per Game Mode start while Big Art is on and the
+// fix is off (an attach restarts Game Mode, so a new attach asks again); and when it is on but this Steam started without
+// it (after an update or an attach), a Game Mode restart is offered once. The backend decides: NVIDIA route, no game.
+let suiAsked = false, suiPendingAsked = false, suiOpen = false;
+const maybeOfferSteamUi = async () => {
+    if (suiOpen || trialOpen)
+        return;
+    const o = await getSteamUi();
+    if (o.offer && !suiAsked) {
+        suiAsked = true;
+        suiOpen = true;
+        DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: "Fix the Big Art menu on the NVIDIA eGPU?", strDescription: "Big Art mode is on. On an NVIDIA eGPU, Steam's own interface compositor cannot start, so the main menu slides in over a black bar. EGPU Buddy can supply what it is missing (on the NVIDIA GPU, no Steam file is changed). Game Mode restarts once to apply it. You can switch it off any time in Setup.", strOKButtonText: "Turn on and restart", strCancelButtonText: "Not now", onOK: async () => {
+                suiOpen = false;
+                const r = await setSteamUi(true);
+                toaster.toast({ title: "EGPU Buddy", body: r.message });
+                if (r.ok && r.restart) {
+                    const g = await restartGamemode();
+                    toaster.toast({ title: "EGPU Buddy", body: g.message });
+                }
+            }, onCancel: () => { suiOpen = false; } }));
+    }
+    else if (o.pending && !suiPendingAsked) {
+        suiPendingAsked = true;
+        suiOpen = true;
+        DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: "Steam menu fix: restart Game Mode?", strDescription: "The Steam menu fix for Big Art mode is on, but Steam was started without it (after an update or a new attach). Restarting Game Mode applies it.", strOKButtonText: "Restart Game Mode", strCancelButtonText: "Later", onOK: async () => { suiOpen = false; const g = await restartGamemode(); toaster.toast({ title: "EGPU Buddy", body: g.message }); }, onCancel: () => { suiOpen = false; } }));
+    }
+};
 // ROG Ally / XG Mobile: the page (main, details, setup, NVIDIA settings) is kept for the plugin's lifetime, so a re-render
 // of the panel does not drop the user back on the main page. Set from the status (ally_xgm); elsewhere it always opens on main.
 const keepPage = { on: false, tab: "main" };
@@ -2837,6 +2866,7 @@ function Content() {
     const [usb4, setUsb4] = SP_REACT.useState({});
     const [report, setReport] = SP_REACT.useState(null);
     const [gr, setGr] = SP_REACT.useState(null);
+    const [sui, setSui] = SP_REACT.useState(null);
     const [tr, setTr] = SP_REACT.useState(null);
     const staleChecked = SP_REACT.useRef(false);
     const [s, setS] = SP_REACT.useState(null);
@@ -2864,6 +2894,7 @@ function Content() {
             setUsb4(a.usb4 ? await getUsb4() : {});
             setGr(await getGameRes());
             setTr(await getTrial());
+            setSui(await getSteamUi());
             // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
             if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) {
                 staleChecked.current = true;
@@ -3043,7 +3074,10 @@ function Content() {
                                 const back = tr.current === "beta" ? tr.main : tr.old;
                                 DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `Return to ${back}`, strDescription: `The eGPU is safely detached, the driver ${back} is put back (offline, a few minutes) and the eGPU is attached again.`, strOKButtonText: "Return", onOK: () => run(revertTrial) }));
                             }, children: tr.current === "beta" ? `Return to the main driver ${tr.main}` : `Return to the previous driver ${tr.old}` }) })), tr.log && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setLogOpen(logOpen === "trial" ? "" : "trial"), children: logOpen === "trial" ? "Hide driver log" : "Show driver log" }) }), tr.log && logOpen === "trial" && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }, children: tr.log }) })] })), tab === "setup" && s?.present && s.game_mode && (SP_JSX.jsxs(DFL.PanelSection, { title: "Game screen", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Play games on", disabled: busy || gameUp, selectedOption: s.output && s.output !== "*" ? s.output : "eDP-1", rgOptions: screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label })), onChange: (o) => { if (o.data !== s.output)
-                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && gr && (SP_JSX.jsx(DFL.PanelSection, { title: "Games", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Best resolution and refresh rate on every screen", description: "On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are.", checked: gr.enabled, onChange: (v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; }) }) }) })), tab === "setup" && nv?.available && (SP_JSX.jsxs(DFL.PanelSection, { title: "NVIDIA settings (experimental)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => { setNvEdit(null); setTab("nvidia"); }, children: "Open NVIDIA settings" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: nv.active ? "Some settings are changed from their defaults." : "All on their defaults: nothing is changed." }) })] })), tab === "nvidia" && nv?.available && (() => {
+                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && gr && (SP_JSX.jsx(DFL.PanelSection, { title: "Games", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Best resolution and refresh rate on every screen", description: "On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are.", checked: gr.enabled, onChange: (v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; }) }) }) })), tab === "setup" && sui?.available && (SP_JSX.jsx(DFL.PanelSection, { title: "Steam menu", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Big Art mode menu fix (NVIDIA eGPU)", description: `Off by default. On the NVIDIA eGPU Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: EGPU Buddy supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when Game Mode restarts.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`, checked: !!sui.enabled, onChange: (v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) {
+                            const g = await restartGamemode();
+                            return { ok: true, message: `${r.message} ${g.message}` };
+                        } return r; }) }) }) })), tab === "setup" && nv?.available && (SP_JSX.jsxs(DFL.PanelSection, { title: "NVIDIA settings (experimental)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => { setNvEdit(null); setTab("nvidia"); }, children: "Open NVIDIA settings" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: nv.active ? "Some settings are changed from their defaults." : "All on their defaults: nothing is changed." }) })] })), tab === "nvidia" && nv?.available && (() => {
                 const cur = nvEdit ?? nv.settings ?? {};
                 const dirty = !!nvEdit && JSON.stringify(nvEdit) !== JSON.stringify(nv.settings);
                 return (SP_JSX.jsxs(DFL.PanelSection, { title: "NVIDIA settings (experimental)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setTab("setup"), children: "Back to setup" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing." }) }), NV_ROWS.map((r) => SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: r.label, description: r.key === "power" ? r.desc : `Next game launch. ${r.desc}`, disabled: lock, selectedOption: cur[r.key] ?? r.opts[0][0], rgOptions: r.opts.map(([d, l]) => ({ data: d, label: l })), onChange: (o) => setNvEdit({ ...cur, [r.key]: o.data }) }) }, r.key)), cur.low_latency === "ultra" && pr && !pr.ready && SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.85 }, children: ["Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: ", pr.tools.map((t) => t.name).join(", ") || "none found", "). ", pr.install?.message ?? ""] }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: lock || pr.install?.state === "running", onClick: () => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; }), children: pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton" }) })] }), cur.low_latency === "ultra" && pr?.ready && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsxs("div", { style: { fontSize: "12px", opacity: 0.8 }, children: ["Ultra: pick ", pr.tools.filter((t) => t.ok).map((t) => t.name).join(" or "), " for the game (Properties > Compatibility), or for every game in Steam Settings > Compatibility. ", pr.install?.state === "done" ? pr.install.message : ""] }) }), (() => {
@@ -3082,6 +3116,10 @@ var index = definePlugin(() => {
         catch { /* backend not up yet */ }
         try {
             await maybeOfferScreen();
+        }
+        catch { /* backend not up yet */ }
+        try {
+            await maybeOfferSteamUi();
         }
         catch { /* backend not up yet */ }
         try {

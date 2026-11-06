@@ -867,6 +867,20 @@ if [ -n "$_nvt" ]; then
   eval "$_nvt" 2>/dev/null || true
   log "NVIDIA settings: $(printf '%s\n' "$_nvt" | sed 's/^export //; s/=.*//' | tr '\n' ' ')" || true
 fi
+# Steam menu fix for Big Art mode (opt-in, egpu-steam-ui-fix): only on the NVIDIA route and only once the user turned it
+# on (never on the AMD / Intel install: the helper checks gpu-vendor). Steam's interface then loads EGPU Buddy's
+# texture-from-pixmap library through Steam's own runtime override; the override folder is rebuilt here at every start,
+# so Steam and Steam-runtime updates are followed. Prints nothing while it is off; nothing here can stop the session.
+_sui=""
+# (not on the route where gamescope stays on the handheld's GPU: Steam's interface is on Mesa there, which has it)
+case "${VK_DRIVER_FILES:-}:${NV_EGPU_GAMESCOPE_HANDHELD_GPU:-0}" in
+  *nvidia_icd*:0)
+    if [ -x "$HOME/.local/bin/egpu-steam-ui-fix" ]; then _sui=$(timeout 10 "$HOME/.local/bin/egpu-steam-ui-fix" env 2>/dev/null) || _sui=""; fi ;;
+esac
+if [ -n "$_sui" ]; then
+  eval "$_sui" 2>/dev/null || true
+  log "Steam menu fix (Big Art mode): on" || true
+fi
 # ROG Ally / XG Mobile: SteamOS starts Steam from steam-launcher.service, and another tool's drop-in there that sets
 # LD_PRELOAD (Ally Companion: liballycaps.so) replaces the session's LD_PRELOAD for Steam. The NVIDIA settings loader then
 # never reached Steam: every Apply asked for a Game Mode restart and nothing applied (SilverplayerX, 0.7.222). Our own
