@@ -36,6 +36,10 @@ are supported in beta (an RX 6800 XT is being tested now).
 - **NVIDIA settings (experimental):** the Windows NVIDIA control panel's global settings (low latency, V-sync, frame
   limit, anisotropic filtering, sharpening, shader cache size, power mode) for games on the NVIDIA eGPU, in the desktop
   app and the plugin, plus Steam's own live Game Mode settings (frame limit, tearing, VRR, sharpness).
+- **Big Art mode menu fix (NVIDIA, opt-in):** on an NVIDIA eGPU Steam's own interface compositor can't start, so with
+  Steam's Big Art home layout (Steam client, October 2026) the main menu slides in over a black bar. EGPU Buddy supplies
+  what it is missing, on the NVIDIA GPU, without changing any Steam file; the plugin offers it while Big Art mode is on
+  ([#7](https://github.com/denver8989/EGPU-Buddy/issues/7)).
 - **ASUS XG Mobile support** (ROG Xbox Ally X tested): attach, Safe Detach and cable pulls in both modes, plus
   XG Mobile controls in the plugin and the desktop app: a power target in watts, fan modes and a custom fan curve, the
   dock's lights, and core and memory clock offsets.
