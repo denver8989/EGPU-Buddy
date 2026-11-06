@@ -406,6 +406,9 @@ const maybeOfferSteamUi = async () => {
 // ROG Ally / XG Mobile: the page (main, details, setup, NVIDIA settings) is kept for the plugin's lifetime, so a re-render
 // of the panel does not drop the user back on the main page. Set from the status (ally_xgm); elsewhere it always opens on main.
 const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" } = { on: false, tab: "main" };
+// ROG Ally / XG Mobile: opening an NVIDIA settings dropdown remounts the menu there, which dropped the picked value before
+// Apply (SilverplayerX, 0.7.226: "nothing can be changed"). Kept here like the page, on that machine only.
+const keepNv: { v: Record<string, string | number> | null } = { v: null };
 function Content() {
   const visible = useQuickAccessVisible();
   const [tab, setTab_] = useState<"main" | "details" | "setup" | "nvidia">(keepPage.on ? keepPage.tab : "main");
@@ -413,7 +416,8 @@ function Content() {
   useEffect(() => { ui(`menu mounted on page ${keepPage.on ? keepPage.tab : "main"} (kept: ${keepPage.on})`); return () => ui(`menu unmounted (page ${keepPage.tab})`); }, []);
   useEffect(() => { ui(`panel ${visible ? "open" : "closed"} (page ${keepPage.tab})`); }, [visible]);
   const [nv, setNv] = useState<NvSettings | null>(null);
-  const [nvEdit, setNvEdit] = useState<Record<string, string | number> | null>(null);
+  const [nvEdit, setNvEdit_] = useState<Record<string, string | number> | null>(keepPage.on ? keepNv.v : null);
+  const setNvEdit = (v: Record<string, string | number> | null) => { if (keepPage.on) keepNv.v = v; setNvEdit_(v); };
   const [live, setLive_] = useState<LiveSettings | null>(null);
   const [pr, setPr] = useState<ProtonStatus | null>(null);
   const [logOpen, setLogOpen] = useState<"" | "setup" | "trial">("");   // logs stay folded away unless asked for
@@ -932,15 +936,17 @@ function Content() {
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing.</div></PanelSectionRow>
           {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={lock}
             selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
-            onChange={(o) => setNvEdit({ ...cur, [r.key]: o.data })} /></PanelSectionRow>)}
+            onChange={(o) => { if (keepFocus) ui(`nvidia pick ${r.key} = ${o.data}`); setNvEdit({ ...cur, [r.key]: o.data }); }} /></PanelSectionRow>)}
           {cur.low_latency === "ultra" && pr && !pr.ready && <>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: {pr.tools.map((t) => t.name).join(", ") || "none found"}). {pr.install?.message ?? ""}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={lock || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
               {pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton"}</ButtonItem></PanelSectionRow></>}
           {cur.low_latency === "ultra" && pr?.ready && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Ultra: pick {pr.tools.filter((t) => t.ok).map((t) => t.name).join(" or ")} for the game (Properties &gt; Compatibility), or for every game in Steam Settings &gt; Compatibility. {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
           {(() => { const once = s?.game_mode && nv.loader !== "loaded";   // the loader is not in this Game Mode yet: one restart
-            return <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && !dirty) || (once && gameUp)} onClick={() => (keepFocus && !dirty) ? undefined : run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return once ? applyNvidia() : { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; })}>
+            return <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && !dirty) || (once && gameUp)} onClick={() => (keepFocus && !dirty) ? setMsg("Nothing changed yet: pick a new value above, then Apply.") : run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return once ? applyNvidia() : { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; })}>
               {once ? (gameUp ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>; })()}
+          {keepFocus && msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
+          {keepFocus && gameUp && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>A game is running: it keeps its settings until you start it again. For an instant change use System settings (live) below.</div></PanelSectionRow>}
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => setNvEdit({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
           {nv.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvidiaOff(); setNv(await getNvidia()); setNvEdit(null); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}

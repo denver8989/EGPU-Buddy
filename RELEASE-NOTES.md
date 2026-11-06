@@ -1,3 +1,8 @@
+0.7.227 — NVIDIA settings page keeps your choice on the ROG Ally.
+
+**NVIDIA settings** (ROG Ally / XG Mobile only; every other machine unchanged)
+- A value picked in a dropdown was lost before Apply (the menu reloads there when a dropdown opens), so nothing seemed to change. The pick is now kept, Apply says what happened, and a running game is told it keeps its settings until restarted.
+
 0.7.226 — Support report: NVIDIA settings from saved choice to running game (ROG Ally / XG Mobile).
 
 **Support report** (ROG Ally / XG Mobile only; every other machine unchanged)
