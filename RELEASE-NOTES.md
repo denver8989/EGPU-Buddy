@@ -1,3 +1,8 @@
+0.7.226 — Support report: NVIDIA settings from saved choice to running game (ROG Ally / XG Mobile).
+
+**Support report** (ROG Ally / XG Mobile only; every other machine unchanged)
+- A new section shows the saved NVIDIA settings, whether Steam carries the settings loader (and any other tool's Steam start-up file), Steam's live Game Mode values, and what a running game actually received. Make the report while the game you are testing runs.
+
 0.7.225 — eGPU sound comes back on the screen; no Steam sign-out after quick Game Mode restarts.
 
 **Sound** (NVIDIA eGPU)

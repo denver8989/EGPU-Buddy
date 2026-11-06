@@ -79,6 +79,33 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   echo "session marker: $(cat /run/user/1000/egpu-session-type 2>/dev/null) · detach marker: $(ls /run/user/1000/egpu-detach-mode /run/nvegpu/gm-detach-pending 2>/dev/null | tr '\n' ' ')"
   echo "login manager: $(grep -h '^Session=' /etc/sddm.conf.d/*.conf /etc/plasmalogin.conf.d/*.conf 2>/dev/null | tr '\n' ' ')"
   echo "hidden NVIDIA userspace: $(ls /usr/lib/*.egpu-off 2>/dev/null | wc -l) renamed, $(cat /run/nvegpu/bind-hidden 2>/dev/null | wc -l) bind-mounted"
+  if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; then
+    # ROG Ally / XG Mobile: NVIDIA settings from the saved choice to what a running game really got (SteamOS beta with Ally
+    # Companion; SilverplayerX: "NVIDIA settings might not be working", while another XG Mobile tester has them all
+    # working). Read-only. Best taken while a game runs: the last block shows what that game received.
+    sec "NVIDIA settings (saved -> loader -> Steam -> game)"
+    H=/home/deck; nt=$H/.config/egpu-buddy
+    echo "saved: $( [ -r $nt/nvidia-tweaks.json ] && tr -d '\n ' < $nt/nvidia-tweaks.json || echo 'none (never saved = off)')"
+    echo "loader files: env [$(cat $nt/nvidia-tweaks.env 2>/dev/null | tr '\n' ' ')] dxvk [$(cat $nt/nvidia-tweaks.dxvk.conf 2>/dev/null | tr '\n' ';')]"
+    echo "loader build: $(ls $H/.local/lib/nv-egpu-buddy/nvt/lib64/libegpu-nvt.so $H/.local/lib/nv-egpu-buddy/nvt/lib32/libegpu-nvt.so 2>/dev/null | wc -l)/2 present, $(sha256sum $H/.local/lib/nv-egpu-buddy/nvt/lib64/libegpu-nvt.so 2>/dev/null | cut -c1-12)"
+    st=$(pgrep -u 1000 -x steam | head -1)
+    [ -n "$st" ] && echo "steam $st: $(tr '\0' '\n' </proc/$st/environ 2>/dev/null | grep -E '^(LD_PRELOAD|VK_DRIVER_FILES|VK_ICD_FILENAMES)=' | tr '\n' ' ')"
+    for f in $H/.config/systemd/user/steam-launcher.service.d/*.conf /etc/systemd/user/steam-launcher.service.d/*.conf /usr/lib/systemd/user/steam-launcher.service.d/*.conf; do
+      [ -f "$f" ] && echo "steam-launcher drop-in $f: $(grep -E '^Environment' "$f" 2>/dev/null | tr '\n' ' ' | cut -c1-200)"; done
+    echo "live (gamescope): $(T=10 t runuser -u deck -- env XDG_RUNTIME_DIR=/run/user/1000 HOME=$H $H/.local/bin/egpu-nvidia-tweaks live-get | tr -d '\n')"
+    n=0
+    for p in $(pgrep -u 1000 -f 'SteamLaunch|\.exe' 2>/dev/null); do
+      e=$(tr '\0' '\n' </proc/$p/environ 2>/dev/null) || continue
+      printf '%s\n' "$e" | grep -qE '^Steam(App|Game)Id=' || continue
+      case "$(cat /proc/$p/comm 2>/dev/null)" in steam|steamwebhelper|reaper|pv-adverb|srt-bwrap|wineserver|services.exe|winedevice.exe|plugplay.exe|explorer.exe|rpcss.exe|svchost.exe|tabtip.exe|conhost.exe) continue ;; esac
+      n=$((n+1)); [ $n -le 3 ] || break
+      echo "game process $p $(cat /proc/$p/comm 2>/dev/null): loader $(printf '%s\n' "$e" | grep -q '^LD_PRELOAD=.*libegpu-nvt' && echo loaded || echo NOT-loaded) · $(printf '%s\n' "$e" | grep -E '^(SteamAppId|VK_DRIVER_FILES|EGPU_NVT_OFF|__GL_SYNC_TO_VBLANK|__GL_SHADER_DISK_CACHE_SIZE|__GL_SHARPEN_VALUE|__GL_LOG_MAX_ANISO|__GL_THREADED_OPTIMIZATIONS|VKD3D_FRAME_RATE|VKD3D_SWAPCHAIN_PRESENT_MODE|DXVK_CONFIG_FILE|DXVK_CONFIG)=' | tr '\n' ' ' | cut -c1-500)"
+      d=$(printf '%s\n' "$e" | sed -n 's/^DXVK_CONFIG_FILE=//p'); [ -n "$d" ] && [ -r "$d" ] && echo "  its DXVK file: $(grep -v '^#' "$d" | grep . | tr '\n' ';' | cut -c1-400)"
+      g=$(ls -t $H/steam-$(printf '%s\n' "$e" | sed -n 's/^SteamAppId=//p').log 2>/dev/null | head -1)
+      [ -n "$g" ] && echo "  its Proton log: $(grep -hE 'Found config file|maxFrameRate|latencySleep|Latency control|Present mode' "$g" | sort -u | head -8 | tr '\n' ';' | cut -c1-500)"
+    done
+    [ $n -gt 0 ] || echo "no game running: take the report while the game you are testing runs to see what it received"
+  fi
   sec "/run/nvegpu"; for f in /run/nvegpu/*.json /run/nvegpu/*.log; do [ -f "$f" ] && { echo "--- ${f##*/}"; tail -n 30 "$f"; }; done
   sec "kernel log (last 80 eGPU lines, NVRM bursts cut)"
   if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; then
