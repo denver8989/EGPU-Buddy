@@ -31,7 +31,7 @@ UID = pwd.getpwnam(USER).pw_uid
 PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.abspath(__file__))
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.222"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.223"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -1273,6 +1273,10 @@ def _xg_power_report(bdf):
         out.append(f"{q}: {_sh(['timeout', '6', 'nvidia-smi', '-i', bdf, f'--query-gpu={q}', '--format=csv,noheader'], 8)[1] or '?'}")
         out += [l.rstrip()[:200] for l in _sh(["timeout", "6", "nvidia-smi", "-i", bdf, "-q", "-d", "POWER"], 8)[1].splitlines()
                 if ":" in l and "Timestamp" not in l][:30]
+        # why the clocks are held down, by name (the flight recorder logs only the bit mask, e.g. lim=0x400), and the
+        # performance state (the memory clock moved between P0, P2 and P4 during a game: SilverplayerX, 0.7.222)
+        out += [l.rstrip()[:200] for l in _sh(["timeout", "6", "nvidia-smi", "-i", bdf, "-q", "-d", "PERFORMANCE"], 8)[1].splitlines()
+                if ":" in l and "Timestamp" not in l][:30]
     else:
         out.append("NVIDIA driver not loaded")
     unit = _sh(["systemctl", "show", "-p", "LoadState", "-p", "UnitFileState", "-p", "ActiveState", "nvidia-powerd.service"], 5)[1]
@@ -1614,8 +1618,11 @@ def _support_report():
         # (did the GPU appear?) was cut off (Legion Go 1 + AG02 report on 0.7.198). Those lines left out, 60 kept.
         if p == "/var/log/egpu-generic.log":
             tail = [t for t in _read(p).splitlines() if "another instance running" not in t][-60:]
+        # ROG Ally / XG Mobile: the plugin's own log carries its menu events there (ui_event), last 200 kept
+        if p in decky_logs and _ally_xgm():
+            tail = _read(p).splitlines()[-200:]
         if tail:
-            lines += ["", f"## {p} (last {len(tail) if p == '/var/log/egpu-generic.log' else 30})"] + [t[:300] for t in tail]
+            lines += ["", f"## {p} (last {len(tail) if (p == '/var/log/egpu-generic.log' or (p in decky_logs and _ally_xgm())) else 30})"] + [t[:300] for t in tail]
     return _redact("\n".join(lines))
 
 
@@ -2421,6 +2428,14 @@ class Plugin:
     async def set_power_limit(self, watts: int):
         rc, out, err = _sh([PRIV, "set-gpu-power-limit", str(int(watts))], 20)
         return {"ok": rc == 0, "message": (err or out)[-200:]}
+
+    async def ui_event(self, text: str):
+        """ROG Ally / XG Mobile only: one line about the plugin's menu (loaded, page shown or left, panel opened or closed,
+        a setting applied) in the plugin log, which the support report includes. The menu jumped back to the top after
+        every change there and the report could not say why (SilverplayerX, 0.7.222). Elsewhere: nothing is written."""
+        if _ally_xgm():
+            decky.logger.info(f"ui: {str(text)[:200]}")
+        return True
 
     async def xgm_fan(self, mode: str):
         """ASUS XG Mobile: fan mode sent to the dock (auto = its own curve)."""

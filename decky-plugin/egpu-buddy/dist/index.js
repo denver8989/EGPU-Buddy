@@ -2491,6 +2491,9 @@ const getTrial = callable("get_driver_trial");
 const startTrial = callable("start_driver_trial");
 const revertTrial = callable("revert_driver_trial");
 const startBetaTrial = callable("start_beta_trial");
+// ROG Ally / XG Mobile: menu events in the plugin log (the backend writes them only there; a no-op everywhere else)
+const uiEvent = callable("ui_event");
+const ui = (t) => { uiEvent(t).catch(() => { }); };
 const ackTrial = callable("ack_driver_trial");
 const getScreens = callable("get_screens");
 const wakeScreens = callable("wake_screens");
@@ -2736,7 +2739,7 @@ const screenTargets = (s, tvWakes) => [
 ];
 const screenState = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
-const PLUGIN_VERSION = "0.7.222";
+const PLUGIN_VERSION = "0.7.223";
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
 const Progress = ({ pct, title, step, started, expect }) => (SP_JSX.jsxs("div", { style: { width: "100%", boxSizing: "border-box", padding: "4px 0" }, children: [SP_JSX.jsxs("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }, children: [SP_JSX.jsx("span", { children: title }), SP_JSX.jsxs("span", { children: [Math.round(pct), "%"] })] }), SP_JSX.jsx("div", { style: { width: "100%", height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.15)", overflow: "hidden" }, children: SP_JSX.jsx("div", { style: { width: `${Math.max(0, Math.min(100, pct))}%`, height: "100%", background: "#1a9fff", transition: "width .4s" } }) }), SP_JSX.jsx("div", { style: { fontSize: "12px", marginTop: "4px", whiteSpace: "normal" }, children: step }), SP_JSX.jsxs("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: [started ? `${mmss(Date.now() / 1000 - started)} elapsed` : "", expect ? ` · usually ${expect}` : ""] }), SP_JSX.jsx("div", { style: { fontSize: "11px", opacity: 0.75, marginTop: "2px", whiteSpace: "normal" }, children: "You can close this menu: it continues, and a notification appears when it is done." })] }));
@@ -2819,7 +2822,9 @@ const keepPage = { on: false, tab: "main" };
 function Content() {
     const visible = useQuickAccessVisible();
     const [tab, setTab_] = SP_REACT.useState(keepPage.on ? keepPage.tab : "main");
-    const setTab = (t) => { keepPage.tab = t; setTab_(t); };
+    const setTab = (t) => { ui(`page ${keepPage.tab} -> ${t}`); keepPage.tab = t; setTab_(t); };
+    SP_REACT.useEffect(() => { ui(`menu mounted on page ${keepPage.on ? keepPage.tab : "main"} (kept: ${keepPage.on})`); return () => ui(`menu unmounted (page ${keepPage.tab})`); }, []);
+    SP_REACT.useEffect(() => { ui(`panel ${visible ? "open" : "closed"} (page ${keepPage.tab})`); }, [visible]);
     const [nv, setNv] = SP_REACT.useState(null);
     const [nvEdit, setNvEdit] = SP_REACT.useState(null);
     const [live, setLive_] = SP_REACT.useState(null);
@@ -2891,16 +2896,22 @@ function Content() {
     const lock = busy && !keepFocus;
     const running = SP_REACT.useRef(false);
     const run = async (fn) => {
-        if (keepFocus && running.current)
+        if (keepFocus && running.current) {
+            ui("change ignored: one is still running");
             return;
+        }
         running.current = true;
+        const t0 = Date.now();
+        ui(`change started (page ${keepPage.tab})`);
         setBusy(true);
         try {
             const r = await fn();
             setMsg(r.message);
+            ui(`change done in ${Date.now() - t0} ms: ${r.ok ? "ok" : "failed"} ${String(r.message ?? "").slice(0, 120)}`);
         }
         catch (e) {
             setMsg(`${e}`);
+            ui(`change error: ${e}`);
         }
         finally {
             running.current = false;
@@ -3056,6 +3067,7 @@ function Content() {
                             }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.SliderField, { label: "Upscaling sharpness", description: "System setting \u00B7 instant, with Steam's FSR or NIS scaling filter (0 = sharpest).", value: live.sharpness ?? 2, min: 0, max: 20, step: 1, onChange: (v) => run(async () => { const r = await setLive("sharpness", v); setLive_(await getLive()); return r; }) }) })] })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "Updates", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Automatic updates", description: "Off (default): a new release is only announced here and you decide when to install it. On: it installs by itself when no game is running.", checked: !!up?.auto_update, onChange: (v) => run(() => setAutoUpdate(v)) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy || !!su?.busy, onClick: () => run(() => checkUpdate(false)), children: "Check for updates now" }) }), SP_JSX.jsx(ReleaseNotes, { label: up?.available ? `What's new in ${up.available}` : "Release notes" }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: up ? (up.available ? `Available: ${up.available}` : (up.checked ? "Up to date." : "Not checked yet.")) + (up.last_error ? ` ${up.last_error}` : "") : "…" }) })] })), tab === "setup" && (SP_JSX.jsxs(DFL.PanelSection, { title: "Extras (testing)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "All off by default." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "USB4 link speed", description: "Adds a USB4 row to the Details tab and warns about a slow cable or port.", checked: !!ad?.usb4, onChange: (v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; }) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "TV control tricks", description: "Off by default. Choosing the TV for Game Mode turns it on and switches it to the eGPU's HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.", checked: !!tv?.enabled, onChange: (v) => run(() => setTvControl(v)) }) }), tv?.enabled && (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: lock, onClick: () => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }, children: tv.paired.length ? "Pair again" : "Find and pair TV" }) })] }))] }))] }));
 }
 var index = definePlugin(() => {
+    ui("plugin frontend loaded");
     // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
     const notices = setInterval(async () => {
         try {

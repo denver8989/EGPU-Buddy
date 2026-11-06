@@ -42,6 +42,11 @@ runtime_leftovers(){
 
 # ROG Ally / XG Mobile: decided now, while egpu-detect and the XG Mobile marker still exist (both are removed below)
 AX=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && AX=1
+# ROG Ally / XG Mobile: the session's Steam LD_PRELOAD drop-in (NVIDIA settings loader next to Ally Companion's library)
+if [ "$AX" = 1 ] && [ -e "$USER_HOME/.config/systemd/user/steam-launcher.service.d/zzzz-egpu-buddy-nvt.conf" ]; then
+  rm -f "$USER_HOME/.config/systemd/user/steam-launcher.service.d/zzzz-egpu-buddy-nvt.conf"
+  userctl daemon-reload >/dev/null 2>&1 || true
+fi
 # --verify: list anything this project left behind. Used to prove a clean uninstall
 # before a from-scratch reinstall. Prints nothing and exits 0 when the machine is clean.
 if [ "${1:-}" = "--verify" ]; then

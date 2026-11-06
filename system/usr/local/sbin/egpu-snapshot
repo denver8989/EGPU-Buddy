@@ -81,8 +81,15 @@ gpu=$(lspci -Dn 2>/dev/null | awk '($2=="0300:"||$2=="0302:") && $3 ~ /^10de:/{p
   echo "hidden NVIDIA userspace: $(ls /usr/lib/*.egpu-off 2>/dev/null | wc -l) renamed, $(cat /run/nvegpu/bind-hidden 2>/dev/null | wc -l) bind-mounted"
   sec "/run/nvegpu"; for f in /run/nvegpu/*.json /run/nvegpu/*.log; do [ -f "$f" ] && { echo "--- ${f##*/}"; tail -n 30 "$f"; }; done
   sec "kernel log (last 80 eGPU lines, NVRM bursts cut)"
+  if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; then
+    # ROG Ally / XG Mobile: also the kernel's WARNING / BUG headers and their RIP line. Only the call-trace lines inside the
+    # NVIDIA modules matched, so what the warning was (and which module raised it) was cut off (SilverplayerX, 0.7.222)
+    T=10 t journalctl -k -b --no-pager -o short-monotonic | grep -iE 'nvidia|NVRM|xid|thunderbolt|pcieport|aer|dpc|amdgpu.*(ring|timeout|reset)|BAR|link|WARNING:|BUG:|RIP:|Tainted:' \
+      | awk '/NVRM:/{n++; if(n<=8)print; else if(n==9)print "  ... (NVRM burst cut)"; next}{n=0; print}' | tail -n 80
+  else
   T=10 t journalctl -k -b --no-pager -o short-monotonic | grep -iE 'nvidia|NVRM|xid|thunderbolt|pcieport|aer|dpc|amdgpu.*(ring|timeout|reset)|BAR|link' \
     | awk '/NVRM:/{n++; if(n<=8)print; else if(n==9)print "  ... (NVRM burst cut)"; next}{n=0; print}' | tail -n 80
+  fi
   case "$reason" in *interrupted*)   # taken at boot after a hang or forced power-off: what happened is in the previous boot
     sec "previous boot: kernel + eGPU Buddy lines (last 120, NVRM bursts cut)"
     T=15 t journalctl -b -1 --no-pager -o short-monotonic | grep -iE 'egpu|nv-egpu|nvidia|NVRM|xid|thunderbolt|pcieport|gamescope|sysext|driver-trial' \

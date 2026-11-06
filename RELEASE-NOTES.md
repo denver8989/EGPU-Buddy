@@ -1,3 +1,12 @@
+0.7.223 — NVIDIA settings now reach Steam next to Ally Companion; menu logging (ROG Ally / XG Mobile only).
+
+**NVIDIA settings** (ROG Ally / XG Mobile only; every other machine unchanged)
+- With the Ally Companion plugin installed, NVIDIA settings never applied: its Steam start-up file sets its own preload library and replaced ours, so every Apply asked for a Game Mode restart and nothing changed. EGPU Buddy now adds its loader next to Ally Companion's, so both load. After updating, restart Game Mode once (or reboot).
+
+**Support report** (ROG Ally / XG Mobile only)
+- The plugin logs its menu events (page shown, left, panel opened or closed, each setting change) so the next report shows why the menu jumps back.
+- The kernel's warning headers and the GPU's named clock-limit reasons and power state are included.
+
 0.7.222 — Plugin: settings no longer jump back to the top (ROG Ally / XG Mobile).
 
 **Plugin** (ROG Ally / XG Mobile only; every other machine unchanged)

@@ -123,6 +123,9 @@ const getTrial = callable<[], Trial>("get_driver_trial");
 const startTrial = callable<[], Result>("start_driver_trial");
 const revertTrial = callable<[], Result>("revert_driver_trial");
 const startBetaTrial = callable<[], Result>("start_beta_trial");
+// ROG Ally / XG Mobile: menu events in the plugin log (the backend writes them only there; a no-op everywhere else)
+const uiEvent = callable<[string], boolean>("ui_event");
+const ui = (t: string) => { uiEvent(t).catch(() => {}); };
 const ackTrial = callable<[], Result>("ack_driver_trial");
 type Screen = { connector: string; name: string; state: string; ddc: boolean };
 const getScreens = callable<[], Screen[]>("get_screens");
@@ -294,7 +297,7 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
-const PLUGIN_VERSION = "0.7.222";
+const PLUGIN_VERSION = "0.7.223";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 // The percentage follows real stages (and real compile output); the running clock shows it is alive between stage changes.
@@ -378,7 +381,9 @@ const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" } = 
 function Content() {
   const visible = useQuickAccessVisible();
   const [tab, setTab_] = useState<"main" | "details" | "setup" | "nvidia">(keepPage.on ? keepPage.tab : "main");
-  const setTab = (t: "main" | "details" | "setup" | "nvidia") => { keepPage.tab = t; setTab_(t); };
+  const setTab = (t: "main" | "details" | "setup" | "nvidia") => { ui(`page ${keepPage.tab} -> ${t}`); keepPage.tab = t; setTab_(t); };
+  useEffect(() => { ui(`menu mounted on page ${keepPage.on ? keepPage.tab : "main"} (kept: ${keepPage.on})`); return () => ui(`menu unmounted (page ${keepPage.tab})`); }, []);
+  useEffect(() => { ui(`panel ${visible ? "open" : "closed"} (page ${keepPage.tab})`); }, [visible]);
   const [nv, setNv] = useState<NvSettings | null>(null);
   const [nvEdit, setNvEdit] = useState<Record<string, string | number> | null>(null);
   const [live, setLive_] = useState<LiveSettings | null>(null);
@@ -425,8 +430,9 @@ function Content() {
   const keepFocus = !!s?.ally_xgm;
   const lock = busy && !keepFocus;
   const running = useRef(false);
-  const run = async (fn: () => Promise<Result>) => { if (keepFocus && running.current) return; running.current = true;
-    setBusy(true); try { const r = await fn(); setMsg(r.message); } catch (e) { setMsg(`${e}`); } finally { running.current = false; setBusy(false); refresh(); } };
+  const run = async (fn: () => Promise<Result>) => { if (keepFocus && running.current) { ui("change ignored: one is still running"); return; } running.current = true;
+    const t0 = Date.now(); ui(`change started (page ${keepPage.tab})`);
+    setBusy(true); try { const r = await fn(); setMsg(r.message); ui(`change done in ${Date.now() - t0} ms: ${r.ok ? "ok" : "failed"} ${String(r.message ?? "").slice(0, 120)}`); } catch (e) { setMsg(`${e}`); ui(`change error: ${e}`); } finally { running.current = false; setBusy(false); refresh(); } };
 
   const tel = s?.telemetry ?? {};
   const plMin = Number(tel["power.min_limit"] ?? 100), plMax = Number(tel["power.max_limit"] ?? 320);
@@ -947,6 +953,7 @@ function Content() {
 }
 
 export default definePlugin(() => {
+  ui("plugin frontend loaded");
   // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
   const notices = setInterval(async () => { try { const t = await popNotice(); if (t) toaster.toast({ title: "EGPU Buddy", body: t, duration: 15000 }); } catch { /* backend not up yet */ }
     try { await maybeShowTrial(); } catch { /* backend not up yet */ }

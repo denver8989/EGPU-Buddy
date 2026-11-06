@@ -867,6 +867,33 @@ if [ -n "$_nvt" ]; then
   eval "$_nvt" 2>/dev/null || true
   log "NVIDIA settings: $(printf '%s\n' "$_nvt" | sed 's/^export //; s/=.*//' | tr '\n' ' ')" || true
 fi
+# ROG Ally / XG Mobile: SteamOS starts Steam from steam-launcher.service, and another tool's drop-in there that sets
+# LD_PRELOAD (Ally Companion: liballycaps.so) replaces the session's LD_PRELOAD for Steam. The NVIDIA settings loader then
+# never reached Steam: every Apply asked for a Game Mode restart and nothing applied (SilverplayerX, 0.7.222). Our own
+# drop-in, read after theirs, sets LD_PRELOAD to the loader followed by THEIR value, so both load. Rewritten at every
+# Game Mode start (removed again when the loader is off or the other drop-in is gone). Runs in a subshell: it cannot end
+# the session.
+if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; then
+  ( set +e
+    _dd="$HOME/.config/systemd/user/steam-launcher.service.d"; _ours="$_dd/zzzz-egpu-buddy-nvt.conf"
+    _lib=$(printf '%s' "${LD_PRELOAD:-}" | tr ':' '\n' | grep -m1 'libegpu-nvt\.so')
+    _other=""
+    for _f in "$_dd"/*.conf; do
+      [ -f "$_f" ] && [ "$_f" != "$_ours" ] || continue
+      _v=$(sed -n 's/^Environment="\{0,1\}LD_PRELOAD=\([^" ]*\)"\{0,1\}[[:space:]]*$/\1/p' "$_f" | tail -1)
+      [ -n "$_v" ] && _other=$_v
+    done
+    if [ -n "$_lib" ] && [ -n "$_other" ]; then
+      case "$_other" in *libegpu-nvt.so*) _want="$_other" ;; *) _want="$_lib:$_other" ;; esac
+      _new=$(printf '[Service]\n# EGPU Buddy: the NVIDIA settings loader next to the LD_PRELOAD another drop-in sets (ROG Ally / XG Mobile)\nEnvironment=LD_PRELOAD=%s\n' "$_want")
+      if [ "$(cat "$_ours" 2>/dev/null)" != "$_new" ]; then
+        printf '%s\n' "$_new" > "$_ours" && systemctl --user daemon-reload && log "NVIDIA settings: Steam's LD_PRELOAD drop-in combined with $_other"
+      fi
+    elif [ -e "$_ours" ]; then
+      rm -f "$_ours" && systemctl --user daemon-reload && log "NVIDIA settings: Steam LD_PRELOAD drop-in removed (loader off or no other drop-in)"
+    fi
+  ) || true
+fi
 if [ "${1:-}" = "--print-env" ] || [ "${NV_EGPU_GAMESCOPE_SESSION_PRINT_ENV:-0}" = "1" ]; then
   printf 'EGPU_PCI=%s\n' "$EGPU_PCI"
   printf 'BAR1_BYTES=%s\n' "$bar1_bytes"
