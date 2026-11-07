@@ -1,3 +1,15 @@
+0.7.230 — NV GPU Buddy: a new experimental mode for desktop PCs and laptops with an NVIDIA card; full NVIDIA settings dropdowns.
+
+**NV GPU Buddy:** new experimental mode for machines with a built-in NVIDIA card (desktop PCs, laptops); never on a handheld
+- NVIDIA settings, power and clocks, the Big Art menu fix, screens, Keep awake, report and updates, with no eGPU parts.
+- Offered at install only on a desktop PC or laptop with NVIDIA (or a desktop getting one), with two confirmations.
+- Not tested on desktop PCs or laptops yet: testers wanted (README).
+
+**NVIDIA settings** (every NVIDIA machine)
+- The dropdowns sit under their labels at full width, so every choice reads in full.
+
+**eGPU installs:** unchanged.
+
 0.7.229 — Screen picker shows your handheld, TV and ultrawide; new Keep awake switch.
 
 **Screen picker** (every machine)

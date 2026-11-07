@@ -122,6 +122,23 @@ After the reboot, plug the eGPU in. Updates are offered in the plugin and the de
 ("What's new in …"); automatic updates are off unless you turn them on. Every release stays available on the
 Releases page.
 
+## NV GPU Buddy (experimental): desktop PCs and laptops with an NVIDIA card
+
+A second mode of the same app for machines whose NVIDIA card is **built in**: a desktop PC, or a laptop with NVIDIA
+graphics. It keeps everything that is not about plugging an eGPU in: NVIDIA settings, power and clock controls, the Big
+Art menu fix, best resolution and refresh rate, screens and TV control, Keep awake, the support report and updates, with
+EGPU Buddy's patched NVIDIA driver. In this mode the plugin and the desktop app are called **NV GPU Buddy**.
+
+- **Who it is for:** SteamOS, CachyOS or Bazzite in Game Mode on a desktop PC or laptop with a GeForce card. Also a desktop
+  PC that is getting one: the driver is installed first, and the card works from its first boot.
+- **Never on a handheld:** a handheld always gets the normal eGPU install, also one EGPU Buddy does not know yet.
+- **Install:** the plugin's **Install system integration** offers NV GPU Buddy on such a machine, with two confirmations.
+  From a terminal: `./install.sh` from the release tarball asks the same.
+- **Bazzite:** use an image without NVIDIA's driver built in (for example `bazzite-deck`, not `bazzite-deck-nvidia`).
+- **Updates:** it only takes the releases marked "NV GPU Buddy" in their notes.
+- **Status:** NOT tested on a desktop PC or laptop yet. If you try it, send a support report (Details > Save support
+  report) through an issue or Discord.
+
 ## Reporting problems
 
 Open an [issue](https://github.com/denver8989/EGPU-Buddy/issues) with your handheld, OS, eGPU and GPU, the
