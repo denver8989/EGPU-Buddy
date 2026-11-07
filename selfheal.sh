@@ -4,6 +4,8 @@
 # re-applied from this payload; pacman packages and kernel modules are restored from the caches kept here.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd); VER=$(cat "$HERE/VERSION" 2>/dev/null || echo dev)
+# NV GPU Buddy track (experimental, built-in NVIDIA card): its own self-heal; every eGPU install carries on below unchanged
+[ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ] && [ -f "$HERE/install-nv-gpu-buddy.sh" ] && exec bash "$HERE/install-nv-gpu-buddy.sh" --selfheal
 USER_NAME=$(stat -c %U "$HERE"); log(){ logger -t egpu-buddy-selfheal "$*"; echo "$*"; }
 # in /var/log, not /tmp: /tmp is emptied at every reboot, and "why did the eGPU stop working after the update" is asked
 # after a reboot. Kept small: the previous log is kept as .1 once it passes 1 MB.

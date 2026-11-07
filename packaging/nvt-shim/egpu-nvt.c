@@ -14,6 +14,9 @@
  * never replaced. DXVK: DXVK reads ONE file - $DXVK_CONFIG_FILE, else dxvk.conf in the working directory (the game's own).
  * The file given to DXVK is ours FOLLOWED BY that file, so the game's (or the user's) own options still come last and
  * win; DXVK_CONFIG from a launch option is applied by DXVK on top of everything, as always.
+ * NV GPU Buddy track (built-in NVIDIA card, experimental): its session drop-ins set NV_GPU_BUDDY=1, which stands in for
+ * the Vulkan pin (there is no eGPU route there), and nv-gpu-buddy.env (the installer's: on a laptop, NVIDIA render
+ * offload for games) is applied first the same way. Neither exists on an eGPU install, so nothing changes there.
  * Plain C, no allocation, no threads, bounded buffers; old glibc symbols only (it also loads inside Steam's runtime). */
 #include <errno.h>
 #include <fcntl.h>
@@ -47,9 +50,9 @@ static int is_steam_itself(void) {
   return !strcmp(comm, "steam") || !strcmp(comm, "steamwebhelper") || !strncmp(comm, "steam-runtime", 13);
 }
 
-static void apply_env(const char *home) {
+static void apply_env(const char *home, const char *name) {
   char path[512], buf[CAP];
-  if (snprintf(path, sizeof path, "%s/.config/egpu-buddy/nvidia-tweaks.env", home) >= (int)sizeof path) return;
+  if (snprintf(path, sizeof path, "%s/.config/egpu-buddy/%s", home, name) >= (int)sizeof path) return;
   if (slurp(path, buf, sizeof buf) <= 0) return;
   for (char *line = buf, *next; line && *line; line = next) {
     next = strchr(line, '\n'); if (next) *next++ = 0;
@@ -104,13 +107,16 @@ static void apply_dxvk(const char *home) {
 
 __attribute__((constructor)) static void egpu_nvt_init(void) {
   const char *vk = getenv("VK_DRIVER_FILES");
-  if (!vk || !strstr(vk, "nvidia_icd")) return;            /* not rendering on the NVIDIA eGPU */
+  const char *nvb = getenv("NV_GPU_BUDDY");
+  int builtin = nvb && !strcmp(nvb, "1");
+  if (!builtin && (!vk || !strstr(vk, "nvidia_icd"))) return;   /* not rendering on the NVIDIA eGPU */
   if (!getenv("SteamGameId") && !getenv("SteamAppId")) return;   /* not a game Steam started */
   if (getenv("EGPU_NVT_OFF")) return;                     /* per-game way out: EGPU_NVT_OFF=1 */
   const char *home = getenv("HOME");
   if (!home || !*home || is_steam_itself()) return;
   int saved = errno;
-  apply_env(home);
+  if (builtin) apply_env(home, "nv-gpu-buddy.env");
+  apply_env(home, "nvidia-tweaks.env");
   apply_dxvk(home);
   errno = saved;
 }

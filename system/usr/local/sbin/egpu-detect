@@ -203,7 +203,8 @@ egpu_is_handheld() {
   return 1
 }
 
-_egpu_has_panel() { local c; for c in "$EGPU_SYSFS_ROOT"/sys/class/drm/card*-eDP-* "$EGPU_SYSFS_ROOT"/sys/class/drm/card*-LVDS-*; do [ -e "$c" ] && return 0; done; return 1; }
+# a built-in screen: the connector exists whether the screen is on or not (eDP, older LVDS, or MIPI DSI on some handhelds)
+_egpu_has_panel() { local c; for c in "$EGPU_SYSFS_ROOT"/sys/class/drm/card*-eDP-* "$EGPU_SYSFS_ROOT"/sys/class/drm/card*-LVDS-* "$EGPU_SYSFS_ROOT"/sys/class/drm/card*-DSI-*; do [ -e "$c" ] && return 0; done; return 1; }
 
 # 0 = removable (behind USB4/TB) or unsure; 1 = fixed in the machine. Since 5.12 the kernel marks a PCI device
 # "removable" when it or a bridge above it sits behind an external-facing port; fixed devices get no attribute at all.
@@ -274,6 +275,13 @@ _egpu_selftest_machine() {
   gpu pci0000:00/0000:00:01.1/0000:01:00.0/0000:02:00.0 0x030000 0x10de removable; chk handheld unknown-handheld || return 1
   # the same unknown handheld reporting itself as a laptop: the docked card is removable -> eGPU app, never nv-laptop
   echo 10 > "$t/sys/class/dmi/id/chassis_type"; chk egpu unknown-handheld-as-laptop || return 1
+  # a NEW handheld nobody has listed, nothing installed for its eGPU and none plugged in (AMD APU + panel), whatever
+  # shape its firmware claims: never offered this track (pc-no-nv needs no panel, nv-* needs a built-in NVIDIA card)
+  for ch in 3 10 13 35 1 2; do reset; dmi "NEWCO" "HX-9" "Next Gen" $ch; panel; gpu pci0000:00/0000:00:08.1/0000:c3:00.0 0x030000 0x1002 fixed
+    chk egpu "new-handheld-chassis-$ch" || return 1; done
+  # the same with a MIPI DSI panel instead of eDP, reporting itself as a desktop
+  reset; dmi "NEWCO" "HX-9" "" 3; mkdir -p "$t/sys/class/drm/card0-DSI-1"; gpu pci0000:00/0000:00:08.1/0000:c3:00.0 0x030000 0x1002 fixed
+  chk egpu new-handheld-dsi-panel || return 1
   # Steam Deck: name list
   reset; dmi "Valve" "Galileo" "Sephiroth" 1; panel; chk handheld steam-deck || return 1
   # XG Mobile seen once on this machine

@@ -38,6 +38,32 @@ MODE=install
 # self-heal or a reinstall of an AMD / Intel setup must never build the NVIDIA driver again. --nvidia switches back.
 GPU_VENDOR=${EGPU_GPU_VENDOR:-$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null | grep -xE 'nvidia|amd' || echo nvidia)}
 for a in "$@"; do case "$a" in --check) MODE=check;; --amd|--no-nvidia) GPU_VENDOR=amd;; --nvidia) GPU_VENDOR=nvidia;; --with-driver) COMPONENTS="$COMPONENTS,driver";; --no-gamescope) COMPONENTS=${COMPONENTS//gamescope/};; *) echo "unknown option $a"; exit 1;; esac; done
+# ---- NV GPU Buddy track (EXPERIMENTAL): a machine with a BUILT-IN NVIDIA card, or a desktop getting one. It has its own
+# installer (install-nv-gpu-buddy.sh); everything below runs unchanged for every eGPU install. Taken only when the track is
+# recorded, chosen by the plugin after its confirmation (EGPU_TRACK=nv-gpu-buddy), or confirmed twice below: a FIRST
+# install from a terminal on a machine egpu-detect --machine sees as a desktop / laptop with NVIDIA or a desktop with no
+# card. The default answer is always the eGPU install, and a handheld is never asked (egpu-detect says "handheld").
+if [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ] || [ "${EGPU_TRACK:-}" = nv-gpu-buddy ]; then
+  exec bash "$ROOT/install-nv-gpu-buddy.sh" "$@"
+fi
+if [ "$MODE" = install ] && [ ! -s /etc/nv-egpu-buddy/gpu-vendor ] && [ -t 0 ] && [ -z "${EGPU_GPU_VENDOR:-}" ] && [ -f "$ROOT/install-nv-gpu-buddy.sh" ]; then
+  _m=$(bash "$ROOT/system/usr/local/sbin/egpu-detect" --machine 2>/dev/null || echo egpu); _nvq=""; _cc=""
+  _n=$(lspci -s "${_m#* }" 2>/dev/null | sed 's/^[^:]*: //; s/ (rev.*//')
+  case "$_m" in
+    nv-desktop*) _nvq="This looks like a desktop PC with a built-in NVIDIA card (${_n:-NVIDIA})." ;;
+    nv-laptop*) _nvq="This looks like a laptop with a built-in NVIDIA card (${_n:-NVIDIA})." ;;
+    pc-no-nv) _nvq="This looks like a desktop PC with no NVIDIA card yet. If you are about to fit one, NV GPU Buddy installs the NVIDIA driver now, so the card works from its first boot."; _cc=--card-coming ;;
+  esac
+  if [ -n "$_nvq" ]; then
+    printf '\n%s\nEGPU Buddy has an EXPERIMENTAL mode for this, NV GPU Buddy: NVIDIA settings, power and clocks, the Big Art menu fix,\nscreens and keep awake, with no eGPU features. It installs EGPU Buddy'"'"'s patched NVIDIA driver in place of the distro'"'"'s.\nInstall NV GPU Buddy instead of the eGPU install? [y/N] ' "$_nvq"
+    read -r _r || _r=n
+    if [ "${_r,,}" = y ]; then
+      read -rp "This is a desktop PC or laptop, NOT a handheld with an eGPU. Type YES to confirm: " _r2 || _r2=""
+      [ "$_r2" = YES ] && exec bash "$ROOT/install-nv-gpu-buddy.sh" $_cc "$@"
+      echo "-> not confirmed: continuing with the normal eGPU install"
+    fi
+  fi
+fi
 # first install from a terminal with no choice made (no flag, no earlier install): ask, as the plugin does
 if [ -z "${EGPU_GPU_VENDOR:-}" ] && [ ! -s /etc/nv-egpu-buddy/gpu-vendor ] && [ "${MODE:-install}" = install ] && [ -t 0 ] \
    && ! printf ' %s ' "$@" | grep -qE ' --(amd|no-nvidia|nvidia) '; then

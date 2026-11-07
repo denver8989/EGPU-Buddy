@@ -6,6 +6,8 @@ set -uo pipefail
 ROOT=$(cd "$(dirname "$0")" && pwd)
 if [ "$(id -u)" = 0 ]; then USER_NAME=${EGPU_TARGET_USER:-${SUDO_USER:-}}; [ -n "$USER_NAME" ] && [ "$USER_NAME" != root ] || { echo "running as root: set EGPU_TARGET_USER=<login user>"; exit 1; }; sudo(){ "$@"; }; AS_ROOT=1; else USER_NAME=${SUDO_USER:-$USER}; AS_ROOT=0; fi
 USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6); USER_UID=$(id -u "$USER_NAME")
+# NV GPU Buddy track (experimental, built-in NVIDIA card): its own uninstall; every eGPU install carries on below unchanged
+[ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ] && [ -f "$ROOT/install-nv-gpu-buddy.sh" ] && exec bash "$ROOT/install-nv-gpu-buddy.sh" --uninstall
 userctl(){ if [ "$AS_ROOT" = 1 ]; then runuser -u "$USER_NAME" -- env "XDG_RUNTIME_DIR=/run/user/$USER_UID" "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$USER_UID/bus" systemctl --user "$@"; else systemctl --user "$@"; fi; }
 map_dest(){ case "$1" in system/*) echo "/${1#system/}";; user/*) echo "$USER_HOME/${1#user/}";; esac; }
 restore_or_remove(){ # $1 dest ; run in the right privilege context

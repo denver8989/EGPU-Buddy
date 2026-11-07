@@ -297,6 +297,12 @@ require_empty_sibling_bridge() {
 
 action=$1
 shift
+# NV GPU Buddy track (experimental): the card is BUILT IN. Only what its features use; every action that removes, resets,
+# rebinds or unloads a GPU, or touches tunnels and sessions, exists for eGPUs and is refused there. eGPU installs: unchanged.
+if [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ]; then
+  case "$action" in status|nvidia-perf|set-gpu-power-limit|set-gpu-graphics-clock|set-gpu-core-offset|reset-gpu-clocks|set-cpu-performance|set-cpu-powersave) ;;
+    *) die "not available in NV GPU Buddy mode (built-in GPU): $action" 2 ;; esac
+fi
 
 case "$action" in
   status)
