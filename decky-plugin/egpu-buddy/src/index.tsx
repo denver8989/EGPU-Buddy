@@ -640,6 +640,12 @@ function Content() {
             <ButtonItem layout="below" onClick={() => setTab("setup")}>Setup &amp; updates</ButtonItem>
           </PanelSectionRow>
         )}
+        {/* NVIDIA settings one press from the front page (every NVIDIA install, both app variants) */}
+        {tab !== "nvidia" && su?.installed_version && su.installed_vendor !== "amd" && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => { setNvEdit(null); setTab("nvidia"); }}>NVIDIA settings</ButtonItem>
+          </PanelSectionRow>
+        )}
       </PanelSection>
       {tab === "main" && (
         <PanelSection title={nvb ? "GPU" : "eGPU"}>

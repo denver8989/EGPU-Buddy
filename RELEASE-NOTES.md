@@ -1,3 +1,11 @@
+0.7.231 — NVIDIA settings show what the running game really got; NVIDIA settings on the front page.
+
+**NV GPU Buddy:** both app variants get this release (NVIDIA settings work)
+
+**NVIDIA settings** (every NVIDIA machine; AMD / Intel installs unchanged)
+- While a game runs, each setting shows Active or Inactive for that game, with the reason when it is not active.
+- The Game Mode plugin has an NVIDIA settings button on its front page.
+
 0.7.230 — NV GPU Buddy: a new experimental mode for desktop PCs and laptops with an NVIDIA card; full NVIDIA settings dropdowns.
 
 **NV GPU Buddy:** new experimental mode for machines with a built-in NVIDIA card (desktop PCs, laptops); never on a handheld
