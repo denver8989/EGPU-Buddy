@@ -12,6 +12,7 @@ The setups below all work. A fix for one of them must not change what the others
 | Bazzite | `grep -qsiE '^(ID\|NAME)="?bazzite' /etc/os-release` (install.sh: `IS_BAZZITE=1`) |
 | SteamOS | `command -v steamos-readonly >/dev/null 2>&1` |
 | AMD / Intel eGPU install | `[ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]` (python: `_installed_vendor() == "amd"`) |
+| NV GPU Buddy track (EXPERIMENTAL: built-in NVIDIA card, desktop / laptop; own installer install-nv-gpu-buddy.sh) | `[ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ]` |
 | NVIDIA reference path (Legion Go 2 / Legion Go 1, SteamOS + CachyOS) | the default: no gate, and therefore **never changed by a fix for another scenario** |
 
 - A fix goes inside the gate of the scenario where the problem was **seen in a report**. If it also touches a shared
@@ -24,6 +25,10 @@ The setups below all work. A fix for one of them must not change what the others
   ask the owner whether to widen it.
 - AMD fixes go in `egpu-generic` (it exits at once unless the AMD / Intel install was chosen). NVIDIA files never run
   AMD code; AMD installs never run NVIDIA code.
+
+- NV GPU Buddy is an alternate MODE of the same app (same version numbers), not an edition. It takes only releases whose
+  notes carry an "NV GPU Buddy:" line: Game Mode plugin and desktop app experience, NVIDIA settings / driver work and
+  fixes. eGPU hot-plug, dock and detach work never goes to it. Nothing built for it may change an eGPU install.
 
 ## 2. Before every commit
 
