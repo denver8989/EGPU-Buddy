@@ -6,6 +6,8 @@ settings that Linux can do for games on an AMD eGPU. Runs as the desktop user.
   egpu-amd-tweaks set '<json>'   save (validated) and rewrite the files the loader reads
   egpu-amd-tweaks env            shell lines for a Game Mode session on the AMD eGPU route (loader + its switch)
   egpu-amd-tweaks off            switch it off completely (no loader in the next sessions)
+  egpu-amd-tweaks game-status    while a game runs: which saved setting that game really received (JSON)
+  egpu-amd-tweaks afmf-install | afmf-remove   the afmf-linux frame generation layer (MIT), user-only, pinned + checksummed
 
 The loader is the same one the NVIDIA settings use (libegpu-nvt.so). The session sets EGPU_AMD_TWEAKS=1 on its AMD eGPU
 route only, where Vulkan sees the eGPU alone; the loader then hands amd-tweaks.env / amd-tweaks.dxvk.conf to each game
@@ -13,16 +15,34 @@ Steam starts. A value already set (launch option) is never replaced and a game's
 written and nothing loads until the user saves once; every setting on its default writes nothing for games.
 Left to Steam (not repeated here): frame limit, tearing, VRR, HDR, scaling filter (FSR / NIS / integer) and sharpness.
 """
-import json, os, shlex, sys
+import json, os, re, shlex, sys
 
 HOME = os.path.expanduser("~")
 D = os.path.join(HOME, ".config/egpu-buddy")
 CFG, ENVF, DXVKF = (os.path.join(D, f) for f in ("amd-tweaks.json", "amd-tweaks.env", "amd-tweaks.dxvk.conf"))
 SHIM = os.path.join(HOME, ".local/lib/nv-egpu-buddy/nvt")
+# Mesa's open implementation of AMD Anti-Lag 2 (VK_AMD_anti_lag, Mesa 25.3+): an implicit layer that is off unless enabled.
+# Games with Anti-Lag 2 built in use it: DirectX 12 through vkd3d-proton 3.0+ (Proton 10 / Experimental / GE-Proton), Vulkan
+# games directly. Offered only when this system's Mesa ships the layer.
+AL2_LAYER = "/usr/share/vulkan/implicit_layer.d/VkLayer_MESA_anti_lag.json"
+# AMD Fluid Motion Frames, experimental: afmf-linux (github.com/serialexperimentslainnnn/afmf-linux, MIT), an open Vulkan
+# implicit layer that doubles the presented frames of any 64-bit Vulkan / Proton game. Installed only when the user asks,
+# under ~/.local (its own installer's layout); the Vulkan loader does not even load it unless AFMF_ENABLE=1 is set.
+# ponytail: pinned release; bump AFMF_VER + AFMF_SHA together after testing a new one.
+AFMF_VER, AFMF_SHA = "1.3.1", "7fafa09021ee94dc5ec8da694cb02fe298b54c114b486611bb24b1e1500edb18"
+AFMF_URL = f"https://github.com/serialexperimentslainnnn/afmf-linux/releases/download/v{AFMF_VER}/afmf-linux-{AFMF_VER}-x86_64.tar.xz"
+AFMF_LIB = os.path.join(HOME, ".local/lib/afmf-linux/libafmf-linux.so")
+AFMF_JSON = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local/share"), "vulkan/implicit_layer.d/afmf-linux.json")
+AFMF_MARK = os.path.join(D, "afmf-installed")   # installed by EGPU Buddy (uninstall removes it then; never a user's own copy)
 
 # key -> (default = no change, allowed values)
 CHOICES = {
-    "anti_lag": ("off", ["off", "on"]),
+    "anti_lag": ("off", ["off", "on", "al2"]),
+    # FSR 4 upgrade for games with FSR 3.1: GE-Proton swaps in AMD's FSR 4 driver file (downloaded by Proton at launch;
+    # opt-in there, PROTON_FSR4_UPGRADE). "latest" = Proton's own default; 4.1.1 / 4.0.0 are the versions it offers.
+    "fsr4": ("off", ["off", "latest", "4.1.1", "4.0.0"]),
+    "afmf": ("off", ["off", "auto", "quality", "performance"]),
+    "afmf_search": ("auto", ["auto", "standard", "high"]),
     "vsync": ("app", ["app", "off", "on"]),
     "aniso": (0, [0, 2, 4, 8, 16]),
     "shader_cache": ("default", ["default", "1", "5", "10", "unlimited"]),
@@ -41,8 +61,19 @@ def load():
 def wanted(s):
     """(DXVK options, environment) for the chosen values; defaults add nothing."""
     dx, ev = {}, {}
-    if s["anti_lag"] == "on":   # Radeon Anti-Lag: one frame queued ahead (DXVK, DirectX 9-11)
+    if s["anti_lag"] in ("on", "al2"):   # Radeon Anti-Lag: one frame queued ahead (DXVK, DirectX 9-11)
         dx["dxgi.maxFrameLatency"] = dx["d3d9.maxFrameLatency"] = "1"
+    if s["anti_lag"] == "al2" and os.path.exists(AL2_LAYER):
+        ev["ENABLE_LAYER_MESA_ANTI_LAG"] = "1"
+    if s["afmf"] != "off" and afmf_installed():
+        ev["AFMF_ENABLE"] = "1"
+        ev["AFMF_GAMESCOPE"] = "1"                      # Game Mode: the layer's gamescope pass-through
+        ev["AFMF_PERFORMANCE_MODE"] = s["afmf"]
+        if s["afmf_search"] != "auto":
+            ev["AFMF_SEARCH_MODE"] = s["afmf_search"]
+        ev["DISABLE_LSFGVK"] = "1"                      # its docs: lsfg-vk next to it hangs presentation
+    if s["fsr4"] != "off":
+        ev["PROTON_FSR4_UPGRADE"] = "1" if s["fsr4"] == "latest" else s["fsr4"]
     if s["vsync"] != "app":
         on = s["vsync"] == "on"
         dx["dxgi.syncInterval"] = dx["d3d9.presentInterval"] = "1" if on else "0"
@@ -59,6 +90,47 @@ def wanted(s):
     if s["gl_threaded"] != "auto":
         ev["mesa_glthread"] = "true" if s["gl_threaded"] == "on" else "false"
     return dx, ev
+
+
+def afmf_installed():
+    return os.path.exists(AFMF_LIB) and os.path.exists(AFMF_JSON)
+
+
+def afmf_install():
+    import hashlib, tarfile, tempfile, urllib.request
+    with tempfile.TemporaryDirectory() as t:
+        f = os.path.join(t, "afmf.tar.xz")
+        try:
+            urllib.request.urlretrieve(AFMF_URL, f)
+        except OSError as e:
+            return False, f"Download failed: {e}"
+        if hashlib.sha256(open(f, "rb").read()).hexdigest() != AFMF_SHA:
+            return False, "Download did not match its checksum: nothing installed."
+        with tarfile.open(f) as tf:
+            src = {os.path.basename(m.name): m for m in tf.getmembers() if m.isfile()}
+            if "libafmf-linux.so" not in src or "afmf-linux.json" not in src:
+                return False, "Unexpected archive: nothing installed."
+            lib, man = tf.extractfile(src["libafmf-linux.so"]).read(), tf.extractfile(src["afmf-linux.json"]).read().decode()
+    j = json.loads(man)
+    j["layer"]["library_path"] = AFMF_LIB
+    for path in (AFMF_LIB, AFMF_JSON):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(AFMF_LIB + ".tmp", "wb").write(lib); os.chmod(AFMF_LIB + ".tmp", 0o644); os.replace(AFMF_LIB + ".tmp", AFMF_LIB)
+    json.dump(j, open(AFMF_JSON + ".tmp", "w"), indent=1); os.replace(AFMF_JSON + ".tmp", AFMF_JSON)
+    os.makedirs(D, exist_ok=True); open(AFMF_MARK, "w").write(AFMF_VER)
+    write_files(load())
+    return True, f"Fluid Motion Frames (afmf-linux {AFMF_VER}) installed."
+
+
+def afmf_remove():
+    if os.path.exists(AFMF_MARK):
+        for f in (AFMF_LIB, AFMF_JSON, AFMF_MARK):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    write_files(load())
+    return True, "Fluid Motion Frames removed."
 
 
 def write_files(s):
@@ -90,8 +162,78 @@ def get():
     s = load()
     e = steam_env()
     loader = "loaded" if e.get("EGPU_AMD_TWEAKS") == "1" and "libegpu-nvt.so" in e.get("LD_PRELOAD", "") else ("restart" if e else "no-steam")
-    return {"settings": s, "defaults": {k: d for k, (d, _) in CHOICES.items()}, "enabled": os.path.exists(CFG),
+    lsfg = any(os.path.exists(os.path.join(d, "vulkan/implicit_layer.d", f)) for d in (os.path.join(HOME, ".local/share"), "/usr/share", "/etc")
+               for f in ("VkLayer_LS_frame_generation.json", "VkLayer_LSFGVK_frame_generation.json"))
+    return {"settings": s, "defaults": {k: d for k, (d, _) in CHOICES.items()}, "enabled": os.path.exists(CFG), "al2": os.path.exists(AL2_LAYER),
+            "afmf": {"installed": afmf_installed(), "ours": os.path.exists(AFMF_MARK), "version": AFMF_VER, "lsfg": lsfg},
             "active": s != {k: d for k, (d, _) in CHOICES.items()}, "loader": loader, "shim": shim_ok()}
+
+
+def game_status():
+    """Per setting, for the running game: active | inactive | overridden | default | na, with a one-line reason. Read-only.
+    The game process and its name are found the way the NVIDIA settings do it (egpu-nvidia-tweaks, same install)."""
+    from importlib.machinery import SourceFileLoader
+    try:
+        nvt = SourceFileLoader("egpu_nvt", os.path.join(HOME, ".local/bin/egpu-nvidia-tweaks")).load_module()
+        g = nvt.game_proc()
+    except Exception:   # noqa: BLE001 - no status rather than an error in the menu
+        return {"running": False}
+    if not g:
+        return {"running": False}
+    s, env = load(), g["env"]
+    appid = env.get("SteamAppId") or env.get("SteamGameId", "")
+    proton = "STEAM_COMPAT_DATA_PATH" in env
+    tool = os.path.basename(next((p for p in env.get("STEAM_COMPAT_TOOL_PATHS", "").split(":") if re.search(r"proton", p, re.I)), ""))
+    loader = "libegpu-nvt.so" in env.get("LD_PRELOAD", "") and env.get("EGPU_AMD_TWEAKS") == "1"
+    try:
+        txt = open(env.get("DXVK_CONFIG_FILE", ""), errors="ignore").read() if env.get("DXVK_CONFIG_FILE") else ""
+    except OSError:
+        txt = ""
+    head, _, tail = txt.partition("\n# own options")
+    ours = dict((x.strip() for x in l.split("=", 1)) for l in head.splitlines() if "=" in l and not l.startswith("#"))
+    own = dict((x.strip().strip('"') for x in l.split("#", 1)[0].split("=", 1)) for l in tail.splitlines()[1:] if "=" in l.split("#", 1)[0] and not l.strip().startswith("["))
+    defaults = {k: d for k, (d, _) in CHOICES.items()}
+    out = {}
+    for k in CHOICES:
+        if s[k] == defaults[k]:
+            out[k] = {"state": "default", "why": "On its default: nothing to hand the game."}; continue
+        if env.get("EGPU_NVT_OFF"):
+            out[k] = {"state": "inactive", "why": "EGPU_NVT_OFF=1 in the game's launch options keeps it out."}; continue
+        if not loader:
+            out[k] = {"state": "inactive", "why": "The game started without the settings loader: Apply once, then start the game again."}; continue
+        dx, ev = wanted({**defaults, k: s[k]})
+        if not proton:
+            dx = {}
+            if k == "fsr4" or not ev:
+                out[k] = {"state": "na", "why": "Proton (Windows) games only: this is a native game."}; continue
+        diff = [x for x, v in ev.items() if env.get(x) not in (None, v)]
+        miss = [x for x, v in ev.items() if x not in env] + [x for x, v in dx.items() if ours.get(x) != v]
+        mine = [x for x, v in dx.items() if x in own and own[x] != v]
+        if diff:
+            out[k] = {"state": "overridden", "why": f"The game's launch options set {diff[0]}={env[diff[0]]}."}
+        elif miss:
+            out[k] = {"state": "inactive", "why": "Changed after the game started: it gets it at its next launch."}
+        elif mine:
+            out[k] = {"state": "overridden", "why": f"The game's own dxvk.conf sets {mine[0]} = {own[mine[0]]}."}
+        elif k == "fsr4" and not re.search(r"GE-Proton|cachyos", tool, re.I):
+            out[k] = {"state": "inactive", "why": f"Needs GE-Proton for this game (it runs on {tool or 'Steam Proton'}): Properties > Compatibility."}
+        elif k == "fsr4":
+            out[k] = {"state": "active", "why": "Handed to the game; FSR 4 replaces FSR 3.1 only in games that have FSR 3.1."}
+        elif k in ("afmf", "afmf_search") and not afmf_installed():
+            out[k] = {"state": "inactive", "why": "Fluid Motion Frames is not installed."}
+        elif k == "afmf":
+            out[k] = {"state": "active", "why": "Handed to the game (64-bit Vulkan / Proton games; doubles the frames shown)."}
+        elif k == "anti_lag" and s[k] == "al2":
+            out[k] = {"state": "active", "why": "Handed to the game; Anti-Lag 2 acts only in games that have it built in."}
+        else:
+            out[k] = {"state": "active", "why": "The running game has it."}
+    name = ""
+    try:
+        name = nvt.game_name(appid)
+    except Exception:   # noqa: BLE001
+        pass
+    return {"running": True, "appid": appid, "game": name or g["comm"], "pid": int(g["pid"]), "loader": loader, "proton": proton,
+            "tool": tool, "settings": out}
 
 
 def main(a):
@@ -117,6 +259,11 @@ def main(a):
             if "libegpu-nvt.so" not in cur:
                 print(f"export LD_PRELOAD={shlex.quote(os.path.join(SHIM, '$LIB', 'libegpu-nvt.so'))}{shlex.quote(':' + cur) if cur else ''}")
             print("export EGPU_AMD_TWEAKS=1")
+    elif cmd in ("afmf-install", "afmf-remove"):
+        ok, msg = afmf_install() if cmd == "afmf-install" else afmf_remove()
+        print(json.dumps({"ok": ok, "message": msg})); return 0 if ok else 1
+    elif cmd == "game-status":
+        print(json.dumps(game_status()))
     elif cmd == "off":
         for f in (CFG, ENVF, DXVKF):
             try:

@@ -60,14 +60,19 @@ const NV_ROWS: { key: string; label: string; desc: string; opts: [string | numbe
 // games on the AMD eGPU. Steam's own Performance menu already has frame limit, tearing, VRR, HDR, FSR / NIS / integer
 // scaling and sharpness, so they are not repeated here.
 type AmdCard = { name?: string; bar_mb?: number; sclk?: string; mclk?: string; temp?: number | null; power?: number | null; cap?: number | null; cap_min?: number | null; cap_max?: number | null; cap_default?: number | null };
-type AmdSettings = { available: boolean; enabled?: boolean; active?: boolean; loader?: string; shim?: boolean; settings?: Record<string, string | number>; defaults?: Record<string, string | number>; card?: AmdCard; game_mode?: boolean; game?: boolean };
+type AmdSettings = { available: boolean; al2?: boolean; afmf?: { installed: boolean; ours: boolean; version: string; lsfg: boolean }; enabled?: boolean; active?: boolean; loader?: string; shim?: boolean; settings?: Record<string, string | number>; defaults?: Record<string, string | number>; card?: AmdCard; game_mode?: boolean; game?: boolean };
 const getAmd = callable<[], AmdSettings>("get_amd_settings");
 const setAmd = callable<[Record<string, string | number>], Result & { restart?: boolean }>("set_amd_settings");
 const applyAmd = callable<[], Result>("apply_amd_settings");
 const amdOff = callable<[], Result>("amd_off");
 const setAmdCap = callable<[number], Result>("set_amd_power_cap");
+const getAmdGame = callable<[], GameNv>("get_amd_game_status");
+const amdAfmf = callable<[boolean], Result>("amd_afmf");
 const AMD_ROWS: { key: string; label: string; desc: string; opts: [string | number, string][] }[] = [
-  { key: "anti_lag", label: "Radeon Anti-Lag", desc: "One frame queued ahead of the screen (DirectX 9-11 games). Games with AMD Anti-Lag 2 built in use their own.", opts: [["off", "Off (game decides)"], ["on", "On"]] },
+  { key: "anti_lag", label: "Radeon Anti-Lag", desc: "On: one frame queued ahead of the screen (DirectX 9-11 games). Anti-Lag 2: also Mesa's open Anti-Lag 2, for games that have it built in (DirectX 12 with Proton 10, Experimental or GE-Proton; Vulkan).", opts: [["off", "Off (game decides)"], ["on", "On"], ["al2", "On + Anti-Lag 2"]] },
+  { key: "fsr4", label: "FSR 4 upgrade", desc: "Games with FSR 3.1 get FSR 4 instead (needs GE-Proton for the game; Proton downloads AMD's FSR 4 file at launch). Pick FSR in the game's own settings.", opts: [["off", "Off (game's own FSR)"], ["latest", "Latest FSR 4"], ["4.1.1", "FSR 4.1.1"], ["4.0.0", "FSR 4.0.0"]] },
+  { key: "afmf", label: "Fluid Motion Frames (experimental)", desc: "Frame generation for 64-bit Vulkan and Proton games: doubles the frames shown (afmf-linux, open source; not AMD's own). Best with 60+ real FPS; adds a little latency.", opts: [["off", "Off"], ["auto", "On (auto)"], ["quality", "On (quality)"], ["performance", "On (performance)"]] },
+  { key: "afmf_search", label: "Fluid Motion Frames search mode", desc: "High follows fast motion better, at a little more GPU cost.", opts: [["auto", "Auto"], ["standard", "Standard"], ["high", "High"]] },
   { key: "vsync", label: "Wait for vertical refresh", desc: "DirectX 9-12, Vulkan and OpenGL games. Tearing in Game Mode also needs Steam's Allow tearing.", opts: [["app", "Use the program setting"], ["off", "Always off"], ["on", "Always on"]] },
   { key: "aniso", label: "Anisotropic filtering", desc: "Every API: Vulkan, DirectX 9-12 and OpenGL games.", opts: [[0, "Program-controlled"], [2, "2x"], [4, "4x"], [8, "8x"], [16, "16x"]] },
   { key: "shader_cache", label: "Shader cache size", desc: "Disk space for compiled shaders; larger means less stutter in big games.", opts: [["default", "Driver default"], ["1", "1 GB"], ["5", "5 GB"], ["10", "10 GB"], ["unlimited", "Unlimited"]] },
@@ -476,6 +481,7 @@ function Content() {
   const [live, setLive_] = useState<LiveSettings | null>(null);
   const [amd, setAmdS] = useState<AmdSettings | null>(null);
   const [amdEdit, setAmdEdit] = useState<Record<string, string | number> | null>(null);
+  const [ags, setAgs] = useState<GameNv | null>(null);
   const [pr, setPr] = useState<ProtonStatus | null>(null);
   const [gs, setGs] = useState<GameNv | null>(null);
   const [logOpen, setLogOpen] = useState<"" | "setup" | "trial">("");   // logs stay folded away unless asked for
@@ -511,7 +517,9 @@ function Content() {
   useEffect(() => { if (visible && (tab === "setup" || tab === "nvidia")) getNvidia().then((n) => { setNv(n); if (tab === "setup") setNvEdit(null); }).catch(() => setNv(null)); }, [visible, tab]);
   // Adrenaline Settings (AMD / Intel install): read when Setup opens, and every 3 s on the page (the card's live readouts)
   useEffect(() => { if (!visible || (tab !== "setup" && tab !== "amd")) return; const f = () => getAmd().then(setAmdS).catch(() => setAmdS(null)); f();
-    if (tab !== "amd") return; const t = setInterval(f, 3000); return () => clearInterval(t); }, [visible, tab]);
+    if (tab !== "amd") return; const g = () => getAmdGame().then(setAgs).catch(() => setAgs(null)); g();
+    const t = setInterval(() => { f(); g(); }, 3000); return () => clearInterval(t); }, [visible, tab]);
+  useEffect(() => { if (visible && tab === "amd") getProton().then(setPr).catch(() => setPr(null)); }, [visible, tab]);
   useEffect(() => { if (visible && tab === "nvidia" && s?.game_mode) getLive().then(setLive_).catch(() => setLive_(null)); }, [visible, tab, s?.game_mode]);
   useEffect(() => { if (visible && tab === "nvidia") getProton().then(setPr).catch(() => setPr(null)); }, [visible, tab]);
   // the live status follows the game while the page is open (every 3 s; read-only)
@@ -1078,15 +1086,28 @@ function Content() {
             .filter((w) => w >= c.cap_min! && w <= c.cap_max!).sort((a, b) => a - b) : [];
         return (<PanelSection title="Adrenaline Settings (experimental)">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Global settings for every game that renders on the AMD eGPU{c.name ? ` (${c.name})` : ""}. Games on the handheld's own GPU never get them; a setting on its default changes nothing.</div></PanelSectionRow>
-          {AMD_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem layout="below" label={r.label} description={`Next game launch. ${r.desc}`} disabled={lock}
-            selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
-            onChange={(o) => setAmdEdit({ ...cur, [r.key]: o.data })} /></PanelSectionRow>)}
+          {ags?.running && (() => { const st = Object.values(ags.settings ?? {}), on = st.filter((x) => x.state === "active").length, set = st.filter((x) => x.state !== "default").length;
+            return <PanelSectionRow><div style={{ fontSize: "12px", padding: "6px 8px", borderRadius: "4px", background: "#57301a", border: "1px solid #ff6a1a" }}>
+              <b>Running: {ags.game}</b><div style={{ opacity: 0.85, marginTop: "2px" }}>{set ? `${on} of ${set} changed setting${set > 1 ? "s" : ""} active in this game.` : "Every setting is on its default."}</div></div></PanelSectionRow>; })()}
+          {AMD_ROWS.filter((r) => r.key !== "afmf_search" || (cur.afmf ?? "off") !== "off").map((r) => <PanelSectionRow key={r.key}><DropdownItem layout="below" label={r.label} description={`Next game launch. ${r.desc}`} disabled={lock}
+            selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.filter(([d]) => d !== "al2" || amd.al2 || cur[r.key] === "al2").map(([d, l]) => ({ data: d, label: l }))}
+            onChange={(o) => setAmdEdit({ ...cur, [r.key]: o.data })} />
+            {ags?.running && <GameState st={ags.settings?.[r.key]} />}</PanelSectionRow>)}
+          {(cur.afmf ?? "off") !== "off" && !amd.afmf?.installed && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdAfmf(true); setAmdS(await getAmd()); return r; })}>
+            Install Fluid Motion Frames (afmf-linux {amd.afmf?.version})</ButtonItem></PanelSectionRow>}
+          {amd.afmf?.lsfg && (cur.afmf ?? "off") !== "off" && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ffb36b" }}>lsfg-vk is installed: it is kept out of games while Fluid Motion Frames is on (the two hang together).</div></PanelSectionRow>}
+          {cur.fsr4 !== "off" && cur.fsr4 !== undefined && pr && !pr.tools.some((t) => /GE-Proton/i.test(t.name)) && <>
+            <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>FSR 4 upgrade needs GE-Proton (none installed). {pr.install?.message ?? ""}</div></PanelSectionRow>
+            <PanelSectionRow><ButtonItem layout="below" disabled={lock || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
+              {pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton"}</ButtonItem></PanelSectionRow></>}
+          {cur.fsr4 !== "off" && cur.fsr4 !== undefined && pr?.tools.some((t) => /GE-Proton/i.test(t.name)) && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>FSR 4: pick {pr.tools.filter((t) => /GE-Proton/i.test(t.name)).map((t) => t.name).slice(-1)[0]} for the game (Properties &gt; Compatibility). {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
           <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!dirty && !once) || (once && !!amd.game)} onClick={() => run(async () => {
             if (dirty) { const r = await setAmd(cur); if (!r.ok) return r; setAmdEdit(null); const n = await getAmd(); setAmdS(n); if (!(n.game_mode && n.loader !== "loaded")) return r; }
             return applyAmd(); })}>
             {once || (dirty && amd.game_mode && amd.loader !== "loaded") ? (amd.game ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{amd.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => setAmdEdit({ ...(amd.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
+          {amd.afmf?.ours && (cur.afmf ?? "off") === "off" && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdAfmf(false); setAmdS(await getAmd()); return r; })}>Remove Fluid Motion Frames</ButtonItem></PanelSectionRow>}
           {amd.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdOff(); setAmdEdit(null); setAmdS(await getAmd()); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
           {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
           {caps.length > 1 && <PanelSectionRow><DropdownItem layout="below" label="Power limit" disabled={lock}

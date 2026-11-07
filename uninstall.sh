@@ -43,6 +43,10 @@ runtime_leftovers(){
     "$USER_HOME/.config/egpu-buddy/steam-ui-fix" \
     "$USER_HOME/.local/state/nv-egpu-buddy/steam-ui-fix.log" \
     "$USER_HOME/.cache/egpu-buddy/dxvk-conf-scan.json"
+  # Fluid Motion Frames (afmf-linux), only when Adrenaline Settings installed it (a user's own copy stays)
+  if [ -e "$USER_HOME/.config/egpu-buddy/afmf-installed" ]; then
+    printf '%s\n' "$USER_HOME/.local/lib/afmf-linux" "$USER_HOME/.local/share/vulkan/implicit_layer.d/afmf-linux.json" "$USER_HOME/.config/egpu-buddy/afmf-installed"
+  fi
 }
 
 # ROG Ally / XG Mobile: decided now, while egpu-detect and the XG Mobile marker still exist (both are removed below)

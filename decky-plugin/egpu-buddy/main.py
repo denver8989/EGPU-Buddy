@@ -2505,6 +2505,15 @@ class Plugin:
             return {"available": False}
         return {"available": True, **d, "card": self._amd_card(), "game_mode": _gamescope_running(), "game": _game_running()}
 
+    async def get_amd_game_status(self):
+        """While a game runs: which saved Adrenaline setting that game really received (read-only)."""
+        if _installed_vendor() != "amd" or not os.path.exists(f"{USER_HOME}/.local/bin/egpu-amd-tweaks"):
+            return {"running": False}
+        try:
+            return json.loads(self._amt("game-status")[1])
+        except ValueError:
+            return {"running": False}
+
     async def set_amd_settings(self, settings: dict):
         if _installed_vendor() != "amd":
             return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
@@ -2528,6 +2537,18 @@ class Plugin:
             return {"ok": False, "message": "Saved: Game Mode picks it up the next time it starts."}
         _spawn_root_job("switch", [SWITCH])
         return {"ok": True, "message": "Game Mode restarts once with the settings loader (dark for a few seconds)."}
+
+    async def amd_afmf(self, install: bool):
+        """Fluid Motion Frames (experimental): install / remove the afmf-linux layer in the user's home (pinned, checksummed)."""
+        if _installed_vendor() != "amd":
+            return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
+        rc, out, err = _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], f"HOME={USER_HOME}",
+                            f"{USER_HOME}/.local/bin/egpu-amd-tweaks", "afmf-install" if install else "afmf-remove"], 120)
+        try:
+            r = json.loads(out)
+        except ValueError:
+            r = {"ok": False, "message": (err or out or "?").strip()[-200:]}
+        return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
 
     async def amd_off(self):
         if _installed_vendor() != "amd":
