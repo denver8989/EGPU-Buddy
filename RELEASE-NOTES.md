@@ -1,3 +1,8 @@
+0.7.237 — AMD eGPUs: Safe Detach on Thunderbolt 3 (Titan Ridge) docks.
+
+**Safe Detach** (AMD / Intel install only; NVIDIA unchanged)
+- On Intel Titan Ridge docks (such as Trebleet), the whole dock is taken off the bus instead of the graphics card alone; removing only the card restarted the machine. Every other dock is unchanged.
+
 0.7.236 — AMD eGPUs: Adrenaline Settings (experimental).
 
 **Adrenaline Settings** (AMD / Intel install only; NVIDIA unchanged)
