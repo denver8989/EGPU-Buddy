@@ -48,6 +48,9 @@ HANDHELD_ART = [
 
 # Keep awake (opt-in, every machine): a logind "sleep" block held by this root backend. Steam's idle sleep and its Sleep
 # button ask logind as the user; a lock held by another user (root) refuses them without an admin password.
+# In Game Mode the block alone is not enough: Steam still runs its idle sleep, takes its UI down, has the suspend refused
+# and stays half asleep (spinner on wake). So the menu also sets Steam's own sleep timers to Never while it is on, and
+# puts the user's values (kept in AWAKE_FLAG) back when it is switched off.
 AWAKE_FLAG = "/var/lib/nvegpu/keep-awake"
 AWAKE_WHO = "EGPU Buddy keep awake"
 
@@ -56,10 +59,22 @@ def _keep_awake_running():
     return subprocess.run(["pgrep", "-f", f"who={AWAKE_WHO}"], capture_output=True).returncode == 0
 
 
+def _steam_sleep_timers():
+    """Steam's own idle-sleep timers (battery, plugged in), in seconds, from its config; Steam's defaults when unset."""
+    try:
+        t = open(f"{USER_HOME}/.local/share/Steam/config/config.vdf", errors="replace").read()
+    except OSError:
+        t = ""
+    v = [re.search(rf'"IdleSuspend{k}Seconds"\s+"(\d+)"', t) for k in ("Battery", "AC")]
+    return [int(m.group(1)) if m else d for m, d in zip(v, (900, 3600))]
+
+
 def _keep_awake(on):
     if on:
         os.makedirs(os.path.dirname(AWAKE_FLAG), exist_ok=True)
-        open(AWAKE_FLAG, "w").close()
+        if not os.path.exists(AWAKE_FLAG) or not os.path.getsize(AWAKE_FLAG):   # remember the user's Steam sleep timers once
+            b, a = _steam_sleep_timers()
+            open(AWAKE_FLAG, "w").write(f"{b} {a}" if b or a else "900 3600")
         if not _keep_awake_running():
             subprocess.Popen(["systemd-inhibit", "--what=sleep:idle", f"--who={AWAKE_WHO}", "--why=Keep awake is on in EGPU Buddy",
                               "--mode=block", "sleep", "infinity"], start_new_session=True,
@@ -2401,7 +2416,11 @@ class Plugin:
         return d
 
     async def get_keep_awake(self):
-        return {"enabled": os.path.exists(AWAKE_FLAG), "active": _keep_awake_running()}
+        try:
+            prev = [int(x) for x in open(AWAKE_FLAG).read().split()][:2]
+        except (OSError, ValueError):
+            prev = []
+        return {"enabled": os.path.exists(AWAKE_FLAG), "active": _keep_awake_running(), "prev": prev if len(prev) == 2 else [900, 3600]}
 
     async def set_keep_awake(self, enabled: bool):
         _keep_awake(bool(enabled))

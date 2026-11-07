@@ -138,8 +138,14 @@ const restartGamemode = callable<[], Result>("restart_gamemode");
 type SteamUi = { available: boolean; enabled?: boolean; bigart?: boolean; active?: boolean; route?: boolean; offer?: boolean; pending?: boolean };
 const getSteamUi = callable<[], SteamUi>("get_steam_ui_fix");
 const getHandheldArt = callable<[], { svg: string; name: string }>("get_handheld_art");
-const getKeepAwake = callable<[], { enabled: boolean; active: boolean }>("get_keep_awake");
+const getKeepAwake = callable<[], { enabled: boolean; active: boolean; prev: number[] }>("get_keep_awake");
 const setKeepAwake = callable<[boolean], Result>("set_keep_awake");
+// Steam's own idle-sleep timers (client setting 24003 battery, 24004 plugged in; seconds, 0 = Never)
+const steamSleep = (bat: number, ac: number) => {
+  const v = (n: number) => { const o: number[] = []; do { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; o.push(b); } while (n); return o; };
+  const f = (id: number, n: number) => [...v(id << 3), ...v(n)];
+  return (window as any).SteamClient?.Settings?.SetSetting?.(btoa(String.fromCharCode(...f(24003, bat), ...f(24004, ac))));
+};
 const setSteamUi = callable<[boolean], Result & { restart?: boolean }>("set_steam_ui_fix");
 type Upd = { needs_detach?: boolean; auto_update: boolean; available: string; state: string; checked: number; last_error: string; installed: string };
 const getUpdate = callable<[], Upd>("get_update_status");
@@ -494,7 +500,7 @@ function Content() {
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
   const [gr, setGr] = useState<{ enabled: boolean } | null>(null);
   const [sui, setSui] = useState<SteamUi | null>(null);
-  const [awake, setAwake] = useState<{ enabled: boolean; active: boolean } | null>(null);
+  const [awake, setAwake] = useState<{ enabled: boolean; active: boolean; prev: number[] } | null>(null);
   useEffect(() => { if (visible && tab === "setup") getKeepAwake().then(setAwake).catch(() => setAwake(null)); }, [visible, tab]);
   const [tr, setTr] = useState<Trial | null>(null);
   const staleChecked = useRef(false);
@@ -1026,8 +1032,9 @@ function Content() {
       )}
       {tab === "setup" && awake && (
         <PanelSection title="Sleep">
-          <PanelSectionRow><ToggleField label="Keep awake" description={`Off by default. On: the machine never goes to sleep by itself, and Steam's Sleep button does nothing while it is on (switch it off to sleep). The screen can still dim.${awake.enabled && !awake.active ? " Not active: switch it off and on." : ""}`}
-            checked={awake.enabled} onChange={(v) => run(async () => { const r = await setKeepAwake(v); setAwake(await getKeepAwake()); return r; })} /></PanelSectionRow>
+          <PanelSectionRow><ToggleField label="Keep awake" description={`Off by default. On: the machine never goes to sleep by itself (Steam's sleep timers are set to Never and put back when you switch it off), and Steam's Sleep button does nothing while it is on (switch it off to sleep). The screen can still dim.${awake.enabled && !awake.active ? " Not active: switch it off and on." : ""}`}
+            checked={awake.enabled} onChange={(v) => run(async () => { const r = await setKeepAwake(v); const a = await getKeepAwake(); setAwake(a);
+              await (v ? steamSleep(0, 0) : steamSleep(a.prev[0], a.prev[1])); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
       {tab === "setup" && gr && (
@@ -1177,6 +1184,7 @@ function Title() {
 
 export default definePlugin(() => {
   ui("plugin frontend loaded");
+  getKeepAwake().then((a) => a.enabled && steamSleep(0, 0)).catch(() => {});   // Keep awake on: Steam's own sleep timers stay at Never
   // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
   const notices = setInterval(async () => { try { const t = await popNotice(); if (t) toaster.toast({ title: appName(), body: t, duration: 15000 }); } catch { /* backend not up yet */ }
     try { await maybeShowTrial(); } catch { /* backend not up yet */ }
