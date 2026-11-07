@@ -59,6 +59,12 @@ ApplicationWindow {
     property var nvEdit: ({})
     property bool nvDirty: false
     property bool nvSaved: false
+    // while a game runs: per setting, what that game really received (read-only), refreshed while the tab is open
+    property var gs: ({})
+    function gsLook(st) { return ({ active: ["#4caf50", "Active"], inactive: ["#f0b429", "Inactive"], overridden: ["#f0b429", "Inactive: the game's own setting"],
+                                    default: ["#8b929a", "Default"], na: ["#8b929a", "Not used by this game"] })[st] || ["#8b929a", st] }
+    Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.page === 1 && win.nvShow && win.visible
+            onTriggered: win.call("GET", "/api/nvidia-game", null, function(r) { win.gs = r || {} }) }
     function loadNv() { call("GET", "/api/nvidia", null, function(r) { if (!r) return; nv = r; if (!nvDirty) nvEdit = Object.assign({}, r.settings || {}) }) }
     property string msg: "Ready."
     property bool msgErr: false
@@ -237,7 +243,11 @@ ApplicationWindow {
                     Label { text: title; font.pixelSize: 14 }
                     Label { text: when; font.pixelSize: 10; opacity: 0.85; color: when === "Instant" ? "#5fd35f" : palette.highlight
                             padding: 2; leftPadding: 6; rightPadding: 6; background: Rectangle { radius: 8; color: "transparent"; border.color: parent.color } } }
-                Label { Layout.fillWidth: true; text: desc; wrapMode: Text.WordWrap; opacity: 0.65; font.pixelSize: 11 } }
+                Label { Layout.fillWidth: true; text: desc; wrapMode: Text.WordWrap; opacity: 0.65; font.pixelSize: 11 }
+                Label { readonly property var st: (win.gs.settings || {})[key]; visible: !!win.gs.running && !!st; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                        font.pixelSize: 11; textFormat: Text.StyledText
+                        text: st ? "<font color='" + win.gsLook(st.state)[0] + "'><b>\u25CF " + win.gsLook(st.state)[1] + "</b></font>"
+                                   + (st.state !== "active" && st.state !== "default" ? "  ·  " + st.why : "") : "" } }
             ComboBox { Layout.preferredWidth: 250; model: opts.map(function(o) { return o[1] })
                 currentIndex: Math.max(0, opts.map(function(o) { return String(o[0]) }).indexOf(String(win.nvEdit[key] === undefined ? opts[0][0] : win.nvEdit[key])))
                 onActivated: function(i) { var e = Object.assign({}, win.nvEdit); e[key] = opts[i][0]; win.nvEdit = e; win.nvDirty = true } } }
@@ -273,6 +283,9 @@ ApplicationWindow {
                 RowLayout { Layout.fillWidth: true
                     ColumnLayout { Layout.fillWidth: true; spacing: 2
                         Label { text: "Global settings"; font.pixelSize: 17; font.bold: true }
+                        Label { visible: !!win.gs.running; font.pixelSize: 12; textFormat: Text.StyledText; color: "#7fc4ff"
+                                text: { var st = Object.keys(win.gs.settings || {}).map(function(k) { return win.gs.settings[k].state }), set = st.filter(function(x) { return x !== "default" }).length
+                                        return "<b>Running: " + (win.gs.game || "") + "</b>  ·  " + (set ? st.filter(function(x) { return x === "active" }).length + " of " + set + " changed settings active in this game" : "every setting is on its default") } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.7
                             text: win.nvb ? "Used by every game Steam starts on the NVIDIA GPU. Nothing is changed while a setting is on its default."
                                 : "Used by every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them, and nothing is changed while a setting is on its default." } }

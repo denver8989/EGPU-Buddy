@@ -282,6 +282,9 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p == "/api/status": return self._json(status())
         if p == "/api/notes": return self._json(release_notes())
         if p == "/api/nvidia": return self._json(nvidia_settings())
+        if p == "/api/nvidia-game":   # while a game runs: which saved setting it really received (read-only)
+            try: return self._json(json.loads(sh([NVT, "game-status"], 20)[1]))
+            except ValueError: return self._json({"running": False})
         return super().do_GET()
     def do_POST(self):
         p = self.path.split("?")[0]; n = int(self.headers.get("content-length", 0)); b = json.loads(self.rfile.read(n) or b"{}")

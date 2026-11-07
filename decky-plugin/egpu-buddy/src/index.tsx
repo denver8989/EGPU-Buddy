@@ -18,6 +18,17 @@ type NvSettings = { available: boolean; error?: string; active?: boolean; enable
   games?: { game: string; overridden: string[] }[] };
 type LiveSettings = { available: boolean; fps?: number | null; tearing?: number | null; vrr?: number | null; sharpness?: number | null };
 const nvidiaOff = callable<[], Result>("nvidia_off");
+// while a game runs: per setting, what that game really received (active | inactive | overridden | default | na)
+type GameNv = { running: boolean; game?: string; appid?: string; loader?: boolean; settings?: Record<string, { state: string; why: string }> };
+const getNvGame = callable<[], GameNv>("get_nvidia_game_status");
+const GS_LOOK: Record<string, [string, string]> = { active: ["#4caf50", "Active"], inactive: ["#f0b429", "Inactive"], overridden: ["#f0b429", "Inactive: the game's own setting"],
+  default: ["#8b929a", "Default"], na: ["#8b929a", "Not used by this game"] };
+const GameState = ({ st }: { st?: { state: string; why: string } }) => {
+  if (!st) return null;
+  const [color, label] = GS_LOOK[st.state] ?? ["#8b929a", st.state];
+  return (<div style={{ fontSize: "11px", marginTop: "4px", lineHeight: 1.35 }}>
+    <span style={{ color, fontWeight: 600 }}>{"\u25CF"} {label}</span>{st.state !== "active" && st.state !== "default" ? <span style={{ opacity: 0.75 }}> · {st.why}</span> : null}</div>);
+};
 const confirmLive = callable<[], Result>("confirm_live_setting");
 type ProtonStatus = { tools: { name: string; ok: boolean }[]; ready: boolean; install: { state?: string; message?: string } };
 const getProton = callable<[], ProtonStatus>("get_proton_status");
@@ -446,6 +457,7 @@ function Content() {
   const setNvEdit = (v: Record<string, string | number> | null) => { if (keepPage.on) keepNv.v = v; setNvEdit_(v); };
   const [live, setLive_] = useState<LiveSettings | null>(null);
   const [pr, setPr] = useState<ProtonStatus | null>(null);
+  const [gs, setGs] = useState<GameNv | null>(null);
   const [logOpen, setLogOpen] = useState<"" | "setup" | "trial">("");   // logs stay folded away unless asked for
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
@@ -479,6 +491,8 @@ function Content() {
   useEffect(() => { if (visible && (tab === "setup" || tab === "nvidia")) getNvidia().then((n) => { setNv(n); if (tab === "setup") setNvEdit(null); }).catch(() => setNv(null)); }, [visible, tab]);
   useEffect(() => { if (visible && tab === "nvidia" && s?.game_mode) getLive().then(setLive_).catch(() => setLive_(null)); }, [visible, tab, s?.game_mode]);
   useEffect(() => { if (visible && tab === "nvidia") getProton().then(setPr).catch(() => setPr(null)); }, [visible, tab]);
+  // the live status follows the game while the page is open (every 3 s; read-only)
+  useEffect(() => { if (!visible || tab !== "nvidia") return; const f = () => getNvGame().then(setGs).catch(() => setGs(null)); f(); const t = setInterval(f, 3000); return () => clearInterval(t); }, [visible, tab]);
   // DDC/CI reads are slow-ish and some screens dislike polling: read once when details open
   useEffect(() => { if (visible && tab === "details") getScreens().then(setScr).catch(() => setScr(null)); }, [visible, tab]);
   useEffect(() => { if (!visible) return; refresh(); const t = setInterval(refresh, su?.busy ? 1000 : 3000); return () => clearInterval(t); }, [visible, su?.busy]);
@@ -993,10 +1007,14 @@ function Content() {
         const dirty = !!nvEdit && JSON.stringify(nvEdit) !== JSON.stringify(nv.settings);
         return (<PanelSection title="NVIDIA settings (experimental)">
           <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("setup")}>Back to setup</ButtonItem></PanelSectionRow>
+          {gs?.running && (() => { const st = Object.values(gs.settings ?? {}), on = st.filter((x) => x.state === "active").length, set = st.filter((x) => x.state !== "default").length;
+            return <PanelSectionRow><div style={{ fontSize: "12px", padding: "6px 8px", borderRadius: "4px", background: "#1a3a57", border: "1px solid #1a9fff" }}>
+              <b>Running: {gs.game}</b><div style={{ opacity: 0.85, marginTop: "2px" }}>{set ? `${on} of ${set} changed setting${set > 1 ? "s" : ""} active in this game.` : "Every setting is on its default."}</div></div></PanelSectionRow>; })()}
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nvb ? "Global settings for every game Steam starts on the NVIDIA GPU; a setting on its default changes nothing." : "Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing."}</div></PanelSectionRow>
           {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem layout="below" label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={lock}
             selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
-            onChange={(o) => { if (keepFocus) ui(`nvidia pick ${r.key} = ${o.data}`); setNvEdit({ ...cur, [r.key]: o.data }); }} /></PanelSectionRow>)}
+            onChange={(o) => { if (keepFocus) ui(`nvidia pick ${r.key} = ${o.data}`); setNvEdit({ ...cur, [r.key]: o.data }); }} />
+            {gs?.running && <GameState st={gs.settings?.[r.key]} />}</PanelSectionRow>)}
           {cur.low_latency === "ultra" && pr && !pr.ready && <>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: {pr.tools.map((t) => t.name).join(", ") || "none found"}). {pr.install?.message ?? ""}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={lock || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>

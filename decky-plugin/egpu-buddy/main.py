@@ -2327,6 +2327,15 @@ class Plugin:
         return _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], f"HOME={USER_HOME}",
                     f"{USER_HOME}/.local/bin/egpu-nvidia-tweaks", *args], 30)
 
+    async def get_nvidia_game_status(self):
+        """While a game runs: which saved NVIDIA setting that game really received (read-only; both app variants)."""
+        if _installed_vendor() == "amd" or not os.path.exists(f"{USER_HOME}/.local/bin/egpu-nvidia-tweaks"):
+            return {"running": False}
+        try:
+            return json.loads(self._nvt("game-status")[1])
+        except ValueError:
+            return {"running": False}
+
     async def get_nvidia_settings(self):
         if _installed_vendor() == "amd" or not os.path.exists(f"{USER_HOME}/.local/bin/egpu-nvidia-tweaks"):
             return {"available": False}

@@ -11,6 +11,7 @@ what Linux has. Shared by the desktop app, the Game Mode plugin and both session
   egpu-nvidia-tweaks live-get            Game Mode: Steam's own live settings (frame limit, tearing, VRR, sharpness)
   egpu-nvidia-tweaks live-set KEY VALUE  Game Mode: change one of them now (gamescope applies it at once)
   egpu-nvidia-tweaks live-set-confirm KEY VALUE   ...and put it back in 15 s unless live-confirm (VRR)
+  egpu-nvidia-tweaks game-status        while a game runs: which saved setting that game really received (JSON)
   egpu-nvidia-tweaks proton-status | proton-install   Proton for Ultra low latency (latest GE-Proton, checksum checked)
 
 How the settings reach games (nothing changes until a setting is moved off its default, and nothing outside this
@@ -246,6 +247,121 @@ def pids(name):
 
 def game_running():
     return subprocess.run(["/usr/local/sbin/egpu-game-running"], capture_output=True).returncode == 0
+
+
+# ---- live status: what the running game really received ----------------------------------------------------------
+# Read-only. The game is the biggest process under the reaper Steam started it in (egpu-game-running), helpers left out.
+# Its /proc environ is what it was started with: the loader's values, set in the processes that started it, are there;
+# its DXVK file (DXVK_CONFIG_FILE) holds our options followed by the game's own dxvk.conf, which wins.
+HELPERS = re.compile(r"(reaper|pv-adverb|srt-bwrap|pressure-vessel.*|steam.*|wineserver|services\.exe|winedevice\.exe|plugplay\.exe|"
+                     r"explorer\.exe|rpcss\.exe|svchost\.exe|tabtip\.exe|conhost\.exe|start\.exe|python3?|bash|sh|proton|wine(64)?|"
+                     r"wine(64)?-preload.*|gamemoded|mangohud|xdg-.*)")
+
+
+def game_proc():
+    r = subprocess.run(["/usr/local/sbin/egpu-game-running", "--pid"], capture_output=True, text=True)
+    root = r.stdout.strip()
+    if r.returncode != 0 or not root.isdigit():
+        return None
+    kids, comm = {}, {}
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            st = open(f"/proc/{d}/stat").read()
+        except OSError:
+            continue
+        c, rest = st[st.index("(") + 1:st.rindex(")")], st[st.rindex(")") + 2:].split()
+        comm[d] = c; kids.setdefault(rest[1], []).append(d)
+    best, todo = None, [root]
+    while todo:
+        p = todo.pop()
+        todo += kids.get(p, [])
+        if p == root or HELPERS.fullmatch(comm.get(p, "")):
+            continue
+        try:
+            rss = int(open(f"/proc/{p}/statm").read().split()[1])
+            env = dict(l.split("=", 1) for l in open(f"/proc/{p}/environ").read().split("\0") if "=" in l)
+        except (OSError, ValueError, IndexError):
+            continue
+        if best is None or rss > best[0]:
+            best = (rss, p, comm[p], env)
+    return best and {"pid": best[1], "comm": best[2], "env": best[3]}
+
+
+def game_name(appid):
+    for lib in libraries():
+        try:
+            m = re.search(r'"name"\s+"([^"]+)"', open(os.path.join(lib, f"appmanifest_{appid}.acf"), errors="ignore").read())
+            if m:
+                return m.group(1)
+        except OSError:
+            pass
+    return ""
+
+
+def game_status():
+    """Per setting, for the running game: active | inactive | overridden | default | na, with a one-line reason."""
+    g = game_proc()
+    if not g:
+        return {"running": False}
+    s, env = load(), g["env"]
+    appid = env.get("SteamAppId") or env.get("SteamGameId", "")
+    proton = "STEAM_COMPAT_DATA_PATH" in env
+    loader = "libegpu-nvt.so" in env.get("LD_PRELOAD", "")
+    off = bool(env.get("EGPU_NVT_OFF"))
+    ours, own, exe = {}, {}, ""
+    try:
+        exe = re.split(r"[\\/]", open(f"/proc/{g['pid']}/cmdline").read().split("\0")[0])[-1]
+    except OSError:
+        pass
+    try:
+        txt = open(env.get("DXVK_CONFIG_FILE", ""), errors="ignore").read() if env.get("DXVK_CONFIG_FILE") else ""
+    except OSError:
+        txt = ""
+    head, _, tail = txt.partition("\n# own options")
+    for line in head.splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = (x.strip() for x in line.split("=", 1)); ours[k] = v
+    sec = None
+    for line in tail.splitlines()[1:]:
+        t = line.split("#", 1)[0].strip()
+        if t.startswith("[") and "]" in t:
+            sec = t[1:t.rindex("]")].strip()
+        elif "=" in t and (sec is None or sec.lower() == exe.lower()):
+            k, v = (x.strip() for x in t.split("=", 1)); own[k] = v.strip('"')
+    defaults = {k: d for k, (d, _) in CHOICES.items()}
+    out = {}
+    for k in CHOICES:
+        if s[k] == defaults[k]:
+            out[k] = {"state": "default", "why": "On its default: nothing to hand the game."}; continue
+        if k == "power":
+            held = os.path.exists("/run/nvegpu/perf-lock")
+            out[k] = {"state": "active", "why": "The GPU clock is held up while the game runs."} if held else {"state": "inactive",
+                      "why": "A GPU clock limit is set: the clock is left to it." if os.path.exists("/run/nvegpu/clock-limit") else "The GPU clock is not held (it starts a few seconds after the game)."}
+            continue
+        if off:
+            out[k] = {"state": "inactive", "why": "EGPU_NVT_OFF=1 in the game's launch options keeps it out."}; continue
+        if not loader:
+            out[k] = {"state": "inactive", "why": "The game started without the settings loader: restart Steam once, then the game."}; continue
+        dx, ev = wanted({**defaults, k: s[k]})
+        if not proton:
+            dx = {}
+            if not ev:
+                out[k] = {"state": "na", "why": "DirectX games only (this is a native game)."}; continue
+        diff = [x for x, v in ev.items() if env.get(x) not in (None, v)]
+        miss = [x for x, v in ev.items() if x not in env] + [x for x, v in dx.items() if ours.get(x) != v]
+        mine = [x for x, v in dx.items() if x in own and own[x] != v]
+        if diff:
+            out[k] = {"state": "overridden", "why": f"The game's launch options set {diff[0]}={env[diff[0]]}."}
+        elif miss:
+            out[k] = {"state": "inactive", "why": "Changed after the game started: it gets it at its next launch."}
+        elif mine:
+            out[k] = {"state": "overridden", "why": f"The game's own dxvk.conf sets {mine[0]} = {own[mine[0]]}."}
+        else:
+            out[k] = {"state": "active", "why": "The running game has it."}
+    return {"running": True, "appid": appid, "game": game_name(appid) or g["comm"], "pid": int(g["pid"]), "loader": loader,
+            "proton": proton, "settings": out}
 
 
 def restart_steam():
@@ -535,6 +651,8 @@ def main(a):
                           "choices": {k: c for k, (_, c) in CHOICES.items()}, "active": bool(dx or ev),
                           "loader": loader_state() if shim_ok() else "none", "enabled": os.path.exists(CFG),
                           "games": [dict(g, overridden=sorted(set(g["keys"]) & set(dx))) for g in games]}))
+    elif cmd == "game-status":
+        print(json.dumps(game_status()))
     elif cmd == "set":
         new = json.loads(a[2]) if len(a) > 2 else {}
         s = load()
