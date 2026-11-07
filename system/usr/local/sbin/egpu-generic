@@ -369,7 +369,7 @@ detach)
   # make its nodes root-only for the move; open fds are unaffected, chmod also masks the seat ACL. Restored on failure.
   nodes="/dev/dri/$card /dev/dri/$(render_of "$card")"; modes=""
   for n in $nodes; do modes="$modes $n:$(stat -c %a "$n" 2>/dev/null)"; chmod 000 "$n" 2>/dev/null; done
-  trap 'rm -f $PENDING $DMODE; for m in $modes; do [ -e "${m%%:*}" ] && chmod "${m##*:}" "${m%%:*}" 2>/dev/null; done' EXIT
+  trap 'as_deck systemctl --user start wireplumber >/dev/null 2>&1; rm -f $PENDING $DMODE; for m in $modes; do [ -e "${m%%:*}" ] && chmod "${m##*:}" "${m%%:*}" 2>/dev/null; done' EXIT
   if game_mode; then
     rm -f /run/user/1000/nv-egpu-buddy-gamescope-starts; G0=$(pgrep -n -x 'gamescope(-wl)?'); as_deck systemctl --user restart gamescope-session.target >/dev/null 2>&1 &
     for _ in $(seq 1 45); do sleep 2; g=$(pgrep -n -x 'gamescope(-wl)?'); [ -n "$g" ] && [ "$g" != "$G0" ] && break; done
@@ -378,6 +378,12 @@ detach)
     for _ in $(seq 1 45); do sleep 2; k=$(pgrep -U 1000 -x kwin_wayland | head -1); [ -n "$k" ] && [ "$k" != "$K0" ] && break; done
   fi
   status DO_NOT_UNPLUG "Releasing the eGPU. Do not unplug yet."
+  # The eGPU's HDMI/DP sound card: PipeWire keeps it open and the PCI remove then hangs for good in snd_card_free (Legion
+  # Go S + RX 9070 XT report HYQAYL: stuck on "Releasing the eGPU"). Same release as the NVIDIA Game Mode detach: its
+  # profile off and wireplumber stopped (started again on exit); its nodes join the wait below, PipeWire TERMed if it holds on.
+  p=$(printf %s "${bdf%.*}" | tr : _)
+  as_deck bash -c 'for c in $(pactl list short cards | awk -v p="'"$p"'" "index(\$2,p){print \$2}"); do pactl set-card-profile "$c" off; done; systemctl --user stop wireplumber' >/dev/null 2>&1
+  for c in /sys/bus/pci/devices/"${bdf%.*}".*/sound/card*; do for d in "$c"/controlC* "$c"/pcmC* "$c"/hwC*; do [ -e "$d" ] && nodes="$nodes /dev/snd/${d##*/}"; done; done
   for _ in $(seq 1 20); do fuser $nodes >/dev/null 2>&1 || break; sleep 2; done
   if fuser $nodes >/dev/null 2>&1; then log "still held by: $(for p in $(fuser $nodes 2>/dev/null); do echo "$p:$(cat /proc/$p/comm 2>/dev/null)"; done | tr '\n' ' ') -> TERM"; fuser -k -TERM $nodes >/dev/null 2>&1; sleep 3; fi
   if fuser $nodes >/dev/null 2>&1; then

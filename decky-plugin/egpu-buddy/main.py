@@ -86,7 +86,7 @@ def _handheld_art(dmi=None):
         ">", '><style>.egpu-hh *{vector-effect:non-scaling-stroke;stroke-width:1px !important}</style>', 1)
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.233"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.234"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -612,6 +612,29 @@ def _heal_audio():
     rc, out, _ = _sh(base + ["is-active", "wireplumber.service"], 5)
     if out.strip() == "inactive":
         _sh(base + ["start", "wireplumber.service"], 10); decky.logger.info("wireplumber was down; started it")
+
+
+def _unstick_audio_detach():
+    """AMD / Intel Safe Detach up to 0.7.234 removed the eGPU while PipeWire still had its HDMI sound card open: the
+    remove waits in snd_card_free for good ("Releasing the eGPU"). Coming in with the update that fixes it, let PipeWire
+    go (wireplumber stopped, pipewire restarted without it), so the waiting detach finishes; then sound back."""
+    def stuck():
+        for d in glob.glob("/proc/[0-9]*/wchan"):
+            if _read(d).strip() == "snd_card_free":
+                return True
+        return False
+    if not stuck():
+        return
+    base = ["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], "systemctl", "--user"]
+    decky.logger.info("a Safe Detach waits for the eGPU sound card: releasing PipeWire")
+    subprocess.run(base + ["stop", "wireplumber"], capture_output=True, timeout=30)
+    subprocess.run(base + ["restart", "pipewire"], capture_output=True, timeout=30)
+    for _ in range(60):
+        if not stuck():
+            break
+        time.sleep(1)
+    subprocess.run(base + ["start", "wireplumber"], capture_output=True, timeout=30)
+    decky.logger.info("sound card released" if not stuck() else "the detach still waits for the sound card")
 
 
 def _settle_detach_status():
@@ -2691,6 +2714,7 @@ class Plugin:
             _keep_awake(True)   # survives reboots and plugin restarts
         if os.path.realpath(PLUGIN_DIR) == os.path.realpath(PLUGIN_LIVE) and _drop_stray_plugin_copies():
             decky.logger.info("removed stray plugin copies from homebrew/plugins")
+        await asyncio.to_thread(_unstick_audio_detach)   # before the update below touches the system (at most ~2 minutes)
         await asyncio.sleep(8)
         threading.Thread(target=_continue_update, daemon=True).start()   # second half of a plugin-first update, if one is pending
         threading.Thread(target=_resume_detached_update, daemon=True).start()   # an update waiting for its Safe Detach, if one is pending

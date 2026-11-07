@@ -1,3 +1,9 @@
+0.7.234 — AMD / Intel eGPUs: Safe Detach no longer stops at "Releasing the eGPU".
+
+**Safe Detach** (AMD / Intel install only; NVIDIA unchanged)
+- The eGPU's HDMI/DP sound is let go before the eGPU is removed; the detach could wait for it forever.
+- A detach already stuck there finishes by itself when this update installs.
+
 0.7.233 — A bigger handheld picture that names your handheld.
 
 **Game Mode plugin** (eGPU installs)
