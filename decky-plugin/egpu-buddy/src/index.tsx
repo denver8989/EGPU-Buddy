@@ -56,6 +56,23 @@ const NV_ROWS: { key: string; label: string; desc: string; opts: [string | numbe
   { key: "shader_cache", label: "Shader cache size", desc: "Disk space for compiled shaders; larger means less stutter in big games (driver default 1 GB).", opts: [["default", "Driver default"], ["1", "1 GB"], ["5", "5 GB"], ["10", "10 GB"], ["unlimited", "Unlimited"]] },
   { key: "gl_threaded", label: "Threaded optimization", desc: "OpenGL games only.", opts: [["auto", "Auto"], ["on", "On"], ["off", "Off"]] },
 ];
+// Adrenaline Settings (experimental, AMD / Intel install only): the Windows Adrenalin graphics settings Linux can do for
+// games on the AMD eGPU. Steam's own Performance menu already has frame limit, tearing, VRR, HDR, FSR / NIS / integer
+// scaling and sharpness, so they are not repeated here.
+type AmdCard = { name?: string; bar_mb?: number; sclk?: string; mclk?: string; temp?: number | null; power?: number | null; cap?: number | null; cap_min?: number | null; cap_max?: number | null; cap_default?: number | null };
+type AmdSettings = { available: boolean; enabled?: boolean; active?: boolean; loader?: string; shim?: boolean; settings?: Record<string, string | number>; defaults?: Record<string, string | number>; card?: AmdCard; game_mode?: boolean; game?: boolean };
+const getAmd = callable<[], AmdSettings>("get_amd_settings");
+const setAmd = callable<[Record<string, string | number>], Result & { restart?: boolean }>("set_amd_settings");
+const applyAmd = callable<[], Result>("apply_amd_settings");
+const amdOff = callable<[], Result>("amd_off");
+const setAmdCap = callable<[number], Result>("set_amd_power_cap");
+const AMD_ROWS: { key: string; label: string; desc: string; opts: [string | number, string][] }[] = [
+  { key: "anti_lag", label: "Radeon Anti-Lag", desc: "One frame queued ahead of the screen (DirectX 9-11 games). Games with AMD Anti-Lag 2 built in use their own.", opts: [["off", "Off (game decides)"], ["on", "On"]] },
+  { key: "vsync", label: "Wait for vertical refresh", desc: "DirectX 9-12, Vulkan and OpenGL games. Tearing in Game Mode also needs Steam's Allow tearing.", opts: [["app", "Use the program setting"], ["off", "Always off"], ["on", "Always on"]] },
+  { key: "aniso", label: "Anisotropic filtering", desc: "Every API: Vulkan, DirectX 9-12 and OpenGL games.", opts: [[0, "Program-controlled"], [2, "2x"], [4, "4x"], [8, "8x"], [16, "16x"]] },
+  { key: "shader_cache", label: "Shader cache size", desc: "Disk space for compiled shaders; larger means less stutter in big games.", opts: [["default", "Driver default"], ["1", "1 GB"], ["5", "5 GB"], ["10", "10 GB"], ["unlimited", "Unlimited"]] },
+  { key: "gl_threaded", label: "OpenGL threading", desc: "OpenGL games only.", opts: [["auto", "Auto"], ["on", "On"], ["off", "Off"]] },
+];
 const getStatus = callable<[], Status>("get_status");
 const attach = callable<[boolean], Result>("attach");
 const safeDetach = callable<[], Result>("safe_detach");
@@ -443,20 +460,22 @@ const maybeOfferSteamUi = async () => {
 
 // ROG Ally / XG Mobile: the page (main, details, setup, NVIDIA settings) is kept for the plugin's lifetime, so a re-render
 // of the panel does not drop the user back on the main page. Set from the status (ally_xgm); elsewhere it always opens on main.
-const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" } = { on: false, tab: "main" };
+const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" | "amd" } = { on: false, tab: "main" };
 // ROG Ally / XG Mobile: opening an NVIDIA settings dropdown remounts the menu there, which dropped the picked value before
 // Apply (SilverplayerX, 0.7.226: "nothing can be changed"). Kept here like the page, on that machine only.
 const keepNv: { v: Record<string, string | number> | null } = { v: null };
 function Content() {
   const visible = useQuickAccessVisible();
-  const [tab, setTab_] = useState<"main" | "details" | "setup" | "nvidia">(keepPage.on ? keepPage.tab : "main");
-  const setTab = (t: "main" | "details" | "setup" | "nvidia") => { ui(`page ${keepPage.tab} -> ${t}`); keepPage.tab = t; setTab_(t); };
+  const [tab, setTab_] = useState<"main" | "details" | "setup" | "nvidia" | "amd">(keepPage.on ? keepPage.tab : "main");
+  const setTab = (t: "main" | "details" | "setup" | "nvidia" | "amd") => { ui(`page ${keepPage.tab} -> ${t}`); keepPage.tab = t; setTab_(t); };
   useEffect(() => { ui(`menu mounted on page ${keepPage.on ? keepPage.tab : "main"} (kept: ${keepPage.on})`); return () => ui(`menu unmounted (page ${keepPage.tab})`); }, []);
   useEffect(() => { ui(`panel ${visible ? "open" : "closed"} (page ${keepPage.tab})`); }, [visible]);
   const [nv, setNv] = useState<NvSettings | null>(null);
   const [nvEdit, setNvEdit_] = useState<Record<string, string | number> | null>(keepPage.on ? keepNv.v : null);
   const setNvEdit = (v: Record<string, string | number> | null) => { if (keepPage.on) keepNv.v = v; setNvEdit_(v); };
   const [live, setLive_] = useState<LiveSettings | null>(null);
+  const [amd, setAmdS] = useState<AmdSettings | null>(null);
+  const [amdEdit, setAmdEdit] = useState<Record<string, string | number> | null>(null);
   const [pr, setPr] = useState<ProtonStatus | null>(null);
   const [gs, setGs] = useState<GameNv | null>(null);
   const [logOpen, setLogOpen] = useState<"" | "setup" | "trial">("");   // logs stay folded away unless asked for
@@ -490,6 +509,9 @@ function Content() {
   } catch (e) { setMsg(`status error: ${e}`); } };
   // NVIDIA settings: read when Setup or the page opens (they also scan the Steam library for games' own dxvk.conf)
   useEffect(() => { if (visible && (tab === "setup" || tab === "nvidia")) getNvidia().then((n) => { setNv(n); if (tab === "setup") setNvEdit(null); }).catch(() => setNv(null)); }, [visible, tab]);
+  // Adrenaline Settings (AMD / Intel install): read when Setup opens, and every 3 s on the page (the card's live readouts)
+  useEffect(() => { if (!visible || (tab !== "setup" && tab !== "amd")) return; const f = () => getAmd().then(setAmdS).catch(() => setAmdS(null)); f();
+    if (tab !== "amd") return; const t = setInterval(f, 3000); return () => clearInterval(t); }, [visible, tab]);
   useEffect(() => { if (visible && tab === "nvidia" && s?.game_mode) getLive().then(setLive_).catch(() => setLive_(null)); }, [visible, tab, s?.game_mode]);
   useEffect(() => { if (visible && tab === "nvidia") getProton().then(setPr).catch(() => setPr(null)); }, [visible, tab]);
   // the live status follows the game while the page is open (every 3 s; read-only)
@@ -642,6 +664,11 @@ function Content() {
           </PanelSectionRow>
         )}
         {/* NVIDIA settings one press from the front page (every NVIDIA install, both app variants) */}
+        {tab !== "amd" && su?.installed_version && su.installed_vendor === "amd" && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => { setAmdEdit(null); setTab("amd"); }}>Adrenaline Settings</ButtonItem>
+          </PanelSectionRow>
+        )}
         {tab !== "nvidia" && su?.installed_version && su.installed_vendor !== "amd" && (
           <PanelSectionRow>
             <ButtonItem layout="below" onClick={() => { setNvEdit(null); setTab("nvidia"); }}>NVIDIA settings</ButtonItem>
@@ -1041,6 +1068,41 @@ function Content() {
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Not yet: FXAA, texture filtering quality, page flipping.</div></PanelSectionRow>
         </PanelSection>);
       })()}
+      {tab === "amd" && amd?.available && (() => {
+        const cur = amdEdit ?? amd.settings ?? {};
+        const dirty = !!amdEdit && JSON.stringify(amdEdit) !== JSON.stringify(amd.settings);
+        const once = amd.game_mode && amd.loader !== "loaded" && !!amd.enabled;   // saved, but Steam started without the loader
+        const c = amd.card ?? {};
+        const caps = c.cap_min != null && c.cap_max != null && c.cap_max > c.cap_min
+          ? Array.from(new Set([...Array.from({ length: 11 }, (_, i) => Math.round((c.cap_min! + (c.cap_max! - c.cap_min!) * i / 10) / 5) * 5), c.cap_default ?? c.cap_max!, c.cap ?? c.cap_max!]))
+            .filter((w) => w >= c.cap_min! && w <= c.cap_max!).sort((a, b) => a - b) : [];
+        return (<PanelSection title="Adrenaline Settings (experimental)">
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Global settings for every game that renders on the AMD eGPU{c.name ? ` (${c.name})` : ""}. Games on the handheld's own GPU never get them; a setting on its default changes nothing.</div></PanelSectionRow>
+          {AMD_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem layout="below" label={r.label} description={`Next game launch. ${r.desc}`} disabled={lock}
+            selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
+            onChange={(o) => setAmdEdit({ ...cur, [r.key]: o.data })} /></PanelSectionRow>)}
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!dirty && !once) || (once && !!amd.game)} onClick={() => run(async () => {
+            if (dirty) { const r = await setAmd(cur); if (!r.ok) return r; setAmdEdit(null); const n = await getAmd(); setAmdS(n); if (!(n.game_mode && n.loader !== "loaded")) return r; }
+            return applyAmd(); })}>
+            {once || (dirty && amd.game_mode && amd.loader !== "loaded") ? (amd.game ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{amd.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => setAmdEdit({ ...(amd.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
+          {amd.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdOff(); setAmdEdit(null); setAmdS(await getAmd()); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
+          {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
+          {caps.length > 1 && <PanelSectionRow><DropdownItem layout="below" label="Power limit" disabled={lock}
+            description={`Instant. Within the card's own range (${c.cap_min}-${c.cap_max} W). The card goes back to its default (${c.cap_default ?? "?"} W) when it is unplugged or the machine restarts.`}
+            selectedOption={c.cap} rgOptions={caps.map((w) => ({ data: w, label: `${w} W${w === c.cap_default ? " (default)" : ""}` }))}
+            onChange={(o) => run(async () => { const r = await setAmdCap(o.data); setAmdS(await getAmd()); return r; })} /></PanelSectionRow>}
+          {c.name && <>
+            <PanelSectionRow><Field label="Smart Access Memory" focusable>{(c.bar_mb ?? 0) > 256 ? `On · ${Math.round((c.bar_mb ?? 0) / 1024)} GB window` : `Off · ${c.bar_mb ?? "?"} MB window`}</Field></PanelSectionRow>
+            <PanelSectionRow><Field label="Clock / memory" focusable>{(c.sclk || "?").replace(/mhz/i, " MHz")} / {(c.mclk || "?").replace(/mhz/i, " MHz")}</Field></PanelSectionRow>
+            <PanelSectionRow><Field label="Temperature · power" focusable>{c.temp ?? "?"} °C · {c.power ?? "?"} W</Field></PanelSectionRow>
+          </>}
+          {!c.name && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>No AMD eGPU attached: the card's power limit and readouts show here when it is.</div></PanelSectionRow>}
+          <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: Mesa's own driver options, DXVK and vkd3d-proton (Proton games), handed to each game Steam starts on the AMD eGPU. A game's own launch options and dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Frame limit, tearing, VRR, HDR, scaling (FSR / integer) and sharpness are in Steam's own Performance menu, so they are not repeated here.</div></PanelSectionRow>
+        </PanelSection>);
+      })()}
+      {tab === "amd" && amd && !amd.available && <PanelSection title="Adrenaline Settings"><PanelSectionRow><div style={{ fontSize: "12px" }}>Not installed yet: update EGPU Buddy (Setup &amp; updates).</div></PanelSectionRow><PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("main")}>Back</ButtonItem></PanelSectionRow></PanelSection>}
       {tab === "nvidia" && live?.available && (
         <PanelSection title="System settings (live)">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Instant, also in a running game. These are Steam's own Game Mode settings (the same switches as its Performance menu), for every game on this screen; Steam's per-game profiles can set them back.</div></PanelSectionRow>

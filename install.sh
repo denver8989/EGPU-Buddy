@@ -184,6 +184,7 @@ map_dest(){ case "$1" in system/*) echo "/${1#system/}";; user/*) echo "$USER_HO
 in_scope(){ # component gating by path
   case "$1" in
     system/usr/local/sbin/egpu-conditional-session|system/etc/systemd/system/egpu-conditional-session.service) want bootpolicy;;
+    user/.local/bin/egpu-amd-tweaks) [ "$GPU_VENDOR" = amd ] && want core;;   # Adrenaline Settings: the AMD / Intel install only
     user/.local/bin/nv-egpu-gamescope-*|user/.local/lib/*|user/.config/systemd/user/gamescope-session.service.d/*|user/.config/systemd/user/steam-launcher.service.d/*|user/.config/gamescope/*|user/.config/environment.d/*|user/.local/bin/egpu-display-profile.sh|user/.local/bin/egpu-kwin-route.sh) want session;;
     *) want core;;
   esac
@@ -493,7 +494,7 @@ fi
 # Only files in the user's home; nothing loads it until the user saves NVIDIA settings (egpu-nvidia-tweaks env).
 # (built with packaging/nvt-shim/build.sh and shipped in git: packaging/nvt-shim/build)
 NVTB="$ROOT/packaging/nvt-shim/build"
-if [ "$GPU_VENDOR" != amd ] && [ -r "$NVTB/lib64/libegpu-nvt.so" ] && [ -r "$NVTB/lib32/libegpu-nvt.so" ]; then
+if [ -r "$NVTB/lib64/libegpu-nvt.so" ] && [ -r "$NVTB/lib32/libegpu-nvt.so" ]; then
   ND="$USER_HOME/.local/lib/nv-egpu-buddy/nvt"; umkdir "$ND/lib/x86_64-linux-gnu" "$ND/lib/i386-linux-gnu" "$ND/lib64" "$ND/lib32"
   cp -f "$NVTB/lib64/libegpu-nvt.so" "$ND/lib64/"; cp -f "$NVTB/lib32/libegpu-nvt.so" "$ND/lib32/"
   cp -f "$NVTB/lib64/libegpu-nvt.so" "$ND/lib/x86_64-linux-gnu/"; cp -f "$NVTB/lib32/libegpu-nvt.so" "$ND/lib/i386-linux-gnu/"

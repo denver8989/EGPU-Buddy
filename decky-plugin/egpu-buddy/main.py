@@ -2469,6 +2469,78 @@ class Plugin:
             r = {"ok": False, "message": err or out}
         return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
 
+    # Setup > Adrenaline Settings (experimental, AMD / Intel install only): egpu-amd-tweaks keeps them in the user's home;
+    # the Game Mode session hands them to games on the AMD eGPU route. Plus the card's own power cap and read-only status.
+    def _amt(self, *args):
+        return _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], f"HOME={USER_HOME}",
+                    f"{USER_HOME}/.local/bin/egpu-amd-tweaks", *args], 30)
+
+    def _amd_card(self):
+        """The AMD eGPU's live readouts (sysfs, read-only); {} when none is attached."""
+        g = _generic_egpu()
+        if not g or not os.path.exists(f"/sys/bus/pci/devices/{g[0]}/vendor") or _read(f"/sys/bus/pci/devices/{g[0]}/vendor").strip() != "0x1002":
+            return {}
+        D = f"/sys/bus/pci/devices/{g[0]}"
+        hw = next(iter(sorted(glob.glob(f"{D}/hwmon/hwmon*"))), "")
+        num = lambda f, div=1: (int(_read(f).strip() or 0) // div) if _read(f).strip().lstrip("-").isdigit() else None
+        cur = lambda f: next((l.split(":", 1)[1].replace("*", "").strip() for l in _read(f).splitlines() if l.rstrip().endswith("*")), "")
+        try:
+            bar = max((int(e, 16) - int(b, 16) + 1) for b, e, *_ in (l.split() for l in _read(f"{D}/resource").splitlines()[:6]) if int(e, 16) > int(b, 16))
+        except ValueError:
+            bar = 0
+        cap = f"{hw}/power1_cap" if hw and os.path.exists(f"{hw}/power1_cap") else ""
+        return {"bdf": g[0], "name": _sh(["lspci", "-s", g[0]], 5)[1].split(": ", 1)[-1].strip(), "bar_mb": bar >> 20,
+                "sclk": cur(f"{D}/pp_dpm_sclk"), "mclk": cur(f"{D}/pp_dpm_mclk"),
+                "temp": num(f"{hw}/temp1_input", 1000) if hw else None,
+                "power": num(f"{hw}/power1_average", 1000000) if hw and os.path.exists(f"{hw}/power1_average") else (num(f"{hw}/power1_input", 1000000) if hw else None),
+                "cap": num(cap, 1000000) if cap else None, "cap_min": num(cap + "_min", 1000000) if cap else None,
+                "cap_max": num(cap + "_max", 1000000) if cap else None, "cap_default": num(cap + "_default", 1000000) if cap else None}
+
+    async def get_amd_settings(self):
+        if _installed_vendor() != "amd" or not os.path.exists(f"{USER_HOME}/.local/bin/egpu-amd-tweaks"):
+            return {"available": False}
+        try:
+            d = json.loads(self._amt("get")[1])
+        except ValueError:
+            return {"available": False}
+        return {"available": True, **d, "card": self._amd_card(), "game_mode": _gamescope_running(), "game": _game_running()}
+
+    async def set_amd_settings(self, settings: dict):
+        if _installed_vendor() != "amd":
+            return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
+        try:
+            r = json.loads(self._amt("set", json.dumps(settings or {}))[1])
+        except ValueError:
+            r = {"ok": False, "message": "could not save"}
+        if not r.get("ok"):
+            return {"ok": False, "message": r.get("message", "?")}
+        st = json.loads(self._amt("get")[1] or "{}")
+        if st.get("loader") == "loaded":
+            return {"ok": True, "message": "Saved: games get it at their next launch (a running game keeps its settings until restarted)."}
+        return {"ok": True, "message": "Saved. First time only: restart Game Mode (Apply below) so Steam starts with the settings loader.", "restart": True}
+
+    async def apply_amd_settings(self):
+        if _installed_vendor() != "amd":
+            return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
+        if _game_running():
+            return {"ok": False, "message": "Close the running game first: this one-time step restarts Game Mode."}
+        if not _gamescope_running():
+            return {"ok": False, "message": "Saved: Game Mode picks it up the next time it starts."}
+        _spawn_root_job("switch", [SWITCH])
+        return {"ok": True, "message": "Game Mode restarts once with the settings loader (dark for a few seconds)."}
+
+    async def amd_off(self):
+        if _installed_vendor() != "amd":
+            return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
+        self._amt("off")
+        return {"ok": True, "message": "Adrenaline Settings off: the next Game Mode start runs without the loader."}
+
+    async def set_amd_power_cap(self, watts: int):
+        if _installed_vendor() != "amd":
+            return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
+        rc, out, err = _sh([PRIV, "set-generic-power-cap", str(int(watts))], 20)
+        return {"ok": rc == 0, "message": ((out if rc == 0 else err or out) or "?").strip()[-200:]}
+
     async def nvidia_off(self):
         rc, out, err = self._nvt("off")
         try:

@@ -818,6 +818,13 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
     log "eGPU over USB4: CPU-written game buffers in system RAM (DXVK_CONFIG='$DXVK_CONFIG' VKD3D_CONFIG='$VKD3D_CONFIG')"
   fi
   log "generic eGPU route: $gen_vendor $gen_bdf ($gen_card) outputs: $gen_outputs"
+  # Adrenaline Settings (experimental, AMD / Intel install only): the settings loader for games on this route, once the
+  # user saved them in the plugin. Prints nothing until then; nothing here can stop the session.
+  if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ -x "$HOME/.local/bin/egpu-amd-tweaks" ]; then
+    _amt=$(timeout 10 "$HOME/.local/bin/egpu-amd-tweaks" env 2>/dev/null) || _amt=""
+    if [ -n "$_amt" ]; then eval "$_amt" 2>/dev/null || true; log "Adrenaline Settings: loader on" || true; fi
+    unset _amt
+  fi
 else
   clear_egpu_env
   export OUTPUT_CONNECTOR="*,${PANEL}"

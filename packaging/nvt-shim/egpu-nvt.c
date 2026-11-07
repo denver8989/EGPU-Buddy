@@ -71,10 +71,10 @@ static unsigned long fnv(const char *s, size_t n) {
   return h & 0xffffffffUL;
 }
 
-static void apply_dxvk(const char *home) {
+static void apply_dxvk(const char *home, const char *name) {
   static char ours[CAP], own[CAP], all[2 * CAP + 64];
   char path[512], out[512], dir[512];
-  if (snprintf(path, sizeof path, "%s/.config/egpu-buddy/nvidia-tweaks.dxvk.conf", home) >= (int)sizeof path) return;
+  if (snprintf(path, sizeof path, "%s/.config/egpu-buddy/%s", home, name) >= (int)sizeof path) return;
   int n = slurp(path, ours, sizeof ours);
   if (n <= 0) return;
   /* the file DXVK would read without us: the user's DXVK_CONFIG_FILE, else the game's own dxvk.conf. An earlier process
@@ -109,14 +109,24 @@ __attribute__((constructor)) static void egpu_nvt_init(void) {
   const char *vk = getenv("VK_DRIVER_FILES");
   const char *nvb = getenv("NV_GPU_BUDDY");
   int builtin = nvb && !strcmp(nvb, "1");
-  if (!builtin && (!vk || !strstr(vk, "nvidia_icd"))) return;   /* not rendering on the NVIDIA eGPU */
+  /* AMD install: the Game Mode session sets EGPU_AMD_TWEAKS=1 only on its AMD eGPU route, where Vulkan sees the eGPU
+   * alone (MESA_VK_DEVICE_SELECT "...!"). Adrenaline Settings then come from amd-tweaks.env / amd-tweaks.dxvk.conf. */
+  const char *amd = getenv("EGPU_AMD_TWEAKS"), *sel = getenv("MESA_VK_DEVICE_SELECT");
+  int amd_route = amd && !strcmp(amd, "1") && sel && strchr(sel, '!');
+  if (!builtin && !amd_route && (!vk || !strstr(vk, "nvidia_icd"))) return;   /* not rendering on the NVIDIA eGPU */
   if (!getenv("SteamGameId") && !getenv("SteamAppId")) return;   /* not a game Steam started */
   if (getenv("EGPU_NVT_OFF")) return;                     /* per-game way out: EGPU_NVT_OFF=1 */
   const char *home = getenv("HOME");
   if (!home || !*home || is_steam_itself()) return;
   int saved = errno;
+  if (amd_route && !builtin && !(vk && strstr(vk, "nvidia_icd"))) {
+    apply_env(home, "amd-tweaks.env");
+    apply_dxvk(home, "amd-tweaks.dxvk.conf");
+    errno = saved;
+    return;
+  }
   if (builtin) apply_env(home, "nv-gpu-buddy.env");
   apply_env(home, "nvidia-tweaks.env");
-  apply_dxvk(home);
+  apply_dxvk(home, "nvidia-tweaks.dxvk.conf");
   errno = saved;
 }
