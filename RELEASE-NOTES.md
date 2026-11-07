@@ -1,3 +1,10 @@
+0.7.236 — AMD eGPUs: Adrenaline Settings (experimental).
+
+**Adrenaline Settings** (AMD / Intel install only; NVIDIA unchanged)
+- New page with the Windows Adrenalin settings Linux can do, for games on the AMD eGPU: Radeon Anti-Lag (and Anti-Lag 2), FSR 4 upgrade (FSR 4.1.2 and 4.1.2 Lite), Fluid Motion Frames (experimental, open-source afmf-linux), vertical refresh, anisotropic filtering, shader cache, OpenGL threading, power limit and card status.
+- While a game runs, each setting shows whether that game has it.
+- Everything is off until you change it. Frame limit, tearing, VRR, HDR and scaling stay in Steam's own Performance menu.
+
 0.7.235 — Support report: kernel crash logs.
 
 **Support report** (every machine)
