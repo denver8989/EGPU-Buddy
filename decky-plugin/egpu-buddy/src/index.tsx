@@ -60,7 +60,7 @@ const NV_ROWS: { key: string; label: string; desc: string; opts: [string | numbe
 // games on the AMD eGPU. Steam's own Performance menu already has frame limit, tearing, VRR, HDR, FSR / NIS / integer
 // scaling and sharpness, so they are not repeated here.
 type AmdCard = { name?: string; bar_mb?: number; sclk?: string; mclk?: string; temp?: number | null; power?: number | null; cap?: number | null; cap_min?: number | null; cap_max?: number | null; cap_default?: number | null };
-type AmdSettings = { available: boolean; al2?: boolean; afmf?: { installed: boolean; ours: boolean; version: string; lsfg: boolean }; enabled?: boolean; active?: boolean; loader?: string; shim?: boolean; settings?: Record<string, string | number>; defaults?: Record<string, string | number>; card?: AmdCard; game_mode?: boolean; game?: boolean };
+type AmdSettings = { available: boolean; al2?: boolean; fsr4_412?: { installed: boolean; state?: string; message?: string; progress?: number }; afmf?: { installed: boolean; ours: boolean; version: string; lsfg: boolean }; enabled?: boolean; active?: boolean; loader?: string; shim?: boolean; settings?: Record<string, string | number>; defaults?: Record<string, string | number>; card?: AmdCard; game_mode?: boolean; game?: boolean };
 const getAmd = callable<[], AmdSettings>("get_amd_settings");
 const setAmd = callable<[Record<string, string | number>], Result & { restart?: boolean }>("set_amd_settings");
 const applyAmd = callable<[], Result>("apply_amd_settings");
@@ -68,9 +68,10 @@ const amdOff = callable<[], Result>("amd_off");
 const setAmdCap = callable<[number], Result>("set_amd_power_cap");
 const getAmdGame = callable<[], GameNv>("get_amd_game_status");
 const amdAfmf = callable<[boolean], Result>("amd_afmf");
+const amdFsr4 = callable<[boolean], Result>("amd_fsr4");
 const AMD_ROWS: { key: string; label: string; desc: string; opts: [string | number, string][] }[] = [
   { key: "anti_lag", label: "Radeon Anti-Lag", desc: "On: one frame queued ahead of the screen (DirectX 9-11 games). Anti-Lag 2: also Mesa's open Anti-Lag 2, for games that have it built in (DirectX 12 with Proton 10, Experimental or GE-Proton; Vulkan).", opts: [["off", "Off (game decides)"], ["on", "On"], ["al2", "On + Anti-Lag 2"]] },
-  { key: "fsr4", label: "FSR 4 upgrade", desc: "Games with FSR 3.1 get FSR 4 instead (needs GE-Proton for the game; Proton downloads AMD's FSR 4 file at launch). Pick FSR in the game's own settings.", opts: [["off", "Off (game's own FSR)"], ["latest", "Latest FSR 4"], ["4.1.1", "FSR 4.1.1"], ["4.0.0", "FSR 4.0.0"]] },
+  { key: "fsr4", label: "FSR 4 upgrade", desc: "Games with FSR 3.1 get FSR 4 instead; pick FSR in the game's own settings. 4.1.2 and 4.1.2 Lite: one download from AMD here, then any Proton 10 or newer (Lite = the lighter INT8 model, faster on RX 7000 and older). GE-Proton's own: the version that GE-Proton build downloads by itself.", opts: [["off", "Off (game's own FSR)"], ["4.1.2", "FSR 4.1.2"], ["4.1.2-lite", "FSR 4.1.2 Lite"], ["latest", "GE-Proton's own FSR 4"]] },
   { key: "afmf", label: "Fluid Motion Frames (experimental)", desc: "Frame generation for 64-bit Vulkan and Proton games: doubles the frames shown (afmf-linux, open source; not AMD's own). Best with 60+ real FPS; adds a little latency.", opts: [["off", "Off"], ["auto", "On (auto)"], ["quality", "On (quality)"], ["performance", "On (performance)"]] },
   { key: "afmf_search", label: "Fluid Motion Frames search mode", desc: "High follows fast motion better, at a little more GPU cost.", opts: [["auto", "Auto"], ["standard", "Standard"], ["high", "High"]] },
   { key: "vsync", label: "Wait for vertical refresh", desc: "DirectX 9-12, Vulkan and OpenGL games. Tearing in Game Mode also needs Steam's Allow tearing.", opts: [["app", "Use the program setting"], ["off", "Always off"], ["on", "Always on"]] },
@@ -1096,11 +1097,15 @@ function Content() {
           {(cur.afmf ?? "off") !== "off" && !amd.afmf?.installed && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdAfmf(true); setAmdS(await getAmd()); return r; })}>
             Install Fluid Motion Frames (afmf-linux {amd.afmf?.version})</ButtonItem></PanelSectionRow>}
           {amd.afmf?.lsfg && (cur.afmf ?? "off") !== "off" && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ffb36b" }}>lsfg-vk is installed: it is kept out of games while Fluid Motion Frames is on (the two hang together).</div></PanelSectionRow>}
-          {cur.fsr4 !== "off" && cur.fsr4 !== undefined && pr && !pr.tools.some((t) => /GE-Proton/i.test(t.name)) && <>
+          {String(cur.fsr4 ?? "").startsWith("4.1.2") && !amd.fsr4_412?.installed && <>
+            <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>{amd.fsr4_412?.state === "running" ? amd.fsr4_412.message : `FSR 4.1.2 comes inside AMD's Windows driver package: about 1 GB is downloaded from AMD once, the FSR file is kept (85 MB) and the rest deleted.${amd.fsr4_412?.state === "failed" ? ` ${amd.fsr4_412.message}` : ""}`}</div></PanelSectionRow>
+            {amd.fsr4_412?.state !== "running" && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdFsr4(true); setAmdS(await getAmd()); return r; })}>Download FSR 4.1.2</ButtonItem></PanelSectionRow>}</>}
+          {amd.fsr4_412?.installed && !String(cur.fsr4 ?? "").startsWith("4.1.2") && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdFsr4(false); setAmdS(await getAmd()); return r; })}>Remove FSR 4.1.2 (frees 85 MB)</ButtonItem></PanelSectionRow>}
+          {cur.fsr4 === "latest" && pr && !pr.tools.some((t) => /GE-Proton/i.test(t.name)) && <>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>FSR 4 upgrade needs GE-Proton (none installed). {pr.install?.message ?? ""}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={lock || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
               {pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton"}</ButtonItem></PanelSectionRow></>}
-          {cur.fsr4 !== "off" && cur.fsr4 !== undefined && pr?.tools.some((t) => /GE-Proton/i.test(t.name)) && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>FSR 4: pick {pr.tools.filter((t) => /GE-Proton/i.test(t.name)).map((t) => t.name).slice(-1)[0]} for the game (Properties &gt; Compatibility). {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
+          {cur.fsr4 === "latest" && pr?.tools.some((t) => /GE-Proton/i.test(t.name)) && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>FSR 4: pick {pr.tools.filter((t) => /GE-Proton/i.test(t.name)).map((t) => t.name).slice(-1)[0]} for the game (Properties &gt; Compatibility). {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
           <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!dirty && !once) || (once && !!amd.game)} onClick={() => run(async () => {
             if (dirty) { const r = await setAmd(cur); if (!r.ok) return r; setAmdEdit(null); const n = await getAmd(); setAmdS(n); if (!(n.game_mode && n.loader !== "loaded")) return r; }
             return applyAmd(); })}>

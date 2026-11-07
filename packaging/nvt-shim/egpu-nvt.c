@@ -105,6 +105,24 @@ static void apply_dxvk(const char *home, const char *name) {
   setenv("EGPU_NVT_DXVK", out, 1);
 }
 
+/* AMD route only (Adrenaline Settings, FSR 4.1.2): put EGPU_FSR4_DLL into the game's Proton prefix as
+ * system32/amdxcffx64.dll (a link), where Proton's amdxc64 loads it when FSR4_UPGRADE=1. A file Proton downloaded there
+ * before is kept next to it as amdxcffx64.dll.egpu-orig. Runs in every process of the launch: the first one after the
+ * prefix exists does it, the rest find the link in place. */
+static void link_fsr4(void) {
+  const char *dll = getenv("EGPU_FSR4_DLL"), *pfx = getenv("STEAM_COMPAT_DATA_PATH");
+  char dst[1024], cur[1024], bak[1100];
+  if (!dll || !*dll || !pfx || !*pfx || access(dll, R_OK) != 0) return;
+  if (snprintf(dst, sizeof dst, "%s/pfx/drive_c/windows/system32/amdxcffx64.dll", pfx) >= (int)sizeof dst) return;
+  ssize_t n = readlink(dst, cur, sizeof cur - 1);
+  if (n > 0) { cur[n] = 0; if (!strcmp(cur, dll)) return; }
+  if (n < 0 && access(dst, F_OK) == 0) {   /* (access, not lstat: old glibc symbols only) */   /* a real file (Proton's own download): keep it aside once */
+    snprintf(bak, sizeof bak, "%s.egpu-orig", dst);
+    if (access(bak, F_OK) != 0) { if (rename(dst, bak) != 0) return; } else if (unlink(dst) != 0) return;
+  } else if (n > 0 && unlink(dst) != 0) return;
+  if (symlink(dll, dst) != 0 && errno != EEXIST) return;
+}
+
 __attribute__((constructor)) static void egpu_nvt_init(void) {
   const char *vk = getenv("VK_DRIVER_FILES");
   const char *nvb = getenv("NV_GPU_BUDDY");
@@ -122,6 +140,7 @@ __attribute__((constructor)) static void egpu_nvt_init(void) {
   if (amd_route && !builtin && !(vk && strstr(vk, "nvidia_icd"))) {
     apply_env(home, "amd-tweaks.env");
     apply_dxvk(home, "amd-tweaks.dxvk.conf");
+    link_fsr4();
     errno = saved;
     return;
   }

@@ -7,6 +7,7 @@ settings that Linux can do for games on an AMD eGPU. Runs as the desktop user.
   egpu-amd-tweaks env            shell lines for a Game Mode session on the AMD eGPU route (loader + its switch)
   egpu-amd-tweaks off            switch it off completely (no loader in the next sessions)
   egpu-amd-tweaks game-status    while a game runs: which saved setting that game really received (JSON)
+  egpu-amd-tweaks fsr4-get | fsr4-remove     AMD's FSR 4.1.2 file (Adrenalin 26.10.1), with the model-selection patch (Lite)
   egpu-amd-tweaks afmf-install | afmf-remove   the afmf-linux frame generation layer (MIT), user-only, pinned + checksummed
 
 The loader is the same one the NVIDIA settings use (libegpu-nvt.so). The session sets EGPU_AMD_TWEAKS=1 on its AMD eGPU
@@ -25,6 +26,20 @@ SHIM = os.path.join(HOME, ".local/lib/nv-egpu-buddy/nvt")
 # Games with Anti-Lag 2 built in use it: DirectX 12 through vkd3d-proton 3.0+ (Proton 10 / Experimental / GE-Proton), Vulkan
 # games directly. Offered only when this system's Mesa ships the layer.
 AL2_LAYER = "/usr/share/vulkan/implicit_layer.d/VkLayer_MESA_anti_lag.json"
+# FSR 4.1.2 / 4.1.2 Lite: AMD's FSR 4 driver file (amdxcffx64.dll) at 4.1.2 only ships inside Adrenalin 26.10.1; Proton's
+# own download lists stop at 4.1.0/4.1.1. fsr4-get downloads that driver package from AMD once (~1 GB, in the background),
+# takes out the one file (bsdtar), checks it, and applies the model-selection patch (github.com/skare-sandbox/
+# fsr4-free-model-selection-patch, stored below as its byte changes: header, 8 jumps and the added stub section; checked
+# before and after). Patched or not it behaves as AMD's file until FSR4_MODEL is set; Lite = FSR4_MODEL=INT8_LITE.
+# The loader links it into the game's Proton prefix (system32) and sets FSR4_UPGRADE=1, the switch Proton's own amdxc64
+# reads (Proton 10 / 11 / Experimental, GE-Proton, proton-cachyos), instead of Proton's PROTON_FSR4_UPGRADE download.
+FSR4_DRV_URL = "https://drivers.amd.com/drivers/whql-amd-software-adrenalin-edition-26.10.1-win11-b.exe"
+FSR4_DRV_PATH = "Packages/Drivers/Display/WT6A_INF/B026676/amdxcffx64.dll"
+FSR4_DIR = os.path.join(HOME, ".local/share/egpu-buddy/fsr4")
+FSR4_DLL = os.path.join(FSR4_DIR, "amdxcffx64-4.1.2.dll")
+FSR4_STATE = os.path.join(HOME, ".cache/egpu-buddy/fsr4-get.json")
+FSR4_PATCH = '{"src_sha256": "c33a287f3048bf02311cae430b6a977500b94ca7b315cd7bff751e6b03e483e3", "out_sha256": "08441d14057fe4671bcd372efa3755324795735c5d8c423da71c4cc1d46002f6", "out_size": 85685760, "patch": [[278, "07"], [353, "b0"], [360, "fee9"], [776, "2e6634656e76"], [784, "b105"], [789, "a00405"], [793, "06"], [797, "701b05"], [812, "20"], [815, "60"], [26032, "e954330405"], [942736, "e91235f604cccccccc"], [975264, "e9b4b6f504cc"], [1113312, "e9ea97f304cc"], [1113616, "e9"], [1113618, "98f304cc"], [1120096, "e9f37df304cc"], [1122176, "e95c76f304cccc"], [1124848, "e9776cf304cccc"]], "tail": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000465352345f4d4f44454c004653525f46475f4d4f444500465352340046503800494e543800493800494e54385f4c495445004c49544500494e54385f4e41564932004e41564932004653523300465352333100465352332e31004e4f4e45004d4c004d4c4647004d4c4647340000000031c066440fb60166440fb60a664589c2664183ca20664589cb664183cb20664183f841720b664183f85a7704664589d0664183f941720b664183f95a7704664589d9664539c8750e664585c0740e48ffc148ffc2ebacb801000000c331c0c353575152415041514152415350488d0d1dffffff31c0ff15dd321dfb4885c07451803800744c4889c74889f9488d1515ffffffe869ffffff85c074234889f9488d1507ffffffe856ffffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5b534883ec40e98e670cfb53575152415041514152415350488d0d94feffff31c0ff1554321dfb4885c07451803800744c4889c74889f9488d1595feffffe8e0feffff85c074234889f9488d1587feffffe8cdfeffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5b534883ec40e985810cfb53575152415041514152415350488d0d0bfeffff31c0ff15cb311dfb4885c07451803800744c4889c74889f9488d1514feffffe857feffff85c074234889f9488d150bfeffffe844feffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5b4883ec484889d0e91b890cfb53575152415041514152415350488d0d80fdffff31c0ff1540311dfb4885c07451803800744c4889c74889f9488d1598fdffffe8ccfdffff85c074234889f9488d1590fdffffe8b9fdffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5b4883ec484889d0e900930cfb53575152415041514152415350488d0df5fcffff31c0ff15b5301dfb4885c0747780380074724889c74889f9488d151efdffffe841fdffff85c074494889f9488d1510fdffffe82efdffff85c074364889f9488d1503fdffffe81bfdffff85c074234889f9488d15f7fcffffe808fdffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5b81e20000ff00e96f660cfb53575152415041514152415350488d0d50fcffff31c0ff1505301dfb4885c0747780380074724889c74889f9488d1585fcffffe891fcffff85c074494889f9488d1575fcffffe87efcffff85c074364889f9488d1567fcffffe86bfcffff85c074234889f9488d1504fcffffe858fcffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5b534881ec50010000e940ca09fb53575152415041514152415350488d0d9efbffff31c0ff15532f1dfb4885c0747780380074724889c74889f9488d15d3fbffffe8dffbffff85c074494889f9488d15c3fbffffe8ccfbffff85c074364889f9488d15b5fbffffe8b9fbffff85c074234889f9488d1552fbffffe8a6fbffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5b4883ec4831c9e99d480afb53575152415041514152415350488d0deefaffff31c0ff15a32e1dfb4885c0747780380074724889c74889f9488d150cfbffffe82ffbffff85c074494889f9488d15fefaffffe81cfbffff85c074364889f9488d15f1faffffe809fbffff85c074234889f9488d15e5faffffe8f6faffff85c0741058415b415a415941585a595f5b31c0c358415b415a415941585a595f5bb801000000c358415b415a415941585a595f5bb001c300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}'
+
 # AMD Fluid Motion Frames, experimental: afmf-linux (github.com/serialexperimentslainnnn/afmf-linux, MIT), an open Vulkan
 # implicit layer that doubles the presented frames of any 64-bit Vulkan / Proton game. Installed only when the user asks,
 # under ~/.local (its own installer's layout); the Vulkan loader does not even load it unless AFMF_ENABLE=1 is set.
@@ -38,9 +53,9 @@ AFMF_MARK = os.path.join(D, "afmf-installed")   # installed by EGPU Buddy (unins
 # key -> (default = no change, allowed values)
 CHOICES = {
     "anti_lag": ("off", ["off", "on", "al2"]),
-    # FSR 4 upgrade for games with FSR 3.1: GE-Proton swaps in AMD's FSR 4 driver file (downloaded by Proton at launch;
-    # opt-in there, PROTON_FSR4_UPGRADE). "latest" = Proton's own default; 4.1.1 / 4.0.0 are the versions it offers.
-    "fsr4": ("off", ["off", "latest", "4.1.1", "4.0.0"]),
+    # FSR 4 upgrade for games with FSR 3.1. 4.1.2 / Lite: our copy (fsr4-get), any Proton 10+. "latest": GE-Proton's own
+    # opt-in download (PROTON_FSR4_UPGRADE=1), whatever version that GE-Proton build defaults to (GE-Proton10-34: 4.0.3).
+    "fsr4": ("off", ["off", "4.1.2", "4.1.2-lite", "latest"]),
     "afmf": ("off", ["off", "auto", "quality", "performance"]),
     "afmf_search": ("auto", ["auto", "standard", "high"]),
     "vsync": ("app", ["app", "off", "on"]),
@@ -72,7 +87,13 @@ def wanted(s):
         if s["afmf_search"] != "auto":
             ev["AFMF_SEARCH_MODE"] = s["afmf_search"]
         ev["DISABLE_LSFGVK"] = "1"                      # its docs: lsfg-vk next to it hangs presentation
-    if s["fsr4"] != "off":
+    if s["fsr4"] in ("4.1.2", "4.1.2-lite"):
+        if os.path.exists(FSR4_DLL):
+            ev["EGPU_FSR4_DLL"] = FSR4_DLL               # the loader links it into the game's prefix
+            ev["FSR4_UPGRADE"] = "1"
+            if s["fsr4"] == "4.1.2-lite":
+                ev["FSR4_MODEL"] = "INT8_LITE"
+    elif s["fsr4"] != "off":
         ev["PROTON_FSR4_UPGRADE"] = "1" if s["fsr4"] == "latest" else s["fsr4"]
     if s["vsync"] != "app":
         on = s["vsync"] == "on"
@@ -133,6 +154,58 @@ def afmf_remove():
     return True, "Fluid Motion Frames removed."
 
 
+def fsr4_state():
+    try:
+        st = json.load(open(FSR4_STATE))
+    except (OSError, ValueError):
+        st = {}
+    if st.get("state") == "running" and not os.path.exists(f"/proc/{st.get('pid', 0)}"):
+        st = {"state": "failed", "message": "The download stopped (restart or crash): try again."}
+    return {**st, "installed": os.path.exists(FSR4_DLL)}
+
+
+def _fsr4_set(**kw):
+    os.makedirs(os.path.dirname(FSR4_STATE), exist_ok=True)
+    json.dump(dict(kw, pid=os.getpid()), open(FSR4_STATE, "w"))
+
+
+def fsr4_get_job():
+    import hashlib, subprocess, urllib.request
+    os.makedirs(FSR4_DIR, exist_ok=True)
+    exe = os.path.join(FSR4_DIR, "adrenalin.exe.part")
+    try:
+        _fsr4_set(state="running", message="Downloading AMD's driver package (about 1 GB)…", progress=0)
+        req = urllib.request.Request(FSR4_DRV_URL, headers={"Referer": "https://www.amd.com/", "User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=60) as r, open(exe, "wb") as f:
+            total, done, last = int(r.headers.get("Content-Length") or 0), 0, 0
+            while chunk := r.read(1 << 20):
+                f.write(chunk); done += len(chunk)
+                if total and done * 100 // total != last:
+                    last = done * 100 // total
+                    _fsr4_set(state="running", message=f"Downloading AMD's driver package: {last} %", progress=last)
+        _fsr4_set(state="running", message="Taking FSR 4.1.2 out of the package…", progress=100)
+        r = subprocess.run(["bsdtar", "-xOf", exe, FSR4_DRV_PATH], capture_output=True)
+        p = json.loads(FSR4_PATCH)
+        d = bytearray(r.stdout)
+        if r.returncode != 0 or hashlib.sha256(d).hexdigest() != p["src_sha256"]:
+            raise RuntimeError("the FSR 4.1.2 file in AMD's package is not the expected one")
+        for o, h in p["patch"]:
+            x = bytes.fromhex(h); d[o:o + len(x)] = x
+        d += bytes.fromhex(p["tail"])
+        if len(d) != p["out_size"] or hashlib.sha256(d).hexdigest() != p["out_sha256"]:
+            raise RuntimeError("the patched file did not check out")
+        open(FSR4_DLL + ".tmp", "wb").write(d); os.replace(FSR4_DLL + ".tmp", FSR4_DLL)
+        write_files(load())
+        _fsr4_set(state="done", message="FSR 4.1.2 ready (standard and Lite).")
+    except Exception as e:   # noqa: BLE001 - reported in the menu
+        _fsr4_set(state="failed", message=f"FSR 4.1.2 download failed: {e}")
+    finally:
+        try:
+            os.remove(exe)
+        except OSError:
+            pass
+
+
 def write_files(s):
     dx, ev = wanted(s)
     os.makedirs(D, exist_ok=True)
@@ -165,6 +238,7 @@ def get():
     lsfg = any(os.path.exists(os.path.join(d, "vulkan/implicit_layer.d", f)) for d in (os.path.join(HOME, ".local/share"), "/usr/share", "/etc")
                for f in ("VkLayer_LS_frame_generation.json", "VkLayer_LSFGVK_frame_generation.json"))
     return {"settings": s, "defaults": {k: d for k, (d, _) in CHOICES.items()}, "enabled": os.path.exists(CFG), "al2": os.path.exists(AL2_LAYER),
+            "fsr4_412": fsr4_state(),
             "afmf": {"installed": afmf_installed(), "ours": os.path.exists(AFMF_MARK), "version": AFMF_VER, "lsfg": lsfg},
             "active": s != {k: d for k, (d, _) in CHOICES.items()}, "loader": loader, "shim": shim_ok()}
 
@@ -215,6 +289,12 @@ def game_status():
             out[k] = {"state": "inactive", "why": "Changed after the game started: it gets it at its next launch."}
         elif mine:
             out[k] = {"state": "overridden", "why": f"The game's own dxvk.conf sets {mine[0]} = {own[mine[0]]}."}
+        elif k == "fsr4" and s[k].startswith("4.1.2") and not os.path.exists(FSR4_DLL):
+            out[k] = {"state": "inactive", "why": "FSR 4.1.2 is not downloaded yet."}
+        elif k == "fsr4" and s[k].startswith("4.1.2"):
+            pfx = os.path.join(env.get("STEAM_COMPAT_DATA_PATH", ""), "pfx/drive_c/windows/system32/amdxcffx64.dll")
+            out[k] = {"state": "active", "why": "FSR 4.1.2 is in this game's Proton prefix."} if os.path.realpath(pfx) == FSR4_DLL else \
+                     {"state": "inactive", "why": "This game's Proton prefix does not have FSR 4.1.2 yet: start the game again."}
         elif k == "fsr4" and not re.search(r"GE-Proton|cachyos", tool, re.I):
             out[k] = {"state": "inactive", "why": f"Needs GE-Proton for this game (it runs on {tool or 'Steam Proton'}): Properties > Compatibility."}
         elif k == "fsr4":
@@ -259,6 +339,32 @@ def main(a):
             if "libegpu-nvt.so" not in cur:
                 print(f"export LD_PRELOAD={shlex.quote(os.path.join(SHIM, '$LIB', 'libegpu-nvt.so'))}{shlex.quote(':' + cur) if cur else ''}")
             print("export EGPU_AMD_TWEAKS=1")
+    elif cmd == "fsr4-get":
+        if fsr4_state().get("state") == "running":
+            print(json.dumps({"ok": True, "message": "Already downloading."})); return 0
+        pid = os.fork()
+        if pid == 0:   # the download runs on by itself (about 1 GB); the menu reads its progress
+            os.setsid()
+            nul = os.open(os.devnull, os.O_RDWR)
+            for fd in (0, 1, 2):   # let go of the caller's pipes, or the plugin would wait for the whole download
+                os.dup2(nul, fd)
+            fsr4_get_job()
+            os._exit(0)
+        os.makedirs(os.path.dirname(FSR4_STATE), exist_ok=True)
+        try:
+            mine = json.load(open(FSR4_STATE)).get("pid") == pid
+        except (OSError, ValueError):
+            mine = False
+        if not mine:
+            json.dump({"state": "running", "message": "Starting the download…", "progress": 0, "pid": pid}, open(FSR4_STATE, "w"))
+        print(json.dumps({"ok": True, "message": "Downloading FSR 4.1.2 (about 1 GB from AMD): progress shows here."}))
+    elif cmd == "fsr4-remove":
+        try:
+            os.remove(FSR4_DLL)
+        except OSError:
+            pass
+        write_files(load())
+        print(json.dumps({"ok": True, "message": "FSR 4.1.2 removed."}))
     elif cmd in ("afmf-install", "afmf-remove"):
         ok, msg = afmf_install() if cmd == "afmf-install" else afmf_remove()
         print(json.dumps({"ok": ok, "message": msg})); return 0 if ok else 1

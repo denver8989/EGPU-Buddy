@@ -2550,6 +2550,16 @@ class Plugin:
             r = {"ok": False, "message": (err or out or "?").strip()[-200:]}
         return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
 
+    async def amd_fsr4(self, get: bool):
+        """FSR 4.1.2 / Lite: download AMD's file in the background (about 1 GB) and patch it, or remove it."""
+        if _installed_vendor() != "amd":
+            return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
+        try:
+            r = json.loads(self._amt("fsr4-get" if get else "fsr4-remove")[1])
+        except ValueError:
+            r = {"ok": False, "message": "could not start it"}
+        return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
+
     async def amd_off(self):
         if _installed_vendor() != "amd":
             return {"ok": False, "message": "Adrenaline Settings are for the AMD / Intel install."}
