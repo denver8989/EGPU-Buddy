@@ -185,7 +185,9 @@ _egpu_selftest() {
 #   egpu              anything else, or unsure: today's eGPU app
 # "Built-in" = the kernel's own fact: neither the card nor any bridge above it is "removable" (the kernel marks
 # everything behind an external-facing Thunderbolt/USB4 port so). No handheld has a built-in NVIDIA card, so this holds
-# for handhelds that do not exist yet. Kernel < 5.12 = unsure = egpu. Any USB4/Thunderbolt device connected = egpu too:
+# for handhelds that do not exist yet. Only firmware (DMI) and the PCI tree are read, never the OS edition or the
+# user name: a laptop on CachyOS's handheld edition, bazzite-deck or a user called "deck" is still a laptop.
+# Kernel < 5.12 = unsure = egpu. Any USB4/Thunderbolt device connected = egpu too:
 # old TB3 firmware may not mark its port external-facing, so a docked card there could look built-in.
 EGPU_HANDHELD_RE='Jupiter|Galileo|Steam Deck|Legion Go|ROG Ally|Xbox Ally|RC71|RC72|RC73|Claw|AYA ?NEO|Loki|G1617|G1618|G1619|ONEXPLAYER|ONE-NETBOOK|AOKZOE|Win600|ZOTAC.*ZONE|Pocket Go|Zeenix'
 
@@ -256,6 +258,9 @@ _egpu_selftest_machine() {
   reset; dmi "LENOVO" "82WK" "Legion Pro 5 16IRX8" 10; panel
   gpu pci0000:00/0000:00:02.0 0x030000 0x8086 fixed; gpu pci0000:00/0000:00:01.0/0000:01:00.0 0x030200 0x10de fixed
   chk "nv-laptop 0000:01:00.0" laptop || return 1
+  # the same laptop on a handheld edition (bazzite-deck / CachyOS handheld) with user "deck": still a laptop
+  mkdir -p "$t/etc"; printf 'ID=bazzite\nVARIANT_ID=bazzite-deck\n' > "$t/etc/os-release"
+  USER=deck HOME=/home/deck chk "nv-laptop 0000:01:00.0" laptop-on-deck-edition || return 1
   # Legion Go 2 + RTX 5060 Ti dock (the real tree from the owner's machine): handheld
   reset; dmi "LENOVO" "83N0" "Legion Go 8ASP2" 30; panel
   gpu pci0000:00/0000:00:08.1/0000:c2:00.0 0x038000 0x1002 fixed
