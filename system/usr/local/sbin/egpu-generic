@@ -392,7 +392,17 @@ detach)
     who=$(for p in $(fuser $nodes 2>/dev/null); do cat /proc/$p/comm 2>/dev/null; done | sort -u | tr '\n' ' ')
     status FAILED "A program is still using the eGPU (${who% }). Close games and try again."; log "abort: nodes busy: $who"; exit 5; fi
   # each step logged and synced first: a kernel crash in the removal reboots before anything else is written
-  for fn in /sys/bus/pci/devices/"${bdf%.*}".[1-7] "/sys/bus/pci/devices/$bdf"; do [ -e "$fn/remove" ] || continue
+  # Intel Titan Ridge (Thunderbolt 3) docks only: take the whole dock off the bus from its top bridge, the way the kernel
+  # does on a cable pull, instead of the GPU's functions alone. Removing only the GPU from a Trebleet (JHL7440) dock
+  # crashed the kernel each time (Legion Go S + RX 9070 XT, reports 5VJF9D, CZX85K), while the same handheld, card and
+  # kernel come off cleanly from the top of a USB4 dock (ValveSoftware/SteamOS#3002). Every other dock: unchanged.
+  top=$(readlink -f "/sys/bus/pci/devices/$bdf"); top=${top#/sys/devices/pci*/}; top=${top#*/}   # below the root port
+  top=/sys/bus/pci/devices/${top%%/*}
+  case "$(cat "$top/vendor" 2>/dev/null):$(cat "$top/device" 2>/dev/null)" in
+    0x8086:0x15e7|0x8086:0x15ea|0x8086:0x15ef) rmlist=$top ;;
+    *) rmlist=$(ls -d /sys/bus/pci/devices/"${bdf%.*}".[1-7] 2>/dev/null; echo "/sys/bus/pci/devices/$bdf") ;;
+  esac
+  for fn in $rmlist; do [ -e "$fn/remove" ] || continue
     log "removing ${fn##*/} ($(basename "$(readlink -f "$fn/driver" 2>/dev/null)"))"; sync; echo 1 > "$fn/remove" 2>/dev/null; done
   rm -f $MARK $MOVED
   if egpu_find >/dev/null; then status FAILED "The eGPU did not leave the bus. Do not unplug; reboot first."; log "remove failed"; exit 6; fi
