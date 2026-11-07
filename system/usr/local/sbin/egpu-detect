@@ -6,6 +6,7 @@
 #   egpu-detect --dock     -> xg-mobile-usb4 | xg-mobile-legacy | usb4 | none   (which dock the eGPU is in, see egpu_dock;
 #                             independent of --device: an XG Mobile on a Legion Go is legion-go-2 + xg-mobile-usb4)
 #   egpu-detect --untested -> one line per difference from the tested configuration (exit 0 = differs, lines printed; 1 = matches the tested machine)
+#   egpu-detect --machine  -> NV GPU Buddy track (experimental): what kind of machine this is, see egpu_machine
 #   egpu-detect --selftest -> check the logic against a fake sysfs tree
 # The eGPU is the display-class PCI device that does NOT drive the built-in panel and sits behind a
 # bridge chain (root port -> dock switch -> GPU). Override: EGPU_PCI_BDF in /etc/nv-egpu-buddy/egpu.conf.
@@ -174,6 +175,119 @@ _egpu_selftest() {
   echo "selftest OK"
 }
 
+# ---- NV GPU Buddy track (experimental). Additive: nothing above uses it, so every eGPU install behaves as before.
+# It only SUGGESTS a track to the installer, which asks the user to confirm; the choice is then recorded and nothing
+# re-detects it later. Prints one of:
+#   handheld          a handheld (name list, profile, XG Mobile, tablet-shaped with a panel): always the eGPU app
+#   nv-desktop BDF    built-in NVIDIA card, no built-in panel
+#   nv-laptop BDF     built-in NVIDIA card next to a built-in panel
+#   pc-no-nv          desktop-shaped, no panel, no NVIDIA card yet ("card coming" candidate)
+#   egpu              anything else, or unsure: today's eGPU app
+# "Built-in" = the kernel's own fact: neither the card nor any bridge above it is "removable" (the kernel marks
+# everything behind an external-facing Thunderbolt/USB4 port so). No handheld has a built-in NVIDIA card, so this holds
+# for handhelds that do not exist yet. Kernel < 5.12 = unsure = egpu. Any USB4/Thunderbolt device connected = egpu too:
+# old TB3 firmware may not mark its port external-facing, so a docked card there could look built-in.
+EGPU_HANDHELD_RE='Jupiter|Galileo|Steam Deck|Legion Go|ROG Ally|Xbox Ally|RC71|RC72|RC73|Claw|AYA ?NEO|Loki|G1617|G1618|G1619|ONEXPLAYER|ONE-NETBOOK|AOKZOE|Win600|ZOTAC.*ZONE|Pocket Go|Zeenix'
+
+egpu_is_handheld() {
+  local id; id="$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/{sys_vendor,product_name,product_family} 2>/dev/null | tr '\n' ' ')"
+  printf '%s' "$id" | grep -qiE "$EGPU_HANDHELD_RE" && return 0
+  [ "$(egpu_device_profile)" = generic ] || return 0
+  [ -e "$EGPU_SYSFS_ROOT"/var/lib/nvegpu/xg-mobile-seen ] && return 0
+  egpu_asus_switch >/dev/null && return 0   # proprietary XG Mobile connector (Ally, Flow laptops)
+  # 30 tablet, 31 convertible, 32 detachable: the shapes handhelds report, here only together with a built-in panel
+  case "$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/chassis_type 2>/dev/null)" in
+    30|31|32) _egpu_has_panel && return 0 ;; esac
+  return 1
+}
+
+_egpu_has_panel() { local c; for c in "$EGPU_SYSFS_ROOT"/sys/class/drm/card*-eDP-* "$EGPU_SYSFS_ROOT"/sys/class/drm/card*-LVDS-*; do [ -e "$c" ] && return 0; done; return 1; }
+
+# 0 = removable (behind USB4/TB) or unsure; 1 = fixed in the machine. Since 5.12 the kernel marks a PCI device
+# "removable" when it or a bridge above it sits behind an external-facing port; fixed devices get no attribute at all.
+_egpu_removable() {
+  local d k; k=${EGPU_KVER:-$(uname -r)}
+  printf '%s\n5.12\n' "${k%%[!0-9.]*}" | sort -V -C 2>/dev/null && [ "${k%%[!0-9.]*}" != 5.12 ] && return 0   # older kernel: unsure
+  d=$(readlink -f "$1") || return 0
+  while case "${d##*/}" in pci*|"") false ;; esac; do   # the card, then each bridge up to the host bridge
+    [ "$(cat "$d/removable" 2>/dev/null)" = removable ] && return 0
+    d=${d%/*}
+  done
+  return 1
+}
+
+egpu_machine() {
+  local dev nv="" kind
+  egpu_is_handheld && { echo handheld; return 0; }
+  [ "$(egpu_dock)" = none ] || { echo egpu; return 0; }
+  for dev in "$EGPU_SYSFS_ROOT"/sys/bus/pci/devices/*; do
+    _egpu_is_display "$dev" || continue
+    _egpu_removable "$dev" && { echo egpu; return 0; }   # an eGPU on the bus: the eGPU app is the right one
+    [ "$(cat "$dev/vendor" 2>/dev/null)" = 0x10de ] && nv=${nv:-$(basename "$dev")}
+  done
+  if [ -n "$nv" ]; then
+    _egpu_has_panel && kind=nv-laptop || kind=nv-desktop
+    echo "$kind $nv"; return 0
+  fi
+  # desktop chassis types (SMBIOS 3.x): desktop, low-profile, pizza box, mini tower, tower, all-in-one... mini PC, stick
+  case "$(cat "$EGPU_SYSFS_ROOT"/sys/class/dmi/id/chassis_type 2>/dev/null)" in
+    3|4|5|6|7|13|15|16|17|23|24|35|36) _egpu_has_panel || { echo pc-no-nv; return 0; } ;; esac
+  echo egpu
+}
+
+_egpu_selftest_machine() {
+  local t; t=$(mktemp -d); trap 'rm -rf "$t"' RETURN
+  EGPU_SYSFS_ROOT=$t; unset EGPU_PCI_BDF
+  dmi() { mkdir -p "$t/sys/class/dmi/id"; echo "$1" > "$t/sys/class/dmi/id/sys_vendor"; echo "$2" > "$t/sys/class/dmi/id/product_name"; echo "$3" > "$t/sys/class/dmi/id/product_family"; echo "$4" > "$t/sys/class/dmi/id/chassis_type"; }
+  gpu() { # path class vendor removable(each level)
+    local p="" part; for part in $(echo "$1" | tr / ' '); do p="$p/$part"; mkdir -p "$t/sys/devices$p"
+      case "$part" in pci*) ;; *) [ "$4" = removable ] && echo removable > "$t/sys/devices$p/removable" ;; esac; done
+    mkdir -p "$t/sys/bus/pci/devices"; echo "$2" > "$t/sys/devices$p/class"; echo "$3" > "$t/sys/devices$p/vendor"
+    ln -sfn "$t/sys/devices$p" "$t/sys/bus/pci/devices/${p##*/}"; }
+  panel() { mkdir -p "$t/sys/class/drm/card1-eDP-1"; }
+  reset() { rm -rf "$t/sys" "$t/var"; }
+  chk() { local got; got=$(egpu_machine); [ "$got" = "$1" ] || { echo "FAIL machine $2: got '$got' want '$1'"; return 1; }; }
+  # tower, RTX card in the x16 slot behind the chipset switch (depth 3: egpu_find would call it an eGPU, egpu_machine must not)
+  reset; dmi "Micro-Star International Co., Ltd." "MS-7D75" "Default string" 3
+  gpu pci0000:00/0000:00:01.1/0000:01:00.0/0000:02:00.0 0x030000 0x10de fixed; chk "nv-desktop 0000:02:00.0" tower || return 1
+  # same tower before the card: AMD APU graphics only, no panel
+  reset; dmi "ASUSTeK COMPUTER INC." "ProArt B650" "" 3; gpu pci0000:00/0000:00:08.1/0000:0e:00.0 0x030000 0x1002 fixed; chk pc-no-nv tower-no-card || return 1
+  # NVIDIA laptop (Optimus 3D controller) next to the panel GPU
+  reset; dmi "LENOVO" "82WK" "Legion Pro 5 16IRX8" 10; panel
+  gpu pci0000:00/0000:00:02.0 0x030000 0x8086 fixed; gpu pci0000:00/0000:00:01.0/0000:01:00.0 0x030200 0x10de fixed
+  chk "nv-laptop 0000:01:00.0" laptop || return 1
+  # Legion Go 2 + RTX 5060 Ti dock (the real tree from the owner's machine): handheld
+  reset; dmi "LENOVO" "83N0" "Legion Go 8ASP2" 30; panel
+  gpu pci0000:00/0000:00:08.1/0000:c2:00.0 0x038000 0x1002 fixed
+  gpu pci0000:00/0000:00:01.1/0000:01:00.0/0000:02:00.0/0000:03:00.0 0x030000 0x10de removable; chk handheld legion-go-2 || return 1
+  # Legion Go 1, no dock
+  reset; dmi "LENOVO" "83E1" "Legion Go 8APU1" 30; panel; gpu pci0000:00/0000:00:08.1/0000:c1:00.0 0x030000 0x1002 fixed; chk handheld legion-go-1 || return 1
+  # ROG Xbox Ally X + XG Mobile
+  reset; dmi "ASUSTeK COMPUTER INC." "ROG Xbox Ally X RC73XA_RC73XA" "ROG Xbox Ally" 31; panel; chk handheld ally || return 1
+  # a handheld nobody has heard of yet, docked to an NVIDIA eGPU: not on the name list, tablet with a panel
+  reset; dmi "NEWCO" "NX-1" "Gamer One" 30; panel
+  gpu pci0000:00/0000:00:01.1/0000:01:00.0/0000:02:00.0 0x030000 0x10de removable; chk handheld unknown-handheld || return 1
+  # the same unknown handheld reporting itself as a laptop: the docked card is removable -> eGPU app, never nv-laptop
+  echo 10 > "$t/sys/class/dmi/id/chassis_type"; chk egpu unknown-handheld-as-laptop || return 1
+  # Steam Deck: name list
+  reset; dmi "Valve" "Galileo" "Sephiroth" 1; panel; chk handheld steam-deck || return 1
+  # XG Mobile seen once on this machine
+  reset; dmi "NEWCO" "NX-2" "" 10; mkdir -p "$t/var/lib/nvegpu"; touch "$t/var/lib/nvegpu/xg-mobile-seen"; chk handheld xg-mobile-seen || return 1
+  # laptop with built-in NVIDIA AND a docked eGPU: the eGPU app
+  reset; dmi "Dell Inc." "XPS 15 9530" "XPS" 10; panel; gpu pci0000:00/0000:00:01.0/0000:01:00.0 0x030200 0x10de fixed
+  gpu pci0000:00/0000:00:07.0/0000:20:00.0/0000:21:00.0 0x030000 0x10de removable; chk egpu laptop+egpu || return 1
+  # old kernel: no "removable" attribute -> unsure -> egpu
+  reset; dmi "MSI" "MS-7C02" "" 3; gpu pci0000:00/0000:00:01.1/0000:01:00.0 0x030000 0x10de fixed
+  EGPU_KVER=5.10.0 chk egpu old-kernel || return 1
+  EGPU_KVER=5.12.0-1 chk "nv-desktop 0000:01:00.0" kernel-5.12 || return 1
+  # a USB4 dock is connected (e.g. TB3 firmware that does not mark its port): egpu, whatever the card looks like
+  mkdir -p "$t/sys/bus/thunderbolt/devices/0-1"; echo Razer > "$t/sys/bus/thunderbolt/devices/0-1/vendor_name"; echo "Core X" > "$t/sys/bus/thunderbolt/devices/0-1/device_name"
+  chk egpu tb-dock-connected || return 1
+  # unknown chassis, no NVIDIA: egpu
+  reset; dmi "X" "Y" "" 2; chk egpu unknown-chassis || return 1
+  echo "machine selftest OK"
+}
+
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   case "${1:-}" in
     --igpu) egpu_igpu_bdf ;;
@@ -181,7 +295,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     --dock) egpu_dock ;;
     --xgm-power) [ "$(egpu_dock)" = xg-mobile-legacy ] || [ "${2:-}" = off ] || exit 0; egpu_asus_power "${2:-}" ;;
     --untested) egpu_untested ;;
-    --selftest) _egpu_selftest ;;
+    --machine) egpu_machine ;;
+    --selftest) _egpu_selftest && _egpu_selftest_machine ;;
     *) egpu_find ;;
   esac
 fi
