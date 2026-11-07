@@ -98,6 +98,8 @@ def status():
             "gpu": gpu, "displays": displays, "panel_enabled": (panel[0] == "enabled") if panel else None,
             "detach": jread(f"{RUN}/safe-detach-status.json"),
             "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0],
+            # NV GPU Buddy track (experimental, built-in NVIDIA card): the window shows its name and hides the eGPU parts
+            "track": "nv-gpu-buddy" if read("/etc/nv-egpu-buddy/track") == "nv-gpu-buddy" else "",
             **update_state(read("/etc/nv-egpu-buddy/version")), **(screens(bdf if driver else "") if vendor in ("", "nvidia") and ref_path() else {})}
 
 def edid_name(conn_dir):
@@ -137,7 +139,7 @@ def update_state(installed):
     if time.time() - _NOTES.get("try", 0) > 600:
         import threading
         _NOTES["try"] = time.time(); threading.Thread(target=release_notes, daemon=True).start()
-    vs = [r["version"] for r in _NOTES["rels"]]
+    vs = [r["version"] for r in track_rels(_NOTES["rels"])]
     latest = max(vs, key=vt) if vs else ""
     pv = read(os.path.expanduser("~/.local/share/steamos-egpu-buddy/VERSION"))
     return {"latest": latest, "staged": pv if pv and installed and vt(pv) > vt(installed) else ""}
@@ -162,6 +164,8 @@ def action(p):
     a = (p or {}).get("action")
     if a == "show": SHOW[0] += 1; return {"ok": True}
     s = status()
+    if s.get("track") and a in ("safe-detach", "attach", "set-screen", "xgm-intro-seen"):   # NV GPU Buddy: eGPU-only actions
+        return {"ok": False, "error": "not available in NV GPU Buddy mode"}
     if a == "safe-detach":
         if not s["present"]: return {"ok": False, "error": "no eGPU on the bus"}
         if s["vendor"] != "nvidia":
@@ -245,6 +249,10 @@ def nvidia_settings():
 REPO = "denver8989/EGPU-Buddy"
 _NOTES = {"t": 0.0, "rels": []}
 def vt(v): return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3]) or (0,)
+def track_rels(rels):
+    """NV GPU Buddy track: only the releases marked for it ("NV GPU Buddy:" in the notes); eGPU installs: every release."""
+    return [r for r in rels if "NV GPU Buddy:" in r["body"]] if read("/etc/nv-egpu-buddy/track") == "nv-gpu-buddy" else rels
+
 def release_notes():
     """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first;
     with nothing newer, the installed release's own notes. Each GitHub release carries only its own changes. Cached 10 min."""
@@ -259,9 +267,10 @@ def release_notes():
                                                for r in data if not r.get("draft") and not r.get("prerelease")])
     except Exception as ex:
         if not _NOTES["rels"]: return {"title": "Release notes", "notes": [], "error": f"Could not reach GitHub: {ex}"}
-    newer = [r for r in _NOTES["rels"] if vt(r["version"]) > vt(installed)]
+    rels = track_rels(_NOTES["rels"])
+    newer = [r for r in rels if vt(r["version"]) > vt(installed)]
     if newer: return {"title": f"What's new since {installed}" if installed else "Release notes", "notes": newer}
-    return {"title": f"What's new in {installed}", "notes": [r for r in _NOTES["rels"] if r["version"] == installed][:1]}
+    return {"title": f"What's new in {installed}", "notes": [r for r in rels if r["version"] == installed][:1]}
 
 class H(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k): super().__init__(*a, directory=HERE, **k)

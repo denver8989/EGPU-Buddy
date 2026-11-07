@@ -16,7 +16,14 @@ ST=/run/nvegpu/update-status.json; mkdir -p /run/nvegpu
 FINAL=0; st(){ [ "$1" = running ] || FINAL=1; printf '{"state":"%s","pct":%s,"step":"%s","version":"%s","t":%s}\n' "$1" "$2" "${3//\"/}" "${VER:-}" "$(date +%s)" > "$ST.tmp"; chmod 644 "$ST.tmp"; mv "$ST.tmp" "$ST"; }
 trap 'rc=$?; [ "$FINAL" = 1 ] || st failed 100 "Update stopped (rc $rc). See /var/log/egpu-buddy-update.log."' EXIT
 cur=$(cat /etc/nv-egpu-buddy/version 2>/dev/null || echo none)
-VER=${1:-$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -1)}
+# NV GPU Buddy track (experimental): only releases whose notes carry an "NV GPU Buddy:" line; eGPU installs: unchanged
+NVB=0; [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ] && NVB=1
+if [ "$NVB" = 1 ] && [ -z "${1:-}" ]; then
+  VER=$(curl -fsSL "https://api.github.com/repos/$REPO/releases?per_page=100" | python3 -c 'import json,re,sys
+v=[r["tag_name"].lstrip("v") for r in json.load(sys.stdin) if not r.get("draft") and not r.get("prerelease") and "NV GPU Buddy:" in (r.get("body") or "")]
+print(max(v, key=lambda x: tuple(int(n) for n in re.findall(r"\d+", x)), default=""))')
+fi
+VER=${VER:-${1:-$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -1)}}
 [ -n "$VER" ] || { say "could not look up the latest release"; st failed 100 "Could not reach GitHub to look up the latest release."; exit 2; }
 [ "$cur" = "$VER" ] && [ "${EGPU_UPDATE_FORCE:-0}" != 1 ] && { say "already on $VER"; st ok 100 "Already up to date ($VER)."; exit 0; }
 say "updating $cur -> $VER"; st running 5 "Downloading $VER"
@@ -46,7 +53,9 @@ done < <(set +e; cd "$SYSDIR" || exit; env EGPU_TARGET_USER="$U" HOME="$H" EGPU_
 say "system integration: install.sh rc=$rc"
 if [ -d "$PLUGIN" ] && [ -f "$T/$ZIP" ]; then
   st running 90 "Installing the Decky plugin"; mkdir -p "$T/p"; (cd "$T/p" && python3 -c 'import sys,zipfile; zipfile.ZipFile(sys.argv[1]).extractall(".")' "$T/$ZIP")
-  rm -rf "$BAK"; cp -a "$PLUGIN" "$BAK"; find "$PLUGIN" -mindepth 1 -delete; cp -a "$T/p/EGPU-Buddy/." "$PLUGIN/"; chown -R "$U": "$PLUGIN"
+  rm -rf "$BAK"; cp -a "$PLUGIN" "$BAK"; find "$PLUGIN" -mindepth 1 -delete; cp -a "$T/p/EGPU-Buddy/." "$PLUGIN/"
+  [ "$NVB" = 1 ] && python3 -c 'import json,sys; p=sys.argv[1]; j=json.load(open(p)); j["name"]="NV GPU Buddy"; json.dump(j,open(p,"w"),indent=2)' "$PLUGIN/plugin.json"
+  chown -R "$U": "$PLUGIN"
   systemctl try-restart plugin_loader.service || true; say "Decky plugin $VER installed (backup: $BAK)"
 fi
 rm -rf "$T"

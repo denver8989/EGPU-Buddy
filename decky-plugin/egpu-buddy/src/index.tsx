@@ -5,6 +5,7 @@ import { FaPlug } from "react-icons/fa";
 import qrcode from "qrcode-generator";
 
 type Status = {
+  track?: string;   // "nv-gpu-buddy": NV GPU Buddy mode (built-in NVIDIA card, experimental)
   present: boolean; bdf: string; driver_loaded: boolean; game_mode: boolean; game_running: boolean; ogui?: boolean;
   attach_pending: boolean; on_egpu: boolean; ally_xgm?: boolean; dock?: string; xgm?: { intro_seen_plugin?: boolean; fan?: string; curve?: number[]; light?: boolean | null; effect?: string; color?: string; speed?: string; brightness?: number; offset?: number[]; power_target?: number | null; live?: { target?: number; cap?: number; draw?: number } }; egpu_handheld?: boolean; handheld_displays?: { name: string; model: string; detail: string; xr?: boolean; brand?: string }[]; output: string;
   gm_status: { state?: string; message?: string }; desktop_status: { state?: string; message?: string };
@@ -90,7 +91,7 @@ const xgmIntro = callable<[], string>("xgm_intro");   // the XG Mobile intro ani
 const xgmIntroDone = callable<[], boolean>("xgm_intro_done");   // light-effect, brightness, offset
 const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"], ["ffd000", "Yellow"], ["00ff40", "Green"], ["00e0ff", "Cyan"], ["0040ff", "Blue"], ["a000ff", "Purple"], ["ffffff", "White"]];
 const resetClocks = callable<[], Result>("reset_clocks");
-type Setup = { gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
+type Setup = { track?: string; machine?: string; gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
 type Conflict = { id: string; name: string; url: string; why: string; evidence: string[]; removable?: boolean };
 const getConflicts = callable<[], Conflict[]>("get_conflicts");   // other eGPU tools that change the same things
@@ -204,7 +205,7 @@ const maybeOfferScreen = async () => {
     onOK={async () => {
       if (o.game) return;
       const r = await setGameScreen(o.connector!);
-      toaster.toast({ title: "EGPU Buddy", body: r.message }); }} />);
+      toaster.toast({ title: appName(), body: r.message }); }} />);
 };
 const ICONS: Record<string, string> = {
   display: `<svg viewBox="0 0 120 48" width="96" height="38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><rect x="28" y="4" width="64" height="34" rx="3"/><path d="M52 44 H68 M60 38 V44"/></svg>`,
@@ -321,6 +322,10 @@ const screenTargets = (s: Status, tvWakes: boolean) => [
 const screenState: Record<string, string> = { "in-use": "on", "other-input": "other input", standby: "asleep", off: "off" };
 const vt = (v: string) => (v.match(/\d+/g) ?? ["0"]).slice(0, 3).reduce((a, x) => a * 1000 + Number(x), 0);
 
+// NV GPU Buddy mode (experimental, a BUILT-IN NVIDIA card): the same plugin under its own name, without the eGPU parts.
+// Every `nvb` branch below is for that mode only; an eGPU install never reports the track and renders as before.
+const APP_NAME = { v: "EGPU Buddy" };
+const appName = () => APP_NAME.v;
 const PLUGIN_VERSION = "0.7.223";
 
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
@@ -393,7 +398,7 @@ const maybeShowTrial = async () => {
     showModal(<ConfirmModal strTitle={`Switch to NVIDIA driver ${t.main}?`}
       strDescription={`Driver ${t.main} is now EGPU Buddy's main driver: most testers run it without problems. The eGPU is safely detached, the driver is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed), then the eGPU is attached with it and checked. If it does not come up, your current driver ${t.old} is put back and attached again by itself, also after a reset or hang. Keep the charger and the eGPU connected. Later: asked again next time; you can also switch any time in Setup & updates.`}
       strOKButtonText="Switch now" strCancelButtonText="Later"
-      onOK={async () => { trialOpen = false; const r = await startTrial(); toaster.toast({ title: "EGPU Buddy", body: r.message, duration: 10000 }); }}
+      onOK={async () => { trialOpen = false; const r = await startTrial(); toaster.toast({ title: appName(), body: r.message, duration: 10000 }); }}
       onCancel={() => { trialOpen = false; }} />);
   }
 };
@@ -411,15 +416,15 @@ const maybeOfferSteamUi = async () => {
     showModal(<ConfirmModal strTitle="Fix the Big Art menu on the NVIDIA eGPU?"
       strDescription="Big Art mode is on. On an NVIDIA eGPU, Steam's own interface compositor cannot start, so the main menu slides in over a black bar. EGPU Buddy can supply what it is missing (on the NVIDIA GPU, no Steam file is changed). Game Mode restarts once to apply it. You can switch it off any time in Setup."
       strOKButtonText="Turn on and restart" strCancelButtonText="Not now"
-      onOK={async () => { suiOpen = false; const r = await setSteamUi(true); toaster.toast({ title: "EGPU Buddy", body: r.message });
-        if (r.ok && r.restart) { const g = await restartGamemode(); toaster.toast({ title: "EGPU Buddy", body: g.message }); } }}
+      onOK={async () => { suiOpen = false; const r = await setSteamUi(true); toaster.toast({ title: appName(), body: r.message });
+        if (r.ok && r.restart) { const g = await restartGamemode(); toaster.toast({ title: appName(), body: g.message }); } }}
       onCancel={() => { suiOpen = false; }} />);
   } else if (o.pending && !suiPendingAsked) {
     suiPendingAsked = true; suiOpen = true;
     showModal(<ConfirmModal strTitle="Steam menu fix: restart Game Mode?"
       strDescription="The Steam menu fix for Big Art mode is on, but Steam was started without it (after an update or a new attach). Restarting Game Mode applies it."
       strOKButtonText="Restart Game Mode" strCancelButtonText="Later"
-      onOK={async () => { suiOpen = false; const g = await restartGamemode(); toaster.toast({ title: "EGPU Buddy", body: g.message }); }}
+      onOK={async () => { suiOpen = false; const g = await restartGamemode(); toaster.toast({ title: appName(), body: g.message }); }}
       onCancel={() => { suiOpen = false; }} />);
   }
 };
@@ -490,6 +495,8 @@ function Content() {
     const t0 = Date.now(); ui(`change started (page ${keepPage.tab})`);
     setBusy(true); try { const r = await fn(); setMsg(r.message); ui(`change done in ${Date.now() - t0} ms: ${r.ok ? "ok" : "failed"} ${String(r.message ?? "").slice(0, 120)}`); } catch (e) { setMsg(`${e}`); ui(`change error: ${e}`); } finally { running.current = false; setBusy(false); refresh(); } };
 
+  const nvb = s?.track === "nv-gpu-buddy" || su?.track === "nv-gpu-buddy";
+  APP_NAME.v = nvb ? "NV GPU Buddy" : "EGPU Buddy";
   const tel = s?.telemetry ?? {};
   const plMin = Number(tel["power.min_limit"] ?? 100), plMax = Number(tel["power.max_limit"] ?? 320);
   const plNow = pl ?? Math.round(Number(tel["power.limit"] ?? plMax));
@@ -527,15 +534,16 @@ function Content() {
   }, [s, visible]);
   const lightFx = (fx?: string, rgb?: string, speed?: string) => run(() => xgmSet("light-effect", `${fx || s?.xgm?.effect || "static"}:${rgb || s?.xgm?.color || "ff0000"}:${speed || s?.xgm?.speed || "normal"}`));
   const clkNow = clk ?? (Math.round(Number(tel["clock_limit"])) || clkMax);   // the applied limit (kept by the helper), else none
-  const controlsOk = !!(s?.present && s?.driver_loaded && s?.on_egpu);
+  const controlsOk = !!(s?.present && s?.driver_loaded && (s?.on_egpu || nvb));
   // "mounted" for uninstall purposes: the driver is loaded, so /usr cannot be written and the
   // extension cannot be unmerged. Detaching is what clears it.
   const egpuMounted = !!(s?.driver_loaded);
   const tvWakes = !!tv?.enabled && !!tv?.paired.length;   // TV control can switch a TV that is off on
-  const askUninstall = () => showModal(<ConfirmModal strTitle="Uninstall EGPU Buddy?" bDestructiveWarning strOKButtonText="Uninstall"
-    strDescription={(egpuMounted ? "The eGPU is safely detached first: Game Mode moves to the handheld screen for a few seconds. " : "") + "Then the system integration is removed and the machine goes back to how it was."}
+  const askUninstall = () => showModal(<ConfirmModal strTitle={`Uninstall ${appName()}?`} bDestructiveWarning strOKButtonText="Uninstall"
+    strDescription={nvb ? "The system integration is removed and the machine goes back to how it was. The NVIDIA driver the machine had before NV GPU Buddy comes back (on SteamOS: none, it has no NVIDIA driver of its own)."
+      : (egpuMounted ? "The eGPU is safely detached first: Game Mode moves to the handheld screen for a few seconds. " : "") + "Then the system integration is removed and the machine goes back to how it was."}
     onOK={() => run(uninstallSystem)} />);
-  const WHAT = "Installs the hot-plug scripts, the Game Mode session, the GBM gamescope, the boot policy, the desktop app, the patched hot-unplug driver with the NVIDIA userspace pinned to it, and the kernel parameters. Backups are kept.";
+  const WHAT = nvb ? "Installs NVIDIA settings and their game loader, power and clock controls, the Big Art menu fix, the desktop app, and EGPU Buddy's patched NVIDIA driver with its userspace pinned to it. No eGPU parts. Backups are kept." : "Installs the hot-plug scripts, the Game Mode session, the GBM gamescope, the boot policy, the desktop app, the patched hot-unplug driver with the NVIDIA userspace pinned to it, and the kernel parameters. Backups are kept.";
   // Before installing: other eGPU tools that change the same settings (primary GPU, Game Mode session, boot GPU) conflict
   // with EGPU Buddy. Offer to remove them with their own uninstaller; installing alongside them stays possible.
   const withConflictCheck = (next: () => void) => {
@@ -578,6 +586,22 @@ function Content() {
   const installFor = (v: "nvidia" | "amd") => confirmInstall(v === "amd" ? "Install for an AMD / Intel eGPU" : "Install for an NVIDIA eGPU", () => installSystem(false, v));
   const installClick = () => {
     if (su?.installed_version) { confirmInstall("Update the system files", () => installSystem(false), () => updateDetached("")); return; }
+    // NV GPU Buddy (experimental): only on a machine egpu-detect sees as a desktop / laptop with a BUILT-IN NVIDIA card, or a
+    // desktop with no card yet - never a handheld. Two confirmations; the default way out is the normal eGPU install.
+    const m = su?.machine ?? "";
+    if (/^(nv-desktop|nv-laptop|pc-no-nv)/.test(m)) {
+      const card = m === "pc-no-nv";
+      const what = m.startsWith("nv-laptop") ? "a laptop with a built-in NVIDIA card" : card ? "a desktop PC with no NVIDIA card yet" : "a desktop PC with a built-in NVIDIA card";
+      showModal(<ConfirmModal strTitle={`This looks like ${what}`}
+        strDescription={`EGPU Buddy has an experimental mode for it, NV GPU Buddy: NVIDIA settings, power and clocks, the Big Art menu fix, screens and keep awake, with no eGPU features. It installs EGPU Buddy's patched NVIDIA driver in place of the system's.${card ? " The driver is installed now, so the card works from its first boot: shut down, fit it, start up." : ""} Not tested on desktop PCs or laptops yet.`}
+        strOKButtonText="NV GPU Buddy (experimental)" strMiddleButtonText="Normal eGPU install" strCancelButtonText="Cancel"
+        onMiddleButton={() => installFor("nvidia")}
+        onOK={() => setTimeout(() => showModal(<ConfirmModal strTitle="Confirm: not a handheld" bDestructiveWarning
+          strDescription="NV GPU Buddy is for desktop PCs and laptops. A handheld with an eGPU needs the normal eGPU install. Is this a desktop PC or a laptop?"
+          strOKButtonText="Yes, install NV GPU Buddy" strCancelButtonText="No"
+          onOK={() => confirmInstall("Install NV GPU Buddy", () => installSystem(false, card ? "nv-gpu-buddy-card" : "nv-gpu-buddy"))} />), 300)} />);
+      return;
+    }
     // first install: always ask (an eGPU that happens to be plugged in is only mentioned, never decides on its own)
     const bus = su?.egpu_on_bus;
     const seen = bus === "nvidia" ? " An NVIDIA eGPU is connected right now." : (bus === "amd" || bus === "intel") ? ` An ${bus === "amd" ? "AMD" : "Intel"} eGPU is connected right now.` : "";
@@ -604,8 +628,8 @@ function Content() {
         )}
       </PanelSection>
       {tab === "main" && (
-        <PanelSection title="eGPU">
-          <PanelSectionRow><div className={staticClasses.Text}>{s ? stateLine(s) : "Loading…"}</div></PanelSectionRow>
+        <PanelSection title={nvb ? "GPU" : "eGPU"}>
+          <PanelSectionRow><div className={staticClasses.Text}>{s ? (nvb ? `${gpuName(tel["name"]) || "NVIDIA GPU"} · ${s.driver_loaded ? `driver ${tel["driver_version"] ?? ""}` : "driver not loaded"}${s.game_mode ? "" : " · Desktop"}` : stateLine(s)) : "Loading…"}</div></PanelSectionRow>
           {su?.unsupported && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ff6b6b" }}>{su.unsupported}</div></PanelSectionRow>}
           {su?.driver_building && !su.busy && (
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.driver_building.includes("prebuild") ? "A SteamOS update is ready: EGPU Buddy is preparing the eGPU driver for it. Restart once it says it is done." : "SteamOS changed the kernel: EGPU Buddy is building the eGPU driver for it in the background (a few minutes). The eGPU works again by itself when it is done; nothing to install."}</div></PanelSectionRow>
@@ -648,10 +672,11 @@ function Content() {
               <PanelSectionRow><ButtonItem layout="below" disabled={busy || gameUp} onClick={() => run(rebootSystem)}>Reboot the system</ButtonItem></PanelSectionRow>
             </>
           )}
-          {su && !su.busy && su.rc !== null && su.rc !== 0 && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ff6b6b" }}>{su.rc === 21 ? "Nothing was changed: the eGPU driver is in use. Safe Detach, unplug the eGPU, then try again." : su.rc === 20 ? "Everything is installed except the NVIDIA driver, which could not be built. Keep the eGPU unplugged, check the internet connection and press Repair. Details: Show setup & updates." : `Install failed (rc ${su.rc}). Log: /tmp/egpu-buddy-setup.log`}</div></PanelSectionRow>}
-          {!!s?.resets?.count && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This device was reset by its hardware {s.resets.count === 1 ? "once" : `${s.resets.count} times`} while the eGPU was connected (last: {s.resets.last}). Always use Safe Detach before unplugging.</div></PanelSectionRow>}
-          {s && !s.game_mode && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>In Desktop mode use the EGPU Buddy desktop app.</div></PanelSectionRow>}
-          {gameUp && s?.game_mode && <PanelSectionRow><div style={{ fontSize: "12px", color: "#f0b429" }}>A game is running. Exit it first to switch screens, attach or detach the eGPU: each of these restarts Game Mode.</div></PanelSectionRow>}
+          {su && !su.busy && su.rc !== null && su.rc !== 0 && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ff6b6b" }}>{su.rc === 21 ? (nvb ? "The NVIDIA card is in use, so the update is staged: it installs by itself at the next reboot." : "Nothing was changed: the eGPU driver is in use. Safe Detach, unplug the eGPU, then try again.") : su.rc === 20 ? "Everything is installed except the NVIDIA driver, which could not be built. Keep the eGPU unplugged, check the internet connection and press Repair. Details: Show setup & updates." : `Install failed (rc ${su.rc}). Log: /tmp/egpu-buddy-setup.log`}</div></PanelSectionRow>}
+          {!nvb && !!s?.resets?.count && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>This device was reset by its hardware {s.resets.count === 1 ? "once" : `${s.resets.count} times`} while the eGPU was connected (last: {s.resets.last}). Always use Safe Detach before unplugging.</div></PanelSectionRow>}
+          {s && !s.game_mode && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>In Desktop mode use the {appName()} desktop app.</div></PanelSectionRow>}
+          {!nvb && gameUp && s?.game_mode && <PanelSectionRow><div style={{ fontSize: "12px", color: "#f0b429" }}>A game is running. Exit it first to switch screens, attach or detach the eGPU: each of these restarts Game Mode.</div></PanelSectionRow>}
+          {!nvb && <>
           {s?.attach_pending && <PanelSectionRow><div style={{ fontSize: "12px" }}>eGPU plugged in. Close the game, then press Attach.</div></PanelSectionRow>}
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || gameUp || (s?.present && (s?.on_egpu || s?.egpu_handheld))} onClick={() => showModal(<ConfirmModal strTitle="Attach the eGPU" strDescription="Game Mode restarts on the eGPU display: the screen goes dark for a few seconds. When it is back, reopen this menu to see the result." strOKButtonText="Attach" onOK={() => run(() => attach(false))} />)}>Attach eGPU</ButtonItem>
@@ -669,6 +694,7 @@ function Content() {
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || !s?.present || gameUp} onClick={() => showModal(<ConfirmModal strTitle="Safe Detach" strDescription="Game Mode moves to the handheld screen and the eGPU is removed from the bus: the screen goes dark for a few seconds and the monitor loses signal. Do not unplug yet. When the handheld screen is back, reopen this menu: it says when it is safe to unplug the cable." strOKButtonText="Detach" bDestructiveWarning onOK={() => run(safeDetach)} />)}>Safe Detach</ButtonItem>
           </PanelSectionRow>
           {s?.gm_status?.state && s.gm_status.state !== "ATTACHED" && s.gm_status.state !== "IDLE" && <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600, color: s.gm_status.state === "SAFE_COMPLETE" || s.gm_status.state === "DETACHED" ? "#4caf50" : s.gm_status.state.includes("DO_NOT") || s.gm_status.state === "FAILED" ? "#ff6b6b" : "#f0b429" }}>{s.gm_status.state === "SAFE_COMPLETE" || s.gm_status.state === "DETACHED" ? "Safe to unplug the cable." : s.gm_status.message}</div></PanelSectionRow>}
+          </>}
           {tr?.message && (tr.running || tr.state === "reverted" || tr.state === "failed") && <PanelSectionRow><div style={{ fontSize: "12px", color: tr.state === "failed" ? "#ff6b6b" : "#f0b429" }}>NVIDIA driver: {tr.message}</div></PanelSectionRow>}
           {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
           {/* Install and uninstall run as background jobs. Without their progress and result HERE, the
@@ -685,20 +711,20 @@ function Content() {
               </PanelSectionRow>
             </>
           )}
-          <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.7 }}>EGPU Buddy {PLUGIN_VERSION}{su && !su.installed_version ? " · not installed" : ""} · {up ? (up.available ? `update ${up.available} available` : up.checked ? "up to date" : "update check pending") : "…"}{up?.auto_update ? " · auto-update on" : " · auto-update off"}</div></PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.7 }}>{appName()} {PLUGIN_VERSION}{nvb ? " (experimental)" : ""}{su && !su.installed_version ? " · not installed" : ""} · {up ? (up.available ? `update ${up.available} available` : up.checked ? "up to date" : "update check pending") : "…"}{up?.auto_update ? " · auto-update on" : " · auto-update off"}</div></PanelSectionRow>
         </PanelSection>
       )}
       {tab === "details" && !s && (
-        <PanelSection title="eGPU details">
+        <PanelSection title={nvb ? "GPU details" : "eGPU details"}>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>No eGPU connected. Setup, updates and uninstall are still available above.</div></PanelSectionRow>
         </PanelSection>
       )}
       {tab === "details" && s && (
         <>
-          <PanelSection title="eGPU details">
+          <PanelSection title={nvb ? "GPU details" : "eGPU details"}>
             {!s.present ? (
               <>
-                <PanelSectionRow><div className={staticClasses.Text}>eGPU not connected.</div></PanelSectionRow>
+                <PanelSectionRow><div className={staticClasses.Text}>{nvb ? "No NVIDIA card found (the driver is ready for one)." : "eGPU not connected."}</div></PanelSectionRow>
                 <Row k="Session" v={s.game_mode ? "Game Mode on handheld" : "Desktop"} />
               </>
             ) : (
@@ -708,21 +734,21 @@ function Content() {
               <Row k="GPU" v={gpuName(tel["name"]) || (s.present ? s.bdf : "absent")} />
               <Row k="Driver" v={s.driver_loaded ? `nvidia ${tel["driver_version"] ?? ""}` : "not loaded"} />
               <Row k="PCIe" v={s.present ? `${s.link.speed} x${s.link.width}` : ""} />
-              {ad?.usb4 && usb4.total !== undefined && (
+              {!nvb && ad?.usb4 && usb4.total !== undefined && (
                 <PanelSectionRow><div style={{ padding: "6px 8px", borderRadius: "4px", fontSize: "12px",
                   background: usb4.slow ? "#3a2a14" : "#1a3a57", border: `1px solid ${usb4.slow ? "#e3a33b" : "#1a9fff"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontWeight: 600 }}>USB4 link</span><b>{usb4.total} Gb/s · {usb4.lanes} × {usb4.per_lane}</b></div>
                   <div style={{ opacity: 0.85, marginTop: "2px" }}>{usb4.slow ? (usb4.lanes! < 2 ? "1 lane: check the cable or port" : "slow link: check the cable or port") : usb4.name}</div>
                 </div></PanelSectionRow>
               )}
-              <Row k="Session" v={s.game_mode ? (s.on_egpu ? `Game Mode on ${screenName(s)}` : s.egpu_handheld ? `${s.output.startsWith("eDP") ? "Handheld" : screenName(s)} + eGPU` : "Game Mode on panel") : "Desktop"} />
+              <Row k="Session" v={nvb ? (s.game_mode ? "Game Mode" : "Desktop") : s.game_mode ? (s.on_egpu ? `Game Mode on ${screenName(s)}` : s.egpu_handheld ? `${s.output.startsWith("eDP") ? "Handheld" : screenName(s)} + eGPU` : "Game Mode on panel") : "Desktop"} />
               {/* one row per screen: a joined list got cut off on the panel */}
               {(scr?.length ? scr : s.displays.map((d) => ({ connector: d.name, name: d.model, state: d.enabled ? "" : "off" }))).map((x) => (
                 <Row key={x.connector} k={x.name || x.connector}
                   v={[screenState[x.state], x.connector.startsWith("HDMI") ? "HDMI" : x.connector.startsWith("DP") ? "DisplayPort" : x.connector].filter(Boolean).join(" · ")} />
               ))}
               {scr?.some((x) => x.ddc) && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await wakeScreens(); getScreens().then(setScr).catch(() => {}); return r; })}>Wake screens</ButtonItem></PanelSectionRow>}
-              <Row k="Audio" v={audioName(s.audio_sink, s.bdf)} />
+              <Row k="Audio" v={nvb ? audioName(s.audio_sink, s.bdf).replace(/^eGPU/, "GPU") : audioName(s.audio_sink, s.bdf)} />
               <Row k="Temp" v={tel["temperature.gpu"] ? `${tel["temperature.gpu"]} °C` : ""} />
               <Row k="Power" v={tel["power.draw"] ? (Number.isFinite(Number(tel["power.limit"])) ? `${Math.round(Number(tel["power.draw"]))} / ${Math.round(Number(tel["power.limit"]))} W` : xgLive.target ? `${Math.round(Number(tel["power.draw"]))} / ${xgLive.target} W target` : xgCap !== null ? `${Math.round(Number(tel["power.draw"]))} / ${xgCap} W cap` : `${Math.round(Number(tel["power.draw"]))} W`) : ""} />
               <Row k="Core / mem" v={tel["clocks.gr"] ? `${tel["clocks.gr"]} / ${tel["clocks.mem"]} MHz` : ""} />
@@ -740,7 +766,7 @@ function Content() {
                 <PanelSectionRow><div style={{ width: "240px", margin: "0 auto", background: "#fff", borderRadius: "4px" }} dangerouslySetInnerHTML={{ __html: qrSvg(report.url) }} /></PanelSectionRow>
                 <Row k="Code" v={report.code} />
               </>)}
-              <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>One file with everything EGPU Buddy logs (versions, GPU and link, screens, Game Mode, attach, Safe Detach, driver trial and the system log), saved in the Desktop folder. Also in Desktop Mode: the "Save EGPU Buddy report" icon. No serial numbers, Wi-Fi names, IP addresses or user names.</div></PanelSectionRow>
+              <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>{nvb ? "One file with everything NV GPU Buddy logs (versions, GPU, screens, Game Mode, NVIDIA settings and the system log), saved in the Desktop folder. Also in Desktop Mode: the \"Save NV GPU Buddy report\" icon." : "One file with everything EGPU Buddy logs (versions, GPU and link, screens, Game Mode, attach, Safe Detach, driver trial and the system log), saved in the Desktop folder. Also in Desktop Mode: the \"Save EGPU Buddy report\" icon."} No serial numbers, Wi-Fi names, IP addresses or user names.</div></PanelSectionRow>
             </PanelSection>
           )}
           {s.present && xg && s.driver_loaded && (
@@ -818,7 +844,7 @@ function Content() {
               {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
             </PanelSection>
           ) : (
-            <PanelSection title="Power controls"><PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Available when Game Mode runs on the eGPU. On the handheld GPU, Game Mode's own performance menu applies.</div></PanelSectionRow></PanelSection>
+            <PanelSection title="Power controls"><PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nvb ? "Available when the NVIDIA driver is loaded." : "Available when Game Mode runs on the eGPU. On the handheld GPU, Game Mode's own performance menu applies."}</div></PanelSectionRow></PanelSection>
           )}
         </>
       )}
@@ -833,6 +859,10 @@ function Content() {
           {su?.busy && <PanelSectionRow><Progress pct={su.progress} title="Installing" step={su.step} started={su.started} expect={su.expect} /></PanelSectionRow>}
           {su && !su.busy && su.rc !== null && <PanelSectionRow><div style={{ fontSize: "12px", color: su.rc === 0 ? "#4caf50" : "#ff6b6b" }}>{su.rc === 0 ? "Finished." : `Failed (rc ${su.rc}).`}</div></PanelSectionRow>}
 
+          {nvb ? (<>
+            <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>NV GPU Buddy (experimental): EGPU Buddy for a built-in NVIDIA card. eGPU features are not part of this mode, and it only takes the updates marked for it.</div></PanelSectionRow>
+            <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => confirmInstall("Reinstall / update NV GPU Buddy", () => installSystem(false))}>Reinstall / update system integration</ButtonItem></PanelSectionRow>
+          </>) : (<>
           {/* The choice is made UP FRONT, not detected. The point of this app is that it is set up in
               advance so the eGPU mounts by itself when it is finally connected - so on a machine that
               has never been set up there is usually nothing plugged in to detect, and asking is the only
@@ -889,6 +919,7 @@ function Content() {
               </div>
             </PanelSectionRow>
           )}
+          </>)}
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !!su?.busy || !su?.installed_version} onClick={askUninstall}>Uninstall system integration</ButtonItem>
           </PanelSectionRow>
@@ -924,7 +955,7 @@ function Content() {
           {tr.log && logOpen === "trial" && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{tr.log}</div></PanelSectionRow>}
         </PanelSection>
       )}
-      {tab === "setup" && s?.present && s.game_mode && (
+      {tab === "setup" && !nvb && s?.present && s.game_mode && (
         <PanelSection title="Game screen">
           <PanelSectionRow><DropdownItem label="Play games on" disabled={busy || gameUp}
             selectedOption={s.output && s.output !== "*" ? s.output : "eDP-1"}
@@ -947,7 +978,7 @@ function Content() {
       )}
       {tab === "setup" && sui?.available && (
         <PanelSection title="Steam menu">
-          <PanelSectionRow><ToggleField label="Big Art mode menu fix (NVIDIA eGPU)" description={`Off by default. On the NVIDIA eGPU Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: EGPU Buddy supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when Game Mode restarts.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`}
+          <PanelSectionRow><ToggleField label={nvb ? "Big Art mode menu fix (NVIDIA)" : "Big Art mode menu fix (NVIDIA eGPU)"} description={`Off by default. On ${nvb ? "an NVIDIA GPU" : "the NVIDIA eGPU"} Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: ${appName()} supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when ${nvb ? "Steam restarts" : "Game Mode restarts"}.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`}
             checked={!!sui.enabled} onChange={(v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) { const g = await restartGamemode(); return { ok: true, message: `${r.message} ${g.message}` }; } return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
@@ -962,8 +993,8 @@ function Content() {
         const dirty = !!nvEdit && JSON.stringify(nvEdit) !== JSON.stringify(nv.settings);
         return (<PanelSection title="NVIDIA settings (experimental)">
           <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("setup")}>Back to setup</ButtonItem></PanelSectionRow>
-          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing.</div></PanelSectionRow>
-          {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={lock}
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nvb ? "Global settings for every game Steam starts on the NVIDIA GPU; a setting on its default changes nothing." : "Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing."}</div></PanelSectionRow>
+          {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem layout="below" label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={lock}
             selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
             onChange={(o) => { if (keepFocus) ui(`nvidia pick ${r.key} = ${o.data}`); setNvEdit({ ...cur, [r.key]: o.data }); }} /></PanelSectionRow>)}
           {cur.low_latency === "ultra" && pr && !pr.ready && <>
@@ -973,10 +1004,10 @@ function Content() {
           {cur.low_latency === "ultra" && pr?.ready && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Ultra: pick {pr.tools.filter((t) => t.ok).map((t) => t.name).join(" or ")} for the game (Properties &gt; Compatibility), or for every game in Steam Settings &gt; Compatibility. {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
           {(() => { const once = s?.game_mode && nv.loader !== "loaded";   // the loader is not in this Game Mode yet: one restart
             return <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && !dirty) || (once && gameUp)} onClick={() => (keepFocus && !dirty) ? setMsg("Nothing changed yet: pick a new value above, then Apply.") : run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return once ? applyNvidia() : { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; })}>
-              {once ? (gameUp ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>; })()}
+              {once ? (gameUp ? "Exit the game (one-time restart)" : nvb ? "Apply (one-time Steam restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>; })()}
           {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
           {gameUp && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>A game is running: it keeps its settings until you start it again. For an instant change use System settings (live) below.</div></PanelSectionRow>}
-          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : nvb ? "First time only: Steam restarts once so it starts with the settings loader. After that, changes apply at the next game launch." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => setNvEdit({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
           {nv.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvidiaOff(); setNv(await getNvidia()); setNvEdit(null); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
           {!!nv.games?.length && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.games.length} game(s) ship their own dxvk.conf; it is read after these settings, so its options win: {nv.games.map((g) => g.game + (g.overridden.length ? ` (own ${g.overridden.join(", ")})` : "")).join(" · ")}</div></PanelSectionRow>}
@@ -1010,8 +1041,8 @@ function Content() {
       {tab === "setup" && (
         <PanelSection title="Extras (testing)">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>All off by default.</div></PanelSectionRow>
-          <PanelSectionRow><ToggleField label="USB4 link speed" description="Adds a USB4 row to the Details tab and warns about a slow cable or port." checked={!!ad?.usb4} onChange={(v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; })} /></PanelSectionRow>
-          <PanelSectionRow><ToggleField label="TV control tricks" description="Off by default. Choosing the TV for Game Mode turns it on and switches it to the eGPU's HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now." checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
+          {!nvb && <PanelSectionRow><ToggleField label="USB4 link speed" description="Adds a USB4 row to the Details tab and warns about a slow cable or port." checked={!!ad?.usb4} onChange={(v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; })} /></PanelSectionRow>}
+          <PanelSectionRow><ToggleField label="TV control tricks" description={`Off by default. Choosing the TV for Game Mode turns it on and switches it to the ${nvb ? "GPU" : "eGPU"}'s HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.`} checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
           {tv?.enabled && (<>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }}>{tv.paired.length ? "Pair again" : "Find and pair TV"}</ButtonItem></PanelSectionRow>
@@ -1022,10 +1053,17 @@ function Content() {
   );
 }
 
+// the panel's title: "NV GPU Buddy" in that mode (read once when Decky loads the plugin)
+function Title() {
+  const [n, setN] = useState(appName());
+  useEffect(() => { getSetup().then((x) => { if (x?.track === "nv-gpu-buddy") { APP_NAME.v = "NV GPU Buddy"; setN(APP_NAME.v); } }).catch(() => {}); }, []);
+  return <div className={staticClasses.Title}>{n}</div>;
+}
+
 export default definePlugin(() => {
   ui("plugin frontend loaded");
   // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
-  const notices = setInterval(async () => { try { const t = await popNotice(); if (t) toaster.toast({ title: "EGPU Buddy", body: t, duration: 15000 }); } catch { /* backend not up yet */ }
+  const notices = setInterval(async () => { try { const t = await popNotice(); if (t) toaster.toast({ title: appName(), body: t, duration: 15000 }); } catch { /* backend not up yet */ }
     try { await maybeShowTrial(); } catch { /* backend not up yet */ }
     try { await maybeOfferScreen(); } catch { /* backend not up yet */ }
     try { await maybeOfferSteamUi(); } catch { /* backend not up yet */ }
@@ -1045,7 +1083,7 @@ export default definePlugin(() => {
   });
   return {
   name: "EGPU Buddy",
-  title: <div className={staticClasses.Title}>EGPU Buddy</div>,
+  title: <Title />,
   content: <Content />,
   icon: <FaPlug />,
   onDismount() { clearInterval(notices); launches?.unregister?.(); modes?.unregister?.(); clearTimeout(modeTimer); },

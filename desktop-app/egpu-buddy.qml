@@ -13,7 +13,11 @@ ApplicationWindow {
     readonly property bool startHidden: Qt.application.arguments.indexOf("--tray") >= 0
     visible: !startHidden
     property int showSeq: -1                   // the launcher asks a running instance to show itself through the backend
-    title: "EGPU Buddy"
+    // NV GPU Buddy mode (experimental, a BUILT-IN NVIDIA card): the same app under its own name, without the eGPU parts.
+    // Every `nvb` binding is for that mode only; an eGPU install never reports the track and looks as before.
+    readonly property bool nvb: s.track === "nv-gpu-buddy"
+    readonly property string appName: nvb ? "NV GPU Buddy" : "EGPU Buddy"
+    title: appName
     // own dark palette + the Fusion style (selected by the launcher): the same look on every desktop theme and distro
     palette { window: "#0b1016"; windowText: "#dfe8f0"; base: "#101720"; alternateBase: "#162030"; text: "#dfe8f0"
               button: "#1b2633"; buttonText: "#dfe8f0"; highlight: "#1a9fff"; highlightedText: "#ffffff"
@@ -129,15 +133,15 @@ ApplicationWindow {
         id: tray
         visible: !win.shot.length
         icon.source: Qt.resolvedUrl("egpu-buddy.png")
-        tooltip: "EGPU Buddy — " + (win.s.present ? (win.g.name || "eGPU on the bus") : "no eGPU")
+        tooltip: win.appName + " — " + (win.s.present ? (win.g.name || (win.nvb ? "NVIDIA GPU" : "eGPU on the bus")) : (win.nvb ? "no NVIDIA card" : "no eGPU"))
         onActivated: function(reason) { if (reason !== Platform.SystemTrayIcon.Context) { win.show(); win.raise(); win.requestActivate() } }
         menu: Platform.Menu {
-            Platform.MenuItem { text: "Open EGPU Buddy"; onTriggered: { win.show(); win.raise(); win.requestActivate() } }
+            Platform.MenuItem { text: "Open " + win.appName; onTriggered: { win.show(); win.raise(); win.requestActivate() } }
             Platform.MenuSeparator {}
-            Platform.MenuItem { text: "Safe Detach…"; enabled: !!win.s.present; onTriggered: { win.show(); win.raise(); confirmDetach.open() } }
-            Platform.MenuItem { text: "Re-attach"; enabled: !(win.s.present && win.s.driver_loaded); onTriggered: win.act("attach") }
+            Platform.MenuItem { text: "Safe Detach…"; visible: !win.nvb; enabled: !!win.s.present; onTriggered: { win.show(); win.raise(); confirmDetach.open() } }
+            Platform.MenuItem { text: "Re-attach"; visible: !win.nvb; enabled: !(win.s.present && win.s.driver_loaded); onTriggered: win.act("attach") }
             Platform.MenuSeparator {}
-            Platform.MenuItem { text: win.updRunning ? "Updating… (show progress)" : (win.updLabel === "Update" ? "Update EGPU Buddy…" : win.updLabel); onTriggered: { win.show(); win.raise(); win.requestActivate(); updateDlg.open() } }
+            Platform.MenuItem { text: win.updRunning ? "Updating… (show progress)" : (win.updLabel === "Update" ? "Update " + win.appName + "…" : win.updLabel); onTriggered: { win.show(); win.raise(); win.requestActivate(); updateDlg.open() } }
             Platform.MenuSeparator {}
             Platform.MenuItem { text: "Quit"; onTriggered: Qt.quit() }
         }
@@ -191,7 +195,7 @@ ApplicationWindow {
         readonly property string phase: win.updRunning ? "running"
             : (win.upd.state && (win.upd.t || 0) >= (askedAt || Date.now() / 1000 - 120)) ? "result"
             : askedAt ? "starting" : "confirm"
-        title: "Update EGPU Buddy"; modal: true; anchors.centerIn: parent; width: Math.min(win.width - 80, 560)
+        title: "Update " + win.appName; modal: true; anchors.centerIn: parent; width: Math.min(win.width - 80, 560)
         closePolicy: phase === "running" ? Popup.NoAutoClose : Popup.CloseOnEscape
         onOpened: { askedAt = 0; win.loadNotes() }
         ColumnLayout { width: parent.width; spacing: 10
@@ -209,7 +213,7 @@ ApplicationWindow {
             ProgressBar { Layout.fillWidth: true; visible: updateDlg.phase === "running" || updateDlg.phase === "starting"; from: 0; to: 100
                 value: win.upd.pct || 0; indeterminate: updateDlg.phase === "starting" }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: updateDlg.phase === "running"
-                text: "EGPU Buddy restarts itself when the update is done." }
+                text: win.appName + " restarts itself when the update is done." }
             RowLayout { Layout.alignment: Qt.AlignRight
                 Button { text: (win.s.latest && win.s.installed && !win.newer(win.s.latest, win.s.installed)) || win.s.staged ? "Reinstall" : "Update"; visible: updateDlg.phase === "confirm"; onClicked: { updateDlg.askedAt = Date.now() / 1000 - 2; win.act("update") } }
                 Button { text: updateDlg.phase === "running" || updateDlg.phase === "starting" ? "Hide" : "Close"; onClicked: updateDlg.close() } }
@@ -253,23 +257,25 @@ ApplicationWindow {
         ColumnLayout {
             width: win.width - 32; x: 16; y: 12; spacing: 12
             RowLayout { Layout.fillWidth: true; spacing: 10
-                Label { text: "EGPU Buddy"; font.pixelSize: 22; font.bold: true }
-                Label { text: (win.g.name && win.s.dock ? win.s.dock + " · " + win.g.name.replace(/^NVIDIA\s+(GeForce\s+)?/i, "") : win.g.name) || (win.s.present ? "NVIDIA GPU (driver not loaded)" : "not detected"); opacity: 0.75; Layout.fillWidth: true; Layout.preferredWidth: 120; wrapMode: Text.WordWrap; maximumLineCount: 2 }   // wraps: the dock + full GPU name was cut off in a narrow window
-                Badge { text: win.s.present ? "On the bus" : "No eGPU"; lit: !!win.s.present }
-                Badge { text: win.s.tunnel ? "Tunnel up" : "No tunnel"; lit: !!win.s.tunnel }
+                Label { text: win.appName; font.pixelSize: 22; font.bold: true }
+                Label { text: "experimental"; visible: win.nvb; opacity: 0.6; font.pixelSize: 11 }
+                Label { text: (win.g.name && win.s.dock ? win.s.dock + " · " + win.g.name.replace(/^NVIDIA\s+(GeForce\s+)?/i, "") : win.g.name) || (win.s.present ? "NVIDIA GPU (driver not loaded)" : win.nvb ? "no NVIDIA card yet (the driver is ready)" : "not detected"); opacity: 0.75; Layout.fillWidth: true; Layout.preferredWidth: 120; wrapMode: Text.WordWrap; maximumLineCount: 2 }   // wraps: the dock + full GPU name was cut off in a narrow window
+                Badge { text: win.s.present ? "On the bus" : "No eGPU"; lit: !!win.s.present; visible: !win.nvb }
+                Badge { text: win.s.tunnel ? "Tunnel up" : "No tunnel"; lit: !!win.s.tunnel; visible: !win.nvb }
                 Badge { text: win.s.driver_loaded ? "Driver loaded" : "Driver unloaded"; lit: !!win.s.driver_loaded }
                 Badge { text: win.s.game_mode ? "Game Mode" : "Desktop"; lit: true }
             }
             // NVIDIA settings (experimental) get their own tab, shown with an NVIDIA eGPU only
             TabBar { id: tabs; Layout.fillWidth: true; visible: win.nvShow; currentIndex: win.page; onCurrentIndexChanged: win.page = currentIndex
-                TabButton { text: "eGPU" }
+                TabButton { text: win.nvb ? "GPU" : "eGPU" }
                 TabButton { text: "NVIDIA settings  ·  experimental"; onClicked: win.loadNv() } }
             ColumnLayout { Layout.fillWidth: true; spacing: 10; visible: win.page === 1 && win.nvShow
                 RowLayout { Layout.fillWidth: true
                     ColumnLayout { Layout.fillWidth: true; spacing: 2
                         Label { text: "Global settings"; font.pixelSize: 17; font.bold: true }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.7
-                            text: "Used by every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them, and nothing is changed while a setting is on its default." } }
+                            text: win.nvb ? "Used by every game Steam starts on the NVIDIA GPU. Nothing is changed while a setting is on its default."
+                                : "Used by every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them, and nothing is changed while a setting is on its default." } }
                     Badge { text: "Experimental"; lit: true }
                     Button { text: "Restore"; onClicked: { win.nvEdit = Object.assign({}, win.nv.defaults || {}); win.nvDirty = true } }
                     Button { text: "Apply"; highlighted: win.nvDirty; enabled: win.nvDirty; onClicked: { win.act("nvidia-set", { settings: win.nvEdit }); win.nvDirty = false; win.nvSaved = true; win.loadNv() } } }
@@ -310,7 +316,7 @@ ApplicationWindow {
                         Button { text: "Turn off"; visible: !!win.nv.enabled; onClicked: { win.act("nvidia-off"); win.loadNv() } } } }
                 Label { text: "Games with their own dxvk.conf (" + ((win.nv.games || []).length) + ")"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: (win.nv.games || []).length > 0 }
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: (win.nv.games || []).length > 0
-                    text: "Their own file keeps working: each game gets EGPU Buddy's settings first and its own file after them, so its own options win. "
+                    text: "Their own file keeps working: each game gets " + win.appName + "'s settings first and its own file after them, so its own options win. "
                           + (win.nv.games || []).map(function(g) { return "<b>" + g.game + "</b>" + (g.overridden.length ? " (keeps its own " + g.overridden.join(", ") + ")" : "") }).join(" · ")
                     textFormat: Text.StyledText }
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11
@@ -331,23 +337,23 @@ ApplicationWindow {
                 Cell { value: win.g["pcie.link.gen.current"] ? "Gen" + win.g["pcie.link.gen.current"] + " x" + win.g["pcie.link.width.current"] : "–"; label: "PCIe link" }
             }
             Flow { Layout.fillWidth: true; spacing: 14
-                Label { text: "EGPU Buddy  <b>" + (win.s.installed || "—") + "</b>"; textFormat: Text.StyledText }
+                Label { text: win.appName + "  <b>" + (win.s.installed || "—") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "Driver  <b>" + (win.g.driver_version || "—") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "Bus  <b>" + (win.s.bdf || "—") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "VRAM  <b>" + (win.g["memory.total"] ? win.num(win.g["memory.total"] / 1024) + " GB" : "—") + "</b>"; textFormat: Text.StyledText }
                 Label { text: "Displays  <b>" + ((win.s.displays || []).map(function(d) { return d.name + (d.enabled ? "" : " (off)") }).join(", ") || "none") + "</b>"; textFormat: Text.StyledText }
-                Label { text: "Handheld panel  <b>" + (win.s.panel_enabled == null ? "—" : win.s.panel_enabled ? "on" : "off") + "</b>"; textFormat: Text.StyledText }
+                Label { visible: !win.nvb; text: "Handheld panel  <b>" + (win.s.panel_enabled == null ? "—" : win.s.panel_enabled ? "on" : "off") + "</b>"; textFormat: Text.StyledText }
             }
             // NVIDIA install: the screen for the desktop and Game Mode, as in the plugin ("Show Game Mode on ..."). Moving between
             // the handheld's GPU and the eGPU restarts the desktop on that GPU alone (no crosstalk, no copies between GPUs)
-            Label { text: "Screen"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: (win.s.screens || []).length > 0 }
-            Flow { Layout.fillWidth: true; spacing: 8; visible: (win.s.screens || []).length > 0
+            Label { text: "Screen"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: !win.nvb && (win.s.screens || []).length > 0 }
+            Flow { Layout.fillWidth: true; spacing: 8; visible: !win.nvb && (win.s.screens || []).length > 0
                 Repeater { model: win.s.screens || []
                     Button { text: modelData.label + (win.s.screen_pick === modelData.name ? "  ✓" : ""); highlighted: win.s.screen_pick === modelData.name
                              onClicked: { var moves = !win.s.game_mode && win.s.present && win.s.driver_loaded && modelData.kind !== win.s.desktop_on
                                           if (moves) { confirmScreen.pick = modelData; confirmScreen.open() } else win.act("set-screen", { connector: modelData.name }) } } }
             }
-            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: (win.s.screens || []).length > 0
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !win.nvb && (win.s.screens || []).length > 0
                 text: "The desktop and Game Mode both start on the screen picked here (or in the plugin). On the handheld's screen the games still render on the eGPU." }
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11 }
             // ASUS XG Mobile: power target (W), fan mode and lights
@@ -420,10 +426,10 @@ ApplicationWindow {
                 Label { text: win.on ? Math.round(pl.value) + " W" : "– W"; Layout.preferredWidth: 60; horizontalAlignment: Text.AlignRight }
                 Button { text: "Apply"; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.act("power-limit", { watts: Math.round(pl.value) }); win.sliderTouched = false } }
             }
-            Label { text: "Lifecycle"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11 }
+            Label { text: win.nvb ? "Clocks and updates" : "Lifecycle"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11 }
             RowLayout { Layout.fillWidth: true; spacing: 10
-                Button { text: "Safe Detach"; Layout.fillWidth: true; enabled: !!win.s.present; opacity: enabled ? 1 : 0.4; onClicked: confirmDetach.open() }
-                Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); opacity: enabled ? 1 : 0.4; onClicked: win.act("attach") }
+                Button { text: "Safe Detach"; visible: !win.nvb; Layout.fillWidth: true; enabled: !!win.s.present; opacity: enabled ? 1 : 0.4; onClicked: confirmDetach.open() }
+                Button { text: "Re-attach"; visible: !win.nvb; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); opacity: enabled ? 1 : 0.4; onClicked: win.act("attach") }
                 Button { text: "Reset clocks"; Layout.fillWidth: true; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.clkTouched = false; win.ptTouched = false; win.offTouched = false; win.act("reset-clocks") } }
                 Button { text: win.updLabel; Layout.fillWidth: true; onClicked: updateDlg.open() }
             }
@@ -431,7 +437,7 @@ ApplicationWindow {
             Frame { Layout.fillWidth: true
                 Label { width: parent.width; wrapMode: Text.WordWrap; text: win.msg; color: win.msgErr ? "#e05555" : palette.windowText } }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11
-                text: "Safe Detach moves the desktop back to the handheld and removes the card; only then unplug. Closing this window keeps EGPU Buddy in the system tray." }
+                text: win.nvb ? "Closing this window keeps NV GPU Buddy in the system tray." : "Safe Detach moves the desktop back to the handheld and removes the card; only then unplug. Closing this window keeps EGPU Buddy in the system tray." }
         }
     }
 

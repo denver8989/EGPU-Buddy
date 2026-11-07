@@ -24,7 +24,7 @@ else
   USER_NAME=${SUDO_USER:-$USER}; AS_ROOT=0
 fi
 USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6); USER_UID=$(id -u "$USER_NAME"); USER_GROUP=$(id -gn "$USER_NAME")
-MODE=install; CARD_COMING=0
+MODE=install; CARD_COMING=${EGPU_NV_CARD_COMING:-0}   # the plugin passes its choice this way (install.sh takes no such option)
 for a in "$@"; do case "$a" in --uninstall) MODE=uninstall;; --selfheal) MODE=selfheal;; --card-coming) CARD_COMING=1;; --check) MODE=check;;
   --nvidia|--with-driver|--no-gamescope) ;; --amd|--no-nvidia) echo "NV GPU Buddy is NVIDIA only; for an AMD / Intel eGPU use the normal install"; exit 1;;
   *) echo "unknown option $a"; exit 1;; esac; done
@@ -42,7 +42,7 @@ templ(){ sed -e "s|/home/deck|$USER_HOME|g" -e "s|^deck ALL=|$USER_NAME ALL=|" -
 
 # what this track puts on the machine (the uninstall removes exactly these)
 SYS_FILES="usr/local/sbin/egpu-detect usr/local/sbin/nv-egpu-buddy-privileged usr/local/bin/nv-egpu-offset-helper usr/local/sbin/egpu-screen
-  usr/local/sbin/egpu-report usr/local/sbin/egpu-snapshot usr/local/sbin/egpu-game-running etc/systemd/system/egpu-buddy-selfheal.service"
+  usr/local/sbin/egpu-report usr/local/sbin/egpu-snapshot usr/local/sbin/egpu-game-running usr/local/sbin/egpu-buddy-update etc/systemd/system/egpu-buddy-selfheal.service"
 USER_FILES=".local/bin/egpu-nvidia-tweaks .local/bin/egpu-steam-ui-fix"
 SUDOERS=/etc/sudoers.d/zz-steamos-egpu-buddy
 SH_DROPIN=/etc/systemd/system/egpu-buddy-selfheal.service.d/10-nv-gpu-buddy.conf
@@ -87,6 +87,9 @@ uninstall(){
   sudo rm -f "$SUDOERS" "$SH_DROPIN"; sudo rmdir "${SH_DROPIN%/*}" 2>/dev/null || true
   for f in $USER_FILES; do rm -f "$USER_HOME/$f" && echo "removed  $USER_HOME/$f"; done
   rm -f "$SL_DROPIN" "$NV_ENV"; rm -rf "$LIBD/nvt" "$LIBD/steam-ui-fix"
+  userctl disable --now egpu-buddy-tray.service >/dev/null 2>&1 || true
+  rm -rf "$USER_HOME/.local/share/egpu-buddy"; rm -f "$USER_HOME/.local/bin/egpu-buddy" "$USER_HOME/.config/systemd/user/egpu-buddy-tray.service"
+  for f in egpu-buddy egpu-buddy-report; do rm -f "$USER_HOME/.local/share/applications/$f.desktop" "$USER_HOME/Desktop/$f.desktop"; done
   for c in steam ogui-steam; do grep -qs 'NV GPU Buddy' "$GSP_HOOK_DIR/$c" && rm -f "$GSP_HOOK_DIR/$c"; done
   # the driver goes only if this track installed it; a driver the machine had before comes back
   if [ -n "$RO" ]; then
@@ -208,12 +211,13 @@ say "== installing system files"
 for f in $SYS_FILES; do
   t=$(mktemp); templ < "$ROOT/system/$f" > "$t"; sudo install -D -m "$(stat -c %a "$ROOT/system/$f")" "$t" "/$f"; rm -f "$t"
 done
-t=$(mktemp); grep -E '^deck ALL=.*(nv-egpu-buddy-privileged|egpu-report)' "$ROOT/system/etc/sudoers.d/zz-steamos-egpu-buddy" | templ > "$t"
+t=$(mktemp); grep -E '^deck ALL=.*(nv-egpu-buddy-privileged|egpu-report|egpu-buddy-update)' "$ROOT/system/etc/sudoers.d/zz-steamos-egpu-buddy" | templ > "$t"
 sudo install -D -m 0440 "$t" "$SUDOERS"; rm -f "$t"; sudo visudo -cf "$SUDOERS" >/dev/null || { sudo rm -f "$SUDOERS"; echo "warning: sudoers rule rejected"; }
 # the self-heal (OS updates, new kernels, the driver load at boot) runs before the login screen, with a time limit
 sudo mkdir -p "${SH_DROPIN%/*}"
 printf '[Unit]\n# NV GPU Buddy: the driver is loaded here, so the login screen comes after it (or after the time limit)\nBefore=display-manager.service\n[Service]\nTimeoutStartSec=180\nExecStart=\nExecStart=/bin/bash %s/install-nv-gpu-buddy.sh --selfheal\n' "$PERSIST" | sudo tee "$SH_DROPIN" >/dev/null
 sudo bash -c "echo '$VER' > /etc/nv-egpu-buddy/version; echo nvidia > /etc/nv-egpu-buddy/gpu-vendor; echo nv-gpu-buddy > '$TRACK_F'
+  echo '${MACHINE%% *}' > /etc/nv-egpu-buddy/machine
   [ '$CARD_COMING' = 1 ] && touch /etc/nv-egpu-buddy/card-coming || true
   systemctl daemon-reload >/dev/null 2>&1 || true; systemctl enable egpu-buddy-selfheal.service >/dev/null 2>&1 || true"
 if [ -d /etc/atomic-update.conf.d ]; then   # SteamOS: carry our /etc files over OS updates
@@ -252,13 +256,34 @@ if [ -d /usr/share/gamescope-session-plus ] || [ -d "$GSP_HOOK_DIR" ]; then
 fi
 userctl daemon-reload >/dev/null 2>&1 || true
 
+# ---- desktop app (NV GPU Buddy: the same app, its eGPU parts hidden; no Safe Detach launcher) ----------------------
+say "== installing the NV GPU Buddy desktop app"
+D="$USER_HOME/.local/share/egpu-buddy"; A="$USER_HOME/.local/share/applications"
+ucmd mkdir -p "$D" "$USER_HOME/.local/bin" "$A" "$USER_HOME/.config/systemd/user"
+for f in egpu-buddy egpu-buddy-server.py egpu-buddy-window.py egpu-buddy.qml index.html egpu-buddy.png; do ucmd cp -f "$ROOT/desktop-app/$f" "$D/"; done
+ucmd chmod +x "$D/egpu-buddy" "$D"/*.py; ucmd ln -sf "$D/egpu-buddy" "$USER_HOME/.local/bin/egpu-buddy"
+for f in egpu-buddy egpu-buddy-report; do
+  sed -e "s#/home/deck#$USER_HOME#g" -e 's/^Name=EGPU Buddy$/Name=NV GPU Buddy/; s/^Name=Save EGPU Buddy report$/Name=Save NV GPU Buddy report/' \
+      -e 's/^Comment=NVIDIA eGPU status.*/Comment=NVIDIA GPU status, NVIDIA settings, power and clocks/; s/^GenericName=eGPU /GenericName=GPU /; s/EGPU Buddy logs/NV GPU Buddy logs/' \
+      "$ROOT/desktop-app/$f.desktop" | ucmd tee "$A/$f.desktop" >/dev/null
+  [ -d "$USER_HOME/Desktop" ] && { ucmd cp -f "$A/$f.desktop" "$USER_HOME/Desktop/$f.desktop"; ucmd chmod +x "$USER_HOME/Desktop/$f.desktop"; }
+done
+templ < "$ROOT/user/.config/systemd/user/egpu-buddy-tray.service" | ucmd tee "$USER_HOME/.config/systemd/user/egpu-buddy-tray.service" >/dev/null
+userctl daemon-reload >/dev/null 2>&1 || true; userctl enable egpu-buddy-tray.service >/dev/null 2>&1 || true
+
 # ---- Decky plugin + the self-heal copy -------------------------------------------------------------------------
-if [ -d "$USER_HOME/homebrew/plugins" ]; then
+# Decky lists the plugin as "NV GPU Buddy" in this mode. Run BY the plugin (a first install or an update from Game Mode,
+# EGPU_COMPONENTS without decky): the plugin is already in place, and restarting Decky now would end this very run, so
+# only its name changes and Decky restarts a few seconds after this script has finished.
+nv_name(){ [ -f "$PLUGIN/plugin.json" ] && sudo python3 -c 'import json,sys; p=sys.argv[1]; j=json.load(open(p)); c=j.get("name")!="NV GPU Buddy"; j["name"]="NV GPU Buddy"; json.dump(j,open(p,"w"),indent=2); sys.exit(0 if c else 1)' "$PLUGIN/plugin.json"; }
+if [ -n "${EGPU_COMPONENTS:-}" ] && ! case ",$EGPU_COMPONENTS," in *,decky,*) true;; *) false;; esac; then
+  if nv_name; then sudo systemd-run --on-active=8 --collect --quiet systemctl try-restart plugin_loader.service >/dev/null 2>&1 || true; fi
+elif [ -d "$USER_HOME/homebrew/plugins" ]; then
   say "== installing the Decky plugin (NV GPU Buddy)"
   sudo rm -rf "$PLUGIN"; sudo mkdir -p "$PLUGIN"
   sudo cp -r "$ROOT/decky-plugin/egpu-buddy/dist" "$ROOT/decky-plugin/egpu-buddy/main.py" "$ROOT/decky-plugin/egpu-buddy/plugin.json" "$ROOT/decky-plugin/egpu-buddy/package.json" "$PLUGIN/"
   [ -d "$ROOT/decky-plugin/egpu-buddy/handhelds" ] && sudo cp -r "$ROOT/decky-plugin/egpu-buddy/handhelds" "$PLUGIN/"
-  sudo chown -R "$USER_NAME" "$PLUGIN"; sudo systemctl restart plugin_loader.service 2>/dev/null || true
+  nv_name || true; sudo chown -R "$USER_NAME" "$PLUGIN"; sudo systemctl restart plugin_loader.service 2>/dev/null || true
 else echo "Decky Loader not found (no ~/homebrew/plugins): install Decky, then run this again for the Game Mode plugin"; fi
 if [ "$(readlink -f "$ROOT")" != "$(readlink -f "$PERSIST")" ]; then
   say "== keeping a copy of this release in $PERSIST (self-heal source)"

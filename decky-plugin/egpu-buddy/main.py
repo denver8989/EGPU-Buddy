@@ -163,7 +163,7 @@ def _release_notes(installed):
         _notes_cache.update(t=time.time(), rels=[{"version": r.get("tag_name", "").lstrip("v"), "date": (r.get("published_at") or "")[:10],
                                                   "body": r.get("body") or "", "url": r.get("html_url", "")}
                                                  for r in data if not r.get("draft") and not r.get("prerelease")])
-    rels = _notes_cache["rels"]
+    rels = [r for r in _notes_cache["rels"] if NV_MARK in r["body"]] if _track() else _notes_cache["rels"]   # NV GPU Buddy: its releases only
     newer = [r for r in rels if _vt(r["version"]) > _vt(installed)]
     if newer:
         return {"title": f"What's new since {installed}" if installed else "Release notes", "notes": newer}
@@ -171,6 +171,10 @@ def _release_notes(installed):
 
 
 def _latest_release():
+    if _track():   # NV GPU Buddy: the newest release marked for it in its notes; the others are eGPU-only work
+        data = json.loads(_get(f"https://api.github.com/repos/{REPO}/releases?per_page=100", 20).decode())
+        marked = [r.get("tag_name", "").lstrip("v") for r in data if not r.get("draft") and not r.get("prerelease") and NV_MARK in (r.get("body") or "")]
+        return max(marked, key=_vt, default="")
     data = json.loads(_get(f"https://api.github.com/repos/{REPO}/releases/latest", 20).decode())
     return data.get("tag_name", "").lstrip("v")
 # (line prefix in the installer output, percent when that stage STARTS, short label for the line under the bar).
@@ -770,6 +774,35 @@ def _notify(text):
     d = _settings(); d["notice"] = text; _save_settings(d)
 
 
+# NV GPU Buddy track (EXPERIMENTAL: a BUILT-IN NVIDIA card, desktop / laptop; install-nv-gpu-buddy.sh). Every branch below that
+# tests _track() is for that mode only; an eGPU install never has the file and runs the old code.
+TRACK_F = "/etc/nv-egpu-buddy/track"
+NV_MARK = "NV GPU Buddy:"   # the release-note line that marks a release for the NV GPU Buddy mode (CLAUDE.md)
+
+
+def _track():
+    return _read(TRACK_F).strip() == "nv-gpu-buddy"
+
+
+_machine_cache = {"t": 0.0, "v": ""}
+def _machine():
+    """egpu-detect --machine (handheld | nv-desktop BDF | nv-laptop BDF | pc-no-nv | egpu): only SUGGESTS the NV GPU Buddy
+    mode before a first install; the user confirms it. Cached a minute (it reads sysfs only)."""
+    if time.time() - _machine_cache["t"] > 60:
+        det = next((d for d in ("/usr/local/sbin/egpu-detect", os.path.join(PLUGIN_DIR, "egpu-detect")) if os.path.exists(d)), "")
+        _machine_cache.update(t=time.time(), v=(_sh(["bash", det, "--machine"], 5)[1].strip() if det else "") or "egpu")
+    return _machine_cache["v"]
+
+
+def _nv_restart_steam():
+    """NV GPU Buddy: Steam restarts with its Game Mode settings (the loader, the Big Art fix); gamescope stays stock."""
+    base = ["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], "systemctl", "--user"]
+    if _sh(base + ["cat", "steam-launcher.service"], 5)[0] == 0:
+        _sh(base + ["restart", "--no-block", "steam-launcher.service"], 10)
+    else:   # gamescope-session-plus (Bazzite and others): the whole session, its hook is read at start
+        _sh(base + ["restart", "--no-block", "gamescope-session-plus@steam.service"], 10)
+
+
 def _installed_vendor():
     """Which install was chosen: 'amd' skips the NVIDIA driver. Nothing was connected at install
     time for most people, so this is a CHOICE, not a detection, and it can turn out to be wrong."""
@@ -972,6 +1005,8 @@ def _setup_worker(action, with_driver=False, version=None, vendor=""):
             # exists to fix the NVIDIA scan-out corruption. Everything else is vendor-neutral.
             # "" = keep the vendor this machine was set up for (install.sh reads it): an update never switches it
             _argv = ["bash", f"{SYSDIR}/install.sh"] + ({"amd": ["--amd"], "nvidia": ["--nvidia"]}.get(vendor, []))
+            if vendor in ("nv-gpu-buddy", "nv-gpu-buddy-card"):   # chosen and confirmed twice in the plugin (NV GPU Buddy)
+                env.update(EGPU_TRACK="nv-gpu-buddy", EGPU_NV_CARD_COMING="1" if vendor == "nv-gpu-buddy-card" else "0")
             rc = _run_logged(_argv, env, SYSDIR)
             if ro: subprocess.run([ro, "enable"], env=_clean_env())
             # only a running Game Mode can be behind; otherwise the next start picks the new files up anyway
@@ -1054,6 +1089,16 @@ def _drop_stray_plugin_copies():
     return n
 
 
+def _nv_name_plugin(d):
+    """NV GPU Buddy: Decky lists the plugin under its own name in this mode (plugin.json)."""
+    try:
+        j = json.load(open(os.path.join(d, "plugin.json")))
+        if j.get("name") != "NV GPU Buddy":
+            j["name"] = "NV GPU Buddy"; json.dump(j, open(os.path.join(d, "plugin.json"), "w"), indent=2)
+    except (OSError, ValueError):
+        pass
+
+
 def _update_plugin_files(version):
     """Replace this plugin with the release's plugin zip (backup kept), then restart Decky detached from ourselves."""
     name = f"EGPU-Buddy-Decky-{version}.zip"; dst = f"/tmp/{name}"
@@ -1072,6 +1117,7 @@ def _update_plugin_files(version):
     for entry in os.listdir(src):
         sp = os.path.join(src, entry); dp = os.path.join(PLUGIN_LIVE, entry)
         shutil.copytree(sp, dp) if os.path.isdir(sp) else shutil.copy2(sp, dp)
+    if _track(): _nv_name_plugin(PLUGIN_LIVE)
     subprocess.run(["chown", "-R", USER, PLUGIN_LIVE], env=_clean_env())
     if os.environ.get("EGPU_NO_DECKY_RESTART") != "1":   # test hook
         if _sysrun_ok():
@@ -1822,7 +1868,7 @@ def _decky_plugins():
     for d in sorted(glob.glob(f"{USER_HOME}/homebrew/plugins/*/")):
         pj = _json(os.path.join(d, "plugin.json")) or {}
         name = pj.get("name") or os.path.basename(d.rstrip("/"))
-        if name == "EGPU Buddy":
+        if name in ("EGPU Buddy", "NV GPU Buddy"):
             continue
         pk = _json(os.path.join(d, "package.json")) or {}
         repo = pk.get("repository") or pk.get("homepage") or (pk["bugs"].get("url") if isinstance(pk.get("bugs"), dict) else None)
@@ -1966,6 +2012,8 @@ class Plugin:
         d = _settings(); d["auto_update"] = bool(enabled); _save_settings(d); return {"ok": True, "message": "saved"}
 
     async def update_detached(self, version: str = ""):
+        if _track():   # NV GPU Buddy: eGPU-only (a built-in card is never attached, detached or moved)
+            return {"ok": False, "message": "Not available in NV GPU Buddy mode."}
         """Update with the eGPU in use (SteamOS): Safe Detach, install, attach again. Without the detach the update waits for a reboot."""
         if _game_running(): return {"ok": False, "message": "Close the running game first."}
         if not _gamescope_running(): return {"ok": False, "message": "Start it from Game Mode."}
@@ -1980,6 +2028,8 @@ class Plugin:
         place. Restarting Decky instead (the old way, still the fallback) reloads Steam's whole interface, which looked
         like a Game Mode restart on every update. The system files follow in the new plugin (_continue_update)."""
         if not re.fullmatch(r"[0-9.]+", version or "") or _vt(version) <= _vt(PAYLOAD_VERSION) or _operation_in_progress():
+            return {}
+        if _track():   # NV GPU Buddy: Decky's installer would bring the plugin back under its eGPU name; the own path keeps it
             return {}
         name = f"EGPU-Buddy-Decky-{version}.zip"; base = f"https://github.com/{REPO}/releases/download/v{version}/"
         try:
@@ -2015,10 +2065,12 @@ class Plugin:
                 "unsupported": _unsupported(), "untested": _untested(), "accepted_untested": _accepted(),
                 "cmdline_missing": out.replace("missing kernel parameters: ", "") if rc != 0 else "",
                 "cmdline_pending": rc != 0 and _sh(["/usr/local/sbin/egpu-kernel-cmdline", "--pending"], 5)[0] == 0,
-                "helpers_present": os.path.exists(PRIV) and os.path.exists(DETACH),
+                "helpers_present": os.path.exists(PRIV) and (_track() or os.path.exists(DETACH)),   # NV GPU Buddy has no detach
                 "busy": _setup["busy"], "step": _setup["step"], "rc": _setup["rc"], "progress": _setup["progress"],
                 "started": _setup["started"], "expect": _expect(), "driver_ready": True if _installed_vendor() == "amd" else _driver_ready(), "driver_building": "" if _installed_vendor() == "amd" else _driver_job(),
                 "installed_vendor": _installed_vendor(), "egpu_on_bus": _egpu_on_bus(),
+                # NV GPU Buddy: the mode this machine is in, and before a first install what kind of machine it looks like
+                "track": "nv-gpu-buddy" if _track() else "", "machine": "" if _read(VERSION_FILE) else _machine(),
                 "can_build_driver": bool(shutil.which("pacman")), "slow_build": bool(shutil.which("steamos-readonly")) and _installed_vendor() != "amd", "log": tail}
 
     async def pop_notice(self):
@@ -2039,6 +2091,8 @@ class Plugin:
             return {"ok": True, "message": "Not in Game Mode: the new session pieces apply at the next Game Mode start."}
         if _game_running():
             return {"ok": False, "message": "Close the running game first."}
+        if _track():
+            _nv_restart_steam(); return {"ok": True, "message": "Steam restarts (a few seconds)."}
         _setup["rc"] = None; _update["state"] = ""
         _spawn_root_job("switch", [SWITCH])
         return {"ok": True, "message": "Game Mode is restarting."}
@@ -2051,7 +2105,9 @@ class Plugin:
         if vendor != "amd" and _driver_job():
             return {"ok": False, "message": "The eGPU driver is being built for this SteamOS version in the background. "
                                             "It is used by itself when it is done (a few minutes); nothing to install."}
-        return _start_setup("install", bool(with_driver), vendor=(vendor if vendor in ("nvidia", "amd") else ""))
+        if vendor in ("nv-gpu-buddy", "nv-gpu-buddy-card") and (_machine() == "handheld" or (vendor == "nv-gpu-buddy" and not _machine().startswith("nv-"))):
+            return {"ok": False, "message": "NV GPU Buddy is for desktop PCs and laptops with a built-in NVIDIA card."}
+        return _start_setup("install", bool(with_driver), vendor=(vendor if vendor in ("nvidia", "amd", "nv-gpu-buddy", "nv-gpu-buddy-card") else ""))
 
 
     async def get_conflicts(self):
@@ -2074,7 +2130,7 @@ class Plugin:
         return {"ok": True, "message": "accepted"}
 
     async def uninstall_system(self):
-        if not (_gpu_bdf() and os.path.exists("/sys/module/nvidia_drm")):
+        if _track() or not (_gpu_bdf() and os.path.exists("/sys/module/nvidia_drm")):   # NV GPU Buddy: a built-in card is never detached
             return _start_setup("uninstall")
         # the driver's files cannot be removed while it runs: Safe Detach first, then uninstall
         if not _gamescope_running():
@@ -2125,6 +2181,7 @@ class Plugin:
             "displays": [{**d, "state": _screen_state(d["name"])} for d in _displays(bdf)] if bdf else [],
             "audio_sink": _audio_sink(),
             "telemetry": _nvidia_query(bdf, bool(_dock_label(bdf))) if (bdf and driver and not gen) else {},
+            "track": "nv-gpu-buddy" if _track() else "",
             "ts": time.time(),
         }
         return status
@@ -2245,6 +2302,8 @@ class Plugin:
     async def get_screen_offer(self):
         """A screen newly connected to the eGPU while Game Mode is on another one -> offer to move."""
         global _seen_screens
+        if _track():
+            return {}
         bdf = _gpu_bdf(); t = time.monotonic()   # stands still during sleep: waking up is not a new connection
         now = {d["name"]: d for d in _displays(bdf)} if bdf else {}
         now.update({d["name"]: {**d, "handheld": True} for d in _handheld_screens() if not d["builtin"]})   # XR glasses etc.
@@ -2298,6 +2357,8 @@ class Plugin:
                  and _gamescope_env("NV_EGPU_GAMESCOPE_HANDHELD_GPU") != "1"
                  and _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] not in ("", "*")
                  and not _gamescope_env("OUTPUT_CONNECTOR").startswith("eDP"))
+        if _track():   # NV GPU Buddy: Steam's interface draws on the NVIDIA card unless this is a laptop (built-in GPU there)
+            route = _gamescope_running() and os.path.exists("/sys/module/nvidia") and not _game_running() and _read("/etc/nv-egpu-buddy/machine").strip() != "nv-laptop"
         d["route"] = bool(route)
         d["offer"] = bool(d.get("available") and route and d.get("bigart") and not d.get("enabled"))   # ask: Big Art on, fix off
         d["pending"] = bool(d.get("available") and route and d.get("enabled") and not d.get("active"))  # on, Steam started without it
@@ -2346,6 +2407,8 @@ class Plugin:
             return {"ok": False, "message": "Close the running game first: this one-time step restarts Game Mode."}
         if not _gamescope_running():
             return {"ok": False, "message": "On the desktop, use the desktop app's Restart Steam."}
+        if _track():
+            _nv_restart_steam(); return {"ok": True, "message": "Steam restarts once with the NVIDIA settings loader (a few seconds)."}
         _spawn_root_job("switch", [SWITCH])
         return {"ok": True, "message": "Game Mode restarts once with the NVIDIA settings loader (dark for a few seconds)."}
 
@@ -2399,6 +2462,8 @@ class Plugin:
         return {"ok": bool(r.get("ok")), "message": r.get("message", "?")}
 
     async def set_game_screen(self, connector: str):
+        if _track():   # NV GPU Buddy: eGPU-only (a built-in card is never attached, detached or moved)
+            return {"ok": False, "message": "Not available in NV GPU Buddy mode."}
         if not re.fullmatch(r"[A-Za-z]+(-[A-Za-z0-9]+)+", connector or ""):
             return {"ok": False, "message": "Unknown screen."}
         if _game_running():
@@ -2422,6 +2487,8 @@ class Plugin:
                 "screens": _handheld_screens() if egpu else []}
 
     async def set_handheld_screen(self, enabled: bool, connector: str = "", transfer: str = "pyrowave"):
+        if _track():   # NV GPU Buddy: eGPU-only (a built-in card is never attached, detached or moved)
+            return {"ok": False, "message": "Not available in NV GPU Buddy mode."}
         if transfer != "pyrowave" or (connector and not re.fullmatch(r"[A-Za-z]+(-[A-Za-z0-9]+)+", connector)):
             return {"ok": False, "message": "Unknown screen or transfer."}
         if enabled and not os.path.exists(XPW_LIB):
@@ -2444,6 +2511,8 @@ class Plugin:
         return {"ok": True, "message": "Saved. It turns on by itself when an eGPU without a monitor is plugged in." if enabled else "Saved."}
 
     async def attach(self, force: bool = False):
+        if _track():   # NV GPU Buddy: eGPU-only (a built-in card is never attached, detached or moved)
+            return {"ok": False, "message": "Not available in NV GPU Buddy mode."}
         decky.logger.info(f"attach pressed (force={force})")
         if not _gamescope_running():
             return {"ok": False, "message": "Not in Game Mode. Use the Attach eGPU desktop icon."}
@@ -2468,6 +2537,8 @@ class Plugin:
         return {"ok": True, "message": "Attaching: the screen goes dark for a moment while Game Mode restarts on the eGPU display. Reopen this menu afterwards."}
 
     async def safe_detach(self):
+        if _track():   # NV GPU Buddy: eGPU-only (a built-in card is never attached, detached or moved)
+            return {"ok": False, "message": "Not available in NV GPU Buddy mode."}
         decky.logger.info("safe detach pressed")
         gen = None if _gpu_bdf() or _installed_vendor() != "amd" else _generic_egpu()   # AMD path: the AMD / Intel install only
         if not _gpu_bdf() and not gen:
@@ -2480,6 +2551,8 @@ class Plugin:
         return {"ok": True, "message": "Detaching: the screen goes dark for a moment while Game Mode moves to the handheld screen. Reopen this menu afterwards; it says when it is safe to unplug."}
 
     async def get_driver_trial(self):
+        if _track():   # NV GPU Buddy: driver trials detach and attach an eGPU; the built-in card stays on its driver
+            return {"available": False}
         t = _trial()
         pv = lambda d: next((l.split("=", 1)[1] for l in _read(f"{SYSDIR}/packaging/{d}/PKGBUILD").splitlines() if l.startswith("pkgver=")), "")
         main, beta, old = pv("nvidia-open-egpu-615"), pv("nvidia-open-egpu-620"), pv("nvidia-open-egpu")
