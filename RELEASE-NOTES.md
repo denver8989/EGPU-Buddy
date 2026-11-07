@@ -1,3 +1,8 @@
+0.7.233 — A bigger handheld picture that names your handheld.
+
+**Game Mode plugin** (eGPU installs)
+- The "Show Game Mode on the handheld screen" button shows a bigger outline of your handheld with its name under it (e.g. Lenovo Legion Go S), and smaller text on one line.
+
 0.7.232 — AMD / Intel eGPUs: Safe Detach in Game Mode works again.
 
 **Safe Detach** (AMD / Intel install only; NVIDIA unchanged)

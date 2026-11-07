@@ -34,15 +34,15 @@ PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", "") or os.path.dirname(os.path.a
 # the rest are banked for when such a handheld turns up.
 # ponytail: untested DMI strings are best guesses from vendor naming; a miss just keeps the generic outline
 HANDHELD_ART = [
-    (r"Legion Go S", "lenovo-legion-go-s"), (r"Legion Go (2|8A.P2)", "lenovo-legion-go-2"), (r"Legion Go", "lenovo-legion-go"),
-    (r"RC73|Xbox Ally", "asus-rog-xbox-ally"), (r"RC71|RC72|ROG Ally", "asus-rog-ally"),
-    (r"Claw A8", "msi-claw-a8"), (r"Claw", "msi-claw"),
-    (r"AYANEO.*SLIDE", "ayaneo-slide"), (r"AYANEO.*KUN", "ayaneo-kun"), (r"AYANEO.*NEXT", "ayaneo-next"),
-    (r"AYANEO.*AIR", "ayaneo-air"), (r"AYANEO 3\b", "ayaneo-3"), (r"AYANEO 2", "ayaneo-2"), (r"AYA ?NEO.*(NEO|FOUNDER|2021)", "ayaneo-neo"),
-    (r"Loki", "ayn-loki"), (r"G1618-03", "gpd-win-3"), (r"G1618-04", "gpd-win-4"), (r"G1617", "gpd-win-mini"), (r"G1619", "gpd-win-max-2"),
-    (r"ONEXPLAYER F1", "onexplayer-f1"), (r"ONEXPLAYER G1", "onexplayer-g1"), (r"ONEXPLAYER X1", "onexplayer-x1"), (r"ONEXPLAYER 2", "onexplayer-2"),
-    (r"AOKZOE A1", "aokzoe-a1"), (r"Win600", "anbernic-win600"), (r"ZOTAC.*ZONE", "zotac-zone"),
-    (r"Pocket Go", "tecno-pocket-go"), (r"Zeenix", "tectoy-zeenix"),
+    (r"Legion Go S", "lenovo-legion-go-s", "Lenovo Legion Go S"), (r"Legion Go (2|8A.P2)", "lenovo-legion-go-2", "Lenovo Legion Go 2"), (r"Legion Go", "lenovo-legion-go", "Lenovo Legion Go"),
+    (r"RC73|Xbox Ally", "asus-rog-xbox-ally", "ROG Xbox Ally"), (r"RC71|RC72|ROG Ally", "asus-rog-ally", "ASUS ROG Ally"),
+    (r"Claw A8", "msi-claw-a8", "MSI Claw A8"), (r"Claw", "msi-claw", "MSI Claw"),
+    (r"AYANEO.*SLIDE", "ayaneo-slide", "AYANEO Slide"), (r"AYANEO.*KUN", "ayaneo-kun", "AYANEO KUN"), (r"AYANEO.*NEXT", "ayaneo-next", "AYANEO NEXT"),
+    (r"AYANEO.*AIR", "ayaneo-air", "AYANEO AIR"), (r"AYANEO 3\b", "ayaneo-3", "AYANEO 3"), (r"AYANEO 2", "ayaneo-2", "AYANEO 2"), (r"AYA ?NEO.*(NEO|FOUNDER|2021)", "ayaneo-neo", "AYANEO"),
+    (r"Loki", "ayn-loki", "AYN Loki"), (r"G1618-03", "gpd-win-3", "GPD WIN 3"), (r"G1618-04", "gpd-win-4", "GPD WIN 4"), (r"G1617", "gpd-win-mini", "GPD WIN Mini"), (r"G1619", "gpd-win-max-2", "GPD WIN Max 2"),
+    (r"ONEXPLAYER F1", "onexplayer-f1", "ONEXPLAYER F1"), (r"ONEXPLAYER G1", "onexplayer-g1", "ONEXPLAYER G1"), (r"ONEXPLAYER X1", "onexplayer-x1", "ONEXPLAYER X1"), (r"ONEXPLAYER 2", "onexplayer-2", "ONEXPLAYER 2"),
+    (r"AOKZOE A1", "aokzoe-a1", "AOKZOE A1"), (r"Win600", "anbernic-win600", "Anbernic Win600"), (r"ZOTAC.*ZONE", "zotac-zone", "ZOTAC ZONE"),
+    (r"Pocket Go", "tecno-pocket-go", "TECNO Pocket Go"), (r"Zeenix", "tectoy-zeenix", "Tectoy Zeenix"),
 ]
 
 
@@ -75,18 +75,18 @@ def _keep_awake(on):
 def _handheld_art(dmi=None):
     if dmi is None:
         dmi = " ".join(_read(f"/sys/class/dmi/id/{k}").strip() for k in ("sys_vendor", "product_name", "product_family"))
-    name = next((f for rx, f in HANDHELD_ART if re.search(rx, dmi, re.I)), "")
+    name, _ = next(((f, t) for rx, f, t in HANDHELD_ART if re.search(rx, dmi, re.I)), ("", ""))
     svg = _read(os.path.join(PLUGIN_DIR, "handhelds", name + ".svg")) if name else ""
     if "<svg" not in svg:
         return ""
     svg = re.sub(r"((?:stroke|fill)\s*[=:]\s*\"?)#[0-9a-fA-F]{3,8}", r"\1currentColor", svg[svg.index("<svg"):])
     svg = re.sub(r"<svg\b([^>]*?)\s(?:width|height)=\"[^\"]*\"", r"<svg\1", svg, count=1)
     svg = re.sub(r"<svg\b([^>]*?)\s(?:width|height)=\"[^\"]*\"", r"<svg\1", svg, count=1)
-    return svg.replace("<svg", '<svg class="egpu-hh" width="96" height="40" preserveAspectRatio="xMidYMid meet"', 1).replace(
+    return svg.replace("<svg", '<svg class="egpu-hh" width="150" height="62" preserveAspectRatio="xMidYMid meet"', 1).replace(
         ">", '><style>.egpu-hh *{vector-effect:non-scaling-stroke;stroke-width:1px !important}</style>', 1)
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.232"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.233"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -2386,7 +2386,9 @@ class Plugin:
     async def get_handheld_art(self):
         """Outline of this handheld for the screen picker (handheld-controller-glyphs, MIT, in handhelds/), or "" for the
         generic one. Picked from the DMI names; recoloured to the menu's text colour, strokes 1 px at any size."""
-        return _handheld_art()
+        dmi = " ".join(_read(f"/sys/class/dmi/id/{k}").strip() for k in ("sys_vendor", "product_name", "product_family"))
+        svg = _handheld_art(dmi)
+        return {"svg": svg, "name": next((t for rx, f, t in HANDHELD_ART if re.search(rx, dmi, re.I)), "") if svg else ""}
 
     async def get_steam_ui_fix(self):
         return self._sui_status()
