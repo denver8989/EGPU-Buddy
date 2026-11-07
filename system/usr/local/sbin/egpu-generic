@@ -364,6 +364,12 @@ detach)
   trap 'rm -f $PENDING $DMODE' EXIT
   date +%s > $PENDING; as_deck touch $DMODE; status DETACHING "Moving the session to the handheld screen. Do not unplug."
   clear_boot_vga; user_env_igpu
+  # The restarted session must not open the eGPU again. Mesa enumerates (and keeps open) every AMD/Intel render node no
+  # matter which device is selected (Legion Go S + RX 9070 XT report: new gamescope and steam on the eGPU -> abort), so
+  # make its nodes root-only for the move; open fds are unaffected, chmod also masks the seat ACL. Restored on failure.
+  nodes="/dev/dri/$card /dev/dri/$(render_of "$card")"; modes=""
+  for n in $nodes; do modes="$modes $n:$(stat -c %a "$n" 2>/dev/null)"; chmod 000 "$n" 2>/dev/null; done
+  trap 'rm -f $PENDING $DMODE; for m in $modes; do [ -e "${m%%:*}" ] && chmod "${m##*:}" "${m%%:*}" 2>/dev/null; done' EXIT
   if game_mode; then
     rm -f /run/user/1000/nv-egpu-buddy-gamescope-starts; G0=$(pgrep -n -x 'gamescope(-wl)?'); as_deck systemctl --user restart gamescope-session.target >/dev/null 2>&1 &
     for _ in $(seq 1 45); do sleep 2; g=$(pgrep -n -x 'gamescope(-wl)?'); [ -n "$g" ] && [ "$g" != "$G0" ] && break; done
@@ -372,10 +378,12 @@ detach)
     for _ in $(seq 1 45); do sleep 2; k=$(pgrep -U 1000 -x kwin_wayland | head -1); [ -n "$k" ] && [ "$k" != "$K0" ] && break; done
   fi
   status DO_NOT_UNPLUG "Releasing the eGPU. Do not unplug yet."
-  nodes="/dev/dri/$card /dev/dri/$(render_of "$card")"
   for _ in $(seq 1 20); do fuser $nodes >/dev/null 2>&1 || break; sleep 2; done
-  if fuser $nodes >/dev/null 2>&1; then log "still held by: $(fuser $nodes 2>/dev/null | tr -s ' ') -> TERM"; fuser -k -TERM $nodes >/dev/null 2>&1; sleep 3; fi
-  if fuser $nodes >/dev/null 2>&1; then status FAILED "A program is still using the eGPU. Close games and try again."; log "abort: nodes busy"; exit 5; fi
+  if fuser $nodes >/dev/null 2>&1; then log "still held by: $(for p in $(fuser $nodes 2>/dev/null); do echo "$p:$(cat /proc/$p/comm 2>/dev/null)"; done | tr '\n' ' ') -> TERM"; fuser -k -TERM $nodes >/dev/null 2>&1; sleep 3; fi
+  if fuser $nodes >/dev/null 2>&1; then
+    # name the holders in the log and on screen (pids alone mean nothing in a report read later)
+    who=$(for p in $(fuser $nodes 2>/dev/null); do cat /proc/$p/comm 2>/dev/null; done | sort -u | tr '\n' ' ')
+    status FAILED "A program is still using the eGPU (${who% }). Close games and try again."; log "abort: nodes busy: $who"; exit 5; fi
   for fn in /sys/bus/pci/devices/"${bdf%.*}".[1-7] "/sys/bus/pci/devices/$bdf"; do [ -e "$fn/remove" ] && echo 1 > "$fn/remove" 2>/dev/null; done
   rm -f $MARK $MOVED
   if egpu_find >/dev/null; then status FAILED "The eGPU did not leave the bus. Do not unplug; reboot first."; log "remove failed"; exit 6; fi

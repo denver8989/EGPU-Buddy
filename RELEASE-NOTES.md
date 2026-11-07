@@ -1,3 +1,9 @@
+0.7.232 — AMD / Intel eGPUs: Safe Detach in Game Mode works again.
+
+**Safe Detach** (AMD / Intel install only; NVIDIA unchanged)
+- Game Mode on the handheld screen no longer grabs the eGPU again, which stopped the detach with "A program is still using the eGPU".
+- If something still holds the eGPU, the message names it.
+
 0.7.231 — NVIDIA settings show what the running game really got; NVIDIA settings on the front page.
 
 **NV GPU Buddy:** both app variants get this release (NVIDIA settings work)
