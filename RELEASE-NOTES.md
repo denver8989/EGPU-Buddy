@@ -1,3 +1,11 @@
+0.7.235 — Support report: kernel crash logs.
+
+**Support report** (every machine)
+- After a crash that restarted the machine, the report includes the kernel's crash log when the system kept one.
+
+**Safe Detach** (AMD / Intel install only; NVIDIA unchanged)
+- Each step of releasing the eGPU is logged, to find where an AMD detach restarts the machine.
+
 0.7.234 — AMD / Intel eGPUs: Safe Detach no longer stops at "Releasing the eGPU".
 
 **Safe Detach** (AMD / Intel install only; NVIDIA unchanged)

@@ -86,7 +86,7 @@ def _handheld_art(dmi=None):
         ">", '><style>.egpu-hh *{vector-effect:non-scaling-stroke;stroke-width:1px !important}</style>', 1)
 RUNENV = {"XDG_RUNTIME_DIR": f"/run/user/{UID}", "DBUS_SESSION_BUS_ADDRESS": f"unix:path=/run/user/{UID}/bus"}
 # ---- system integration setup (the whole SteamOS-EGPU-Buddy install, driven from Game Mode) ----
-PAYLOAD_VERSION = "0.7.234"   # pinned by build-release.sh; the matching release tarball is fetched and verified
+PAYLOAD_VERSION = "0.7.235"   # pinned by build-release.sh; the matching release tarball is fetched and verified
 REPO = "denver8989/EGPU-Buddy"
 SYSDIR = f"{USER_HOME}/.local/share/steamos-egpu-buddy"
 SETUP_LOG = "/tmp/egpu-buddy-setup.log"
@@ -615,7 +615,7 @@ def _heal_audio():
 
 
 def _unstick_audio_detach():
-    """AMD / Intel Safe Detach up to 0.7.234 removed the eGPU while PipeWire still had its HDMI sound card open: the
+    """AMD / Intel Safe Detach up to 0.7.235 removed the eGPU while PipeWire still had its HDMI sound card open: the
     remove waits in snd_card_free for good ("Releasing the eGPU"). Coming in with the update that fixes it, let PipeWire
     go (wireplumber stopped, pipewire restarted without it), so the waiting detach finishes; then sound back."""
     def stuck():
@@ -1824,6 +1824,10 @@ def _system_report():
     if shutil.which("coredumpctl"):
         cd = _sh(["coredumpctl", "list", "--no-pager", "--since", "-3d"], 15)[1].splitlines()
         if cd: L += ["", "## Crashed programs, last 3 days (last 15)"] + [l[:200] for l in cd[-15:]]
+    # a kernel crash reboots before the journal is written: its log survives only in pstore (saved by systemd-pstore)
+    ps = sorted(glob.glob("/var/lib/systemd/pstore/*/dmesg*") + glob.glob("/var/lib/systemd/pstore/dmesg*"), key=os.path.getmtime)
+    if ps:
+        L += ["", f"## Kernel crash log (pstore, newest of {len(ps)}: {ps[-1]}, last 120 lines)"] + [l[:240] for l in _read(ps[-1]).splitlines()[-120:]]
     return L
 
 
