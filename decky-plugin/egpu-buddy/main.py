@@ -1434,6 +1434,18 @@ def _xg_power_report(bdf):
     out.append("firmware attributes: " + (" ".join(attrs) or "none (asus-armoury not loaded; Linux 6.19+)"))
     if nv:
         out.append("  values: " + " ".join(nv))
+    # the CPU's power limits as the firmware holds them, and what it draws now (SilverplayerX: CPU stuck near 12 W with
+    # Steam's TDP slider at 35 W; does the slider reach the firmware, and is a low-power profile holding it down?)
+    ppt = [f"{p.split('/')[-2]}={_read(p)}" for p in sorted(glob.glob("/sys/class/firmware-attributes/*/attributes/ppt_*/current_value"))]
+    pkg = [f"{_read(os.path.join(h, 'power1_average')) or '?'}uW" for h in glob.glob("/sys/class/hwmon/hwmon*")
+           if _read(os.path.join(h, "name")) == "amdgpu" and _read(os.path.join(h, "power1_label")) == "PPT"]
+    mhz = sorted(float(l.split(":")[1]) for l in (_read("/proc/cpuinfo") or "").splitlines() if l.startswith("cpu MHz"))
+    out.append("CPU power: " + " ".join(ppt or ["no ppt_* attributes"]) + f" · package now {' '.join(pkg) or '?'}"
+               f" · platform_profile {_read('/sys/firmware/acpi/platform_profile') or '?'}"
+               f" · governor {_read('/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor') or '?'}"
+               f" · EPP {_read('/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference') or '?'}"
+               f" · max MHz {_read('/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq') or '?'}"
+               f" · now MHz {int(mhz[0]) if mhz else '?'}-{int(mhz[-1]) if mhz else '?'}")
     return out
 
 
