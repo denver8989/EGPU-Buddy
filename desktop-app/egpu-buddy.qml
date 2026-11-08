@@ -11,7 +11,10 @@ ApplicationWindow {
     id: win
     width: 900; height: 640; minimumWidth: 640; minimumHeight: 520
     readonly property bool startHidden: Qt.application.arguments.indexOf("--tray") >= 0
-    visible: !startHidden
+    // Shown from onCompleted, after the domain is cleared: the window's Wayland app id is then the runner's name, which the
+    // launcher sets to "egpu-buddy" (= egpu-buddy.desktop), so the taskbar shows the app's icon and name, not "qml".
+    visible: false
+    Component.onCompleted: { Qt.application.domain = ""; if (!startHidden) show() }
     property int showSeq: -1                   // the launcher asks a running instance to show itself through the backend
     // NV GPU Buddy mode (experimental, a BUILT-IN NVIDIA card): the same app under its own name, without the eGPU parts.
     // Every `nvb` binding is for that mode only; an eGPU install never reports the track and looks as before.
