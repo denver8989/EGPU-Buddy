@@ -47,6 +47,8 @@ if [ -n "$QML" ] && [ -d $QMLDIR/QtQuick/Controls ] && [ -d $QMLDIR/Qt/labs/plat
   # plugin builds the tray from QWidgets and aborts ("Cannot create a QWidget without QApplication"): the qml runner on
   # SteamOS never creates a QApplication, whatever --apptype says (tested on a real device, all four spellings).
   export QT_QUICK_CONTROLS_STYLE=Fusion QT_QPA_PLATFORMTHEME=generic
+  # the qml runner sends the Qt logo as the window icon; without it KWin takes the icon from egpu-buddy.desktop
+  export QT_WAYLAND_DISABLED_INTERFACES=xdg_toplevel_icon_manager_v1
   # run Qt's runner under the app's name: its window is then "egpu-buddy" to the taskbar (icon and name from egpu-buddy.desktop)
   R="${XDG_RUNTIME_DIR:-/tmp}/egpu-buddy-run"; mkdir -p "$R" && ln -sfn "$QML" "$R/egpu-buddy" && QML="$R/egpu-buddy"
   exec "$QML" "$D/egpu-buddy.qml" -- ${1:+"$1"}
