@@ -261,6 +261,7 @@ say "== installing the NV GPU Buddy desktop app"
 D="$USER_HOME/.local/share/egpu-buddy"; A="$USER_HOME/.local/share/applications"
 ucmd mkdir -p "$D" "$USER_HOME/.local/bin" "$A" "$USER_HOME/.config/systemd/user"
 for f in egpu-buddy egpu-buddy-server.py egpu-buddy-window.py egpu-buddy.qml index.html egpu-buddy.png; do ucmd cp -f "$ROOT/desktop-app/$f" "$D/"; done
+ucmd cp -f "$ROOT/desktop-app/nv-gpu-buddy.png" "$D/egpu-buddy.png"   # NV GPU Buddy keeps its own icon under the shared name
 ucmd chmod +x "$D/egpu-buddy" "$D"/*.py; ucmd ln -sf "$D/egpu-buddy" "$USER_HOME/.local/bin/egpu-buddy"
 for f in egpu-buddy egpu-buddy-report; do
   sed -e "s#/home/deck#$USER_HOME#g" -e 's/^Name=EGPU Buddy$/Name=NV GPU Buddy/; s/^Name=Save EGPU Buddy report$/Name=Save NV GPU Buddy report/' \
