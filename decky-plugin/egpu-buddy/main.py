@@ -1550,7 +1550,11 @@ def _support_report():
                 lines.append(f"{f}: " + (" | ".join(keep[:8]) or "(nothing gamescope-related)"))
         lines += ["", "## Bazzite NVIDIA driver"] + (_sh(["/usr/local/sbin/egpu-bazzite-driver", "--status"], 20)[1].splitlines()
                                                    if os.path.exists("/usr/local/sbin/egpu-bazzite-driver") else ["(not installed)"])
-        lines += [l[:300] for l in _read("/var/log/egpu-bazzite-driver.log").splitlines()[-120:]]
+        blog = _read("/var/log/egpu-bazzite-driver.log").splitlines()
+        # our own decisions only (dated lines): a build's container output fills the tail below and pushed them out
+        lines += ["", "## Bazzite: driver and update check decisions (last 60)"] + \
+                 [l[:300] for l in blog if re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d ", l)][-60:]
+        lines += ["", "## Bazzite: driver build log tail (last 120)"] + [l[:300] for l in blog[-120:]]
         # the last earlier boot with the driver merged: how it ended (a boot with it that never reached the login screen)
         cur = _read("/proc/sys/kernel/random/boot_id").strip().replace("-", "")
         mb = [b.strip().replace("-", "") for b in _read("/var/lib/nvegpu/bazzite/merged-boots").splitlines() if b.strip()]

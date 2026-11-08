@@ -251,6 +251,7 @@ case "${1:---status}" in
       merged && { rm -f "$LINK"; systemd-sysext refresh >>"$LOG" 2>&1; }
       merged || { drop "$EXT.old"; [ -e "$EXT" ] && mv "$EXT" "$EXT.old"; mv "$EXT.staged" "$EXT"; drop "$EXT.old"; }
     fi
+    built || say "boot: no driver built for kernel $K yet (built for: $(cut -d' ' -f2 "$EXT/.egpu-version" 2>/dev/null || echo none); built ahead for: $(staged_k | grep . || echo none))"
     built || deactivate                                         # built for another kernel / version / image: never merge it
     [ "$(mode_now)" = conflict ] && exit 0
     built || build || exit 0
@@ -285,36 +286,50 @@ case "${1:---status}" in
     # for its reboot (a staged rpm-ostree deployment) with a new kernel gets the driver built BEFORE the reboot, so its
     # first boot merges it. Also retries a build for the running kernel that failed at boot (no network yet).
     [ "$(id -u)" = 0 ] || exit 1
-    [ "$(mode_now)" = full ] && [ -e "$EXT/.egpu-version" ] || exit 0   # only where this project's driver is installed
-    [ -e "$W/auto-off2" ] && exit 0
+    # what the update check decided, logged once per change (the support report shows it: was an update seen, and why
+    # was or wasn't the driver built ahead)
+    note(){ [ "$(cat "$W/update-check" 2>/dev/null)" = "$*" ] && return 0; mkdir -p "$W"; echo "$*" > "$W/update-check"; say "update check: $*"; }
+    [ "$(mode_now)" = full ] && [ -e "$EXT/.egpu-version" ] || { note "skipped (mode $(mode_now), driver installed: $([ -e "$EXT/.egpu-version" ] && echo yes || echo no))"; exit 0; }
+    [ -e "$W/auto-off2" ] && { note "skipped (driver switched off after hung boots)"; exit 0; }
     flock -n "$W/.build.lock" true || exit 0                                     # a build is running
-    js=$(rpm-ostree status --json 2>/dev/null) || exit 0
+    js=$(rpm-ostree status --json 2>/dev/null) || { note "rpm-ostree status failed"; exit 0; }
     nxt=$(printf '%s' "$js" | python3 -I -c '
 import json, sys
 d = json.load(sys.stdin)
-if d.get("transaction"): sys.exit(0)                       # an update is still being written: next time
+if d.get("transaction"): print("busy"); sys.exit(0)        # an update is still being written: next time
 for x in d.get("deployments", []):
     if x.get("staged") or (not x.get("booted") and x is d["deployments"][0]):
         print("/ostree/deploy/%s/deploy/%s.%s" % (x["osname"], x["checksum"], x["serial"])); break
 ' 2>/dev/null)
+    [ "$nxt" = busy ] && { note "an update is being downloaded or written; checked again in 2 minutes"; exit 0; }
+    [ -z "$nxt" ] && note "no Bazzite update waiting (kernel $K)"
+    [ -n "$nxt" ] && [ ! -d "$nxt/usr/lib/modules" ] && note "an update is waiting, but its files are not readable at $nxt"
     if [ -n "$nxt" ] && [ -d "$nxt/usr/lib/modules" ]; then
       NK=$(cd "$nxt/usr/lib/modules" && for d in */; do [ -e "$d/vmlinuz" ] && echo "${d%/}"; done | head -1)
+      NV=$(sed -n 's/^VERSION_ID=//p' "$nxt/usr/lib/os-release" 2>/dev/null | tr -d '"')
+      u="update to Fedora ${NV:-?} waiting with kernel ${NK:-?}"
+      if [ -z "$NK" ]; then note "$u: no kernel found in it"
+      elif [ "$NK" = "$K" ]; then note "$u: same kernel, nothing to build"
+      elif [ "$(staged_k)" = "$NK" ]; then note "$u: driver already built for it"
+      elif [ -e "$nxt/usr/bin/nvidia-smi" ]; then note "$u: it has its own NVIDIA driver"; fi
       if [ -n "$NK" ] && [ "$NK" != "$K" ] && [ "$(staged_k)" != "$NK" ] && [ ! -e "$nxt/usr/bin/nvidia-smi" ]; then
-        STAMP=$W/prebuild-failed-$NK; [ "$(cat "$STAMP" 2>/dev/null || echo 0)" -ge 3 ] && exit 0
-        NV=$(sed -n 's/^VERSION_ID=//p' "$nxt/usr/lib/os-release" 2>/dev/null | tr -d '"')
+        STAMP=$W/prebuild-failed-$NK; [ "$(cat "$STAMP" 2>/dev/null || echo 0)" -ge 3 ] && { note "$u: building ahead failed 3 times, gave up (built after the restart instead)"; exit 0; }
+        note "$u: building"
         say "a Bazzite update is waiting for its reboot with kernel $NK: building the driver for it now"
         mkdir -p /run/nvegpu; echo "Bazzite update ready: preparing the eGPU driver for it (about 10 minutes). Restart after it says it is done." > /run/nvegpu/notice
         if EGPU_KERNEL=$NK EGPU_MODROOT=$nxt/usr/lib/modules EGPU_STAGE_ONLY=1 IMG_VERSION=${NV:-} "$0" --stage-build; then
-          rm -f "$STAMP"; echo "The eGPU driver for the Bazzite update is ready. You can restart now." > /run/nvegpu/notice
-        else echo $(( $(cat "$STAMP" 2>/dev/null || echo 0) + 1 )) > "$STAMP"
+          rm -f "$STAMP"; note "$u: driver built ahead, ready for the restart"; echo "The eGPU driver for the Bazzite update is ready. You can restart now." > /run/nvegpu/notice
+        else echo $(( $(cat "$STAMP" 2>/dev/null || echo 0) + 1 )) > "$STAMP"; note "$u: building ahead failed (try $(cat "$STAMP"))"
           echo "The eGPU driver could not be prepared ahead of the Bazzite update; it is built after the restart instead (about 10 minutes)." > /run/nvegpu/notice; fi
         exit 0
       fi
     fi
     # the running kernel without its driver (the build at boot had no network): try again, then switch it on live
     if ! built && [ "$(staged_k)" != "$K" ] && ! nv_loaded; then
-      STAMP=$W/prebuild-failed-$K; [ "$(cat "$STAMP" 2>/dev/null || echo 0)" -ge 3 ] && exit 0
-      if build; then rm -f "$STAMP"; can_load && activate; else echo $(( $(cat "$STAMP" 2>/dev/null || echo 0) + 1 )) > "$STAMP"; fi
+      STAMP=$W/prebuild-failed-$K; [ "$(cat "$STAMP" 2>/dev/null || echo 0)" -ge 3 ] && { note "no driver for the running kernel $K: building failed 3 times, gave up until the next install or boot"; exit 0; }
+      note "no driver for the running kernel $K: building"
+      if build; then rm -f "$STAMP"; note "driver built for the running kernel $K"; can_load && activate
+      else echo $(( $(cat "$STAMP" 2>/dev/null || echo 0) + 1 )) > "$STAMP"; note "no driver for the running kernel $K: building failed (try $(cat "$STAMP"))"; fi
     fi
     exit 0 ;;
   --stage-build) [ "${EGPU_STAGE_ONLY:-0}" = 1 ] || exit 2; build; exit $? ;;
