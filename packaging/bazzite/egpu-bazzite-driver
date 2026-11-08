@@ -239,7 +239,8 @@ case "${1:---status}" in
   --status) status ;;
   --build)
     [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
-    rm -f "$W/auto-off" "$W/auto-off2" "$W"/prebuild-failed-*; build; rc=$?   # a new install retries what the timer gave up on; [ $rc = 0 ] || exit $rc
+    # (a new install also retries the builds the update timer gave up on)
+    rm -f "$W/auto-off" "$W/auto-off2" "$W"/prebuild-failed-*; build; rc=$?; [ $rc = 0 ] || exit $rc
     if sb_on && ! key_enrolled; then enroll; exit 11; fi
     activate ;;
   --boot)   # at every boot: a staged build takes over, a new kernel gets its driver (network permitting), never blocks
