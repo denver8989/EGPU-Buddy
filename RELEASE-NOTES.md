@@ -1,3 +1,11 @@
+0.7.238 — Keep awake fixed.
+
+**Keep awake**
+- No longer leaves Game Mode stuck on a spinner after an hour idle: Steam's own sleep timers are set to Never while it is on, and put back when it is off.
+- The Sleep button works with it on.
+- Only with an eGPU plugged in; switches itself off a few minutes after the eGPU is gone.
+- NV GPU Buddy: the same fix (the built-in NVIDIA card counts as plugged in).
+
 0.7.237 — AMD eGPUs: Safe Detach on Thunderbolt 3 (Titan Ridge) docks.
 
 **Safe Detach** (AMD / Intel install only; NVIDIA unchanged)

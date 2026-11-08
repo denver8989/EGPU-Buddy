@@ -2496,6 +2496,18 @@ const getSteamUi = callable("get_steam_ui_fix");
 const getHandheldArt = callable("get_handheld_art");
 const getKeepAwake = callable("get_keep_awake");
 const setKeepAwake = callable("set_keep_awake");
+// Steam's own idle-sleep timers (client setting 24003 battery, 24004 plugged in; seconds, 0 = Never)
+const steamSleep = (bat, ac) => {
+    const v = (n) => { const o = []; do {
+        let b = n & 0x7f;
+        n >>>= 7;
+        if (n)
+            b |= 0x80;
+        o.push(b);
+    } while (n); return o; };
+    const f = (id, n) => [...v(id << 3), ...v(n)];
+    return window.SteamClient?.Settings?.SetSetting?.(btoa(String.fromCharCode(...f(24003, bat), ...f(24004, ac))));
+};
 const setSteamUi = callable("set_steam_ui_fix");
 const getUpdate = callable("get_update_status");
 const setAutoUpdate = callable("set_auto_update");
@@ -3176,7 +3188,13 @@ function Content() {
                                 const back = tr.current === "beta" ? tr.main : tr.old;
                                 DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `Return to ${back}`, strDescription: `The eGPU is safely detached, the driver ${back} is put back (offline, a few minutes) and the eGPU is attached again.`, strOKButtonText: "Return", onOK: () => run(revertTrial) }));
                             }, children: tr.current === "beta" ? `Return to the main driver ${tr.main}` : `Return to the previous driver ${tr.old}` }) })), tr.log && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setLogOpen(logOpen === "trial" ? "" : "trial"), children: logOpen === "trial" ? "Hide driver log" : "Show driver log" }) }), tr.log && logOpen === "trial" && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }, children: tr.log }) })] })), tab === "setup" && !nvb && s?.present && s.game_mode && (SP_JSX.jsxs(DFL.PanelSection, { title: "Game screen", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Play games on", disabled: busy || gameUp, selectedOption: s.output && s.output !== "*" ? s.output : "eDP-1", rgOptions: screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label })), onChange: (o) => { if (o.data !== s.output)
-                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && awake && (SP_JSX.jsx(DFL.PanelSection, { title: "Sleep", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Keep awake", description: `Off by default. On: the machine never goes to sleep by itself, and Steam's Sleep button does nothing while it is on (switch it off to sleep). The screen can still dim.${awake.enabled && !awake.active ? " Not active: switch it off and on." : ""}`, checked: awake.enabled, onChange: (v) => run(async () => { const r = await setKeepAwake(v); setAwake(await getKeepAwake()); return r; }) }) }) })), tab === "setup" && gr && (SP_JSX.jsx(DFL.PanelSection, { title: "Games", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Best resolution and refresh rate on every screen", description: "On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are.", checked: gr.enabled, onChange: (v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; }) }) }) })), tab === "setup" && sui?.available && (SP_JSX.jsx(DFL.PanelSection, { title: "Steam menu", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: nvb ? "Big Art mode menu fix (NVIDIA)" : "Big Art mode menu fix (NVIDIA eGPU)", description: `Off by default. On ${nvb ? "an NVIDIA GPU" : "the NVIDIA eGPU"} Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: ${appName()} supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when ${nvb ? "Steam restarts" : "Game Mode restarts"}.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`, checked: !!sui.enabled, onChange: (v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) {
+                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && awake && (SP_JSX.jsx(DFL.PanelSection, { title: "Sleep", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Keep awake", disabled: !awake.egpu && !awake.enabled, description: `Off by default. On: while the eGPU is plugged in, the machine never goes to sleep by itself (Steam's sleep timers are set to Never and put back when you switch it off). The Sleep button still works, and the screen can still dim. Without an eGPU it switches off.${awake.enabled && !awake.active ? " Not active: switch it off and on." : ""}`, checked: awake.enabled, onChange: (v) => run(async () => {
+                            const r = await setKeepAwake(v);
+                            const a = await getKeepAwake();
+                            setAwake(a);
+                            await (v ? steamSleep(0, 0) : steamSleep(a.prev[0], a.prev[1]));
+                            return r;
+                        }) }) }) })), tab === "setup" && gr && (SP_JSX.jsx(DFL.PanelSection, { title: "Games", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Best resolution and refresh rate on every screen", description: "On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are.", checked: gr.enabled, onChange: (v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; }) }) }) })), tab === "setup" && sui?.available && (SP_JSX.jsx(DFL.PanelSection, { title: "Steam menu", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: nvb ? "Big Art mode menu fix (NVIDIA)" : "Big Art mode menu fix (NVIDIA eGPU)", description: `Off by default. On ${nvb ? "an NVIDIA GPU" : "the NVIDIA eGPU"} Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: ${appName()} supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when ${nvb ? "Steam restarts" : "Game Mode restarts"}.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`, checked: !!sui.enabled, onChange: (v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) {
                             const g = await restartGamemode();
                             return { ok: true, message: `${r.message} ${g.message}` };
                         } return r; }) }) }) })), tab === "setup" && nv?.available && (SP_JSX.jsxs(DFL.PanelSection, { title: "NVIDIA settings (experimental)", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => { setNvEdit(null); setTab("nvidia"); }, children: "Open NVIDIA settings" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: nv.active ? "Some settings are changed from their defaults." : "All on their defaults: nothing is changed." }) })] })), tab === "nvidia" && nv?.available && (() => {
@@ -3241,6 +3259,33 @@ function Title() {
 }
 var index = definePlugin(() => {
     ui("plugin frontend loaded");
+    // Keep awake: Steam's own sleep timers stay at Never while it is on; no eGPU mounted switches it off (timers put back)
+    // ponytail: 3 minutes of no eGPU before switching off — the Thunderbolt link can take minutes to come up after boot/replug
+    let neverSet = false, goneSince = 0;
+    const awakeCheck = async () => {
+        const a = await getKeepAwake();
+        if (!a.enabled) {
+            neverSet = false;
+            goneSince = 0;
+            return;
+        }
+        if (a.egpu) {
+            goneSince = 0;
+            if (!neverSet) {
+                await steamSleep(0, 0);
+                neverSet = true;
+            }
+            return;
+        }
+        goneSince = goneSince || Date.now();
+        if (Date.now() - goneSince > 180000) {
+            await setKeepAwake(false);
+            await steamSleep(a.prev[0], a.prev[1]);
+            neverSet = false;
+            goneSince = 0;
+        }
+    };
+    awakeCheck().catch(() => { });
     // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
     const notices = setInterval(async () => {
         try {
@@ -3259,6 +3304,10 @@ var index = definePlugin(() => {
         catch { /* backend not up yet */ }
         try {
             await maybeOfferSteamUi();
+        }
+        catch { /* backend not up yet */ }
+        try {
+            await awakeCheck();
         }
         catch { /* backend not up yet */ }
         try {
