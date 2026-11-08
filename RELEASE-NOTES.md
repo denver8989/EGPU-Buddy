@@ -1,3 +1,15 @@
+0.7.240 — SteamOS: Game Mode follows the screen you pick; new app icons.
+
+**SteamOS** (SteamOS only; Bazzite and CachyOS unchanged)
+- Picking a screen in Game Mode now moves Game Mode to it. SteamOS's own Game Mode start ignored the choice and stayed on the first screen it found.
+
+**ROG Ally / XG Mobile** (every other machine unchanged)
+- The support report also shows the CPU's power limits and speed.
+
+**Desktop app**
+- New EGPU Buddy icon, also in the window's title bar instead of the Qt logo.
+- NV GPU Buddy: its own NV GPU Buddy icon.
+
 0.7.239 — ROG Ally X with a USB4 eGPU box; settings save on every pick; desktop app icon.
 
 **ROG Ally / XG Mobile only** (every other machine unchanged)
