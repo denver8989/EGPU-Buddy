@@ -6,6 +6,7 @@
 pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1 || exit 0          # the patched driver is not installed: not ours to guard
 t=$(tr '\n' ' ')
 v=$(pacman -Q nvidia-open-egpu-dkms | awk '{print $2}')
+logger -t egpu-buddy-pre-upgrade "stopped an update that would change: $t(patched driver $v kept)"
 cat >&2 <<MSG
 EGPU Buddy: this update would change $t
 That breaks the eGPU-patched NVIDIA driver ($v) at the next restart, so the update was stopped. Nothing was changed.

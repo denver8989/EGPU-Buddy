@@ -1526,7 +1526,7 @@ def _support_report():
                   + (_sh(["systemctl", "is-active", "egpu-flight-recorder.service"], 3)[1] or "?") + ")"]
     # what EGPU Buddy's scripts said in the journal over the last three days (every boot, not only this and the previous)
     jt = _sh(["journalctl", "--no-pager", "-o", "short-iso", "--since", "-3 days", "-t", "egpu-buddy", "-t", "egpu-decky-guard",
-              "-t", "egpu-driver-prebuild", "-t", "egpu-buddy-selfheal"], 20)[1].splitlines()
+              "-t", "egpu-driver-prebuild", "-t", "egpu-buddy-selfheal", "-t", "egpu-buddy-post-upgrade", "-t", "egpu-buddy-pre-upgrade"], 20)[1].splitlines()
     jt = [l for l in jt if "flight recorder" not in l and " state: " not in l]   # the recorder's own lines are above
     tm = _sh(["systemctl", "show", "egpu-driver-prebuild.timer", "-p", "UnitFileState,ActiveState,LastTriggerUSec,NextElapseUSecMonotonic"], 5)[1]
     lines += ["", "## Update check timer (builds the driver ahead of an OS update)", " · ".join(tm.split()) or "(not installed)"]

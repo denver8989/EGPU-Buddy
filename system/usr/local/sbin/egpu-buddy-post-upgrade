@@ -78,7 +78,10 @@ check
 if [ -n "$bad" ] && [ "${bad#no eGPU driver}" != "$bad" ] && [ -e "/usr/lib/modules/$newest/build" ]; then
   dkms autoinstall -k "$newest" >/dev/null 2>&1; check   # headers are there: the build just needs another go
 fi
-[ -z "$bad" ] && exit 0
+# all well: said once per kernel set (not on every pacman run), so the report shows the check ran after each kernel update
+if [ -z "$bad" ]; then ok="driver OK after the update for kernel(s) $(echo $kernels)"
+  [ "$(cat /var/lib/nvegpu/update-check-pacman 2>/dev/null)" = "$ok" ] || { mkdir -p /var/lib/nvegpu; echo "$ok" > /var/lib/nvegpu/update-check-pacman; logger -t egpu-buddy-post-upgrade "$ok"; }
+  exit 0; fi
 if [ -e /run/nvegpu/update-repair-tried ]; then
   tell "eGPU driver after the update: $bad. Re-run the installer before restarting."   # already tried once this boot
 else
