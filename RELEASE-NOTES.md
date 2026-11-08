@@ -1,3 +1,11 @@
+0.7.241 — Bazzite 45: the NVIDIA driver builds again.
+
+**Bazzite** (Bazzite only; SteamOS and CachyOS unchanged)
+- Fresh installs and updates to Bazzite 45 failed to build the NVIDIA driver (no picture on the eGPU). Fixed; the driver is also prepared before the restart into a Bazzite update again.
+
+**Support report**
+- Shows what the OS-update check saw and did on Bazzite, SteamOS and CachyOS, and whether its notices were shown.
+
 0.7.240 — SteamOS: Game Mode follows the screen you pick; new app icons.
 
 **SteamOS** (SteamOS only; Bazzite and CachyOS unchanged)
