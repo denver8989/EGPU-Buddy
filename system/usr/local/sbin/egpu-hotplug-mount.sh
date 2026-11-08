@@ -360,6 +360,14 @@ case "$_hw_dock" in xg-mobile-*) _hw_why="${_hw_why:+$_hw_why + }XG Mobile ($_hw
 if [ -n "$_hw_why" ]; then
   EGPU_PIN_CORRECTED=1; EGPU_PIN_ASPM_OFF=1
   log "$_hw_why: corrected link pin (no Enter Compliance bit), ASPM/L1SS off on both ends"
+  # A USB4 box that is not an XG Mobile (an AORUS RTX 5060 Ti AI BOX on an Ally X): pin at the speed the link already runs,
+  # never a forced Gen4 -> Gen3 retrain. The forced Gen3 was tested on the XG Mobile only; on the AORUS box it gave Xid 32/39
+  # within minutes and a crash at Desktop Safe Detach, while the same box at its own Gen4 runs clean on a Legion Go 2.
+  case "$_hw_dock" in xg-mobile-*) ;; *)
+    case "$(cat "$GDEV/current_link_speed" 2>/dev/null)" in 2.5*) EGPU_PIN_GEN=1 ;; 5.0*) EGPU_PIN_GEN=2 ;; 8.0*) EGPU_PIN_GEN=3 ;;
+      16.0*) EGPU_PIN_GEN=4 ;; 32.0*) EGPU_PIN_GEN=5 ;; esac
+    [ -n "${EGPU_PIN_GEN:-}" ] && log "$_hw_why with a $_hw_dock box: link pinned at its current Gen$EGPU_PIN_GEN, no speed change" ;;
+  esac
   rm -f /run/user/1000/nv-egpu-buddy/egpu-gpufault   # plugged in again: the session wrapper may route to it again
   # nouveau bound the eGPU at the enumeration (ROG Xbox Ally X, beta driver trial): the NVIDIA driver then finds no
   # device and Game Mode crash-loops on the dead card. Hand it back before anything else touches the card.
@@ -505,7 +513,7 @@ pin_link_speed(){
     # retrain touching only the retrain bit. Verified on an RTX 3080: 16GT/s -> 8GT/s x4, link up.
     # (The legacy path is left exactly as it was tested on the RTX 5060 Ti.)
     local _b _g _gen; _g=${1:-$gpu}; _b=$(basename "$(dirname "$(readlink -f "/sys/bus/pci/devices/$_g")")")
-    _gen=$(cat /etc/nv-egpu-buddy/link-gen 2>/dev/null || echo 3); case "$_gen" in 1|2|3|4|5) ;; *) _gen=3 ;; esac
+    _gen=$(cat /etc/nv-egpu-buddy/link-gen 2>/dev/null || echo "${EGPU_PIN_GEN:-3}"); case "$_gen" in 1|2|3|4|5) ;; *) _gen=3 ;; esac
     if [ "${EGPU_PIN_ASPM_OFF:-0}" = 1 ]; then   # masked: ASPM Control bits only, then the L1 PM Substates enables
       setpci -s "${_b#0000:}" CAP_EXP+10.w=0000:0003 2>/dev/null || true
       setpci -s "${_g#0000:}" CAP_EXP+10.w=0000:0003 2>/dev/null || true

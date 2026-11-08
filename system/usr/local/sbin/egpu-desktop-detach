@@ -22,6 +22,9 @@ fi
 DESK=plasma; [ "${2:-}" = x11 ] && DESK=plasmax11
 ST=/run/nvegpu; mkdir -p $ST; LOG=/var/log/egpu-gamemode.log; HELPER=/usr/local/sbin/egpu-safe-detach
 log(){ printf '%s desktop-detach: %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
+# ROG Ally / XG Mobile: each line to disk at once — a crash mid-detach took the last steps with it (Ally X + AORUS box report)
+{ [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } &&
+  log(){ printf '%s desktop-detach: %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; sync -d "$LOG" 2>/dev/null || true; }
 # full-length copy for support reports (the report shortens lines of the detach log): /run/nvegpu is in every snapshot
 dlog(){ log "$*"; printf '%s\n' "$*" >> $ST/gm-driver.log; }; rm -f $ST/gm-driver.log $ST/gm-dmabuf.log
 as_deck(){ runuser -u deck -- env $RUNENV "$@"; }
