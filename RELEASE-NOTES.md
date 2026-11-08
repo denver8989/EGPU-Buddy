@@ -1,3 +1,16 @@
+0.7.239 — ROG Ally X with a USB4 eGPU box; settings save on every pick; desktop app icon.
+
+**ROG Ally / XG Mobile only** (every other machine unchanged)
+- A USB4 box that isn't an XG Mobile (such as the AORUS RTX 5060 Ti AI BOX) keeps its link at its own speed instead of being forced to the XG Mobile's slower one, which caused GPU errors and a crash at Desktop Safe Detach. The XG Mobile is unchanged.
+- Desktop Safe Detach writes its log to disk line by line, so a crash no longer erases the last steps.
+
+**NVIDIA settings and Adrenaline Settings**
+- Every pick saves at once, in Game Mode and in the desktop app. A pick waiting for Apply was lost when the menu closed. Apply stays only for the one-time Game Mode restart.
+- NV GPU Buddy: the same change.
+
+**Desktop app**
+- The taskbar shows EGPU Buddy's icon and name.
+
 0.7.238 — Keep awake fixed.
 
 **Keep awake**
