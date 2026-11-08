@@ -1,3 +1,10 @@
+0.7.242 — Bazzite: Steam no longer signed out after failed Game Mode starts.
+
+**Bazzite** (Bazzite only; SteamOS and CachyOS unchanged)
+- After 5 failed Game Mode starts in a row Bazzite resets Steam, which signs you out. Game Mode now falls back to Bazzite's own gamescope, then to the handheld screen, before that point.
+- The NVIDIA picture fix is rebuilt when Bazzite moves to a new Fedora version (Bazzite 45).
+- Failed Game Mode starts show in the support report.
+
 0.7.241 — Bazzite 45: the NVIDIA driver builds again.
 
 **Bazzite** (Bazzite only; SteamOS and CachyOS unchanged)
