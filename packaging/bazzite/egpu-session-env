@@ -39,6 +39,11 @@ _egpu_bz(){
   route=none
   { [ -e "$rt/egpu-detach-mode" ] || [ -e /run/nvegpu/gm-detach-pending ]; } && route=detach
   [ $(( $(date +%s) - $(stat -c %Y /run/nvegpu/session-restart-ours 2>/dev/null || echo 0) )) -lt 300 ] && rm -f /tmp/chimeraos-short-session-tracker
+  # Failed starts in a row so far (Bazzite counts every session under a minute; at 5 it resets Steam = signed out). Logged
+  # for the report, and our routes step back before Bazzite's count gets there (below): 3 -> Bazzite's own gamescope on
+  # the eGPU, 4 -> the handheld exactly as Bazzite runs it, eGPU unused (that session works, lasts, and clears the count).
+  local sst; sst=$(wc -l 2>/dev/null < /tmp/chimeraos-short-session-tracker || echo 0); case "$sst" in ''|*[!0-9]*) sst=0 ;; esac
+  [ "$sst" -ge 1 ] && logger -t egpu-buddy "Game Mode: $sst quick failed start(s) in a row before this one ($(tr '\n' ',' < /tmp/chimeraos-short-session-tracker 2>/dev/null)); Bazzite resets Steam (signs it out) at 5"
   # a Safe Detach restarts Game Mode on purpose for the handheld screen: never back onto the eGPU then. As on SteamOS,
   # gamescope and Vulkan/EGL are pinned to the handheld's GPU so nothing in this session opens the eGPU.
   if [ "$route" = detach ]; then
@@ -61,6 +66,10 @@ _egpu_bz(){
   done
   # Fedora names the ICD per architecture (nvidia_icd.x86_64.json, nvidia_icd.i686.json for 32-bit games)
   local icd; icd=$(ls /usr/share/vulkan/icd.d/nvidia_icd*.json 2>/dev/null | paste -sd: -)
+  if [ "$sst" -ge 4 ] && [ -n "$bdf" ]; then
+    logger -t egpu-buddy "Game Mode: $sst failed starts in a row on the eGPU: this start uses the handheld without the eGPU, so Bazzite does not reset Steam"
+    bdf=""
+  fi
   if [ -z "$bdf" ] || [ -z "$card" ] || [ -z "$icd" ]; then
     # No usable eGPU: Game Mode on the handheld exactly as Bazzite runs it, but with Vulkan/EGL on the handheld's GPU. With
     # the patched driver installed its Vulkan driver is always there, and after a cable pull it would talk to an NVIDIA
@@ -109,6 +118,10 @@ _egpu_bz(){
   if [ "$NV_EGPU_BUDDY_GAMESCOPE_BIN" != /usr/bin/gamescope ]; then
     local tag; tag=$(/usr/bin/gamescope --version 2>&1 | grep -oE 'gamescope version [^ ]+' | head -1 | awk '{print $3}' | sed 's/+$//')
     [ -n "$tag" ] && [ "$(cat /usr/local/lib/egpu-buddy/gamescope-gbm/BUILT-FROM 2>/dev/null)" = "$tag" ] || NV_EGPU_BUDDY_GAMESCOPE_BIN=/usr/bin/gamescope
+  fi
+  if [ "$sst" -ge 3 ] && [ "$NV_EGPU_BUDDY_GAMESCOPE_BIN" != /usr/bin/gamescope ]; then
+    logger -t egpu-buddy "Game Mode: $sst failed starts in a row: this start uses Bazzite's own gamescope on the eGPU (picture fix off for it)"
+    NV_EGPU_BUDDY_GAMESCOPE_BIN=/usr/bin/gamescope
   fi
   GAMESCOPE_BIN="$HOME/.local/lib/nv-egpu-buddy/gamescope-shim/gamescope"
   [ -x "$GAMESCOPE_BIN" ] || { GAMESCOPE_BIN=$NV_EGPU_BUDDY_GAMESCOPE_BIN; [ -x "$GAMESCOPE_BIN" ] || GAMESCOPE_BIN=/usr/bin/gamescope; }

@@ -43,6 +43,9 @@ reason(){
     [ -n "$(bz_tag)" ] || return 1
     [ -x "$PRIV" ] || { echo "not built for this Bazzite yet (gamescope $(bz_tag))"; return 0; }
     [ "$(bz_built_from)" = "$(bz_tag)" ] || { echo "Bazzite's gamescope is now $(bz_tag) (ours was built into $(bz_built_from))"; return 0; }
+    # the same gamescope version on a new Fedora base (Bazzite 44 -> 45) runs ours on libraries it was not built against
+    local bf nf; bf=$(cut -d' ' -f1 /usr/local/lib/egpu-buddy/gamescope-gbm/BUILD-ID 2>/dev/null); nf="fedora-$( . /etc/os-release 2>/dev/null; printf '%s' "${VERSION_ID:-}")"
+    [ -z "$bf" ] || [ "$bf" = "$nf" ] || { echo "Bazzite is now on $nf (ours was built on $bf)"; return 0; }
   else
   command -v steamos-readonly >/dev/null 2>&1 || return 1            # SteamOS only; other systems build it with the installer
   [ -x "$BR/usr/bin/makepkg" ] && [ -f "$BUILD" ] || return 1         # no build root / payload: nothing this can do
