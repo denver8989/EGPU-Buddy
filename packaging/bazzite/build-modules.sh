@@ -9,7 +9,8 @@ set -euo pipefail
 K=${1:?kernel}; V=${2:?version}; OUT=/w/out/$K
 dnf -y -q install --setopt=install_weak_deps=False gcc make patch xz kmod findutils diffutils elfutils-libelf-devel \
   bc bison flex perl openssl >/dev/null
-rpm -i --nodeps --replacepkgs "/w/kernel-devel-$K.rpm"
+# Bazzite kernel packages are unsigned; Fedora 45's rpm refuses unsigned packages by default (digests still checked)
+rpm -i --nodeps --replacepkgs --nosignature --define '_pkgverify_level digest' "/w/kernel-devel-$K.rpm"
 KS=/usr/src/kernels/$K; [ -f "$KS/Makefile" ] || { echo "kernel-devel did not install $KS"; exit 2; }
 MK=(); if grep -q '^CONFIG_CC_IS_CLANG=y' "$KS/.config"; then dnf -y -q install clang lld llvm >/dev/null; MK=(CC=clang LD=ld.lld LLVM=1); fi
 rm -rf /build; mkdir /build; tar -xf "/w/NVIDIA-kernel-module-source-$V.tar.xz" -C /build; S=/build/NVIDIA-kernel-module-source-$V
