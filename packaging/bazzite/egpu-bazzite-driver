@@ -191,8 +191,15 @@ build(){ # one build at a time (install, boot, prebuild timer)
     [ -n "$egl" ] && steps="$steps && bash /b/build-userspace.sh --egl$egl"
   fi
   say "building the patched NVIDIA driver $PV for $K in a Fedora container ($mode; several minutes, the first time ~1 GB of downloads)"
-  podman run --rm --network host --security-opt label=disable -v "$W:/w" -v "$PKG:/p:ro" -v "$LIB:/b:ro" "${keyarg[@]}" \
-    "$IMG" bash -c "set -e; $steps" >>"$LOG" 2>&1 || { say "the driver build failed (see $LOG); nothing was changed"; return 8; }
+  # a new Fedora release's container can change the rules (Fedora 45: rpm refused the unsigned kernel-devel); then the
+  # previous release's container, which built the last kernels, gets a second try
+  local img ok=0 v=${IMG##*:}
+  for img in "$IMG" $(case "$v" in *[!0-9]*|'') ;; *) echo "${IMG%:*}:$((v - 1))" ;; esac); do
+    podman run --rm --network host --security-opt label=disable -v "$W:/w" -v "$PKG:/p:ro" -v "$LIB:/b:ro" "${keyarg[@]}" \
+      "$img" bash -c "set -e; $steps" >>"$LOG" 2>&1 && { ok=1; break; }
+    say "the build in $img failed"
+  done
+  [ $ok = 1 ] || { say "the driver build failed (see $LOG); nothing was changed"; return 8; }
   if [ -d "$W/out/userspace/usr" ]; then drop "$W/userspace"; mv "$W/out/userspace" "$W/userspace"; fi
   local N="$EXT.new"; drop "$N"; mkdir -p "$N/usr/lib/modules/$K/extra/nvidia" "$N/usr/lib/extension-release.d"
   if [ "$mode" = full ]; then
@@ -232,7 +239,7 @@ case "${1:---status}" in
   --status) status ;;
   --build)
     [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
-    rm -f "$W/auto-off" "$W/auto-off2"; build; rc=$?; [ $rc = 0 ] || exit $rc
+    rm -f "$W/auto-off" "$W/auto-off2" "$W"/prebuild-failed-*; build; rc=$?   # a new install retries what the timer gave up on; [ $rc = 0 ] || exit $rc
     if sb_on && ! key_enrolled; then enroll; exit 11; fi
     activate ;;
   --boot)   # at every boot: a staged build takes over, a new kernel gets its driver (network permitting), never blocks
