@@ -65,6 +65,8 @@ ApplicationWindow {
                                     default: ["#8b929a", "Default"], na: ["#8b929a", "Not used by this game"] })[st] || ["#8b929a", st] }
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.page === 1 && win.nvShow && win.visible
             onTriggered: win.call("GET", "/api/nvidia-game", null, function(r) { win.gs = r || {} }) }
+    // every pick saves at once (a pick waiting for Apply was lost when the window closed)
+    function saveNv(e) { nvEdit = e; act("nvidia-set", { settings: e }); nvDirty = false; nvSaved = true; loadNv() }
     function loadNv() { call("GET", "/api/nvidia", null, function(r) { if (!r) return; nv = r; if (!nvDirty) nvEdit = Object.assign({}, r.settings || {}) }) }
     property string msg: "Ready."
     property bool msgErr: false
@@ -250,7 +252,7 @@ ApplicationWindow {
                                    + (st.state !== "active" && st.state !== "default" ? "  ·  " + st.why : "") : "" } }
             ComboBox { Layout.preferredWidth: 250; model: opts.map(function(o) { return o[1] })
                 currentIndex: Math.max(0, opts.map(function(o) { return String(o[0]) }).indexOf(String(win.nvEdit[key] === undefined ? opts[0][0] : win.nvEdit[key])))
-                onActivated: function(i) { var e = Object.assign({}, win.nvEdit); e[key] = opts[i][0]; win.nvEdit = e; win.nvDirty = true } } }
+                onActivated: function(i) { var e = Object.assign({}, win.nvEdit); e[key] = opts[i][0]; win.saveNv(e) } } }
     }
     component Cell: Frame {
         property string value; property string unit; property string label
@@ -290,8 +292,8 @@ ApplicationWindow {
                             text: win.nvb ? "Used by every game Steam starts on the NVIDIA GPU. Nothing is changed while a setting is on its default."
                                 : "Used by every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them, and nothing is changed while a setting is on its default." } }
                     Badge { text: "Experimental"; lit: true }
-                    Button { text: "Restore"; onClicked: { win.nvEdit = Object.assign({}, win.nv.defaults || {}); win.nvDirty = true } }
-                    Button { text: "Apply"; highlighted: win.nvDirty; enabled: win.nvDirty; onClicked: { win.act("nvidia-set", { settings: win.nvEdit }); win.nvDirty = false; win.nvSaved = true; win.loadNv() } } }
+                    Button { text: "Restore"; onClicked: win.saveNv(Object.assign({}, win.nv.defaults || {})) }
+                }
                 NvRow { key: "low_latency"; title: "Low latency mode"; desc: "Frames queued ahead of the screen (DirectX 9-12 games). Ultra adds NVIDIA's latency pacing in DirectX 11 games."
                         opts: [["off", "Off (game decides)"], ["on", "On"], ["ultra", "Ultra"]] }
                 // Ultra needs a recent Proton (DXVK 2.6+): offer the latest GE-Proton when none is installed

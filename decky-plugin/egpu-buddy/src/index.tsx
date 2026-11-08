@@ -1056,7 +1056,9 @@ function Content() {
       )}
       {tab === "nvidia" && nv?.available && (() => {
         const cur = nvEdit ?? nv.settings ?? {};
-        const dirty = !!nvEdit && JSON.stringify(nvEdit) !== JSON.stringify(nv.settings);
+        // every pick saves at once: a pick waiting for Apply was lost when the menu closed
+        const saveNv = (n: Record<string, string | number>) => { setNvEdit(n); run(async () => { const r = await setNvidia(n); if (r.ok) { setNv(await getNvidia()); setNvEdit(null);
+          return { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; }); };
         return (<PanelSection title="NVIDIA settings (experimental)">
           <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("setup")}>Back to setup</ButtonItem></PanelSectionRow>
           {gs?.running && (() => { const st = Object.values(gs.settings ?? {}), on = st.filter((x) => x.state === "active").length, set = st.filter((x) => x.state !== "default").length;
@@ -1065,20 +1067,20 @@ function Content() {
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nvb ? "Global settings for every game Steam starts on the NVIDIA GPU; a setting on its default changes nothing." : "Global settings for every game that renders on the NVIDIA eGPU. Games on the handheld's own GPU never get them; a setting on its default changes nothing."}</div></PanelSectionRow>
           {NV_ROWS.map((r) => <PanelSectionRow key={r.key}><DropdownItem layout="below" label={r.label} description={r.key === "power" ? r.desc : `Next game launch. ${r.desc}`} disabled={lock}
             selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.map(([d, l]) => ({ data: d, label: l }))}
-            onChange={(o) => { if (keepFocus) ui(`nvidia pick ${r.key} = ${o.data}`); setNvEdit({ ...cur, [r.key]: o.data }); }} />
+            onChange={(o) => { if (keepFocus) ui(`nvidia pick ${r.key} = ${o.data}`); saveNv({ ...cur, [r.key]: o.data }); }} />
             {gs?.running && <GameState st={gs.settings?.[r.key]} />}</PanelSectionRow>)}
           {cur.low_latency === "ultra" && pr && !pr.ready && <>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: {pr.tools.map((t) => t.name).join(", ") || "none found"}). {pr.install?.message ?? ""}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={lock || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
               {pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton"}</ButtonItem></PanelSectionRow></>}
           {cur.low_latency === "ultra" && pr?.ready && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Ultra: pick {pr.tools.filter((t) => t.ok).map((t) => t.name).join(" or ")} for the game (Properties &gt; Compatibility), or for every game in Steam Settings &gt; Compatibility. {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
-          {(() => { const once = s?.game_mode && nv.loader !== "loaded";   // the loader is not in this Game Mode yet: one restart
-            return <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!keepFocus && !dirty) || (once && gameUp)} onClick={() => (keepFocus && !dirty) ? setMsg("Nothing changed yet: pick a new value above, then Apply.") : run(async () => { const r = await setNvidia(cur); if (r.ok) { setNv(await getNvidia()); setNvEdit(null); return once ? applyNvidia() : { ok: true, message: "Saved: games get it at their next launch (a running game keeps its settings until restarted)." }; } return r; })}>
-              {once ? (gameUp ? "Exit the game (one-time restart)" : nvb ? "Apply (one-time Steam restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>; })()}
+          {(() => { const once = s?.game_mode && nv.loader !== "loaded" && !!nv.enabled;   // the loader is not in this Game Mode yet: one restart
+            return once && <PanelSectionRow><ButtonItem layout="below" disabled={lock || gameUp} onClick={() => run(() => applyNvidia())}>
+              {gameUp ? "Exit the game (one-time restart)" : nvb ? "Apply (one-time Steam restart)" : "Apply (one-time Game Mode restart)"}</ButtonItem></PanelSectionRow>; })()}
           {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
           {gameUp && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>A game is running: it keeps its settings until you start it again. For an instant change use System settings (live) below.</div></PanelSectionRow>}
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : nvb ? "First time only: Steam restarts once so it starts with the settings loader. After that, changes apply at the next game launch." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
-          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => setNvEdit({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => saveNv({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
           {nv.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvidiaOff(); setNv(await getNvidia()); setNvEdit(null); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
           {!!nv.games?.length && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.games.length} game(s) ship their own dxvk.conf; it is read after these settings, so its options win: {nv.games.map((g) => g.game + (g.overridden.length ? ` (own ${g.overridden.join(", ")})` : "")).join(" · ")}</div></PanelSectionRow>}
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Not yet: FXAA, texture filtering quality, page flipping.</div></PanelSectionRow>
@@ -1086,7 +1088,8 @@ function Content() {
       })()}
       {tab === "amd" && amd?.available && (() => {
         const cur = amdEdit ?? amd.settings ?? {};
-        const dirty = !!amdEdit && JSON.stringify(amdEdit) !== JSON.stringify(amd.settings);
+        // every pick saves at once: a pick waiting for Apply was lost when the menu closed
+        const saveAmd = (n: Record<string, string | number>) => { setAmdEdit(n); run(async () => { const r = await setAmd(n); if (r.ok) { setAmdEdit(null); setAmdS(await getAmd()); } return r; }); };
         const once = amd.game_mode && amd.loader !== "loaded" && !!amd.enabled;   // saved, but Steam started without the loader
         const c = amd.card ?? {};
         const caps = c.cap_min != null && c.cap_max != null && c.cap_max > c.cap_min
@@ -1099,7 +1102,7 @@ function Content() {
               <b>Running: {ags.game}</b><div style={{ opacity: 0.85, marginTop: "2px" }}>{set ? `${on} of ${set} changed setting${set > 1 ? "s" : ""} active in this game.` : "Every setting is on its default."}</div></div></PanelSectionRow>; })()}
           {AMD_ROWS.filter((r) => r.key !== "afmf_search" || (cur.afmf ?? "off") !== "off").map((r) => <PanelSectionRow key={r.key}><DropdownItem layout="below" label={r.label} description={`Next game launch. ${r.desc}`} disabled={lock}
             selectedOption={cur[r.key] ?? r.opts[0][0]} rgOptions={r.opts.filter(([d]) => d !== "al2" || amd.al2 || cur[r.key] === "al2").map(([d, l]) => ({ data: d, label: l }))}
-            onChange={(o) => setAmdEdit({ ...cur, [r.key]: o.data })} />
+            onChange={(o) => saveAmd({ ...cur, [r.key]: o.data })} />
             {ags?.running && <GameState st={ags.settings?.[r.key]} />}</PanelSectionRow>)}
           {(cur.afmf ?? "off") !== "off" && !amd.afmf?.installed && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdAfmf(true); setAmdS(await getAmd()); return r; })}>
             Install Fluid Motion Frames (afmf-linux {amd.afmf?.version})</ButtonItem></PanelSectionRow>}
@@ -1113,12 +1116,10 @@ function Content() {
             <PanelSectionRow><ButtonItem layout="below" disabled={lock || pr.install?.state === "running"} onClick={() => run(async () => { const r = await installProton(); setTimeout(async () => setPr(await getProton()), 3000); return r; })}>
               {pr.install?.state === "running" ? "Installing GE-Proton…" : "Install latest GE-Proton"}</ButtonItem></PanelSectionRow></>}
           {cur.fsr4 === "latest" && pr?.tools.some((t) => /GE-Proton/i.test(t.name)) && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>FSR 4: pick {pr.tools.filter((t) => /GE-Proton/i.test(t.name)).map((t) => t.name).slice(-1)[0]} for the game (Properties &gt; Compatibility). {pr.install?.state === "done" ? pr.install.message : ""}</div></PanelSectionRow>}
-          <PanelSectionRow><ButtonItem layout="below" disabled={lock || (!dirty && !once) || (once && !!amd.game)} onClick={() => run(async () => {
-            if (dirty) { const r = await setAmd(cur); if (!r.ok) return r; setAmdEdit(null); const n = await getAmd(); setAmdS(n); if (!(n.game_mode && n.loader !== "loaded")) return r; }
-            return applyAmd(); })}>
-            {once || (dirty && amd.game_mode && amd.loader !== "loaded") ? (amd.game ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)") : "Apply"}</ButtonItem></PanelSectionRow>
+          {once && <PanelSectionRow><ButtonItem layout="below" disabled={lock || !!amd.game} onClick={() => run(() => applyAmd())}>
+            {amd.game ? "Exit the game (one-time restart)" : "Apply (one-time Game Mode restart)"}</ButtonItem></PanelSectionRow>}
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{amd.loader === "loaded" ? "Changes apply the next time a game starts; no restart." : "First time only: Game Mode restarts once so Steam starts with the settings loader. After that, changes apply at the next game launch."}</div></PanelSectionRow>
-          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => setAmdEdit({ ...(amd.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => saveAmd({ ...(amd.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
           {amd.afmf?.ours && (cur.afmf ?? "off") === "off" && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdAfmf(false); setAmdS(await getAmd()); return r; })}>Remove Fluid Motion Frames</ButtonItem></PanelSectionRow>}
           {amd.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await amdOff(); setAmdEdit(null); setAmdS(await getAmd()); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
           {msg && <PanelSectionRow><div style={{ fontSize: "12px" }}>{msg}</div></PanelSectionRow>}
