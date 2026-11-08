@@ -186,6 +186,19 @@ if [ -n "${NV_EGPU_GAMESCOPE_XGPU_DRIVERS:-}" ]; then
       [ -n "$_v" ] && [ -n "$_d" ] && prefix+=(--prefer-vk-device "${_v#0x}:${_d#0x}"); fi
   fi
 fi
+# SteamOS only (Bazzite and CachyOS unchanged): Valve's gamescope-session hard-codes -O '*,eDP-1' and ignores
+# OUTPUT_CONNECTOR, so the screen picked in the plugin never reached gamescope (report: our OUTPUT_CONNECTOR=HDMI-A-1,*,eDP-1,
+# gamescope ran with -O *,eDP-1). '*' then takes whichever connected screen comes first: picking between two eGPU
+# screens did nothing. Hand gamescope the session's choice in place of the hard-coded one.
+if command -v steamos-readonly >/dev/null 2>&1 && [ -n "${OUTPUT_CONNECTOR:-}" ]; then
+  _a=(); _o=0
+  for _x in "$@"; do
+    if [ "$_o" = 1 ]; then _a+=("$OUTPUT_CONNECTOR"); _o=0; continue; fi
+    case "$_x" in -O|--prefer-output) _o=1 ;; esac
+    _a+=("$_x")
+  done
+  set -- "${_a[@]}"
+fi
 # Breadcrumb for the support report (read-only for everything else): which binary this shim chose for this PID and from
 # what (the PID stays the same through exec), so the report can tell whether the NVIDIA picture fix is the one running.
 { mkdir -p "${XDG_RUNTIME_DIR:-/run/user/1000}/nv-egpu-buddy" && printf '%s\n' "pid=$$" "time=$(date '+%F %T')" "chosen=$gamescope_bin" \
