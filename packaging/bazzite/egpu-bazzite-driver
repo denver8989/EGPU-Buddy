@@ -197,7 +197,7 @@ build(){ # one build at a time (install, boot, prebuild timer)
   for img in "$IMG" $(case "$v" in *[!0-9]*|'') ;; *) echo "${IMG%:*}:$((v - 1))" ;; esac); do
     podman run --rm --network host --security-opt label=disable -v "$W:/w" -v "$PKG:/p:ro" -v "$LIB:/b:ro" "${keyarg[@]}" \
       "$img" bash -c "set -e; $steps" >>"$LOG" 2>&1 && { ok=1; break; }
-    say "the build in $img failed"
+    say "the build in $img failed: $(grep -v '^\[' "$LOG" | grep . | tail -1 | cut -c1-200)"
   done
   [ $ok = 1 ] || { say "the driver build failed (see $LOG); nothing was changed"; return 8; }
   if [ -d "$W/out/userspace/usr" ]; then drop "$W/userspace"; mv "$W/out/userspace" "$W/userspace"; fi

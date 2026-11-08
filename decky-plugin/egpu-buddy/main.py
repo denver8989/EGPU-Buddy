@@ -1528,6 +1528,8 @@ def _support_report():
     jt = _sh(["journalctl", "--no-pager", "-o", "short-iso", "--since", "-3 days", "-t", "egpu-buddy", "-t", "egpu-decky-guard",
               "-t", "egpu-driver-prebuild", "-t", "egpu-buddy-selfheal"], 20)[1].splitlines()
     jt = [l for l in jt if "flight recorder" not in l and " state: " not in l]   # the recorder's own lines are above
+    tm = _sh(["systemctl", "show", "egpu-driver-prebuild.timer", "-p", "UnitFileState,ActiveState,LastTriggerUSec,NextElapseUSecMonotonic"], 5)[1]
+    lines += ["", "## Update check timer (builds the driver ahead of an OS update)", " · ".join(tm.split()) or "(not installed)"]
     if jt:
         lines += ["", "## EGPU Buddy journal, last 3 days (last 80)"] + [l[:300] for l in jt[-80:]]
     # how Game Mode was started: the session unit as systemd sees it (with every drop-in) and the OS's gamescope package
@@ -2137,6 +2139,7 @@ class Plugin:
         # root services leave a one-line notice here (e.g. the driver being built ahead of a staged SteamOS update)
         try: text = open("/run/nvegpu/notice").read().strip(); os.remove("/run/nvegpu/notice")
         except OSError: text = ""
+        if text: _sh(["logger", "-t", "egpu-buddy", f"notice shown in Game Mode: {text[:200]}"], 3)   # in the report's journal
         return text
 
     async def apply_kernel_cmdline(self):
