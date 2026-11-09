@@ -1,0 +1,405 @@
+[
+  {
+    "file": "assets/screenshot-main.png",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/docs/assets/screenshot-main.png",
+    "credit": "EGPU Buddy repository, MIT; screenshot-desktop uses SilverplayerX device readings.",
+    "usage": "Included",
+    "sha256": "2618b96a5f70d42ecc3efb7a3fb5e7f31b3388e7e3e407771305d2090e707bf2",
+    "note": "Repository reference image; may show older plugin version. Animated crop only. Current behavior checked against 0.7.241 source."
+  },
+  {
+    "file": "assets/screenshot-details.png",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/docs/assets/screenshot-details.png",
+    "credit": "EGPU Buddy repository, MIT; screenshot-desktop uses SilverplayerX device readings.",
+    "usage": "Included",
+    "sha256": "c023d23a3b66cc3b325d9981de327ffe02c75a20553d38bdc1e730b75abf1ab3",
+    "note": "Repository reference image; may show older plugin version. Animated crop only. Current behavior checked against 0.7.241 source."
+  },
+  {
+    "file": "assets/screenshot-setup.png",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/docs/assets/screenshot-setup.png",
+    "credit": "EGPU Buddy repository, MIT; screenshot-desktop uses SilverplayerX device readings.",
+    "usage": "Collected reference asset; not currently displayed in the animation",
+    "sha256": "68a5db5daced91f78f865710262c3223fe9137a42b1f1627195d24d7303bad29",
+    "note": "Repository reference image; may show older plugin version. Animated crop only. Current behavior checked against 0.7.241 source."
+  },
+  {
+    "file": "assets/screenshot-xg-mobile.png",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/docs/assets/screenshot-xg-mobile.png",
+    "credit": "EGPU Buddy repository, MIT; screenshot-desktop uses SilverplayerX device readings.",
+    "usage": "Included",
+    "sha256": "f636ae29b5d16847ab62964032f4b4c7fba5acc34ffb563edd08796590ee6a66",
+    "note": "Repository reference image; may show older plugin version. Animated crop only. Current behavior checked against 0.7.241 source."
+  },
+  {
+    "file": "assets/screenshot-desktop-xg-mobile.png",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/docs/assets/screenshot-desktop-xg-mobile.png",
+    "credit": "EGPU Buddy repository, MIT; screenshot-desktop uses SilverplayerX device readings.",
+    "usage": "Included",
+    "sha256": "5277739e1f255562be5de73ec2b635529deb6baaf53748fbfb4476a01c178443",
+    "note": "Repository reference image; may show older plugin version. Animated crop only. Current behavior checked against 0.7.241 source."
+  },
+  {
+    "file": "assets/icon.png",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/docs/assets/icon.png",
+    "credit": "EGPU Buddy repository, MIT; screenshot-desktop uses SilverplayerX device readings.",
+    "usage": "Included",
+    "sha256": "aacc8be559fc531c4c678fd3a0e7e9dd2bc8c7bd6be40d6cf34fb71057dd53e6"
+  },
+  {
+    "file": "assets/lenovo-legion-go-2.svg",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/decky-plugin/egpu-buddy/handhelds/lenovo-legion-go-2.svg",
+    "credit": "victor-borges/handheld-controller-glyphs, MIT; retain upstream notice in source/glyphs-LICENSE",
+    "usage": "Included",
+    "sha256": "fc867f54afae0b584a2db0bb5d72bc575225c528c873be59f09005dec7a70ebf",
+    "modification": "App glyph silhouette unchanged; grey recoloured to pale blue for contrast, as the app does at runtime."
+  },
+  {
+    "file": "assets/lenovo-legion-go.svg",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/decky-plugin/egpu-buddy/handhelds/lenovo-legion-go.svg",
+    "credit": "victor-borges/handheld-controller-glyphs, MIT; retain upstream notice in source/glyphs-LICENSE",
+    "usage": "Included",
+    "sha256": "0f8ce21237f73052aca962ecb195e9dc32a5934a233556c1e5a0b18687b5456a",
+    "modification": "App glyph silhouette unchanged; grey recoloured to pale blue for contrast, as the app does at runtime."
+  },
+  {
+    "file": "assets/asus-rog-xbox-ally.svg",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/decky-plugin/egpu-buddy/handhelds/asus-rog-xbox-ally.svg",
+    "credit": "victor-borges/handheld-controller-glyphs, MIT; retain upstream notice in source/glyphs-LICENSE",
+    "usage": "Included",
+    "sha256": "ac882df07c24ab3876458fd53f8b931ebc4447c2b24c539fec811a9e380199bd",
+    "modification": "App glyph silhouette unchanged; grey recoloured to pale blue for contrast, as the app does at runtime."
+  },
+  {
+    "file": "assets/display.svg",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/decky-plugin/egpu-buddy/src/index.tsx",
+    "credit": "EGPU Buddy MIT",
+    "usage": "Included",
+    "sha256": "fe87543e8eb9507ed7481ed098a8a649826691c1851aee5b1d382e94711ac91c"
+  },
+  {
+    "file": "assets/handheld.svg",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/decky-plugin/egpu-buddy/src/index.tsx",
+    "credit": "EGPU Buddy MIT",
+    "usage": "Collected reference asset; not currently displayed in the animation",
+    "sha256": "f842fab4b8356d7a04c7f00f5e991092832e25294f43f202fe7581bb31d43483"
+  },
+  {
+    "file": "assets/bazzite.svg",
+    "source": "https://bazzite.gg/content/uploads/2024/02/Bazzite_Color_Long.svg",
+    "page": "https://bazzite.gg/",
+    "credit": "Bazzite official branding; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "777179735430e692fb827c2401197c50511ba01aabf10248115193c79cdaeb22"
+  },
+  {
+    "file": "assets/cachyos.svg",
+    "source": "https://cachyos.org/_astro/logo.DuMERIP6.svg",
+    "page": "https://cachyos.org/",
+    "credit": "CachyOS official branding; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "8a170323507cd504632fd04d8ef984f462de37203225ee2db46d484873f14e5b"
+  },
+  {
+    "file": "assets/decky.png",
+    "source": "https://decky.xyz/icons/icon-512x512.png",
+    "page": "https://decky.xyz/",
+    "credit": "Decky Loader official icon, upstream BSD-3-Clause; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "4dd483eaf8af8ff80ef6ccf5fc47ce6d9e9640a1cab459c29a8b52bb7f4c3196"
+  },
+  {
+    "file": "assets/steam.png",
+    "source": "https://cdn.fastly.steamstatic.com/steamdeck/images/steamdeck_steamlogo.png",
+    "page": "https://www.steamdeck.com/en/software",
+    "credit": "Valve official Steam logo; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "5b381b886f34e0bd722efdd1a812995d3f4d82d5cba3ca5aa9cc5e73dc7c90cc"
+  },
+  {
+    "file": "assets/xg-mobile.jpg",
+    "source": "https://dlcdnwebimgs.asus.com/gain/F26E974A-523A-4B3B-8954-CD0BAD788558",
+    "page": "https://rog.asus.com/us/external-graphics-docks/rog-xg-mobile-2025/gallery/",
+    "credit": "ASUS official product image; editorial reference, rights not independently cleared",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "c3672a8d2aac26e53b493fa62a1393ee9ab75e2109635fc794ecc9fe68e7f1bd"
+  },
+  {
+    "file": "assets/rog-xbox-ally.jpg",
+    "source": "https://dlcdnwebimgs.asus.com/gain/BEEE4F75-C6D0-4696-B487-81ACCDAE571B",
+    "page": "https://rog.asus.com/gaming-handhelds/rog-ally/rog-xbox-ally-x-2025/gallery/",
+    "credit": "ASUS official product image; editorial reference, rights not independently cleared",
+    "usage": "Collected reference asset; not currently displayed in the animation",
+    "sha256": "3fa4128d4837694051566febc6559a55401764626da4a2380dc813f1323d150a"
+  },
+  {
+    "file": "assets/lenovo-legion-go-s.svg",
+    "source": "https://github.com/victor-borges/handheld-controller-glyphs",
+    "credit": "Victor Borges, MIT; actual app asset, contrast recoloured. See source/glyphs-vendored-LICENSE.",
+    "sha256": "a8d2a6c7b530247ec318dedb85357adfc8b2b3e0e329e35d5de605b09856d083"
+  },
+  {
+    "file": "assets/decky-general.png",
+    "source": "https://github.com/SteamDeckHomebrew/decky-loader/tree/main/frontend/src/components/settings/pages",
+    "credit": "Decky Loader, BSD-3-Clause. Actual source components captured in a sandbox; CSS/control runtime emulated; no live installation.",
+    "sha256": "f2efa0936b537395a932e7b93d2b2e5944031a9c53bd2a11a1e4a636cbc236ca"
+  },
+  {
+    "file": "assets/decky-developer.png",
+    "source": "https://github.com/SteamDeckHomebrew/decky-loader/tree/main/frontend/src/components/settings/pages",
+    "credit": "Decky Loader, BSD-3-Clause. Actual source components captured in a sandbox; CSS/control runtime emulated; no live installation.",
+    "sha256": "6b589d7f5f1b7202a3d14bd667b554667f0fa4aeece535285f7c4c460bf0907d"
+  },
+  {
+    "file": "assets/decky-warning.png",
+    "source": "https://github.com/SteamDeckHomebrew/decky-loader/tree/main/frontend/src/components/settings/pages",
+    "credit": "Decky Loader, BSD-3-Clause. Actual source components captured in a sandbox; CSS/control runtime emulated; no live installation.",
+    "sha256": "0a5ee849970cb851f3834bb4d06e3672989882d4b607d09132e2861248da9b9d"
+  },
+  {
+    "file": "assets/install-choice.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "2d7f27762d1a17ab7ffcece681fb6b92b28a03133b8ce516e73a5f0755406cbe"
+  },
+  {
+    "file": "assets/install-confirm-nv.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "d81775bb0e3ef094d3c257f03b200872345ee6f798b9efae088679340d2ce539"
+  },
+  {
+    "file": "assets/install-confirm-amd.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "d8c50ecb97de34016f9e776f1c0994cba299fa9bd9ba156400ff5d73267bde4e"
+  },
+  {
+    "file": "assets/install-untested.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "7337916ba9761f84faa2a31cc92111620eb25470d2204533669de494e3eee108"
+  },
+  {
+    "file": "assets/install-conflict.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "859911f9dc2bbd0ee2d1afa19d2beffa1a9f248dfd2de06e6672cf41326f2383"
+  },
+  {
+    "file": "assets/install-progress-nv.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "f507924996207966e9f8a3439241c3adbb1b0d615cd134f53780b09b4bd7295d"
+  },
+  {
+    "file": "assets/install-progress-amd.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "e602e73ec505a234d0c43e0cd3704307c58e539cfb889ed50bee332287e0a24a"
+  },
+  {
+    "file": "assets/install-success.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "7845462992ca57238bb609923c9eb7a1cbc904504be5e0f750c27e6147d9fe28"
+  },
+  {
+    "file": "assets/install-error.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "2da3884c3dd10f4682b2eb6a427d26847f3a2872699726edf5cc0f6c47ebf0d7"
+  },
+  {
+    "file": "assets/install-nvb-offer.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "f1144be3133db6916e30893266a07d6421fd12c8275b5b4915149c0fe98b22a4"
+  },
+  {
+    "file": "assets/install-nvb-confirm.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "483117eb7b1b3e1240673c7fd74ec598e01d38d4f5a5889e488a2bdb076ea799"
+  },
+  {
+    "file": "assets/install-nvb-final.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "3a0c91bb2abb9b403d94954b4d3e80db761852424068eeb26a2a93df15d241ff"
+  },
+  {
+    "file": "assets/install-nvb-main.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "a86e4b8a81e91a30725b6f4de86e0986428d0cf58d07bb7109b39edff494a1ad"
+  },
+  {
+    "file": "assets/install-nvb-settings.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "f5d563a9d0fcbbe5012d5b7ab4765b8b008a5125bb5a943fd433e9856d2bb9f4"
+  },
+  {
+    "file": "assets/github-release-actual.png",
+    "source": "https://github.com/denver8989/EGPU-Buddy/releases/tag/v0.7.242",
+    "credit": "Actual GitHub release webpage screenshot, read-only capture 2026-11-09; no downloads started.",
+    "sha256": "2dc3ceddbb26089813d7f1a51a0fdc49920cb473a4de06d4e620e3e9802ac1e2"
+  },
+  {
+    "file": "assets/file-picker.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Reconstructed UI screenshot from Decky source labels and known ZIP picker behavior. Not a live screenshot.",
+    "sha256": "efc37c94697513e413d62d723524923bc9caa2f4a6dd8333fba9aaf3c8248042"
+  },
+  {
+    "file": "assets/plugin-confirmation.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Reconstructed UI screenshot from Decky source labels and known ZIP picker behavior. Not a live screenshot.",
+    "sha256": "8996fd0425c944c99492d9c0a42607e65242ccd4d3ea3834b8aa61a3d5865c0f"
+  },
+  {
+    "file": "assets/dock-ag03.jpg",
+    "source": "https://aoostar.com/cdn/shop/files/1500-1500_2.jpg?width=900",
+    "page": "https://aoostar.com/products/aoostar-ag03-egpu-dock",
+    "credit": "AOOSTAR official product photo; product revisions may differ from tested unit",
+    "usage": "Editorial product reference; final publishing permissions not independently cleared",
+    "sha256": "ce8ca39ddc6765c0f3ae5ba42c247e1f9c55b5d5dea95e23eada2ead7abf86a4"
+  },
+  {
+    "file": "assets/dock-ag02.jpg",
+    "source": "https://aoostar.com/cdn/shop/files/29.jpg?width=900",
+    "page": "https://aoostar.com/collections/egpu-dock-11-12/products/aoostar-ag01-egpu-dock-with-oculink-port-built-in-huntkey-400w-power-supply-supports-tgx-interface-hot-swap",
+    "credit": "AOOSTAR official product photo; product revisions may differ from tested unit",
+    "usage": "Editorial product reference; final publishing permissions not independently cleared",
+    "sha256": "a507846941b34cc829eeef2929bab537022bf72cf2d006bfc7e6c57e88bef563"
+  },
+  {
+    "file": "assets/dock-trebleet.jpg",
+    "source": "https://static.wixstatic.com/media/1da7d3_839d0555b9d04da79f6b5078a9d8ae02~mv2.jpg/v1/fit/w_900,h_900,q_90/file.jpg",
+    "page": "https://www.trebleet.com/product-page/compact-thunderbolt3-egpu-enclosure-with-600w-psu",
+    "credit": "TREBLEET official catalog photo; representative image, exact tester SKU not recorded",
+    "usage": "Editorial product reference; final publishing permissions not independently cleared",
+    "sha256": "4c86bef04c04b4c170a5f62ebcb4fdc002d8fc4fc0dafbb41c9619fed1c40360"
+  },
+  {
+    "file": "assets/dock-aorus.jpg",
+    "source": "https://mma.prnewswire.com/media/2776407/RTX_5060_Ti_AI_BOX_1280x720.jpg",
+    "page": "https://www.prnewswire.com/mx/comunicados-de-prensa/gigabyte-lanza-la-egpu-aorus-rtx-5060-ti-ai-box-para-llevar-la-potencia-de-una-computadora-de-escritorio-a-las-portatiles-ultrabook-302560402.html",
+    "credit": "GIGABYTE press photo distributed through PR Newswire",
+    "usage": "Editorial product reference; final publishing permissions not independently cleared",
+    "sha256": "0ce3730dfca4c74af900e61b413ef1cf925108a1751c1d188a653cca7df865c9"
+  },
+  {
+    "file": "assets/dock-deg2.png",
+    "source": "https://www.minisforum.com/cdn/shop/files/1cf6e09de711b851d69c3273db6f49e8_b1413d09-8cd3-43e7-a6f8-82fde7fcbe81.png?v=1767494485&width=900",
+    "page": "https://www.minisforum.com/products/deg2",
+    "credit": "MINISFORUM official DEG2 catalog image; photo may show a GPU not used in this project test",
+    "sha256": "a82b76318f0042f09c2bde67ab700c0a3fd1241cbc6efeb42e0fc14f6cbf965f"
+  },
+  {
+    "file": "assets/dock-aorus-cutout.png",
+    "source": "assets/dock-aorus.jpg",
+    "credit": "Original manufacturer/catalog image; built-in image_gen background extraction",
+    "usage": "Dock gallery",
+    "sha256": "72b22ee7d623a851b0428227917c6ca15fc617947ab327019e23a8b8a16a22cc",
+    "note": "AI-assisted cutout. Original source photo preserved; full prompts in source/cutout-edit-prompts.json. Product photo is representative, not tester capture."
+  },
+  {
+    "file": "assets/dock-ag03-cutout.png",
+    "source": "assets/dock-ag03.jpg",
+    "credit": "Original manufacturer/catalog image; built-in image_gen background extraction",
+    "usage": "Dock gallery",
+    "sha256": "3c51c6ebf4716be1bf0dcfbb6bbf7f726d5aa70ca669d9a6f26e4809bcf06df0",
+    "note": "AI-assisted cutout. Original source photo preserved; full prompts in source/cutout-edit-prompts.json. Product photo is representative, not tester capture."
+  },
+  {
+    "file": "assets/dock-ag02-cutout.png",
+    "source": "assets/dock-ag02.jpg",
+    "credit": "Original manufacturer/catalog image; built-in image_gen background extraction",
+    "usage": "Dock gallery",
+    "sha256": "bf448b257d5dada9f422f8047560237e241ff18edbd826679acdf0c479391b04",
+    "note": "AI-assisted cutout. Original source photo preserved; full prompts in source/cutout-edit-prompts.json. Product photo is representative, not tester capture."
+  },
+  {
+    "file": "assets/xg-mobile-cutout.png",
+    "source": "assets/xg-mobile.jpg",
+    "credit": "Original manufacturer/catalog image; built-in image_gen background extraction",
+    "usage": "Dock gallery",
+    "sha256": "5271b4defdb66abf91c93db8687d5dd6dbbb46b0d66223a21fcc96e18aba95fd",
+    "note": "AI-assisted cutout. Original source photo preserved; full prompts in source/cutout-edit-prompts.json. Product photo is representative, not tester capture."
+  },
+  {
+    "file": "assets/dock-deg2-cutout.png",
+    "source": "assets/dock-deg2.png",
+    "credit": "Original manufacturer/catalog image; built-in image_gen background extraction",
+    "usage": "Dock gallery",
+    "sha256": "49b6ddc93466983305075feb3f230da2ba8a54f7d67785d869d988454c2d18fb",
+    "note": "AI-assisted cutout. Original source photo preserved; full prompts in source/cutout-edit-prompts.json. Product photo is representative, not tester capture."
+  },
+  {
+    "file": "assets/dock-trebleet-cutout.png",
+    "source": "assets/dock-trebleet.jpg",
+    "credit": "Original manufacturer/catalog image; built-in image_gen background extraction",
+    "usage": "Dock gallery",
+    "sha256": "289fd7bc3405b78cf98aa73f29ff30583449a738aba3ef326b44e3298d466763",
+    "note": "AI-assisted cutout. Original source photo preserved; full prompts in source/cutout-edit-prompts.json. Product photo is representative, not tester capture."
+  },
+  {
+    "file": "assets/dock-aorus-user.png",
+    "source": "/home/deck/Downloads/Aorus 5060ti ai box.png",
+    "credit": "User-provided product image",
+    "usage": "AORUS entry in dock gallery; replaces generated cutout",
+    "sha256": "b6a1f1a24e3273d0fdd19e11e4d6395530ec6adaf62cd03fc2fb3ff6022048dc",
+    "note": "Copied unchanged. Existing transparency preserved; no AI editing."
+  },
+  {
+    "file": "assets/support-save-report.png",
+    "source": "capture-sandbox/support-capture.html + plugin-source.tsx Support report section",
+    "credit": "EGPU Buddy source-rendered simulation; mocked state; no report generated",
+    "usage": "Slide 21 Discord support instructions",
+    "sha256": "b36dcf8030cfa725c4a22d4fe723b465be1a0b243bb67a856a98f40e179c9e0d"
+  },
+  {
+    "file": "intro-assets/bensound-scifi.mp3",
+    "source": "/mnt/7c8421e4-0f50-4673-8138-e510b9c4c5fb/Downloads/bensound-scifi.mp3",
+    "credit": "Bensound \u2014 SciFi; owner supplied",
+    "usage": "Continuous crossfaded soundtrack under opening and presentation; speech prioritized",
+    "sha256": "f429397f78c9ff51f69c86c24ee83a3ad094d248b83e2f81c74b227f525739ba"
+  },
+  {
+    "file": "assets/newlook-egpu-overview.png",
+    "source": "/home/deck/Desktop/New look/EGPU Buddy new look - 1 Overview.png",
+    "credit": "Owner-provided new desktop app screenshot",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "1127014a4e6b6b791aa0a238c86f9214ade33223e63fa0b3a34275cda1d3d809"
+  },
+  {
+    "file": "assets/newlook-egpu-settings.png",
+    "source": "/home/deck/Desktop/New look/EGPU Buddy new look - 2 NVIDIA settings.png",
+    "credit": "Owner-provided new desktop app screenshot",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "c2cfb9aa66300ab84ce5cff0b4272ed0e6fd6652fd6aaaa2e6abaf91c3a76dd1"
+  },
+  {
+    "file": "assets/newlook-egpu-extras.png",
+    "source": "/home/deck/Desktop/New look/EGPU Buddy new look - 3 Extras and setup.png",
+    "credit": "Owner-provided new desktop app screenshot",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "cff706672dfa4cc9a2f31b935d58349820f8951a871f2f5a5471c0a25df31dea"
+  },
+  {
+    "file": "assets/newlook-xg-overview.png",
+    "source": "/home/deck/Desktop/New look/EGPU Buddy new look - XG Mobile preview - Overview.png",
+    "credit": "Owner-provided new desktop app screenshot / preview; example hardware readings",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "80af244328a6c8975a524b3eb5965549f1f7d4a9c3e9db057713c63cf0c20d9f"
+  },
+  {
+    "file": "assets/newlook-xg-extras.png",
+    "source": "/home/deck/Desktop/New look/EGPU Buddy new look - XG Mobile preview - Extras and setup.png",
+    "credit": "Owner-provided new desktop app screenshot / preview; example hardware readings",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "33cca67354957fb5a6d500c1da931c15f0a334bdccf813bc8e50a40c3b54ec1b"
+  }
+]

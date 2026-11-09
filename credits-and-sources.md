@@ -103,3 +103,7 @@ Music: Bensound — SciFi, owner-supplied `bensound-scifi.mp3`, copied unchanged
 Parachuting CPU: generated with the built-in image_gen tool as a new transparent illustration, then animated by FFmpeg after the spoken “skydiving test.” Asset: `intro-assets/cpu-parachute.png`. Exact generation prompt, mode and provenance: `intro-assets/cpu-parachute-provenance.json`.
 
 Opening audio cleanup: chair/background noise suppressed with the FFmpeg arnndn filter and the cb speech model (https://github.com/richardpl/arnndn-models). The recorded speech windows are preserved, with 200 ms crossfades into the cleaned ambience. Original recordings are unchanged. Quick review and the background music toggle were removed from both players at the owner’s request; background music remains mixed under speech.
+
+## New desktop app screenshots — 9 Nov 2026
+
+The owner supplied the images in Desktop/New look. Active desktop-app visuals now use those files unchanged: Overview, NVIDIA/GPU settings, and Extras and setup. The EGPU film also includes the supplied XG Mobile overview and setup previews. Preview images retain visible labels and their example readings are not treated as hardware test evidence. Decky installation dialogs remain source-rendered examples of that separate interface. Per-file original paths and SHA-256 checksums are in asset-sources.json.

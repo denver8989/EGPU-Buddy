@@ -79,5 +79,26 @@
     "source": "https://github.com/SteamDeckHomebrew/decky-loader/tree/main/frontend/src/components/settings/pages",
     "credit": "Decky Loader, BSD-3-Clause. Actual source components captured in a sandbox; CSS/control runtime emulated; no live installation.",
     "sha256": "6b589d7f5f1b7202a3d14bd667b554667f0fa4aeece535285f7c4c460bf0907d"
+  },
+  {
+    "file": "assets/newlook-nv-overview.png",
+    "source": "/home/deck/Desktop/New look/NV GPU Buddy new look preview - 1 Overview.png",
+    "credit": "Owner-provided new desktop app screenshot / preview; example hardware readings",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "a6a98e41f1fd9149de177bd97b5a34057b55a1f8175558c549ae6ad73c4ea0b2"
+  },
+  {
+    "file": "assets/newlook-nv-settings.png",
+    "source": "/home/deck/Desktop/New look/NV GPU Buddy new look preview - 2 GPU settings.png",
+    "credit": "Owner-provided new desktop app screenshot / preview; example hardware readings",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "42bf256b9826b02be3e2e27ea3e19f0948e2782cec1fcf17d922a811df82687e"
+  },
+  {
+    "file": "assets/newlook-nv-extras.png",
+    "source": "/home/deck/Desktop/New look/NV GPU Buddy new look preview - 3 Extras and setup.png",
+    "credit": "Owner-provided new desktop app screenshot / preview; example hardware readings",
+    "usage": "Presentation screenshot; copied unchanged",
+    "sha256": "f01db8ede8370fb12b4b4d0420d2bb6ab52e09d9054f311fe02622abd66672ce"
   }
 ]

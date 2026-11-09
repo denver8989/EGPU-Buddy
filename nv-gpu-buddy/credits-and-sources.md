@@ -53,3 +53,7 @@ Narration is generated locally from the owner’s recorded voice, using the exis
 Music: Bensound — SciFi, the same owner-supplied track used in the EGPU presentation. It uses the existing continuous music master with 12-second equal-power crossfades if playback reaches a loop transition, a final four-second fade, and an 11 dB reduction beneath narration.
 
 Source content remains the previously checked 0.7.242 snapshot. Mocked installation/UI captures remain labeled; desktop/laptop hardware testing is still needed.
+
+## New desktop app screenshots — 9 Nov 2026
+
+The owner supplied the images in Desktop/New look. Active desktop-app visuals now use those files unchanged: Overview, NVIDIA/GPU settings, and Extras and setup. The EGPU film also includes the supplied XG Mobile overview and setup previews. Preview images retain visible labels and their example readings are not treated as hardware test evidence. Decky installation dialogs remain source-rendered examples of that separate interface. Per-file original paths and SHA-256 checksums are in asset-sources.json.
