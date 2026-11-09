@@ -390,10 +390,10 @@
   },
   {
     "file": "assets/newlook-xg-overview.png",
-    "source": "/home/deck/Desktop/New look/EGPU Buddy new look - XG Mobile preview - Overview.png",
-    "credit": "Owner-provided new desktop app screenshot / preview; example hardware readings",
+    "source": "/home/deck/Desktop/EGPU Buddy new look - XG Mobile preview - Overview.png",
+    "credit": "Owner-provided updated XG Mobile desktop preview, including Odyssey G9 and Game Mode screen picker",
     "usage": "Presentation screenshot; copied unchanged",
-    "sha256": "80af244328a6c8975a524b3eb5965549f1f7d4a9c3e9db057713c63cf0c20d9f"
+    "sha256": "210c4814a51522fa7d9fde4de3727ab968ed6510ff3e2fe980f0de371a3caf34"
   },
   {
     "file": "assets/newlook-xg-extras.png",
