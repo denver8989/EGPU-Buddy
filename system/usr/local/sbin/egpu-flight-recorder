@@ -72,7 +72,8 @@ while :; do
   fi
   line="S $mode comp=$comp fix=$fix out=$out game=$game"
   # AMD eGPU: amdgpu's own numbers (busy %, the active core / memory clock, power, temperature, the power profile, the link)
-  if [ -z "$gpu" ] && [ -n "$egpu" ]; then
+  # (not while Safe Detach takes it off the bus: nothing may read the card during its removal, AMD / Intel install only)
+  if [ -z "$gpu" ] && [ -n "$egpu" ] && [ ! -e /run/nvegpu/gm-detach-pending ]; then
     D=/sys/bus/pci/devices/$egpu; hw=$(ls -d "$D"/hwmon/hwmon* 2>/dev/null | head -1)
     sclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_sclk" 2>/dev/null); mclk=$(sed -n 's/.*: *\([0-9]*Mhz\) *\*$/\1/p' "$D/pp_dpm_mclk" 2>/dev/null)
     pw=$(( $(cat "$hw/power1_average" 2>/dev/null || cat "$hw/power1_input" 2>/dev/null || echo 0) / 1000000 )); tp=$(( $(cat "$hw/temp1_input" 2>/dev/null || echo 0) / 1000 ))

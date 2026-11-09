@@ -399,9 +399,24 @@ detach)
   top=$(readlink -f "/sys/bus/pci/devices/$bdf"); top=${top#/sys/devices/pci*/}; top=${top#*/}   # below the root port
   top=/sys/bus/pci/devices/${top%%/*}
   case "$(cat "$top/vendor" 2>/dev/null):$(cat "$top/device" 2>/dev/null)" in
-    0x8086:0x15e7|0x8086:0x15ea|0x8086:0x15ef) rmlist=$top ;;
+    0x8086:0x15e7|0x8086:0x15ea|0x8086:0x15ef) rmlist=$top; tr=1 ;;
     *) rmlist=$(ls -d /sys/bus/pci/devices/"${bdf%.*}".[1-7] 2>/dev/null; echo "/sys/bus/pci/devices/$bdf") ;;
   esac
+  # Titan Ridge docks only: the dock-top removal still reset the machine at once, with nothing in the journal (Legion Go S
+  # + RX 9070 XT, Trebleet, report 6E9952). The working removal (same handheld and card, ASMedia dock) ran with nothing
+  # touching the card; here a new Game Mode had started 1 s before. So: let the new session settle, take the drivers off
+  # one function at a time (sound, then the GPU), each step logged and synced, and keep the kernel's own lines of the
+  # removal in /var/log/egpu-detach-kmsg.log, written line by line, so the next report shows the step and the oops.
+  if [ "${tr:-0}" = 1 ]; then
+    K=/var/log/egpu-detach-kmsg.log; : > $K
+    ( timeout 120 stdbuf -oL dmesg -W 2>/dev/null | while IFS= read -r l; do printf '%s\n' "$l" >> $K; sync $K; done ) &
+    sleep 5
+    for fn in $(ls -d /sys/bus/pci/devices/"${bdf%.*}".[1-7] 2>/dev/null) /sys/bus/pci/devices/$bdf; do
+      d=$(readlink -f "$fn/driver" 2>/dev/null); [ -n "$d" ] || continue
+      log "unbinding ${fn##*/} from ${d##*/}"; sync; echo "${fn##*/}" > "$d/unbind" 2>/dev/null; sleep 2
+      log "unbound ${fn##*/}"; sync
+    done
+  fi
   for fn in $rmlist; do [ -e "$fn/remove" ] || continue
     log "removing ${fn##*/} ($(basename "$(readlink -f "$fn/driver" 2>/dev/null)"))"; sync; echo 1 > "$fn/remove" 2>/dev/null; done
   rm -f $MARK $MOVED

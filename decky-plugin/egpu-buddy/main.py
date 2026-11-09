@@ -2515,6 +2515,8 @@ class Plugin:
     def _amd_card(self):
         """The AMD eGPU's live readouts (sysfs, read-only); {} when none is attached."""
         g = _generic_egpu()
+        if os.path.exists("/run/nvegpu/gm-detach-pending"):   # Safe Detach is taking it off the bus: hands off its sysfs
+            return {}
         if not g or not os.path.exists(f"/sys/bus/pci/devices/{g[0]}/vendor") or _read(f"/sys/bus/pci/devices/{g[0]}/vendor").strip() != "0x1002":
             return {}
         D = f"/sys/bus/pci/devices/{g[0]}"
