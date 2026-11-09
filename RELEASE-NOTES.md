@@ -1,3 +1,10 @@
+0.7.245 — Desktop app: Check for updates; NV GPU Buddy gets TV control in the new look.
+
+**Desktop app** (new look only; the classic look is unchanged)
+- Check for updates asks GitHub at once, also when the update window opens (it used to wait up to 20 minutes).
+- NV GPU Buddy: TV control, best resolution, Steam menu fix and automatic updates in Extras and setup, as in its Game Mode plugin.
+- NV GPU Buddy: no USB4 link or eGPU wording for a built-in card.
+
 0.7.244 — Desktop app: new look; only the screen you pick shows a picture.
 
 **Desktop app** (new look by default on SteamOS and CachyOS with an NVIDIA eGPU; Bazzite, ROG Ally / XG Mobile, AMD / Intel and NV GPU Buddy keep the classic look until it is picked)
