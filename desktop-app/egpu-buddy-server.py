@@ -106,7 +106,7 @@ def handheld_svg():
     svg = open(path, errors="ignore").read(); svg = svg[svg.index("<svg"):]
     svg = re.sub(r"((?:stroke|fill)\s*[=:]\s*\"?)#[0-9a-fA-F]{3,8}", r"\g<1>#c9c5ea", svg)
     svg = re.sub(r'<svg\b([^>]*?)\s(?:width|height)="[^"]*"', r"<svg\1", svg, count=2)
-    svg = re.sub(r'stroke-width="[^"]*"', 'stroke-width="0.95"', svg)   # the file's 0.2-unit strokes drew ~0.3 px lines: faint and broken
+    svg = re.sub(r'stroke-width="[^"]*"', 'stroke-width="1.15"', svg)   # the file's 0.2-unit strokes drew ~0.3 px lines: faint and broken
     return svg.encode()
 
 # ---- Extras: the Game Mode plugin's own settings file, so the app and the plugin always agree ----

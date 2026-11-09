@@ -477,7 +477,7 @@ ApplicationWindow {
             Card { visible: win.nl
                 RowLayout { Layout.fillWidth: true; spacing: 12
                     ColumnLayout { spacing: 0; Layout.preferredWidth: 150; visible: win.s.handheld !== undefined && win.s.handheld !== ""
-                        Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 130; Layout.preferredHeight: 56; fillMode: Image.PreserveAspectFit; sourceSize.width: 520; smooth: true; mipmap: true; source: win.s.handheld ? win.api + "/handheld.svg" : "" }
+                        Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 130; Layout.preferredHeight: 56; fillMode: Image.PreserveAspectFit; sourceSize.height: 56 * Screen.devicePixelRatio; smooth: true; source: win.s.handheld ? win.api + "/handheld.svg" : "" }
                         Label { Layout.alignment: Qt.AlignHCenter; text: (win.s.handheld || "").replace(/^(Lenovo|ASUS|MSI|AYANEO) /, ""); font.bold: true }
                         Label { Layout.alignment: Qt.AlignHCenter; text: win.s.panel_enabled == null ? "" : win.s.panel_enabled ? "handheld screen on" : "handheld screen off"; font.pixelSize: 11; color: win.subCol } }
                     ColumnLayout { Layout.fillWidth: true; Layout.preferredWidth: 1; spacing: 4
@@ -494,7 +494,7 @@ ApplicationWindow {
                     RowLayout { spacing: 12; visible: !win.nvb
                         Repeater { model: (win.s.screens || []).filter(function(x) { return x.kind === "egpu" })
                             ColumnLayout { spacing: 0
-                                Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 72; Layout.preferredHeight: 34; fillMode: Image.PreserveAspectFit; sourceSize.width: 288; smooth: true; source: win.screenArt(modelData, "#ece9ff") }
+                                Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 72; Layout.preferredHeight: 34; fillMode: Image.PreserveAspectFit; sourceSize.height: 34 * Screen.devicePixelRatio; smooth: true; source: win.screenArt(modelData, "#ece9ff") }
                                 Label { Layout.alignment: Qt.AlignHCenter; text: modelData.label; font.bold: true; font.pixelSize: 12 }
                                 Label { Layout.alignment: Qt.AlignHCenter; text: win.s.screen_pick === modelData.name ? "main screen" : "on"; font.pixelSize: 11; color: win.subCol } } } }
                 }
@@ -631,7 +631,7 @@ ApplicationWindow {
                                 background: Rectangle { radius: 12; color: sb.sel ? palette.alternateBase : palette.window; border.width: sb.sel ? 2 : 1; border.color: sb.sel ? palette.highlight : palette.mid }
                                 contentItem: ColumnLayout { spacing: 2
                                     Item { Layout.fillHeight: true }
-                                    Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: 44; fillMode: Image.PreserveAspectFit; sourceSize.width: 500; smooth: true; mipmap: true
+                                    Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: 44; fillMode: Image.PreserveAspectFit; sourceSize.height: 44 * Screen.devicePixelRatio; smooth: true
                                             source: modelData.name.indexOf("eDP") === 0 && win.s.handheld ? win.api + "/handheld.svg" : win.screenArt(modelData, sb.sel ? "#2ee6f0" : "#ece9ff") }
                                     Label { Layout.alignment: Qt.AlignHCenter; text: win.portName(modelData.port); font.pixelSize: 11; color: win.subCol }
                                     Label { Layout.alignment: Qt.AlignHCenter; Layout.maximumWidth: 138; elide: Text.ElideRight; text: modelData.label; font.bold: true }
