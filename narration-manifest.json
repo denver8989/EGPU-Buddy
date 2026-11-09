@@ -1,0 +1,322 @@
+[
+  {
+    "id": 1,
+    "title": "EGPU Buddy",
+    "start": 20,
+    "end": 30.083333333333336,
+    "text": "narration/01-hero.txt",
+    "audio": "audio/01.wav"
+  },
+  {
+    "id": 2,
+    "title": "The handheld needs USB4",
+    "start": 30.083333333333336,
+    "end": 55.083333333333336,
+    "text": "narration/02-requirements.txt",
+    "audio": "audio/02.wav"
+  },
+  {
+    "id": 3,
+    "title": "What had to be fixed",
+    "start": 55.083333333333336,
+    "end": 75.33333333333334,
+    "text": "narration/03-patches.txt",
+    "audio": "audio/03.wav"
+  },
+  {
+    "id": 4,
+    "title": "Built on community fixes",
+    "start": 75.33333333333334,
+    "end": 98.87500000000001,
+    "text": "narration/04-community.txt",
+    "audio": "audio/04.wav"
+  },
+  {
+    "id": 5,
+    "title": "Three parts working together",
+    "start": 98.87500000000001,
+    "end": 115.04166666666669,
+    "text": "narration/05-parts.txt",
+    "audio": "audio/05.wav"
+  },
+  {
+    "id": 6,
+    "title": "Start with tested setups",
+    "start": 115.04166666666669,
+    "end": 147.29166666666669,
+    "text": "narration/06-hardware.txt",
+    "audio": "audio/06.wav"
+  },
+  {
+    "id": 7,
+    "title": "eGPU docks tested so far",
+    "start": 147.29166666666669,
+    "end": 187.08333333333334,
+    "text": "narration/07-dockgallery.txt",
+    "audio": "audio/07.wav"
+  },
+  {
+    "id": 8,
+    "title": "GPUs tested and reported",
+    "start": 187.08333333333334,
+    "end": 228.45833333333334,
+    "text": "narration/08-gpulist.txt",
+    "audio": "audio/08.wav"
+  },
+  {
+    "id": 9,
+    "title": "Device glyphs by Victor Borges",
+    "start": 228.45833333333334,
+    "end": 243.04166666666669,
+    "text": "narration/09-glyphcredit.txt",
+    "audio": "audio/09.wav"
+  },
+  {
+    "id": 10,
+    "title": "SteamOS. CachyOS. Bazzite.",
+    "start": 243.04166666666669,
+    "end": 263.625,
+    "text": "narration/10-os.txt",
+    "audio": "audio/10.wav"
+  },
+  {
+    "id": 11,
+    "title": "Connect, then let Game Mode move",
+    "start": 263.625,
+    "end": 284.375,
+    "text": "narration/11-attach.txt",
+    "audio": "audio/11.wav"
+  },
+  {
+    "id": 12,
+    "title": "Safe Detach comes before unplugging",
+    "start": 284.375,
+    "end": 302.7916666666667,
+    "text": "narration/12-detach.txt",
+    "audio": "audio/12.wav"
+  },
+  {
+    "id": 13,
+    "title": "What if the cable gets pulled?",
+    "start": 302.7916666666667,
+    "end": 331.0416666666667,
+    "text": "narration/13-recovery.txt",
+    "audio": "audio/13.wav"
+  },
+  {
+    "id": 14,
+    "title": "Choose where Game Mode appears",
+    "start": 331.0416666666667,
+    "end": 355.5416666666667,
+    "text": "narration/14-screens.txt",
+    "audio": "audio/14.wav"
+  },
+  {
+    "id": 15,
+    "title": "The eGPU can render for a small screen",
+    "start": 355.5416666666667,
+    "end": 370.58333333333337,
+    "text": "narration/15-copyback.txt",
+    "audio": "audio/15.wav"
+  },
+  {
+    "id": 16,
+    "title": "Readings and GPU controls",
+    "start": 370.58333333333337,
+    "end": 391.58333333333337,
+    "text": "narration/16-telemetry.txt",
+    "audio": "audio/16.wav"
+  },
+  {
+    "id": 17,
+    "title": "XG Mobile gets its own controls",
+    "start": 391.58333333333337,
+    "end": 409.58333333333337,
+    "text": "narration/17-xg.txt",
+    "audio": "audio/17.wav"
+  },
+  {
+    "id": 18,
+    "title": "The same setup on the desktop",
+    "start": 409.58333333333337,
+    "end": 428.33333333333337,
+    "text": "narration/18-desktop.txt",
+    "audio": "audio/18.wav"
+  },
+  {
+    "id": 19,
+    "title": "Optional settings (experimental)",
+    "start": 428.33333333333337,
+    "end": 450.50000000000006,
+    "text": "narration/19-experimental.txt",
+    "audio": "audio/19.wav"
+  },
+  {
+    "id": 20,
+    "title": "Save a report for Discord support",
+    "start": 450.50000000000006,
+    "end": 473.70833333333337,
+    "text": "narration/20-report.txt",
+    "audio": "audio/20.wav"
+  },
+  {
+    "id": 21,
+    "title": "Built with testers and upstream projects",
+    "start": 473.70833333333337,
+    "end": 497.95833333333337,
+    "text": "narration/21-credits.txt",
+    "audio": "audio/21.wav"
+  },
+  {
+    "id": 22,
+    "title": "Install the Decky plugin",
+    "start": 497.95833333333337,
+    "end": 508.7916666666667,
+    "text": "narration/22-tutorial.txt",
+    "audio": "audio/22.wav"
+  },
+  {
+    "id": 23,
+    "title": "Before you start",
+    "start": 508.7916666666667,
+    "end": 521.375,
+    "text": "narration/23-prereq.txt",
+    "audio": "audio/23.wav"
+  },
+  {
+    "id": 24,
+    "title": "1. Enable Decky Developer mode",
+    "start": 521.375,
+    "end": 539.7083333333334,
+    "text": "narration/24-capture.txt",
+    "audio": "audio/24.wav"
+  },
+  {
+    "id": 25,
+    "title": "2. Download the Decky ZIP",
+    "start": 539.7083333333334,
+    "end": 561.7083333333334,
+    "text": "narration/25-capture.txt",
+    "audio": "audio/25.wav"
+  },
+  {
+    "id": 26,
+    "title": "3. Browse to the downloaded ZIP",
+    "start": 561.7083333333334,
+    "end": 581.3333333333334,
+    "text": "narration/26-capture.txt",
+    "audio": "audio/26.wav"
+  },
+  {
+    "id": 27,
+    "title": "4. Read Decky\u2019s warning",
+    "start": 581.3333333333334,
+    "end": 599.3333333333334,
+    "text": "narration/27-capture.txt",
+    "audio": "audio/27.wav"
+  },
+  {
+    "id": 28,
+    "title": "The download is in Downloads",
+    "start": 599.3333333333334,
+    "end": 614.4583333333334,
+    "text": "narration/28-capture.txt",
+    "audio": "audio/28.wav"
+  },
+  {
+    "id": 29,
+    "title": "Confirm EGPU Buddy, then open it",
+    "start": 614.4583333333334,
+    "end": 630.0,
+    "text": "narration/29-capture.txt",
+    "audio": "audio/29.wav"
+  },
+  {
+    "id": 30,
+    "title": "Alternative: paste the direct ZIP URL",
+    "start": 630.0,
+    "end": 646.4166666666666,
+    "text": "narration/30-capture.txt",
+    "audio": "audio/30.wav"
+  },
+  {
+    "id": 31,
+    "title": "5. Choose the external GPU vendor",
+    "start": 646.4166666666666,
+    "end": 666.75,
+    "text": "narration/31-capture.txt",
+    "audio": "audio/31.wav"
+  },
+  {
+    "id": 32,
+    "title": "NVIDIA branch: build the patched driver",
+    "start": 666.75,
+    "end": 685.0833333333334,
+    "text": "narration/32-capture.txt",
+    "audio": "audio/32.wav"
+  },
+  {
+    "id": 33,
+    "title": "AMD / Intel branch: no NVIDIA build",
+    "start": 685.0833333333334,
+    "end": 714.125,
+    "text": "narration/33-capture.txt",
+    "audio": "audio/33.wav"
+  },
+  {
+    "id": 34,
+    "title": "Conditional prompts: stop and read",
+    "start": 714.125,
+    "end": 737.8333333333334,
+    "text": "narration/34-capture.txt",
+    "audio": "audio/34.wav"
+  },
+  {
+    "id": 35,
+    "title": "Conflicts need attention first",
+    "start": 737.8333333333334,
+    "end": 757.375,
+    "text": "narration/35-capture.txt",
+    "audio": "audio/35.wav"
+  },
+  {
+    "id": 36,
+    "title": "6. Wait for integration to finish",
+    "start": 757.375,
+    "end": 775.1666666666666,
+    "text": "narration/36-capture.txt",
+    "audio": "audio/36.wav"
+  },
+  {
+    "id": 37,
+    "title": "The AMD / Intel progress path",
+    "start": 775.1666666666666,
+    "end": 789.25,
+    "text": "narration/37-capture.txt",
+    "audio": "audio/37.wav"
+  },
+  {
+    "id": 38,
+    "title": "If installation fails, repair first",
+    "start": 789.25,
+    "end": 804.9583333333334,
+    "text": "narration/38-capture.txt",
+    "audio": "audio/38.wav"
+  },
+  {
+    "id": 39,
+    "title": "7. Reboot before connecting the eGPU",
+    "start": 804.9583333333334,
+    "end": 824.1666666666667,
+    "text": "narration/39-capture.txt",
+    "audio": "audio/39.wav"
+  },
+  {
+    "id": 40,
+    "title": "Connect after the reboot",
+    "start": 824.1666666666667,
+    "end": 841.4583333333334,
+    "text": "narration/40-finish.txt",
+    "audio": "audio/40.wav"
+  }
+]
