@@ -372,8 +372,19 @@ def settle():
         print(found[0][0], wake(*found[0], take_input=True))
 
 
-def _kwin_enable(conn, on):
-    os.system(f"kscreen-doctor output.{conn}.{'enable' if on else 'disable'} >/dev/null 2>&1")
+def _kwin_layout(conn):
+    """KDE's main-screen order and scale for a screen, so turning it back on restores both (KDE brings a re-enabled
+    screen back as a secondary screen at its default scale: a TV that was the main screen lost the taskbar)."""
+    try:
+        o = next(x for x in json.loads(subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=10).stdout)["outputs"] if x.get("name") == conn)
+        return {"priority": int(o["priority"]), "scale": float(o["scale"])}
+    except Exception:
+        return {}
+
+
+def _kwin_enable(conn, on, layout=None):
+    extra = "".join(f" output.{conn}.{k}.{v:g}" for k, v in (layout or {}).items())
+    os.system(f"kscreen-doctor output.{conn}.{'enable' if on else 'disable'}{extra} >/dev/null 2>&1")
 
 
 def _connected():
@@ -393,7 +404,7 @@ def _connected():
 
 def watch():
     """Desktop (KWin) only - Game Mode picks its screens at attach (nv-egpu-buddy-mount)."""
-    names, last, ours = set(), {}, set()
+    names, last, ours = set(), {}, {}   # ours: screens this watcher disabled -> their KDE layout
     if subprocess.run(["which", "kscreen-doctor"], capture_output=True).returncode:
         print("no kscreen-doctor (not KDE Plasma): desktop screen rule off", flush=True); return
     # With one external screen, no I2C in the 5 s loop (every machine; first seen on the XG Mobile). After a desktop
@@ -428,10 +439,10 @@ def watch():
                     # the user) turned off. A KDE-side output toggle on the eGPU can leave the link dark.
                     if not use and enabled and others:  # never switch off the last lit screen
                         print(f"{conn}: {st} -> disable", flush=True)
-                        _kwin_enable(conn, False); ours.add(conn)
+                        ours[conn] = _kwin_layout(conn); _kwin_enable(conn, False)
                     elif use and not enabled and conn in ours:
                         print(f"{conn}: {st} -> enable (we disabled it)", flush=True)
-                        _kwin_enable(conn, True); ours.discard(conn)
+                        _kwin_enable(conn, True, ours.pop(conn))
         time.sleep(5)
 
 
