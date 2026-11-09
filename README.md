@@ -85,10 +85,27 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 ### The desktop app
 
 <p align="center">
-  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="700">
+  <img src="docs/assets/screenshot-desktop-overview.png" alt="EGPU Buddy desktop app, Overview: Legion Go 2 connected over USB4 to an RTX 5060 Ti with two screens, live temperature, power, GPU load, VRAM, clocks and PCIe link, power limit, the screen picker and Safe Detach" width="800">
 </p>
-<p align="center"><sub>The same controls on the desktop, here with an ASUS XG Mobile: GPU readings, power target and its 115 W cap,
-fan modes and custom curve, lights and clock offsets. Readings from SilverplayerX's device.</sub></p>
+<p align="center"><sub>Overview: the handheld, the eGPU and its screens at a glance, live readings, the power limit, the screen the
+desktop and Game Mode show on (only the picked screen shows a picture), and Safe Detach. The version and the update button stay at the top.</sub></p>
+
+<table align="center">
+  <tr>
+    <th width="50%" valign="top">NVIDIA settings<br><sub>Low latency, power mode, vertical sync, frame limit, filtering, sharpening, shader cache.</sub></th>
+    <th width="50%" valign="top">Extras and setup<br><sub>The Game Mode settings, updates, TV control, the look and the support report.</sub></th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshot-desktop-nvidia.png" alt="EGPU Buddy desktop app, NVIDIA settings: low latency, power management, vertical sync, max frame rate, anisotropic filtering, image sharpening, shader cache size, threaded optimization" width="400"></td>
+    <td valign="top"><img src="docs/assets/screenshot-desktop-extras.png" alt="EGPU Buddy desktop app, Extras and setup: best resolution, Steam menu fix, wake screens, automatic updates, USB4 link check, TV control and pairing, new or classic look, support report" width="400"></td>
+  </tr>
+</table>
+
+<p align="center"><sub>The classic look is one click away in Extras and setup. Below, the classic look with an ASUS XG Mobile:
+power target and its 115 W cap, fan modes and custom curve, lights and clock offsets. Readings from SilverplayerX's device.</sub></p>
+<p align="center">
+  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app, classic look, with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="600">
+</p>
 
 ## Tested hardware
 
