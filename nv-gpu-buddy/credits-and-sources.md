@@ -57,3 +57,5 @@ Source content remains the previously checked 0.7.242 snapshot. Mocked installat
 ## New desktop app screenshots — 9 Nov 2026
 
 The owner supplied the images in Desktop/New look. Active desktop-app visuals now use those files unchanged: Overview, NVIDIA/GPU settings, and Extras and setup. The EGPU film also includes the supplied XG Mobile overview and setup previews. Preview images retain visible labels and their example readings are not treated as hardware test evidence. Decky installation dialogs remain source-rendered examples of that separate interface. Per-file original paths and SHA-256 checksums are in asset-sources.json.
+
+Screenshot context correction: Game Mode feature views use Decky plugin imagery again. New desktop images appear only in the EGPU desktop chapter or explicitly labeled Desktop Mode portions of the NV interface/settings chapters. The update-channel explanation retains its original diagram/text.
