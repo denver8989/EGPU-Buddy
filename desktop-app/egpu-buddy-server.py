@@ -68,6 +68,46 @@ def ref_path():
 
 _DOCK = [None, ""]   # [bdf it was looked up for, label]: egpu-detect is a script, not run on every poll
 
+# ---- look (new / classic), handheld picture ----
+LOOK_FILE = os.path.expanduser("~/.config/nv-egpu-buddy/look")
+def look():
+    """The picked look wins. Unpicked: the new look on the NVIDIA reference path (SteamOS / CachyOS handhelds) only;
+    Bazzite, ROG Ally / XG Mobile, AMD / Intel and NV GPU Buddy keep the classic look until someone picks the new one."""
+    v = read(LOOK_FILE)
+    if v in ("classic", "new"): return v
+    other = (not ref_path()) or read("/etc/nv-egpu-buddy/track") == "nv-gpu-buddy" or read("/etc/nv-egpu-buddy/gpu-vendor") == "amd"
+    return "classic" if other else "new"
+
+# DMI "vendor product family" -> handhelds/<file>.svg (the same table as the Game Mode plugin, same pictures)
+HANDHELD_ART = [
+    (r"Legion Go S", "lenovo-legion-go-s", "Lenovo Legion Go S"), (r"Legion Go (2|8A.P2)", "lenovo-legion-go-2", "Lenovo Legion Go 2"), (r"Legion Go", "lenovo-legion-go", "Lenovo Legion Go"),
+    (r"RC73|Xbox Ally", "asus-rog-xbox-ally", "ROG Xbox Ally"), (r"RC71|RC72|ROG Ally", "asus-rog-ally", "ASUS ROG Ally"),
+    (r"Claw A8", "msi-claw-a8", "MSI Claw A8"), (r"Claw", "msi-claw", "MSI Claw"),
+    (r"AYANEO.*SLIDE", "ayaneo-slide", "AYANEO Slide"), (r"AYANEO.*KUN", "ayaneo-kun", "AYANEO KUN"), (r"AYANEO.*NEXT", "ayaneo-next", "AYANEO NEXT"),
+    (r"AYANEO.*AIR", "ayaneo-air", "AYANEO AIR"), (r"AYANEO 3\b", "ayaneo-3", "AYANEO 3"), (r"AYANEO 2", "ayaneo-2", "AYANEO 2"), (r"AYA ?NEO.*(NEO|FOUNDER|2021)", "ayaneo-neo", "AYANEO"),
+    (r"Loki", "ayn-loki", "AYN Loki"), (r"G1618-03", "gpd-win-3", "GPD WIN 3"), (r"G1618-04", "gpd-win-4", "GPD WIN 4"), (r"G1617", "gpd-win-mini", "GPD WIN Mini"), (r"G1619", "gpd-win-max-2", "GPD WIN Max 2"),
+    (r"ONEXPLAYER F1", "onexplayer-f1", "ONEXPLAYER F1"), (r"ONEXPLAYER G1", "onexplayer-g1", "ONEXPLAYER G1"), (r"ONEXPLAYER X1", "onexplayer-x1", "ONEXPLAYER X1"), (r"ONEXPLAYER 2", "onexplayer-2", "ONEXPLAYER 2"),
+    (r"AOKZOE A1", "aokzoe-a1", "AOKZOE A1"), (r"Win600", "anbernic-win600", "Anbernic Win600"), (r"ZOTAC.*ZONE", "zotac-zone", "ZOTAC ZONE"),
+    (r"Pocket Go", "tecno-pocket-go", "TECNO Pocket Go"), (r"Zeenix", "tectoy-zeenix", "Tectoy Zeenix"),
+]
+
+def handheld_art():
+    """(name, svg path) of this handheld's outline, or ("", "") when none is known."""
+    dmi = " ".join(read(f"/sys/class/dmi/id/{k}") for k in ("sys_vendor", "product_name", "product_family"))
+    name, title = next(((f, t) for rx, f, t in HANDHELD_ART if re.search(rx, dmi, re.I)), ("", ""))
+    for d in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "handhelds"), os.path.join(os.path.expanduser("~"), "homebrew/plugins/EGPU-Buddy/handhelds")):
+        if name and os.path.exists(f"{d}/{name}.svg"): return title, f"{d}/{name}.svg"
+    return "", ""
+
+def handheld_svg():
+    """The outline in the app's line colour, sized by the window (the plugin recolours the same files)."""
+    _, path = handheld_art()
+    if not path: return b""
+    svg = open(path, errors="ignore").read(); svg = svg[svg.index("<svg"):]
+    svg = re.sub(r"((?:stroke|fill)\s*[=:]\s*\"?)#[0-9a-fA-F]{3,8}", r"\g<1>#c9c5ea", svg)
+    svg = re.sub(r'<svg\b([^>]*?)\s(?:width|height)="[^"]*"', r"<svg\1", svg, count=2)
+    return svg.encode()
+
 def status():
     _, l, _ = sh(["lspci", "-Dn"]); bdf = next((x.split()[0] for x in l.splitlines() if " 0300: 10de:" in x), ""); vendor = "nvidia" if bdf else ""
     if not bdf:
@@ -99,7 +139,7 @@ def status():
             "detach": jread(f"{RUN}/safe-detach-status.json"),
             "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0],
             # NV GPU Buddy track (experimental, built-in NVIDIA card): the window shows its name and hides the eGPU parts
-            "track": "nv-gpu-buddy" if read("/etc/nv-egpu-buddy/track") == "nv-gpu-buddy" else "",
+            "track": "nv-gpu-buddy" if read("/etc/nv-egpu-buddy/track") == "nv-gpu-buddy" else "", "look": look(), "handheld": handheld_art()[0],
             **update_state(read("/etc/nv-egpu-buddy/version")), **(screens(bdf if driver else "") if vendor in ("", "nvidia") and ref_path() else {})}
 
 def edid_name(conn_dir):
@@ -107,6 +147,18 @@ def edid_name(conn_dir):
     except OSError: return ""
     i = e.find(b"\0\0\0\xfc\0")
     return e[i + 5:i + 18].split(b"\n")[0].decode(errors="ignore").strip() if i >= 0 else ""
+
+def best_mode(conn_dir):
+    """The mode that says what the screen is: the largest one in the widest shape it lists (a 32:9 monitor lists 16:9 modes too)."""
+    ms = [tuple(map(int, m.split("x"))) for m in read(conn_dir + "/modes").splitlines() if re.fullmatch(r"\d+x\d+", m)]
+    shape = lambda m: 2 if m[0] / m[1] >= 3.2 else 1 if m[0] / m[1] >= 2.2 else 0
+    best = max(ms, key=lambda m: (shape(m), m[0] * m[1]), default=None)
+    return "%dx%d" % best if best else ""
+
+def edid_inch(conn_dir):
+    """Screen diagonal in inches from the EDID's size in cm (0 when it does not say)."""
+    try: e = open(conn_dir + "/edid", "rb").read()[:128]; return round((e[21] ** 2 + e[22] ** 2) ** 0.5 / 2.54) if e[21] and e[22] else 0
+    except (OSError, IndexError): return 0
 
 def screens(bdf):
     """NVIDIA install: the screens the desktop (and Game Mode) can be put on, as in the plugin: the handheld's own screen, a
@@ -120,9 +172,9 @@ def screens(bdf):
         card, conn = os.path.basename(d).split("-", 1)
         if read(d + "/status") != "connected" or conn.startswith("Writeback"): continue
         if card == pcard:
-            out.append({"name": conn, "kind": "handheld", "label": "Handheld screen" if conn.startswith("eDP") else (edid_name(d) or conn) + " (USB-C)"})
+            out.append({"name": conn, "kind": "handheld", "label": "Handheld screen" if conn.startswith("eDP") else (edid_name(d) or conn) + " (USB-C)", "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d)})
         elif card == ecard and not conn.startswith("eDP"):
-            out.append({"name": conn, "kind": "egpu", "label": edid_name(d) or conn})
+            out.append({"name": conn, "kind": "egpu", "label": edid_name(d) or conn, "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d)})
     out.sort(key=lambda x: x["kind"] != "handheld")
     on = ""
     _, k, _ = sh(["pgrep", "-u", str(UID), "-x", "kwin_wayland"])
@@ -191,6 +243,11 @@ def action(p):
     if a in ("xgm-fan", "xgm-fan-curve", "xgm-light", "xgm-light-effect", "xgm-brightness", "xgm-offset", "xgm-power"):   # ASUS XG Mobile (the helper refuses any other dock)
         arg = str((p or {}).get("value", "")); rc, o, e = sh(["sudo", "-n", PRIV, {"xgm-power": "xgm-power-target"}.get(a, a), arg], 20)
         return {"ok": rc == 0, "out": o or e}
+    if a == "set-look":   # the app's look: new (default) or classic (the one before); kept per user
+        v = "classic" if str((p or {}).get("value", "")) == "classic" else "new"
+        os.makedirs(os.path.dirname(LOOK_FILE), exist_ok=True); open(LOOK_FILE, "w").write(v + "\n"); return {"ok": True, "out": "Look: " + v, "silent": True}
+    if a == "report":   # Save support report (the same file as the "Save EGPU Buddy report" icon)
+        rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-report"], 90); return {"ok": rc == 0, "out": ("Support report saved: " + o.strip()) if rc == 0 else (o or e)}
     if a == "xgm-intro-seen":   # the XG Mobile intro animation was shown in this app (it plays once here, once in the plugin)
         rc, o, e = sh(["sudo", "-n", PRIV, "xgm-intro-seen", "desktop"], 10); return {"ok": rc == 0, "silent": True}
     if a == "set-screen":   # NVIDIA install: the screen for the desktop and Game Mode (the plugin's "Show Game Mode on ...")
@@ -204,10 +261,9 @@ def action(p):
         if not (s["present"] and s["driver_loaded"]):
             return {"ok": True, "out": f"{pick['label']} picked: the desktop and Game Mode use it once the eGPU is attached."}
         if pick["kind"] == s.get("desktop_on"):
-            # same GPU as now: only the primary screen changes (the built-in screen is always there on the handheld GPU)
-            if not pick["name"].startswith("eDP"):
-                sh(["kscreen-doctor", f"output.{c}.enable", f"output.{c}.priority.1"], 15)
-            return {"ok": True, "out": f"The desktop is on {pick['label']}."}
+            # same GPU as now: the picked screen alone shows an image (owner's rule), every other screen KWin drives goes off
+            sh(["/usr/local/sbin/egpu-screen", "only", c], 30)
+            return {"ok": True, "out": f"The desktop is on {pick['label']} only."}
         # the other GPU: KWin re-starts on it (one GPU at a time: no crosstalk); the login comes back to the desktop
         sh(["sudo", "-n", PRIV, "session-fallback", "desktop"], 10)
         subprocess.Popen(OWN_UNIT + ["/bin/sh", "-c", "sleep 2; qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout || qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout"],
@@ -283,6 +339,9 @@ class H(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         p = self.path.split("?")[0]
         if p == "/api/status": return self._json(status())
+        if p == "/handheld.svg":
+            b = handheld_svg()
+            self.send_response(200 if b else 404); self.send_header("content-type", "image/svg+xml"); self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b); return
         if p == "/api/notes": return self._json(release_notes())
         if p == "/api/nvidia": return self._json(nvidia_settings())
         if p == "/api/nvidia-game":   # while a game runs: which saved setting it really received (read-only)

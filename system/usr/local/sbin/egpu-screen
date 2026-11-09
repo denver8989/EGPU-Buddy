@@ -6,6 +6,7 @@
   egpu-screen wake [CONNECTOR]  power on screens still on our input (all if none given)
   egpu-screen wake --input ...  also switch screens on another input back to us
   egpu-screen settle            the only external screen? turn it on and onto our input
+  egpu-screen only CONNECTOR    desktop only: that screen alone shows an image (every other KWin screen off)
   egpu-screen replug [CONNECTOR] desktop only: software unplug + replug, for a monitor stuck on "no signal"
   egpu-screen watch             desktop session: settle on plug-in; with 2+ screens, leave a TV that is
                                 on another input (or off) out of the desktop until it is switched to us
@@ -387,6 +388,36 @@ def _kwin_enable(conn, on, layout=None):
     os.system(f"kscreen-doctor output.{conn}.{'enable' if on else 'disable'}{extra} >/dev/null 2>&1")
 
 
+def _kwin_outputs():
+    try:
+        return [o["name"] for o in json.loads(subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=10).stdout)["outputs"] if o.get("connected")]
+    except Exception:
+        return []
+
+
+def _reference_path():
+    """The NVIDIA reference path (Legion Go SteamOS / CachyOS): not Bazzite, not ROG Ally / XG Mobile, not the AMD / Intel install,
+    not NV GPU Buddy. The picked-screen-only rule at login runs there only; every other setup keeps what KWin shows."""
+    rd = lambda f: open(f).read() if os.path.exists(f) else ""
+    if "bazzite" in rd("/etc/os-release").lower() or os.path.exists("/var/lib/nvegpu/xg-mobile-seen"): return False
+    if rd("/etc/nv-egpu-buddy/gpu-vendor").strip() == "amd" or rd("/etc/nv-egpu-buddy/track").strip() == "nv-gpu-buddy": return False
+    return subprocess.run(["/usr/local/sbin/egpu-detect", "--device"], capture_output=True, text=True).stdout.strip() != "rog-ally"
+
+
+def only(conn):
+    """Desktop (KWin): CONN is the only screen showing an image; every other screen KWin drives goes off, in one
+    KWin change (the owner's rule: picking a screen in the app = an image on that screen alone). The handheld's own
+    panel is on the other GPU when the desktop runs on the eGPU, so it is not KWin's to switch: panel-off does that."""
+    names = _kwin_outputs()
+    if conn not in names:
+        return f"{conn} is not a screen KWin drives"
+    args = [f"output.{conn}.enable", f"output.{conn}.priority.1"] + [f"output.{n}.disable" for n in names if n != conn]
+    subprocess.run(["kscreen-doctor"] + args, capture_output=True, timeout=20)
+    if not conn.startswith("eDP") and not any(n.startswith("eDP") for n in names):
+        subprocess.run(["sudo", "-n", "/usr/local/sbin/nv-egpu-buddy-privileged", "panel-off"], capture_output=True, timeout=20)
+    return "only " + conn
+
+
 def _connected():
     """(connector, EDID) of every connected non-panel output, from the kernel's own copy: no I2C."""
     out = []
@@ -404,13 +435,25 @@ def _connected():
 
 def watch():
     """Desktop (KWin) only - Game Mode picks its screens at attach (nv-egpu-buddy-mount)."""
-    names, last, ours = set(), {}, {}   # ours: screens this watcher disabled -> their KDE layout
+    names, last, ours, seen_once = set(), {}, {}, {}   # ours: screens this watcher disabled -> their KDE layout
     if subprocess.run(["which", "kscreen-doctor"], capture_output=True).returncode:
         print("no kscreen-doctor (not KDE Plasma): desktop screen rule off", flush=True); return
     # With one external screen, no I2C in the 5 s loop (every machine; first seen on the XG Mobile). After a desktop
     # screen-off / wake, every EDID read on the monitor's bus blanked a Dell U3415W on DisplayPort for a moment (XG Mobile RTX 5070 Ti Laptop,
     # NVIDIA 610.57.04 open, SteamOS 3.9.5; GitHub issue #6 by akamel001). The kernel's connector status and EDID are read
     # each pass instead, and the I2C scan runs only when that set changes. Two or more screens: unchanged.
+    # the screen picked in the plugin / desktop app (NVIDIA reference path: the file exists only there): once per
+    # desktop login that screen alone shows an image, as Game Mode does. KWin can still be starting: wait for it.
+    try:
+        pick = open("/var/lib/nvegpu/game-screen").read().strip() if _reference_path() else ""
+    except OSError:
+        pick = ""
+    for _ in range(12 if pick else 0):
+        if os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") == 0 or pick in _kwin_outputs():
+            break
+        time.sleep(5)
+    if pick and os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") != 0 and pick in _kwin_outputs():
+        print(f"{pick}: picked screen -> {only(pick)}", flush=True)
     seen = None
     while True:
         if os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") != 0:
@@ -430,6 +473,9 @@ def watch():
                         continue  # a read that failed this time is not news
                     if st == last.get(conn):
                         continue  # act on changes only, so a manual KDE change is never fought
+                    if seen_once.get(conn) != st:
+                        seen_once[conn] = st; continue  # a new state must hold for two passes (10 s): a TV reads "off" for a
+                        # moment while it powers up with the dock, and a disable + enable 7 s apart left the eGPU head dark
                     last[conn] = st
                     use = st not in ("other-input", "off")
                     enabled = any(open(n).read().strip() == "enabled" for n in glob.glob(f"/sys/class/drm/card*-{conn}/enabled"))
@@ -480,6 +526,8 @@ def main(argv):
                 open(st, "w").write("off"); time.sleep(3); open(st, "w").write("detect")
             print(conn, "replugged")
         return 0
+    if cmd == "only" and len(want) == 1:
+        print(only(want[0])); return 0
     if cmd == "settle":
         settle(); return 0
     if cmd == "find":
