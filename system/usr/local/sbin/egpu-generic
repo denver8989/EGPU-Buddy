@@ -411,11 +411,25 @@ detach)
     K=/var/log/egpu-detach-kmsg.log; : > $K
     ( timeout 120 stdbuf -oL dmesg -W 2>/dev/null | while IFS= read -r l; do printf '%s\n' "$l" >> $K; sync $K; done ) &
     sleep 5
+    # 0.7.247 report 5232ST: the GPU unbind hit "BUG: kernel NULL pointer dereference, address 0x138" right after "ttm
+    # finalized" and the machine reset before the stack trace was written. So: (1) the eGPU's outputs are switched off
+    # while the driver is still whole (the TV goes dark now, not when the driver is gone); (2) for this step only, an oops
+    # does not reboot (panic_on_oops 0, restored after), and the unbind runs in its own process, so an oops kills that
+    # process instead of the machine and the full trace reaches the log.
+    po=$(cat /proc/sys/kernel/panic_on_oops 2>/dev/null); log "panic_on_oops=$po panic=$(cat /proc/sys/kernel/panic 2>/dev/null)"
+    echo 0 > /proc/sys/kernel/panic_on_oops 2>/dev/null
+    for st in /sys/bus/pci/devices/$bdf/drm/card*/card*-*/status; do [ -e "$st" ] && echo off > "$st" 2>/dev/null; done
+    log "eGPU outputs off"; sync; sleep 2
     for fn in $(ls -d /sys/bus/pci/devices/"${bdf%.*}".[1-7] 2>/dev/null) /sys/bus/pci/devices/$bdf; do
       d=$(readlink -f "$fn/driver" 2>/dev/null); [ -n "$d" ] || continue
-      log "unbinding ${fn##*/} from ${d##*/}"; sync; echo "${fn##*/}" > "$d/unbind" 2>/dev/null; sleep 2
+      log "unbinding ${fn##*/} from ${d##*/}"; sync; sh -c 'echo "$1" > "$2/unbind"' _ "${fn##*/}" "$d" 2>/dev/null; log "unbind returned $?"; sleep 3
       log "unbound ${fn##*/}"; sync
     done
+    [ -n "$po" ] && echo "$po" > /proc/sys/kernel/panic_on_oops 2>/dev/null
+    if grep -qE 'BUG:|Oops|Call Trace' $K 2>/dev/null; then
+      sleep 5; sync; log "kernel oops during the unbind: trace kept in $K"
+      status FAILED "The eGPU driver crashed while letting go. Restart before unplugging, then send a support report."; exit 7
+    fi
   fi
   for fn in $rmlist; do [ -e "$fn/remove" ] || continue
     log "removing ${fn##*/} ($(basename "$(readlink -f "$fn/driver" 2>/dev/null)"))"; sync; echo 1 > "$fn/remove" 2>/dev/null; done

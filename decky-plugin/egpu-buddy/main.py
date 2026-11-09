@@ -1774,11 +1774,14 @@ def _support_report():
         # (did the GPU appear?) was cut off (Legion Go 1 + AG02 report on 0.7.198). Those lines left out, 60 kept.
         if p == "/var/log/egpu-generic.log":
             tail = [t for t in _read(p).splitlines() if "another instance running" not in t][-60:]
+        # AMD Safe Detach on a Titan Ridge dock: the kernel's lines of the removal, a whole oops trace included
+        if p == "/var/log/egpu-detach-kmsg.log":
+            tail = _read(p).splitlines()[-150:]
         # ROG Ally / XG Mobile: the plugin's own log carries its menu events there (ui_event), last 200 kept
         if p in decky_logs and _ally_xgm():
             tail = _read(p).splitlines()[-200:]
         if tail:
-            lines += ["", f"## {p} (last {len(tail) if (p == '/var/log/egpu-generic.log' or (p in decky_logs and _ally_xgm())) else 30})"] + [t[:300] for t in tail]
+            lines += ["", f"## {p} (last {len(tail) if (p in ('/var/log/egpu-generic.log', '/var/log/egpu-detach-kmsg.log') or (p in decky_logs and _ally_xgm())) else 30})"] + [t[:300] for t in tail]
     return _redact("\n".join(lines))
 
 
