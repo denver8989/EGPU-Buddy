@@ -260,7 +260,7 @@ case "${1:---status}" in
     # buttons do not work there) and would appear unasked. The player is told the simple way back; a reinstall still offers
     # the key (--build) for anyone who wants Secure Boot on.
     can_load || { say "Secure Boot is on and this machine's signing key is not trusted: the patched driver cannot load"
-      mkdir -p /run/nvegpu; echo "Secure Boot is now on, so the eGPU driver cannot load. Turn Secure Boot off again in the BIOS (it was off before) and the eGPU works as before." > /run/nvegpu/notice; exit 0; }
+      mkdir -p /run/nvegpu; echo "Secure Boot is now on, so the eGPU driver cannot load. Switch Secure Boot off in the BIOS and the eGPU works again." > /run/nvegpu/notice; exit 0; }
     # (0.7.148's "auto-off" came from a miscount, not from hung boots: it is dropped, the driver goes back on)
     [ -e "$W/auto-off" ] && { rm -f "$W/auto-off"; echo 0 > "$W/boot-attempts"; say "0.7.148 switched the driver off by mistake (a boot was counted twice): switched back on"; }
     # boots that failed with a build whose files had the container's SELinux labels (0.7.151 and older): that was the
