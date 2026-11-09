@@ -66,6 +66,13 @@ def ref_path():
         _REF[0] = not bz and not ally
     return _REF[0]
 
+_ALLY = [None]
+def is_ally():
+    """ROG Ally / ASUS XG Mobile (the CLAUDE.md gate), looked up once."""
+    if _ALLY[0] is None:
+        _ALLY[0] = sh(["/usr/local/sbin/egpu-detect", "--device"])[1] == "rog-ally" or os.path.exists("/var/lib/nvegpu/xg-mobile-seen")
+    return _ALLY[0]
+
 _DOCK = [None, ""]   # [bdf it was looked up for, label]: egpu-detect is a script, not run on every poll
 
 # ---- look (new / classic), handheld picture ----
@@ -175,7 +182,9 @@ def status():
             "update": jread("/run/nvegpu/update-status.json"), "installed": read("/etc/nv-egpu-buddy/version"), "gm": jread("/run/nvegpu/gm-status.json"), "last": dict(LAST), "show_seq": SHOW[0],
             # NV GPU Buddy track (experimental, built-in NVIDIA card): the window shows its name and hides the eGPU parts
             "track": "nv-gpu-buddy" if read("/etc/nv-egpu-buddy/track") == "nv-gpu-buddy" else "", "look": look(), "handheld": handheld_art()[0],
-            **update_state(read("/etc/nv-egpu-buddy/version")), **(screens(bdf if driver else "") if vendor in ("", "nvidia") and ref_path() else {})}
+            **update_state(read("/etc/nv-egpu-buddy/version")), **(screens(bdf if driver else "") if vendor in ("", "nvidia") and ref_path() else {}),
+            # ROG Ally / XG Mobile: the screen Game Mode starts on (the plugin's "Show Game Mode on"); its desktop keeps its own screens
+            **({**screens(bdf if driver else ""), "screens_game_only": True} if vendor in ("", "nvidia") and not ref_path() and is_ally() else {})}
 
 def edid_name(conn_dir):
     try: e = open(conn_dir + "/edid", "rb").read()[:128]
@@ -319,6 +328,8 @@ def action(p):
         if not pick: return {"ok": False, "error": f"{c} is not a connected screen"}
         rc, o, e = sh(["sudo", "-n", PRIV, "set-game-screen", c], 10)
         if rc != 0: return {"ok": False, "out": o or e}
+        if s.get("screens_game_only"):   # ROG Ally / XG Mobile: Game Mode only, the desktop is left as it is
+            return {"ok": True, "out": f"{pick['label']} picked: Game Mode starts on it next time. The desktop keeps its screens."}
         if s["game_mode"]: return {"ok": True, "out": f"{pick['label']} picked: Game Mode uses it at its next start."}
         if not (s["present"] and s["driver_loaded"]):
             return {"ok": True, "out": f"{pick['label']} picked: the desktop and Game Mode use it once the eGPU is attached."}

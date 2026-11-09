@@ -298,6 +298,7 @@ ApplicationWindow {
     }
     function portName(p) { return p === "DP" ? "DisplayPort" : p === "HDMI" ? "HDMI" : p === "eDP" ? "Built-in" : (p || "") }
     function pickScreen(sc) {
+        if (s.screens_game_only) { act("set-screen", { connector: sc.name }); return }   // ROG Ally / XG Mobile: Game Mode's screen only
         var moves = !s.game_mode && s.present && s.driver_loaded && sc.kind !== s.desktop_on
         if (moves) { confirmScreen.pick = sc; confirmScreen.open() } else act("set-screen", { connector: sc.name })
     }
@@ -537,14 +538,14 @@ ApplicationWindow {
             }
             // NVIDIA install: the screen for the desktop and Game Mode, as in the plugin ("Show Game Mode on ..."). Moving between
             // the handheld's GPU and the eGPU restarts the desktop on that GPU alone (no crosstalk, no copies between GPUs)
-            Label { text: "Screen"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: !win.nl && !win.nvb && (win.s.screens || []).length > 0 }
-            Flow { Layout.fillWidth: true; spacing: 8; visible: !win.nl && !win.nvb && (win.s.screens || []).length > 0
+            Label { text: "Screen"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: !win.nl && !win.nvb && !win.s.screens_game_only && (win.s.screens || []).length > 0 }
+            Flow { Layout.fillWidth: true; spacing: 8; visible: !win.nl && !win.nvb && !win.s.screens_game_only && (win.s.screens || []).length > 0
                 Repeater { model: win.s.screens || []
                     Button { text: modelData.label + (win.s.screen_pick === modelData.name ? "  ✓" : ""); highlighted: win.s.screen_pick === modelData.name
                              onClicked: { var moves = !win.s.game_mode && win.s.present && win.s.driver_loaded && modelData.kind !== win.s.desktop_on
                                           if (moves) { confirmScreen.pick = modelData; confirmScreen.open() } else win.act("set-screen", { connector: modelData.name }) } } }
             }
-            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !win.nl && !win.nvb && (win.s.screens || []).length > 0
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !win.nl && !win.nvb && !win.s.screens_game_only && (win.s.screens || []).length > 0
                 text: "The desktop and Game Mode both start on the screen picked here (or in the plugin). On the handheld's screen the games still render on the eGPU." }
             Card {
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: !win.nl }
@@ -623,12 +624,12 @@ ApplicationWindow {
             }
             RowLayout { Layout.fillWidth: true; visible: win.nl && !win.nvb; spacing: 14
                 Card { visible: (win.s.screens || []).length > 0; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 17
-                    Head { text: "Show the desktop on" }
+                    Head { text: win.s.screens_game_only ? "Show Game Mode on" : "Show the desktop on" }
                     Flow { Layout.fillWidth: true; spacing: 10
                         Repeater { model: win.s.screens || []
                             AbstractButton { id: sb
                                 readonly property bool sel: win.s.screen_pick === modelData.name
-                                readonly property bool moves: !win.s.game_mode && !!win.s.present && !!win.s.driver_loaded && modelData.kind !== win.s.desktop_on
+                                readonly property bool moves: !win.s.screens_game_only && !win.s.game_mode && !!win.s.present && !!win.s.driver_loaded && modelData.kind !== win.s.desktop_on
                                 width: 150; height: 118
                                 onClicked: win.pickScreen(modelData)
                                 background: Rectangle { radius: 12; color: sb.sel ? palette.alternateBase : palette.window; border.width: sb.sel ? 2 : 1; border.color: sb.sel ? palette.highlight : palette.mid }
@@ -641,7 +642,8 @@ ApplicationWindow {
                                     Label { Layout.alignment: Qt.AlignHCenter; text: sb.sel ? "picked" : sb.moves ? "restarts the desktop" : (modelData.mode || ""); font.pixelSize: 11; color: sb.sel ? palette.highlight : win.subCol }
                                     Item { Layout.fillHeight: true } } } } }
                     Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.subCol
-                            text: "Only the picked screen shows an image. Game Mode starts on it too. On the handheld's screen the games still render on the eGPU." } }
+                            text: win.s.screens_game_only ? "Game Mode starts on the picked screen. The desktop keeps its screens as they are."
+                                : "Only the picked screen shows an image. Game Mode starts on it too. On the handheld's screen the games still render on the eGPU." } }
                 Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 10
                     Head { text: "Unplugging" }
                     Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Safe Detach moves everything to the handheld and switches the card off. Unplug when it says so." }
