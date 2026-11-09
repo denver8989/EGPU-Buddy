@@ -36,13 +36,18 @@ case "$want" in
       echo "refusing to turn the built-in panel off: no eGPU is mounted to take over (set EGPU_PANEL_FORCE=1 to override)" >&2
       exit 3
     fi
+    # AMD / Intel install: "-M amdgpu" opens the FIRST amdgpu card, which is the AMD eGPU, so the panel's CRTC was never
+    # switched off and the panel stayed lit (amdgpu ignores bl_power and keeps a minimum backlight at 0; Legion Go S +
+    # RX 9070 XT report). Address the panel's own card by its PCI id there. NVIDIA installs: unchanged.
+    MT="-M amdgpu"
+    [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && MT="-D pci:$(basename "$(readlink -f /sys/class/drm/$PC/device)")"
     crtc_off() {
       local id crtc
-      id=$(modetest -M amdgpu -c 2>/dev/null | awk '/eDP-1/{print $1; exit}')
-      for crtc in $(modetest -M amdgpu -p 2>/dev/null | awk '/^CRTCs:/{f=1;next}/^Planes:/{f=0}f&&/^[0-9]/&&$2!=0{print $1}'); do
+      id=$(modetest $MT -c 2>/dev/null | awk '/eDP-1/{print $1; exit}')
+      for crtc in $(modetest $MT -p 2>/dev/null | awk '/^CRTCs:/{f=1;next}/^Planes:/{f=0}f&&/^[0-9]/&&$2!=0{print $1}'); do
         python3 /usr/local/sbin/egpu-crtc-off.py /dev/dri/$PC "$crtc" >/dev/null 2>&1
       done
-      [ -n "$id" ] && modetest -M amdgpu -w "$id":DPMS:3 >/dev/null 2>&1
+      [ -n "$id" ] && modetest $MT -w "$id":DPMS:3 >/dev/null 2>&1
     }
     if [ "$OWNED" = 0 ]; then crtc_off
     else
