@@ -1,3 +1,12 @@
+0.7.247 — AMD eGPU: handheld screen fully off on the TV; Safe Detach on Thunderbolt 3 docks reworked.
+
+**AMD / Intel eGPU** (AMD / Intel install only; NVIDIA unchanged)
+- The handheld screen now switches fully off while Game Mode is on the external screen; it stayed lit.
+- Safe Detach on Intel Titan Ridge (Thunderbolt 3) docks: nothing reads the card during the removal, the new session settles first, the drivers come off one step at a time, and the kernel's messages of the removal go into the support report.
+
+**Fix**
+- Updates no longer crash programs that have the NVIDIA settings loader open. (SteamOS and CachyOS with an NVIDIA eGPU; other setups unchanged)
+
 0.7.246 — Desktop app recovers by itself after an update; XG Mobile screen picker.
 
 **Desktop app**
