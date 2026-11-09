@@ -365,6 +365,7 @@ ApplicationWindow {
         anchors.top: win.nl ? hdr.bottom : parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; contentWidth: availableWidth
         background: Rectangle { color: palette.window }
         ColumnLayout {
+            id: pageCol
             width: win.width - 32; x: 16; y: win.nl ? 10 : 12; spacing: win.nl ? 10 : 12
             RowLayout { Layout.fillWidth: true; spacing: 10; visible: !win.nl
                 Label { text: win.appName; font.pixelSize: 22; font.bold: true }
@@ -663,9 +664,10 @@ ApplicationWindow {
     }
 
     // ---- self-test: one frame to a PNG, then quit ----
+    readonly property bool shotFull: Qt.application.arguments.indexOf("--full") >= 0   // --full: the whole page, not only what fits the window
     readonly property string shot: Qt.application.arguments.indexOf("--shot") >= 0 ? (Qt.application.arguments[Qt.application.arguments.indexOf("--shot") + 1] || "") : ""
     // the header is outside the scroll area: saved as <shot>.hdr.png, the rest as <shot>
     Timer { id: shotTimer; interval: 600
-        function body() { view.grabToImage(function(r) { console.log("shot saved: " + r.saveToFile(win.shot)); Qt.quit() }) }
+        function body() { (win.shotFull ? pageCol : view).grabToImage(function(r) { console.log("shot saved: " + r.saveToFile(win.shot)); Qt.quit() }) }
         onTriggered: { if (win.nl) hdr.grabToImage(function(h) { h.saveToFile(win.shot + ".hdr.png"); body() }); else body() } }
 }

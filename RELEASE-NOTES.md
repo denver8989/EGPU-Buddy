@@ -1,3 +1,17 @@
+0.7.244 — Desktop app: new look; only the screen you pick shows a picture.
+
+**Desktop app** (new look by default on SteamOS and CachyOS with an NVIDIA eGPU; Bazzite, ROG Ally / XG Mobile, AMD / Intel and NV GPU Buddy keep the classic look until it is picked)
+- New look with three tabs: Overview, NVIDIA settings, Extras and setup. The classic look is one click away.
+- Version and update button always at the top; the power limit is visible without scrolling.
+- Extras and setup: best resolution, Steam menu fix, wake screens, automatic updates, USB4 link check, TV control and pairing (the same settings as the Game Mode plugin).
+- The fan is shown only when the GPU reports its speed.
+- Picking a screen on the same GPU no longer logs out; the app keeps working when the tray icon quits.
+
+**Screens** (SteamOS and CachyOS with an NVIDIA eGPU; every other setup unchanged)
+- The screen you pick is the only one showing a picture, also after logging in.
+- A TV that is still powering up is no longer switched off and on, which left it black.
+- A TV switched back on keeps its main-screen place and scale.
+
 0.7.243 — Bazzite: Steam stays signed in when the eGPU drops at boot.
 
 **Bazzite** (Bazzite only; SteamOS and CachyOS unchanged)
