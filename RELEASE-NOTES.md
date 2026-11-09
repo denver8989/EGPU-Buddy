@@ -1,3 +1,9 @@
+0.7.248 — AMD eGPU Safe Detach on Thunderbolt 3 docks: TV goes dark first, no reboot.
+
+**AMD / Intel eGPU** (Intel Titan Ridge dock, AMD / Intel install only; NVIDIA unchanged)
+- Safe Detach switches the eGPU's screens off before letting go of the card; the TV kept showing the picture.
+- If the AMD driver still crashes while letting go, the machine no longer reboots: Safe Detach says to restart, and the support report keeps the full crash message.
+
 0.7.247 — AMD eGPU: handheld screen fully off on the TV; Safe Detach on Thunderbolt 3 docks reworked.
 
 **AMD / Intel eGPU** (AMD / Intel install only; NVIDIA unchanged)
