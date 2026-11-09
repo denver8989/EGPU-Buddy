@@ -4,9 +4,12 @@
 
 <p align="center">
   <a href="https://discord.gg/r3dhqAqnW"><img src="https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord"></a>
+  <a href="https://denver8989.github.io/EGPU-Buddy/"><img src="https://img.shields.io/badge/Watch-Presentation-58c8ff?style=for-the-badge" alt="Watch the EGPU Buddy presentation"></a>
 </p>
 
 # EGPU Buddy
+
+**[Watch the EGPU Buddy presentation](https://denver8989.github.io/EGPU-Buddy/)** — Opening demo and narrated walkthrough, with a Skip intro button.
 
 Use an eGPU with a Linux gaming handheld in **Game Mode**, the way it works on Windows: plug it in and Game Mode
 moves to your monitor or TV; unplug it, safely or by pulling the cable, and it goes back to the handheld screen;
