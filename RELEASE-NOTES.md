@@ -1,3 +1,10 @@
+0.7.246 — Desktop app recovers by itself after an update; XG Mobile screen picker.
+
+**Desktop app**
+- After an update the app restarts by itself and its backend comes back, wherever the app was opened; it said "backend not answering" until reopened. (SteamOS and CachyOS with an NVIDIA eGPU; other setups unchanged)
+- New look: Repair install in Extras and setup.
+- ROG Ally / XG Mobile, new look: "Show Game Mode on" picks the screen Game Mode starts on; the desktop keeps its screens. (ROG Ally / XG Mobile only; every other machine unchanged)
+
 0.7.245 — Desktop app: Check for updates; NV GPU Buddy gets TV control in the new look.
 
 **Desktop app** (new look only; the classic look is unchanged)

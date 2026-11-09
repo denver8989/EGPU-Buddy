@@ -451,6 +451,7 @@ ApplicationWindow {
                         RowLayout { spacing: 8
                             Button { text: win.updLabel; Layout.fillWidth: true; onClicked: updateDlg.open() }
                             Button { text: "Check for updates"; onClicked: win.act("check-update") }
+                            Button { text: "Repair install"; onClicked: updateDlg.open() }   // the update window offers Reinstall: it repairs the system files and the plugin
                             Button { text: "What's new"; onClicked: updateDlg.open() } } }
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv
                         RowLayout { spacing: 8
@@ -472,8 +473,8 @@ ApplicationWindow {
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; Layout.columnSpan: win.width < 760 ? 1 : 2
                         Head { text: "Only in the Game Mode plugin for now" }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol
-                                text: win.nvb ? "Keep awake, repair and uninstall."
-                                    : "Keep awake, the NVIDIA beta driver and revert (they detach the eGPU and rebuild the driver, so they stay where Game Mode can show their progress), repair and uninstall." } }
+                                text: win.nvb ? "Keep awake (it uses Steam's own sleep settings, which only Game Mode has) and uninstall."
+                                    : "Keep awake (it uses Steam's own sleep settings, which only Game Mode has), the NVIDIA beta driver and revert, and uninstall (both detach the eGPU from Game Mode first)." } }
                 }
             }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 0
