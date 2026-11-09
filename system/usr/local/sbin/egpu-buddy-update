@@ -65,5 +65,12 @@ case "$rc" in 0) say "done: $VER"; st ok 100 "Updated to $VER." ;;
 # the running desktop app is the old version: restart it (its window shows the result once), a few seconds after the
 # window has shown 100 %
 # (its own timer unit: a background job of this script dies with it when it runs as a unit, which the app always does)
+if ! grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && [ ! -e /var/lib/nvegpu/xg-mobile-seen ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" != nv-gpu-buddy ]; then
+  # NVIDIA reference path: the window may run outside the tray service (opened from the menu or the desktop icon), and then
+  # try-restart left it running on the old code with its backend gone. Stop the window wherever it runs and start the tray
+  # app again (it shows the update result once); the backend restarts by itself with the new code.
+  systemd-run --quiet --collect --on-active=4 --unit="egpu-buddy-app-restart-$(date +%s)" /bin/sh -c "pkill -u $U -f 'egpu-buddy-server[.]py'; if pkill -u $U -f 'egpu-buddy[.]qml'; then sleep 1; runuser -u $U -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user restart egpu-buddy-tray.service; else runuser -u $U -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user try-restart egpu-buddy-tray.service; fi" >/dev/null 2>&1 || true
+else
 systemd-run --quiet --collect --on-active=4 --unit="egpu-buddy-app-restart-$(date +%s)" /bin/sh -c "pkill -u $U -f 'egpu-buddy-server[.]py'; runuser -u $U -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user try-restart egpu-buddy-tray.service" >/dev/null 2>&1 || true
+fi
 [ "$rc" = 21 ] && exit 0; exit "$rc"

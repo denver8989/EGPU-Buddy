@@ -31,7 +31,10 @@ fi
 if ! ss -ltn 2>/dev/null | grep -q "127.0.0.1:$PORT "; then
   # its own user unit: started from the tray service it lived in that unit and died with it (the tray quits when the
   # window already runs, e.g. both opening on the switch to Desktop); a second start is refused while it runs
-  if ! systemd-run --user --quiet --collect --unit=egpu-buddy-server python3 "$D/egpu-buddy-server.py" >/dev/null 2>&1; then
+  # NVIDIA reference path (Legion Go, SteamOS / CachyOS): the backend comes back by itself when it stops (an update stops it
+  # to load its new code; the window then said "backend not answering" until it was reopened). Other setups unchanged.
+  RS=""; if ! grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && [ ! -e /var/lib/nvegpu/xg-mobile-seen ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" != nv-gpu-buddy ]; then RS="-p Restart=always -p RestartSec=2"; fi
+  if ! systemd-run --user --quiet --collect --unit=egpu-buddy-server $RS python3 "$D/egpu-buddy-server.py" >/dev/null 2>&1; then
     systemctl --user -q is-active egpu-buddy-server.service 2>/dev/null || { setsid python3 "$D/egpu-buddy-server.py" >/tmp/egpu-buddy-server.log 2>&1 </dev/null & }
   fi
   for _ in $(seq 1 25); do ss -ltn 2>/dev/null | grep -q "127.0.0.1:$PORT " && break; sleep 0.2; done
