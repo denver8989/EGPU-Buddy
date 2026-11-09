@@ -1,3 +1,8 @@
+0.7.250 — AMD eGPU Safe Detach on Thunderbolt 3 docks: TV-remote (CEC) fix now applies.
+
+**AMD / Intel eGPU** (Intel Titan Ridge dock, AMD / Intel install only; NVIDIA unchanged)
+- Safe Detach now finds the eGPU's TV-remote (CEC) link and switches it off before letting go of the card; 0.7.249 missed it, so the crash remained.
+
 0.7.249 — AMD eGPU Safe Detach on Thunderbolt 3 docks: no more crash with a TV remote (CEC) in use.
 
 **AMD / Intel eGPU** (Intel Titan Ridge dock, AMD / Intel install only; NVIDIA unchanged)
