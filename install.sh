@@ -496,10 +496,17 @@ fi
 NVTB="$ROOT/packaging/nvt-shim/build"
 if [ -r "$NVTB/lib64/libegpu-nvt.so" ] && [ -r "$NVTB/lib32/libegpu-nvt.so" ]; then
   ND="$USER_HOME/.local/lib/nv-egpu-buddy/nvt"; umkdir "$ND/lib/x86_64-linux-gnu" "$ND/lib/i386-linux-gnu" "$ND/lib64" "$ND/lib32"
-  cp -f "$NVTB/lib64/libegpu-nvt.so" "$ND/lib64/"; cp -f "$NVTB/lib32/libegpu-nvt.so" "$ND/lib32/"
-  cp -f "$NVTB/lib64/libegpu-nvt.so" "$ND/lib/x86_64-linux-gnu/"; cp -f "$NVTB/lib32/libegpu-nvt.so" "$ND/lib/i386-linux-gnu/"
-  if [ -e /usr/lib64/libc.so.6 ] && [ ! -L /usr/lib64 ]; then cp -f "$NVTB/lib32/libegpu-nvt.so" "$ND/lib/"   # Fedora: lib = 32-bit
-  else cp -f "$NVTB/lib64/libegpu-nvt.so" "$ND/lib/"; fi                                                      # Arch: lib = 64-bit
+  # NVIDIA reference path: an update REPLACES the file (new copy, then renamed over) instead of rewriting it in place.
+  # Rewriting changed the code under every running program that had it loaded, and their child processes then crashed
+  # in it at exit, several a second for hours (Legion Go 2, CachyOS, after the 0.7.246 update). Other setups: unchanged.
+  nvt_cp(){ cp -f "$1" "$2/"; }
+  if [ "$IS_BAZZITE" = 0 ] && [ "$GPU_VENDOR" = nvidia ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ ! -e /var/lib/nvegpu/xg-mobile-seen ]; then
+    nvt_cp(){ cp -f "$1" "$2/.libegpu-nvt.so.new" && mv -f "$2/.libegpu-nvt.so.new" "$2/libegpu-nvt.so"; }
+  fi
+  nvt_cp "$NVTB/lib64/libegpu-nvt.so" "$ND/lib64"; nvt_cp "$NVTB/lib32/libegpu-nvt.so" "$ND/lib32"
+  nvt_cp "$NVTB/lib64/libegpu-nvt.so" "$ND/lib/x86_64-linux-gnu"; nvt_cp "$NVTB/lib32/libegpu-nvt.so" "$ND/lib/i386-linux-gnu"
+  if [ -e /usr/lib64/libc.so.6 ] && [ ! -L /usr/lib64 ]; then nvt_cp "$NVTB/lib32/libegpu-nvt.so" "$ND/lib"   # Fedora: lib = 32-bit
+  else nvt_cp "$NVTB/lib64/libegpu-nvt.so" "$ND/lib"; fi                                                     # Arch: lib = 64-bit
   uown "$ND"; say "== installed the NVIDIA settings loader ($(cat "$NVTB/BUILD-ID" 2>/dev/null))"
 fi
 
