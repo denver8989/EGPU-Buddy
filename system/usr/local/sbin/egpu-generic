@@ -423,7 +423,8 @@ detach)
     # cec-mote plugin / cec-wake). Close its users and clear its logical addresses now, while AUX still works, so the
     # adapter is already disabled when the connector is freed.
     for c in /sys/class/cec/cec*; do
-      case "$(readlink -f "$c/device")" in */$bdf/*) ;; *) continue ;; esac
+      [ -e "$c" ] || continue; cp_=$(readlink -f "$c/device"); log "CEC ${c##*/} on $cp_"
+      case "$cp_" in */$bdf|*/$bdf/*) ;; *) continue ;; esac
       cd=/dev/${c##*/}; fuser -k "$cd" >/dev/null 2>&1; sleep 0.5
       python3 -c 'import fcntl,os,sys; f=os.open(sys.argv[1],os.O_RDWR); fcntl.ioctl(f,0xc05c6104,bytearray(92))' "$cd" 2>/dev/null
       log "CEC ${c##*/} released (rc $?)"
