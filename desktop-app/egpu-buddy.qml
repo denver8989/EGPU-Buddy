@@ -221,7 +221,7 @@ ApplicationWindow {
             : askedAt ? "starting" : "confirm"
         title: "Update " + win.appName; modal: true; anchors.centerIn: parent; width: Math.min(win.width - 80, 560)
         closePolicy: phase === "running" ? Popup.NoAutoClose : Popup.CloseOnEscape
-        onOpened: { askedAt = 0; win.loadNotes() }
+        onOpened: { askedAt = 0; if (win.nl) win.call("POST", "/api/action", { action: "check-update" }, function() { win.loadNotes(); win.refresh() }); else win.loadNotes() }
         ColumnLayout { width: parent.width; spacing: 10
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap
                 text: updateDlg.phase === "confirm" ? (win.s.staged ? "Installed: " + (win.s.installed || "unknown") + ". Version " + win.s.staged + " is already downloaded and finishes installing at the next reboot.\nRun the update again now anyway?"
@@ -449,6 +449,7 @@ ApplicationWindow {
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Installed " + (win.s.installed || "unknown") + (win.s.latest ? " · newest " + win.s.latest : "") }
                         RowLayout { spacing: 8
                             Button { text: win.updLabel; Layout.fillWidth: true; onClicked: updateDlg.open() }
+                            Button { text: "Check for updates"; onClicked: win.act("check-update") }
                             Button { text: "What's new"; onClicked: updateDlg.open() } } }
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv
                         RowLayout { spacing: 8
@@ -470,7 +471,8 @@ ApplicationWindow {
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; Layout.columnSpan: win.width < 760 ? 1 : 2
                         Head { text: "Only in the Game Mode plugin for now" }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol
-                                text: "Keep awake, the NVIDIA beta driver and revert (they detach the eGPU and rebuild the driver, so they stay where Game Mode can show their progress), repair and uninstall." } }
+                                text: win.nvb ? "Keep awake, repair and uninstall."
+                                    : "Keep awake, the NVIDIA beta driver and revert (they detach the eGPU and rebuild the driver, so they stay where Game Mode can show their progress), repair and uninstall." } }
                 }
             }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 0
@@ -481,14 +483,14 @@ ApplicationWindow {
                         Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 130; Layout.preferredHeight: 56; fillMode: Image.PreserveAspectFit; sourceSize.height: 56 * Screen.devicePixelRatio; smooth: true; source: win.s.handheld ? win.api + "/handheld.svg" : "" }
                         Label { Layout.alignment: Qt.AlignHCenter; text: (win.s.handheld || "").replace(/^(Lenovo|ASUS|MSI|AYANEO) /, ""); font.bold: true }
                         Label { Layout.alignment: Qt.AlignHCenter; text: win.s.panel_enabled == null ? "" : win.s.panel_enabled ? "handheld screen on" : "handheld screen off"; font.pixelSize: 11; color: win.subCol } }
-                    ColumnLayout { Layout.fillWidth: true; Layout.preferredWidth: 1; spacing: 4
+                    ColumnLayout { Layout.fillWidth: true; Layout.preferredWidth: 1; spacing: 4; visible: !win.nvb   // a built-in card has no USB4 link
                         Rectangle { Layout.fillWidth: true; height: 3; radius: 2; color: win.s.present && win.s.tunnel ? palette.highlight : palette.mid }
                         Label { Layout.alignment: Qt.AlignHCenter; text: win.s.present ? (win.s.tunnel ? "USB4 · connected" : "on the bus · no tunnel") : "no eGPU"; font.pixelSize: 11; color: win.subCol } }
                     RowLayout { spacing: 10
                         BrandMark { vendor: win.vendorKey }
                         ColumnLayout { spacing: 0
                             Label { text: (win.g.name || "").replace(/^NVIDIA\s+(GeForce\s+)?/i, "") || (win.s.present ? "GPU (driver not loaded)" : win.nvb ? "no NVIDIA card yet" : "not detected"); font.bold: true }
-                            Label { text: (win.s.dock ? win.s.dock + " · " : "") + (win.g.driver_version ? "driver " + win.g.driver_version : (win.s.driver_loaded ? "driver loaded" : "driver unloaded")); font.pixelSize: 11; color: win.subCol } } }
+                            Label { text: (win.nvb ? "built-in · " : "") + (win.s.dock ? win.s.dock + " · " : "") + (win.g.driver_version ? "driver " + win.g.driver_version : (win.s.driver_loaded ? "driver loaded" : "driver unloaded")); font.pixelSize: 11; color: win.subCol } } }
                     ColumnLayout { Layout.fillWidth: true; Layout.preferredWidth: 1; spacing: 4; visible: !win.nvb
                         Rectangle { Layout.fillWidth: true; height: 3; radius: 2; color: win.s.present && (win.s.displays || []).length ? palette.highlight : palette.mid }
                         Label { Layout.alignment: Qt.AlignHCenter; text: (win.s.displays || []).length + ((win.s.displays || []).length === 1 ? " screen" : " screens"); font.pixelSize: 11; color: win.subCol } }

@@ -303,6 +303,10 @@ def action(p):
             if len(hdmi) != 1: return {"ok": False, "out": "Connect the TV to the eGPU's HDMI port first." if not hdmi else "More than one HDMI screen: unplug the others while pairing."}
             rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "pair", ips[0], hdmi[0]], 90)
             return {"ok": o.startswith("paired"), "out": o or e or "No answer from the TV."}
+    if a == "check-update":   # Check for updates: ask GitHub now instead of waiting for the 10-minute refresh
+        _NOTES["t"] = 0; _NOTES["try"] = time.time(); release_notes(); st = update_state(s.get("installed", ""))
+        newer = st["latest"] and s.get("installed") and vt(st["latest"]) > vt(s["installed"])
+        return {"ok": True, "out": ("Update available: " + st["latest"]) if newer else ("Up to date (" + (s.get("installed") or "?") + ")"), "silent": True}
     if a == "report":   # Save support report (the same file as the "Save EGPU Buddy report" icon)
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-report"], 90); return {"ok": rc == 0, "out": ("Support report saved: " + o.strip()) if rc == 0 else (o or e)}
     if a == "xgm-intro-seen":   # the XG Mobile intro animation was shown in this app (it plays once here, once in the plugin)
