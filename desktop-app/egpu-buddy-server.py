@@ -130,6 +130,9 @@ def screens(bdf):
         try: env = dict(l.split("=", 1) for l in open(f"/proc/{k.split()[0]}/environ").read().split("\0") if "=" in l)
         except OSError: env = {}
         dev = env.get("KWIN_DRM_DEVICES", "")
+        if not dev:   # kwin_wayland has cap_sys_nice, so its environ is unreadable to us: read what the session started it with
+            _, o, _ = sh(["systemctl", "--user", "show-environment"])
+            dev = next((l.split("=", 1)[1] for l in o.splitlines() if l.startswith("KWIN_DRM_DEVICES=")), "")
         on = "egpu" if ecard and f"/dev/dri/{ecard}" in dev.split(":")[:1] else ("handheld" if dev else "")
     return {"screens": out, "screen_pick": read("/var/lib/nvegpu/game-screen"), "desktop_on": on}
 
