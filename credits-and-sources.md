@@ -70,7 +70,7 @@ The current project memory ACTIVE_TASK.md (2026-11-08 Ming CZX85K) identifies Le
 - **assets/file-picker.png** — Reconstructed UI screenshot from Decky source labels and known ZIP picker behavior. Not a live screenshot. Source: Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox
 - **assets/plugin-confirmation.png** — Reconstructed UI screenshot from Decky source labels and known ZIP picker behavior. Not a live screenshot. Source: Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox
 
-Original illustrations and atmospheric blue/black background are authored in motion.js. Their geometry is editable. They identify generic hardware rather than pretending to be manufacturer product photos. Original imagery and marks retain their respective rights; final publication permissions/brand terms should be checked. This folder contains the published interactive presentation.
+Original illustrations and atmospheric blue/black background are authored in motion.js. Their geometry is editable. They identify generic hardware rather than pretending to be manufacturer product photos. Original imagery and marks retain their respective rights; final publication permissions/brand terms should be checked. No video has been published.
 
 ## Revision 04: dock gallery and GPU list
 
@@ -101,3 +101,5 @@ The owner supplied `VID20261109121330.mp4`; the original is unchanged. `source/i
 Music: Bensound — SciFi, owner-supplied `bensound-scifi.mp3`, copied unchanged into `intro-assets/`. This supersedes the earlier original music samples throughout the active presentation. `source/music-loop-plan.json` records the repeated middle section, 12-second overlapping transitions and final fade. A continuous master supplies matching music positions in the intro and presentation; opening speech sidechains the music lower.
 
 Parachuting CPU: generated with the built-in image_gen tool as a new transparent illustration, then animated by FFmpeg after the spoken “skydiving test.” Asset: `intro-assets/cpu-parachute.png`. Exact generation prompt, mode and provenance: `intro-assets/cpu-parachute-provenance.json`.
+
+Opening audio cleanup: chair/background noise suppressed with the FFmpeg arnndn filter and the cb speech model (https://github.com/richardpl/arnndn-models). The recorded speech windows are preserved, with 200 ms crossfades into the cleaned ambience. Original recordings are unchanged. Quick review and the background music toggle were removed from both players at the owner’s request; background music remains mixed under speech.
