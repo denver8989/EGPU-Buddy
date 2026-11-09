@@ -32,7 +32,7 @@ ApplicationWindow {
     readonly property string subCol: nl ? "#a7a2cc" : "#8b929a"
     readonly property string vendorKey: s.vendor === "amd" || s.vendor === "intel" ? s.vendor : "nvidia"
     readonly property string brandCol: ({ nvidia: "#76b900", amd: "#ed1c24", intel: "#0071c5" })[vendorKey]
-    readonly property string api: "http://127.0.0.1:8772"
+    readonly property string api: Qt.application.arguments.indexOf("--api") >= 0 ? Qt.application.arguments[Qt.application.arguments.indexOf("--api") + 1] : "http://127.0.0.1:8772"   // --api URL: test hook (a stand-in backend)
     property var s: ({})                       // last /api/status
     property var g: (s.gpu || {})
     readonly property bool on: !!(s.present && s.driver_loaded && g.name)
