@@ -1,0 +1,83 @@
+[
+  {
+    "file": "assets/bazzite.svg",
+    "source": "https://bazzite.gg/content/uploads/2024/02/Bazzite_Color_Long.svg",
+    "page": "https://bazzite.gg/",
+    "credit": "Bazzite official branding; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "777179735430e692fb827c2401197c50511ba01aabf10248115193c79cdaeb22"
+  },
+  {
+    "file": "assets/cachyos.svg",
+    "source": "https://cachyos.org/_astro/logo.DuMERIP6.svg",
+    "page": "https://cachyos.org/",
+    "credit": "CachyOS official branding; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "8a170323507cd504632fd04d8ef984f462de37203225ee2db46d484873f14e5b"
+  },
+  {
+    "file": "assets/decky.png",
+    "source": "https://decky.xyz/icons/icon-512x512.png",
+    "page": "https://decky.xyz/",
+    "credit": "Decky Loader official icon, upstream BSD-3-Clause; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "4dd483eaf8af8ff80ef6ccf5fc47ce6d9e9640a1cab459c29a8b52bb7f4c3196"
+  },
+  {
+    "file": "assets/steam.png",
+    "source": "https://cdn.fastly.steamstatic.com/steamdeck/images/steamdeck_steamlogo.png",
+    "page": "https://www.steamdeck.com/en/software",
+    "credit": "Valve official Steam logo; trademark retained",
+    "usage": "Included; verify final publication permissions",
+    "sha256": "5b381b886f34e0bd722efdd1a812995d3f4d82d5cba3ca5aa9cc5e73dc7c90cc"
+  },
+  {
+    "file": "assets/install-choice.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "2d7f27762d1a17ab7ffcece681fb6b92b28a03133b8ce516e73a5f0755406cbe"
+  },
+  {
+    "file": "assets/install-nvb-offer.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "f1144be3133db6916e30893266a07d6421fd12c8275b5b4915149c0fe98b22a4"
+  },
+  {
+    "file": "assets/install-nvb-confirm.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "483117eb7b1b3e1240673c7fd74ec598e01d38d4f5a5889e488a2bdb076ea799"
+  },
+  {
+    "file": "assets/install-nvb-final.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "3a0c91bb2abb9b403d94954b4d3e80db761852424068eeb26a2a93df15d241ff"
+  },
+  {
+    "file": "assets/install-nvb-main.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "a86e4b8a81e91a30725b6f4de86e0986428d0cf58d07bb7109b39edff494a1ad"
+  },
+  {
+    "file": "assets/install-nvb-settings.png",
+    "source": "Capture sandbox in EGPU-Buddy-Motion-Draft/capture-sandbox",
+    "credit": "Source-rendered simulation from actual Decky / EGPU Buddy frontend; emulated styles and mocked backend.",
+    "sha256": "f5d563a9d0fcbbe5012d5b7ab4765b8b008a5125bb5a943fd433e9856d2bb9f4"
+  },
+  {
+    "file": "assets/icon.png",
+    "source": "/home/deck/SteamOS-EGPU-Buddy/desktop-app/nv-gpu-buddy.png",
+    "credit": "Actual NV GPU Buddy app icon, EGPU Buddy project",
+    "usage": "Included",
+    "sha256": "2e29740b97f3757b634bbb92f447c900bcfd3232de292e4a3adcd5661b34dd0a"
+  },
+  {
+    "file": "assets/decky-developer.png",
+    "source": "https://github.com/SteamDeckHomebrew/decky-loader/tree/main/frontend/src/components/settings/pages",
+    "credit": "Decky Loader, BSD-3-Clause. Actual source components captured in a sandbox; CSS/control runtime emulated; no live installation.",
+    "sha256": "6b589d7f5f1b7202a3d14bd667b554667f0fa4aeece535285f7c4c460bf0907d"
+  }
+]

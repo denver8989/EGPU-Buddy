@@ -1,0 +1,106 @@
+[
+  {
+    "id": 0,
+    "title": "NV GPU Buddy",
+    "start": 0,
+    "end": 19.458333333333332,
+    "text": "narration/00.txt",
+    "audio": "audio/00.mp3"
+  },
+  {
+    "id": 1,
+    "title": "Who this mode is for",
+    "start": 19.458333333333332,
+    "end": 41.541666666666664,
+    "text": "narration/01.txt",
+    "audio": "audio/01.mp3"
+  },
+  {
+    "id": 2,
+    "title": "What it keeps",
+    "start": 41.541666666666664,
+    "end": 59.33333333333333,
+    "text": "narration/02.txt",
+    "audio": "audio/02.mp3"
+  },
+  {
+    "id": 3,
+    "title": "Built-in graphics changes the job",
+    "start": 59.33333333333333,
+    "end": 76.79166666666666,
+    "text": "narration/03.txt",
+    "audio": "audio/03.mp3"
+  },
+  {
+    "id": 4,
+    "title": "The project’s patched NVIDIA driver",
+    "start": 76.79166666666666,
+    "end": 98.74999999999999,
+    "text": "narration/04.txt",
+    "audio": "audio/04.mp3"
+  },
+  {
+    "id": 5,
+    "title": "Start with the Decky plugin",
+    "start": 98.74999999999999,
+    "end": 118.12499999999999,
+    "text": "narration/05.txt",
+    "audio": "audio/05.mp3"
+  },
+  {
+    "id": 6,
+    "title": "Choose NV GPU Buddy",
+    "start": 118.12499999999999,
+    "end": 139.75,
+    "text": "narration/06.txt",
+    "audio": "audio/06.mp3"
+  },
+  {
+    "id": 7,
+    "title": "Confirm this is not a handheld",
+    "start": 139.75,
+    "end": 153.45833333333334,
+    "text": "narration/07.txt",
+    "audio": "audio/07.mp3"
+  },
+  {
+    "id": 8,
+    "title": "Review and install the integration",
+    "start": 153.45833333333334,
+    "end": 174.04166666666669,
+    "text": "narration/08.txt",
+    "audio": "audio/08.mp3"
+  },
+  {
+    "id": 9,
+    "title": "The interface becomes NV GPU Buddy",
+    "start": 174.04166666666669,
+    "end": 194.37500000000003,
+    "text": "narration/09.txt",
+    "audio": "audio/09.mp3"
+  },
+  {
+    "id": 10,
+    "title": "NVIDIA settings in both interfaces",
+    "start": 194.37500000000003,
+    "end": 211.83333333333337,
+    "text": "narration/10.txt",
+    "audio": "audio/10.mp3"
+  },
+  {
+    "id": 11,
+    "title": "Its own update selection",
+    "start": 211.83333333333337,
+    "end": 233.12500000000003,
+    "text": "narration/11.txt",
+    "audio": "audio/11.mp3"
+  },
+  {
+    "id": 12,
+    "title": "Experimental, ready for testers",
+    "start": 233.12500000000003,
+    "end": 251.45833333333337,
+    "text": "narration/12.txt",
+    "audio": "audio/12.mp3"
+  }
+]
