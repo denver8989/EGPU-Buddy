@@ -10,7 +10,7 @@ import Qt.labs.platform as Platform
 
 ApplicationWindow {
     id: win
-    width: 900; height: 640; minimumWidth: 640; minimumHeight: 520
+    width: 1060; height: 660; minimumWidth: 640; minimumHeight: 520
     readonly property bool startHidden: Qt.application.arguments.indexOf("--tray") >= 0
     // Shown from onCompleted, after the domain is cleared: the window's Wayland app id is then the runner's name, which the
     // launcher sets to "egpu-buddy" (= egpu-buddy.desktop), so the taskbar shows the app's icon and name, not "qml".
@@ -72,6 +72,11 @@ ApplicationWindow {
     property bool nvSaved: false
     // while a game runs: per setting, what that game really received (read-only), refreshed while the tab is open
     property var gs: ({})
+    // Game Mode settings the app shares with the plugin (the plugin's own settings file; NVIDIA reference path only, else {})
+    property var ex: ({})
+    function loadEx() { call("GET", "/api/extras", null, function(r) { if (r) ex = r }) }
+    function setEx(key, v) { act("set-extra", { key: key, value: v }); loadEx() }
+    Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.pg === 2 && win.visible; onTriggered: win.loadEx() }
     function gsLook(st) { return ({ active: ["#4caf50", "Active"], inactive: ["#f0b429", "Inactive"], overridden: ["#f0b429", "Inactive: the game's own setting"],
                                     default: ["#8b929a", "Default"], na: ["#8b929a", "Not used by this game"] })[st] || ["#8b929a", st] }
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.page === 1 && win.nvShow && win.visible
@@ -252,23 +257,23 @@ ApplicationWindow {
     // a live reading as a ring + number
     component Ring: Rectangle {
         property real frac: 0; property color col: palette.highlight; property string big; property string sub
-        Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: 74; radius: 14; color: palette.base; border.color: palette.light
+        Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: 64; radius: 14; color: palette.base; border.color: palette.light
         onFracChanged: cv.requestPaint(); onColChanged: cv.requestPaint()
-        RowLayout { anchors.fill: parent; anchors.margins: 12; spacing: 10
-            Canvas { id: cv; Layout.preferredWidth: 48; Layout.preferredHeight: 48
-                onPaint: { var c = getContext("2d"); c.reset(); c.lineWidth = 7; c.lineCap = "round"
-                    c.strokeStyle = "" + palette.light; c.beginPath(); c.arc(24, 24, 20, 0, 2 * Math.PI); c.stroke()
-                    if (frac > 0.01) { c.strokeStyle = "" + col; c.beginPath(); c.arc(24, 24, 20, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.min(1, frac)); c.stroke() } } }
+        RowLayout { anchors.fill: parent; anchors.margins: 10; spacing: 8
+            Canvas { id: cv; Layout.preferredWidth: 44; Layout.preferredHeight: 44
+                onPaint: { var c = getContext("2d"); c.reset(); c.lineWidth = 6; c.lineCap = "round"
+                    c.strokeStyle = "" + palette.light; c.beginPath(); c.arc(22, 22, 18, 0, 2 * Math.PI); c.stroke()
+                    if (frac > 0.01) { c.strokeStyle = "" + col; c.beginPath(); c.arc(22, 22, 18, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.min(1, frac)); c.stroke() } } }
             ColumnLayout { Layout.fillWidth: true; spacing: 0
-                Label { text: big; font.pixelSize: 20; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+                Label { text: big; font.pixelSize: 18; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
                 Label { text: sub; font.pixelSize: 11; color: win.subCol; elide: Text.ElideRight; Layout.fillWidth: true } } }
     }
     component TextTile: Rectangle {
         property string big; property string sub
-        Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: 74; radius: 14; color: palette.base; border.color: palette.light
-        ColumnLayout { anchors.fill: parent; anchors.margins: 12; spacing: 0
+        Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: 64; radius: 14; color: palette.base; border.color: palette.light
+        ColumnLayout { anchors.fill: parent; anchors.margins: 10; spacing: 0
             Item { Layout.fillHeight: true }
-            Label { text: big; font.pixelSize: 20; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+            Label { text: big; font.pixelSize: 18; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
             Label { text: sub; font.pixelSize: 11; color: win.subCol; elide: Text.ElideRight; Layout.fillWidth: true }
             Item { Layout.fillHeight: true } }
     }
@@ -350,6 +355,7 @@ ApplicationWindow {
                     background: Rectangle { color: "transparent"
                         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 3; visible: tb.checked; color: modelData.i === 1 ? win.brandCol : palette.highlight } } } }
             Item { Layout.fillWidth: true }
+            Button { text: win.updLabel; onClicked: updateDlg.open() }
             Button { text: "Save support report"; onClicked: win.act("report") }
         }
     }
@@ -359,7 +365,7 @@ ApplicationWindow {
         anchors.top: win.nl ? hdr.bottom : parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; contentWidth: availableWidth
         background: Rectangle { color: palette.window }
         ColumnLayout {
-            width: win.width - 32; x: 16; y: 12; spacing: 12
+            width: win.width - 32; x: 16; y: win.nl ? 10 : 12; spacing: win.nl ? 10 : 12
             RowLayout { Layout.fillWidth: true; spacing: 10; visible: !win.nl
                 Label { text: win.appName; font.pixelSize: 22; font.bold: true }
                 Label { text: "experimental"; visible: win.nvb; opacity: 0.6; font.pixelSize: 11 }
@@ -431,32 +437,47 @@ ApplicationWindow {
                     text: "* Experimental. Done with what Linux offers rather than NVIDIA's control panel: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options, and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and its own dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Turn off removes it from games completely. In Game Mode the plugin also has Steam's own live settings (frame limit, tearing, VRR, sharpness). Not available yet: FXAA, texture filtering quality, page flipping." } }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 2
                 GridLayout { Layout.fillWidth: true; columns: win.width < 760 ? 1 : 2; columnSpacing: 14; rowSpacing: 14
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1
-                        Head { text: "Look" }
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "The new look is on. Classic is the app as it was before: the same controls on the old layout." }
-                        RowLayout { spacing: 8
-                            Button { text: "New"; highlighted: true; enabled: false }
-                            Button { text: "Classic"; onClicked: { win.act("set-look", { value: "classic" }); win.page = 0 } } } }
+                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv
+                        Head { text: "Game Mode" }
+                        Switch { Layout.fillWidth: true; text: "Best resolution and refresh rate on every screen"; checked: !!win.ex.game_res; onToggled: win.setEx("game_res_native", checked) }
+                        Switch { Layout.fillWidth: true; text: "Steam menu fix"; visible: !!(win.ex.steam_fix || {}).available; checked: !!(win.ex.steam_fix || {}).enabled; onToggled: { win.act("steam-fix", { value: checked }); win.loadEx() } }
+                        Button { text: "Wake screens"; onClicked: win.act("wake-screens") } }
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1
                         Head { text: "Updates" }
+                        Switch { Layout.fillWidth: true; visible: !!win.ex.tv; text: "Automatic updates"; checked: !!win.ex.auto_update; onToggled: win.setEx("auto_update", checked) }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Installed " + (win.s.installed || "unknown") + (win.s.latest ? " · newest " + win.s.latest : "") }
-                        Button { text: win.updLabel; Layout.fillWidth: true; onClicked: updateDlg.open() } }
+                        RowLayout { spacing: 8
+                            Button { text: win.updLabel; Layout.fillWidth: true; onClicked: updateDlg.open() }
+                            Button { text: "What's new"; onClicked: updateDlg.open() } } }
+                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv
+                        RowLayout { spacing: 8
+                            Head { text: "Extras" }
+                            Badge { text: "testing · off by default"; lit: false } }
+                        Switch { Layout.fillWidth: true; text: "USB4 link speed check"; checked: !!win.ex.usb4_on; onToggled: win.setEx("usb4", checked) }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; visible: !!win.ex.usb4_on; color: (win.ex.usb4 || {}).slow ? "#f0b429" : win.subCol
+                                text: (win.ex.usb4 || {}).name ? (win.ex.usb4.name + ": " + win.ex.usb4.total + " Gb/s (" + win.ex.usb4.lanes + " x " + win.ex.usb4.per_lane + ")" + (win.ex.usb4.slow ? " · slower than USB4 should be: try another cable or port" : "")) : "No USB4 link found." }
+                        Switch { Layout.fillWidth: true; text: "TV control: turn on and switch input"; checked: !!(win.ex.tv || {}).enabled; onToggled: { win.act("tv-control", { value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: ((win.ex.tv || {}).paired || []).length > 0; text: "Paired: " + ((win.ex.tv || {}).paired || []).join(", ") }
+                        Button { text: "Pair TV"; enabled: !!(win.ex.tv || {}).enabled; Layout.alignment: Qt.AlignLeft; onClicked: win.act("pair-tv") } }
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1
-                        Head { text: "Support" }
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "One file with everything a bug report needs, saved in the Desktop folder." }
-                        Button { text: "Save support report"; Layout.fillWidth: true; onClicked: win.act("report") } }
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1
+                        Head { text: "Look and support" }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Classic is the app as it was before: the same controls on the old layout." }
+                        RowLayout { spacing: 8
+                            Button { text: "New look"; highlighted: true; enabled: false }
+                            Button { text: "Classic look"; onClicked: { win.act("set-look", { value: "classic" }); win.page = 0 } }
+                            Button { text: "Save support report"; onClicked: win.act("report") } } }
+                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; Layout.columnSpan: win.width < 760 ? 1 : 2
                         Head { text: "Only in the Game Mode plugin for now" }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol
-                                text: "Automatic updates on / off, best resolution and refresh rate on every screen, Steam menu fix, keep awake, the NVIDIA beta driver and revert, USB4 link speed, TV control and pairing, repair and uninstall, wake screens." } }
+                                text: "Keep awake, the NVIDIA beta driver and revert (they detach the eGPU and rebuild the driver, so they stay where Game Mode can show their progress), repair and uninstall." } }
                 }
             }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 0
             // ---- new look: Overview ----
             Card { visible: win.nl
                 RowLayout { Layout.fillWidth: true; spacing: 12
-                    ColumnLayout { spacing: 2; Layout.preferredWidth: 170; visible: win.s.handheld !== undefined && win.s.handheld !== ""
-                        Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 150; Layout.preferredHeight: 70; fillMode: Image.PreserveAspectFit; sourceSize.width: 450; source: win.s.handheld ? win.api + "/handheld.svg" : "" }
+                    ColumnLayout { spacing: 0; Layout.preferredWidth: 150; visible: win.s.handheld !== undefined && win.s.handheld !== ""
+                        Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 130; Layout.preferredHeight: 56; fillMode: Image.PreserveAspectFit; sourceSize.width: 520; smooth: true; mipmap: true; source: win.s.handheld ? win.api + "/handheld.svg" : "" }
                         Label { Layout.alignment: Qt.AlignHCenter; text: (win.s.handheld || "").replace(/^(Lenovo|ASUS|MSI|AYANEO) /, ""); font.bold: true }
                         Label { Layout.alignment: Qt.AlignHCenter; text: win.s.panel_enabled == null ? "" : win.s.panel_enabled ? "handheld screen on" : "handheld screen off"; font.pixelSize: 11; color: win.subCol } }
                     ColumnLayout { Layout.fillWidth: true; Layout.preferredWidth: 1; spacing: 4
@@ -473,7 +494,7 @@ ApplicationWindow {
                     RowLayout { spacing: 12; visible: !win.nvb
                         Repeater { model: (win.s.screens || []).filter(function(x) { return x.kind === "egpu" })
                             ColumnLayout { spacing: 0
-                                Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 80; Layout.preferredHeight: 38; fillMode: Image.PreserveAspectFit; sourceSize.width: 240; source: win.screenArt(modelData, "#ece9ff") }
+                                Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 72; Layout.preferredHeight: 34; fillMode: Image.PreserveAspectFit; sourceSize.width: 288; smooth: true; source: win.screenArt(modelData, "#ece9ff") }
                                 Label { Layout.alignment: Qt.AlignHCenter; text: modelData.label; font.bold: true; font.pixelSize: 12 }
                                 Label { Layout.alignment: Qt.AlignHCenter; text: win.s.screen_pick === modelData.name ? "main screen" : "on"; font.pixelSize: 11; color: win.subCol } } } }
                 }
@@ -485,36 +506,8 @@ ApplicationWindow {
                 Ring { frac: (+win.g["utilization.gpu"] || 0) / 100; big: win.num(win.g["utilization.gpu"]) + "%"; sub: "GPU busy" }
                 Ring { col: "#d36bff"; frac: (+win.g["memory.used"] || 0) / (+win.g["memory.total"] || 1); big: win.g["memory.used"] ? win.num(win.g["memory.used"] / 1024, 1) + " GB" : "–"; sub: win.g["memory.total"] ? "of " + win.num(win.g["memory.total"] / 1024) + " GB VRAM" : "VRAM" }
                 TextTile { big: win.num(win.g["clocks.gr"]) + " MHz"; sub: "GPU · memory " + win.num(win.g["clocks.mem"]) + " MHz" }
-                TextTile { big: win.isNum(win.g["fan.speed"]) || !win.on || !win.xg ? win.num(win.g["fan.speed"]) + "%" : win.cap1(win.xgm.fan || "auto"); sub: "fan · " + (win.g["pcie.link.gen.current"] ? "Gen" + win.g["pcie.link.gen.current"] + " x" + win.g["pcie.link.width.current"] : "PCIe link –") }
-            }
-            RowLayout { Layout.fillWidth: true; visible: win.nl && !win.nvb; spacing: 14
-                Card { visible: (win.s.screens || []).length > 0; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 17
-                    Head { text: "Show the desktop on" }
-                    Flow { Layout.fillWidth: true; spacing: 10
-                        Repeater { model: win.s.screens || []
-                            AbstractButton { id: sb
-                                readonly property bool sel: win.s.screen_pick === modelData.name
-                                readonly property bool moves: !win.s.game_mode && !!win.s.present && !!win.s.driver_loaded && modelData.kind !== win.s.desktop_on
-                                width: 150; height: 134
-                                onClicked: win.pickScreen(modelData)
-                                background: Rectangle { radius: 12; color: sb.sel ? palette.alternateBase : palette.window; border.width: sb.sel ? 2 : 1; border.color: sb.sel ? palette.highlight : palette.mid }
-                                contentItem: ColumnLayout { spacing: 2
-                                    Item { Layout.fillHeight: true }
-                                    Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 110; Layout.preferredHeight: 52; fillMode: Image.PreserveAspectFit; sourceSize.width: 330
-                                            source: modelData.name.indexOf("eDP") === 0 && win.s.handheld ? win.api + "/handheld.svg" : win.screenArt(modelData, sb.sel ? "#2ee6f0" : "#ece9ff") }
-                                    Label { Layout.alignment: Qt.AlignHCenter; text: win.portName(modelData.port); font.pixelSize: 11; color: win.subCol }
-                                    Label { Layout.alignment: Qt.AlignHCenter; Layout.maximumWidth: 138; elide: Text.ElideRight; text: modelData.label; font.bold: true }
-                                    Label { Layout.alignment: Qt.AlignHCenter; text: sb.sel ? "picked" : sb.moves ? "restarts the desktop" : (modelData.mode || ""); font.pixelSize: 11; color: sb.sel ? palette.highlight : win.subCol }
-                                    Item { Layout.fillHeight: true } } } } }
-                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.subCol
-                            text: "Only the picked screen shows an image. Game Mode starts on it too. On the handheld's screen the games still render on the eGPU." } }
-                Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 10
-                    Head { text: "Unplugging" }
-                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Safe Detach moves everything to the handheld and switches the card off. Unplug when it says so." }
-                    Button { id: sdBtn; text: "Safe Detach"; Layout.fillWidth: true; Layout.preferredHeight: 50; enabled: !!win.s.present; onClicked: confirmDetach.open()
-                             background: Rectangle { radius: 12; color: sdBtn.enabled ? (sdBtn.down ? "#1fb8c1" : palette.highlight) : palette.mid }
-                             contentItem: Label { text: sdBtn.text; font.pixelSize: 16; font.bold: true; color: sdBtn.enabled ? palette.highlightedText : win.subCol; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
-                    Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); onClicked: win.act("attach") } }
+                TextTile { big: win.g["pcie.link.gen.current"] ? "Gen" + win.g["pcie.link.gen.current"] + " x" + win.g["pcie.link.width.current"] : "–"
+                           sub: "PCIe link" + (win.isNum(win.g["fan.speed"]) ? " · fan " + win.num(win.g["fan.speed"]) + "%" : "") }
             }
             // ---- classic look ----
             GridLayout { Layout.fillWidth: true; visible: !win.nl; columns: 4; columnSpacing: 8; rowSpacing: 8
@@ -552,7 +545,6 @@ ApplicationWindow {
                 text: "The desktop and Game Mode both start on the screen picked here (or in the plugin). On the handheld's screen the games still render on the eGPU." }
             Card {
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: !win.nl }
-            Head { text: "Power and clocks"; visible: win.nl }
             // ASUS XG Mobile: power target (W), fan mode and lights
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; visible: win.on && win.xg && !win.plOk
                 text: "NVIDIA does not let the driver set this GPU's power limit (its cap is " + win.xgTop + " W). A power target below it makes EGPU Buddy hold the GPU there by limiting its clock"
@@ -622,8 +614,38 @@ ApplicationWindow {
                 Slider { id: pl; Layout.fillWidth: true; from: 100; to: 320; stepSize: 5; value: 320; enabled: win.on; onMoved: win.sliderTouched = true }
                 Label { text: win.on ? Math.round(pl.value) + " W" : "– W"; Layout.preferredWidth: 60; horizontalAlignment: Text.AlignRight }
                 Button { text: "Apply"; enabled: win.on; opacity: enabled ? 1 : 0.4; onClicked: { win.act("power-limit", { watts: Math.round(pl.value) }); win.sliderTouched = false } }
+                Button { text: "Reset clocks"; visible: win.nl; enabled: win.on; onClicked: { win.clkTouched = false; win.ptTouched = false; win.offTouched = false; win.act("reset-clocks") } }
             }
-            Button { text: "Reset clocks"; visible: win.nl; enabled: win.on; Layout.alignment: Qt.AlignLeft; onClicked: { win.clkTouched = false; win.ptTouched = false; win.offTouched = false; win.act("reset-clocks") } }
+            Button { text: "Reset clocks"; visible: win.nl && win.on && (win.xg || !win.plOk); Layout.alignment: Qt.AlignLeft; onClicked: { win.clkTouched = false; win.ptTouched = false; win.offTouched = false; win.act("reset-clocks") } }
+            }
+            RowLayout { Layout.fillWidth: true; visible: win.nl && !win.nvb; spacing: 14
+                Card { visible: (win.s.screens || []).length > 0; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 17
+                    Head { text: "Show the desktop on" }
+                    Flow { Layout.fillWidth: true; spacing: 10
+                        Repeater { model: win.s.screens || []
+                            AbstractButton { id: sb
+                                readonly property bool sel: win.s.screen_pick === modelData.name
+                                readonly property bool moves: !win.s.game_mode && !!win.s.present && !!win.s.driver_loaded && modelData.kind !== win.s.desktop_on
+                                width: 150; height: 118
+                                onClicked: win.pickScreen(modelData)
+                                background: Rectangle { radius: 12; color: sb.sel ? palette.alternateBase : palette.window; border.width: sb.sel ? 2 : 1; border.color: sb.sel ? palette.highlight : palette.mid }
+                                contentItem: ColumnLayout { spacing: 2
+                                    Item { Layout.fillHeight: true }
+                                    Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: 44; fillMode: Image.PreserveAspectFit; sourceSize.width: 500; smooth: true; mipmap: true
+                                            source: modelData.name.indexOf("eDP") === 0 && win.s.handheld ? win.api + "/handheld.svg" : win.screenArt(modelData, sb.sel ? "#2ee6f0" : "#ece9ff") }
+                                    Label { Layout.alignment: Qt.AlignHCenter; text: win.portName(modelData.port); font.pixelSize: 11; color: win.subCol }
+                                    Label { Layout.alignment: Qt.AlignHCenter; Layout.maximumWidth: 138; elide: Text.ElideRight; text: modelData.label; font.bold: true }
+                                    Label { Layout.alignment: Qt.AlignHCenter; text: sb.sel ? "picked" : sb.moves ? "restarts the desktop" : (modelData.mode || ""); font.pixelSize: 11; color: sb.sel ? palette.highlight : win.subCol }
+                                    Item { Layout.fillHeight: true } } } } }
+                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.subCol
+                            text: "Only the picked screen shows an image. Game Mode starts on it too. On the handheld's screen the games still render on the eGPU." } }
+                Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 10
+                    Head { text: "Unplugging" }
+                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Safe Detach moves everything to the handheld and switches the card off. Unplug when it says so." }
+                    Button { id: sdBtn; text: "Safe Detach"; Layout.fillWidth: true; Layout.preferredHeight: 50; enabled: !!win.s.present; onClicked: confirmDetach.open()
+                             background: Rectangle { radius: 12; color: sdBtn.enabled ? (sdBtn.down ? "#1fb8c1" : palette.highlight) : palette.mid }
+                             contentItem: Label { text: sdBtn.text; font.pixelSize: 16; font.bold: true; color: sdBtn.enabled ? palette.highlightedText : win.subCol; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } }
+                    Button { text: "Re-attach"; Layout.fillWidth: true; enabled: !(win.s.present && win.s.driver_loaded); onClicked: win.act("attach") } }
             }
             Label { text: win.nvb ? "Clocks and updates" : "Lifecycle"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: !win.nl }
             RowLayout { Layout.fillWidth: true; spacing: 10; visible: !win.nl

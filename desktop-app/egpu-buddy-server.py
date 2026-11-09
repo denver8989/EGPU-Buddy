@@ -106,7 +106,41 @@ def handheld_svg():
     svg = open(path, errors="ignore").read(); svg = svg[svg.index("<svg"):]
     svg = re.sub(r"((?:stroke|fill)\s*[=:]\s*\"?)#[0-9a-fA-F]{3,8}", r"\g<1>#c9c5ea", svg)
     svg = re.sub(r'<svg\b([^>]*?)\s(?:width|height)="[^"]*"', r"<svg\1", svg, count=2)
+    svg = re.sub(r'stroke-width="[^"]*"', 'stroke-width="0.95"', svg)   # the file's 0.2-unit strokes drew ~0.3 px lines: faint and broken
     return svg.encode()
+
+# ---- Extras: the Game Mode plugin's own settings file, so the app and the plugin always agree ----
+PLUGIN_SETTINGS = os.path.expanduser("~/.config/egpu-buddy/plugin.json")
+SCREEN_NET = "/var/lib/nvegpu/screen-net.json"
+STEAM_FIX = os.path.expanduser("~/.local/bin/egpu-steam-ui-fix")
+def plugin_settings():
+    try: return json.load(open(PLUGIN_SETTINGS))
+    except Exception: return {}
+def save_plugin_settings(d):
+    os.makedirs(os.path.dirname(PLUGIN_SETTINGS), exist_ok=True); json.dump(d, open(PLUGIN_SETTINGS, "w"))
+def extras_on():
+    """The Game Mode settings the app shows on the NVIDIA reference path only (as before: other setups keep the plugin as the one place)."""
+    return ref_path() and read("/etc/nv-egpu-buddy/track") != "nv-gpu-buddy" and read("/etc/nv-egpu-buddy/gpu-vendor") != "amd"
+def usb4():
+    """The eGPU's USB4 / Thunderbolt link as the kernel reports it (the plugin's reading)."""
+    import glob
+    for dev in sorted(glob.glob("/sys/bus/thunderbolt/devices/*-*")):
+        if re.search(r"-0$|:", os.path.basename(dev)) or not read(dev + "/device_name"): continue
+        per = float((re.findall(r"[\d.]+", read(dev + "/rx_speed")) or ["0"])[0]); lanes = int(read(dev + "/rx_lanes") or "0")
+        return {"name": " ".join(x for x in (read(dev + "/vendor_name"), read(dev + "/device_name")) if x), "per_lane": per, "lanes": lanes, "total": per * lanes, "slow": lanes < 2 or per < 20}
+    return {}
+def extras():
+    if not extras_on(): return {}
+    d = plugin_settings(); fix = {}
+    if os.path.exists(STEAM_FIX):
+        try: fix = json.loads(sh([STEAM_FIX, "status"], 10)[1])
+        except ValueError: fix = {}
+    net = jread(SCREEN_NET) or {}
+    on = bool(d.get("addons", {}).get("usb4"))
+    return {"auto_update": bool(d.get("auto_update", False)), "game_res": bool(d.get("game_res_native", True)),
+            "steam_fix": {"available": bool(fix.get("available")), "enabled": bool(fix.get("enabled"))},
+            "usb4_on": on, "usb4": usb4() if on else {},
+            "tv": {"enabled": bool(net.get("enabled")), "paired": [f'{t["ip"]} on {t["input"].replace("_", " ")}' for t in (net.get("tvs") or {}).values()]}}
 
 def status():
     _, l, _ = sh(["lspci", "-Dn"]); bdf = next((x.split()[0] for x in l.splitlines() if " 0300: 10de:" in x), ""); vendor = "nvidia" if bdf else ""
@@ -246,6 +280,29 @@ def action(p):
     if a == "set-look":   # the app's look: new (default) or classic (the one before); kept per user
         v = "classic" if str((p or {}).get("value", "")) == "classic" else "new"
         os.makedirs(os.path.dirname(LOOK_FILE), exist_ok=True); open(LOOK_FILE, "w").write(v + "\n"); return {"ok": True, "out": "Look: " + v, "silent": True}
+    if a in ("set-extra", "steam-fix", "tv-control", "wake-screens", "pair-tv"):   # Game Mode settings in the app (NVIDIA reference path)
+        if not extras_on(): return {"ok": False, "error": "these settings are in the Game Mode plugin on this setup"}
+        v = (p or {}).get("value")
+        if a == "set-extra":
+            k = str((p or {}).get("key", "")); d = plugin_settings()
+            if k in ("auto_update", "game_res_native"): d[k] = bool(v)
+            elif k == "usb4": d.setdefault("addons", {})["usb4"] = bool(v)
+            else: return {"ok": False, "error": "unknown setting"}
+            save_plugin_settings(d); return {"ok": True, "out": "Saved.", "silent": True}
+        if a == "steam-fix":
+            rc, o, e = sh([STEAM_FIX, "on" if v else "off"], 20)
+            return {"ok": rc == 0, "out": ("Steam menu fix " + ("on" if v else "off") + ". It applies when Game Mode restarts.") if rc == 0 else (e or o or "could not change it")}
+        if a == "tv-control":
+            rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvctl", "on" if v else "off"], 15); return {"ok": rc == 0, "out": o or e}
+        if a == "wake-screens":
+            rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "wake", "--input"], 30); return {"ok": rc == 0, "out": o.replace("\n", "; ") or e or "No external screens connected."}
+        if a == "pair-tv":
+            ips = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "find"], 30)[1].split()
+            hdmi = [x["name"] for x in s.get("screens", []) if x["name"].startswith("HDMI")]
+            if not ips: return {"ok": False, "out": "No LG TV found on the network. Turn the TV on, on the same network as this device."}
+            if len(hdmi) != 1: return {"ok": False, "out": "Connect the TV to the eGPU's HDMI port first." if not hdmi else "More than one HDMI screen: unplug the others while pairing."}
+            rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "pair", ips[0], hdmi[0]], 90)
+            return {"ok": o.startswith("paired"), "out": o or e or "No answer from the TV."}
     if a == "report":   # Save support report (the same file as the "Save EGPU Buddy report" icon)
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-report"], 90); return {"ok": rc == 0, "out": ("Support report saved: " + o.strip()) if rc == 0 else (o or e)}
     if a == "xgm-intro-seen":   # the XG Mobile intro animation was shown in this app (it plays once here, once in the plugin)
@@ -342,6 +399,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p == "/handheld.svg":
             b = handheld_svg()
             self.send_response(200 if b else 404); self.send_header("content-type", "image/svg+xml"); self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b); return
+        if p == "/api/extras": return self._json(extras())
         if p == "/api/notes": return self._json(release_notes())
         if p == "/api/nvidia": return self._json(nvidia_settings())
         if p == "/api/nvidia-game":   # while a game runs: which saved setting it really received (read-only)

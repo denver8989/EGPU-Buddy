@@ -6,6 +6,7 @@
   egpu-screen wake [CONNECTOR]  power on screens still on our input (all if none given)
   egpu-screen wake --input ...  also switch screens on another input back to us
   egpu-screen settle            the only external screen? turn it on and onto our input
+  egpu-screen tvctl on|off      TV control tricks on or off
   egpu-screen only CONNECTOR    desktop only: that screen alone shows an image (every other KWin screen off)
   egpu-screen replug [CONNECTOR] desktop only: software unplug + replug, for a monitor stuck on "no signal"
   egpu-screen watch             desktop session: settle on plug-in; with 2+ screens, leave a TV that is
@@ -494,6 +495,12 @@ def watch():
 
 def main(argv):
     cmd, want = (argv[1] if len(argv) > 1 else "list"), argv[2:]
+    if cmd == "tvctl" and want in (["on"], ["off"]):   # TV control tricks on / off (the file is root's; the app and the plugin both switch it)
+        try: d = json.load(open(NET))
+        except (OSError, ValueError): d = {}
+        d["enabled"] = want[0] == "on"
+        os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
+        print("TV control " + want[0]); return 0
     take_input = "--input" in want
     want = [w for w in want if w != "--input"]
     found = [s for s in screens() if not want or s[0] in want]
