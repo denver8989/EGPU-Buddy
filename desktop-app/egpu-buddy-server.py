@@ -119,8 +119,9 @@ def plugin_settings():
 def save_plugin_settings(d):
     os.makedirs(os.path.dirname(PLUGIN_SETTINGS), exist_ok=True); json.dump(d, open(PLUGIN_SETTINGS, "w"))
 def extras_on():
-    """The Game Mode settings the app shows on the NVIDIA reference path only (as before: other setups keep the plugin as the one place)."""
-    return ref_path() and read("/etc/nv-egpu-buddy/track") != "nv-gpu-buddy" and read("/etc/nv-egpu-buddy/gpu-vendor") != "amd"
+    """The Game Mode settings the app shows: the NVIDIA reference path and NV GPU Buddy (the plugin has them there too); Bazzite,
+    ROG Ally / XG Mobile and AMD / Intel keep the plugin as the one place."""
+    return ref_path() and read("/etc/nv-egpu-buddy/gpu-vendor") != "amd"
 def usb4():
     """The eGPU's USB4 / Thunderbolt link as the kernel reports it (the plugin's reading)."""
     import glob

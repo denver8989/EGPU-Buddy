@@ -455,8 +455,8 @@ ApplicationWindow {
                         RowLayout { spacing: 8
                             Head { text: "Extras" }
                             Badge { text: "testing · off by default"; lit: false } }
-                        Switch { Layout.fillWidth: true; text: "USB4 link speed check"; checked: !!win.ex.usb4_on; onToggled: win.setEx("usb4", checked) }
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; visible: !!win.ex.usb4_on; color: (win.ex.usb4 || {}).slow ? "#f0b429" : win.subCol
+                        Switch { Layout.fillWidth: true; visible: !win.nvb; text: "USB4 link speed check"; checked: !!win.ex.usb4_on; onToggled: win.setEx("usb4", checked) }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; visible: !win.nvb && !!win.ex.usb4_on; color: (win.ex.usb4 || {}).slow ? "#f0b429" : win.subCol
                                 text: (win.ex.usb4 || {}).name ? (win.ex.usb4.name + ": " + win.ex.usb4.total + " Gb/s (" + win.ex.usb4.lanes + " x " + win.ex.usb4.per_lane + ")" + (win.ex.usb4.slow ? " · slower than USB4 should be: try another cable or port" : "")) : "No USB4 link found." }
                         Switch { Layout.fillWidth: true; text: "TV control: turn on and switch input"; checked: !!(win.ex.tv || {}).enabled; onToggled: { win.act("tv-control", { value: checked }); win.loadEx() } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: ((win.ex.tv || {}).paired || []).length > 0; text: "Paired: " + ((win.ex.tv || {}).paired || []).join(", ") }

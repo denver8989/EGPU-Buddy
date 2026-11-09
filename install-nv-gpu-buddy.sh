@@ -211,7 +211,7 @@ say "== installing system files"
 for f in $SYS_FILES; do
   t=$(mktemp); templ < "$ROOT/system/$f" > "$t"; sudo install -D -m "$(stat -c %a "$ROOT/system/$f")" "$t" "/$f"; rm -f "$t"
 done
-t=$(mktemp); grep -E '^deck ALL=.*(nv-egpu-buddy-privileged|egpu-report|egpu-buddy-update)' "$ROOT/system/etc/sudoers.d/zz-steamos-egpu-buddy" | templ > "$t"
+t=$(mktemp); grep -E '^deck ALL=.*(nv-egpu-buddy-privileged|egpu-report|egpu-buddy-update|egpu-screen)' "$ROOT/system/etc/sudoers.d/zz-steamos-egpu-buddy" | templ > "$t"
 sudo install -D -m 0440 "$t" "$SUDOERS"; rm -f "$t"; sudo visudo -cf "$SUDOERS" >/dev/null || { sudo rm -f "$SUDOERS"; echo "warning: sudoers rule rejected"; }
 # the self-heal (OS updates, new kernels, the driver load at boot) runs before the login screen, with a time limit
 sudo mkdir -p "${SH_DROPIN%/*}"
