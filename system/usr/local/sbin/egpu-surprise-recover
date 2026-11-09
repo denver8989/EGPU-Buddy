@@ -36,6 +36,13 @@ if [ "${1:-}" = --steam-watch ]; then
   # session is still settling is exactly what produced the "Unable to open a connection to X"
   # dialog. So: let the session settle, start Steam once, and only then watch for a stray dialog.
   sleep 25
+  # Bazzite only: this Steam is for the DESKTOP. Started while Game Mode comes up, it took Steam's single-instance lock, the
+  # session's own Steam exited at once and Game Mode died in 5 s; five of those and Bazzite resets Steam, signing it out
+  # (Legion Go report on 0.7.241: armed at boot, fired at 297 s as Game Mode started). Without a desktop: nothing to do.
+  if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release && { ! pgrep -U 1000 -x kwin_wayland >/dev/null 2>&1 \
+       || pgrep -U 1000 -f 'gamescope-session|opengamepadui|gamescope(-wl)?( |$)' >/dev/null 2>&1; }; then
+    log "steam-watch: no desktop (or Game Mode is starting): Steam left to the session"; exit 0
+  fi
   if ! runuser -u deck -- pgrep -x steam >/dev/null 2>&1; then
     runuser -u deck -- env $RUNENV bash -c 'mv -f ~/.steam/steam.pid ~/.steam/steam.pid.old 2>/dev/null; systemd-run --user --collect --quiet --unit=egpu-steam-settled-$(date +%s) /usr/bin/steam -silent' >/dev/null 2>&1
     sleep 20
@@ -60,6 +67,7 @@ if [ "${1:-}" = --steam-watch ]; then
   exit 0
 fi
 [ "$(id -u)" = 0 ] || exit 1
+T0=$(cut -d. -f1 /proc/uptime)   # when this recovery started (seconds since boot), for "started after the removal" below
 # safe detach / reattach own their PCI-remove -> not a surprise
 [ -e /run/user/$U/nv-egpu-buddy/detach-handoff-active ] && { log "skip: safe-detach in progress"; exit 0; }
 pgrep -f '/usr/local/sbin/egpu-safe-detach' >/dev/null && { log "skip: safe-detach helper running"; exit 0; }
@@ -163,6 +171,9 @@ back || for p in $(pgrep -u 1000); do
   # the relaunched Game Mode session (systemd restarts it the instant the old one dies, before this script runs) lives in the
   # session's own cgroup; nothing from the old session can, systemd killed that cgroup. Never touch it.
   [ "$GM" = 1 ] && grep -qE "$GM_CGROUPS" /proc/$p/cgroup 2>/dev/null && continue
+  # Bazzite only: started after the removal = cannot hold the removed card's buffers. The removal at boot was taken for a
+  # desktop pull (no session yet) and the Game Mode that came up meanwhile (gamescope, OpenGamepadUI) was killed.
+  [ "$BZ" = 1 ] && [ "$(( $(sed 's/.*) //' /proc/$p/stat 2>/dev/null | awk '{print $20}') / $(getconf CLK_TCK) ))" -ge "$T0" ] 2>/dev/null && continue
   ls -l /proc/$p/fd 2>/dev/null | grep -qE 'dmabuf|sync_file' || continue
   case "$(cat /proc/$p/comm 2>/dev/null)" in kwin_wayland|Xwayland|plasmashell|pipewire*|wireplumber|systemd*) ;; *) kill -9 "$p" 2>/dev/null; log "killed pre-removal dmabuf holder $p ($(cat /proc/$p/comm 2>/dev/null))";; esac
 done

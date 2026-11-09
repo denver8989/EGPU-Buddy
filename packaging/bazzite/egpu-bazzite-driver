@@ -255,7 +255,9 @@ case "${1:---status}" in
     built || deactivate                                         # built for another kernel / version / image: never merge it
     [ "$(mode_now)" = conflict ] && exit 0
     built || build || exit 0
-    can_load || exit 0
+    # Secure Boot switched on after the install (BIOS reset or update): the build is signed, but the firmware must trust the
+    # key. Only an install asked for that, so the driver stayed off with no prompt; queued here (the plugin shows the steps).
+    can_load || { key_pending || enroll; mkdir -p /run/nvegpu; echo "Secure Boot is on: restart, choose Enroll MOK on the blue screen, password $MOKPW. The eGPU works after that." > /run/nvegpu/notice; exit 0; }
     # (0.7.148's "auto-off" came from a miscount, not from hung boots: it is dropped, the driver goes back on)
     [ -e "$W/auto-off" ] && { rm -f "$W/auto-off"; echo 0 > "$W/boot-attempts"; say "0.7.148 switched the driver off by mistake (a boot was counted twice): switched back on"; }
     # boots that failed with a build whose files had the container's SELinux labels (0.7.151 and older): that was the
