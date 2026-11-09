@@ -1,3 +1,9 @@
+0.7.243 — Bazzite: Steam stays signed in when the eGPU drops at boot.
+
+**Bazzite** (Bazzite only; SteamOS and CachyOS unchanged)
+- When the eGPU dropped off during boot, the recovery started a second Steam and stopped the starting Game Mode; after 5 failed starts Bazzite reset Steam, which signed you out. Fixed.
+- Secure Boot switched on after installing: the plugin now says so, instead of the eGPU silently not working.
+
 0.7.242 — Bazzite: Steam no longer signed out after failed Game Mode starts.
 
 **Bazzite** (Bazzite only; SteamOS and CachyOS unchanged)
