@@ -5,6 +5,13 @@ say where it came from.
 
 ## On-device testing
 
+- **1khanfusion** (Discord) — on-device testing of Bazzite on the Legion Go 2 (Ryzen Z2) with a Gigabyte AORUS AI Box
+  (RTX 5060 Ti): the Bazzite port was run and verified on that device, feature by feature.
+- **ming** (Discord) — AMD eGPU tester: on-device testing of the AMD eGPU path on SteamOS 3.10: Legion Go S with an AMD
+  RX 9070 XT in a Trebleet Thunderbolt 3 enclosure (Intel JHL7440 Titan Ridge), TV over a CEC-capable DisplayPort-to-HDMI
+  adapter. That device's support reports found the AMD driver crash in Safe Detach (the DP-CEC teardown, fixed in
+  0.7.251), the handheld backlight staying on, the Game Mode start loop with one picked screen (0.7.253) and the desktop
+  Safe Detach on AMD (0.7.254), and led to the TV remote over CEC.
 - **SilverplayerX** (Discord) — on-device testing and development on the ROG Xbox Ally X (RC73XA) with an ASUS XG Mobile
   2025 (GC34, RTX 5070 Ti Laptop GPU): the XG Mobile releases were run on that device, and the support reports from it
   found the desktop Safe Detach, cable-pull, re-attach, power and fan, and Return to Gaming Mode issues
@@ -29,6 +36,8 @@ say where it came from.
     (fixed in 0.7.202).
   - [#6](https://github.com/denver8989/EGPU-Buddy/issues/6): the screen watcher's EDID reads making a DisplayPort monitor
     blink after a screen-off (fixed in 0.7.208, every machine in 0.7.209).
+- **bbauti** (GitHub) — tested the Steam menu fix on a desktop with a built-in RTX 3060 (Bazzite 45), found Steam
+  freeing pixmaps through the GLX 1.2 name and sent the patch ([#8](https://github.com/denver8989/EGPU-Buddy/issues/8), shipped in 0.7.252).
 
 ## ASUS XG Mobile
 

@@ -16,10 +16,10 @@ moves to your monitor or TV; unplug it, safely or by pulling the cable, and it g
 plug it in again and it comes back. It's all controlled from a Decky plugin in the Quick Access menu.
 
 NVIDIA eGPUs are fully supported, including the fix for NVIDIA's Game Mode display glitches. AMD and Intel eGPUs
-are supported in beta (an RX 6800 XT is being tested now).
+are supported in beta (RX 6800 XT, RX 6750 XT, RX 9070 and RX 9070 XT tested by users).
 
 > **Use at your own risk.** This changes the NVIDIA driver, boot settings and the Game Mode session. It has been
-> tested on four machines (below) and nothing else. Read [TESTED.md](TESTED.md) first, and keep a way to boot without
+> tested on the machines below and nothing else. Read [TESTED.md](TESTED.md) first, and keep a way to boot without
 > the eGPU. Claude (Anthropic) and Codex (OpenAI) were used as development assistants.
 
 ## Features
@@ -35,6 +35,8 @@ are supported in beta (an RX 6800 XT is being tested now).
   desktop runs on the handheld's GPU alone and games still render on the eGPU.
 - **Best picture by default:** each screen's native resolution at its highest refresh rate.
 - **Screens wake and switch input** where they support it (DDC/CI or HDMI-CEC).
+- **TV controls (opt-in):** volume, mute, TV on and TV off from the plugin and the desktop app, and the TV switched off
+  at Safe Detach: for a paired LG TV over the network, or over HDMI-CEC through SteamOS's own CEC service.
 - **GPU details and controls:** temperature, power, clocks, VRAM, power limit and clock offset.
 - **NVIDIA settings (experimental):** the Windows NVIDIA control panel's global settings (low latency, V-sync, frame
   limit, anisotropic filtering, sharpening, shader cache size, power mode) for games on the NVIDIA eGPU, in the desktop
@@ -87,13 +89,13 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 <p align="center">
   <img src="docs/assets/screenshot-desktop-overview.png" alt="EGPU Buddy desktop app, Overview: Legion Go 2 connected over USB4 to an RTX 5060 Ti with two screens, live temperature, power, GPU load, VRAM, clocks and PCIe link, power limit, the screen picker and Safe Detach" width="800">
 </p>
-<p align="center"><sub>Overview: the handheld, the eGPU and its screens at a glance, live readings, the power limit, the screen the
-desktop and Game Mode show on (only the picked screen shows a picture), and Safe Detach. The version and the update button stay at the top.</sub></p>
+<p align="center"><sub>Overview: the handheld, the eGPU and its screens at a glance, live readings, TV controls, the power limit, the
+screen the desktop and Game Mode show on (only the picked screen shows a picture), and Safe Detach. The version and the update button stay at the top.</sub></p>
 
 <table align="center">
   <tr>
     <th width="50%" valign="top">NVIDIA settings<br><sub>Low latency, power mode, vertical sync, frame limit, filtering, sharpening, shader cache.</sub></th>
-    <th width="50%" valign="top">Extras and setup<br><sub>The Game Mode settings, updates, TV control, the look and the support report.</sub></th>
+    <th width="50%" valign="top">Extras and setup<br><sub>The Game Mode settings, updates, the TV card (control, pairing, TV off at Safe Detach), the look and the support report.</sub></th>
   </tr>
   <tr>
     <td valign="top"><img src="docs/assets/screenshot-desktop-nvidia.png" alt="EGPU Buddy desktop app, NVIDIA settings: low latency, power management, vertical sync, max frame rate, anisotropic filtering, image sharpening, shader cache size, threaded optimization" width="400"></td>
@@ -101,26 +103,28 @@ desktop and Game Mode show on (only the picked screen shows a picture), and Safe
   </tr>
 </table>
 
-<p align="center"><sub>The classic look is one click away in Extras and setup. Below, the classic look with an ASUS XG Mobile:
-power target and its 115 W cap, fan modes and custom curve, lights and clock offsets. Readings from SilverplayerX's device.</sub></p>
-<p align="center">
-  <img src="docs/assets/screenshot-desktop-xg-mobile.png" alt="EGPU Buddy desktop app, classic look, with an ASUS XG Mobile: GPU readings, power target, fan modes, lights and clock offsets" width="600">
-</p>
+<p align="center"><sub>The classic look is one click away in Extras and setup.</sub></p>
 
 ## Tested hardware
 
-| | Legion Go 2 | Legion Go 2 (Ryzen Z2) | Legion Go 1 | ROG Xbox Ally X | Legion Go 1 (AMD eGPU) | Legion Go 1 (AMD eGPU) | Legion Go 1 (AMD eGPU) |
-|---|---|---|---|---|---|---|---|
-| OS | CachyOS (Deckify) | Bazzite 44 (handheld image, bazzite-deck) | SteamOS 3.8 | SteamOS 3.8 | SteamOS 3.9 | CachyOS (Deckify) | CachyOS (Deckify) |
-| eGPU | Gigabyte AORUS AI Box, RTX 5060 Ti | Gigabyte AORUS AI Box, RTX 5060 Ti | AOOSTAR AG03, RTX 3080 | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | AOOSTAR AG02, AMD RX 6800 XT | Minisforum DEG2 (Thunderbolt 5 dock, on USB4), PowerColor AMD RX 9070 | Thunderbolt 3 enclosure (Intel JHL7440), AMD RX 6750 XT |
-| Screens | Acer X49 ultrawide (DisplayPort), LG TV (HDMI) | Samsung Odyssey G95SC ultrawide (HDMI) | Acer X49 ultrawide (DisplayPort) | TV (HDMI) | MSI MP275 (HDMI) | Samsung TV (HDMI) | monitor (HDMI) |
-| Status | Tested | **Fully working**: every feature verified on the device (on-device testing: 1khanfusion) | Tested | Tested (on-device testing and development: SilverplayerX) | **Testing in progress** (on-device testing: RetroMann): plug-in, unplug and games work; sleep and performance fixes being confirmed ([TESTED.md](TESTED.md)) | **Testing in progress** (on-device testing: zergpoop): plug-in, Game Mode and the full 16 GB memory window work; heavy games still crash after a few minutes to about 30 min: an open AMD driver problem with RX 9000 cards over Thunderbolt / USB4 ([TESTED.md](TESTED.md)) | **Testing in progress** (on-device testing: Ivan C.nunes): desktop works; Game Mode on the eGPU being looked at ([TESTED.md](TESTED.md)) |
+| Handheld | OS | eGPU | Screens | Status | Tested by |
+|---|---|---|---|---|---|
+| Legion Go 2 | CachyOS (Deckify), SteamOS | Gigabyte AORUS AI Box, RTX 5060 Ti | Acer X49 ultrawide (DP), LG TV (HDMI) | **Fully working** (reference machine) | denver8989 (maintainer) |
+| Legion Go 2 (Ryzen Z2) | Bazzite 44 (bazzite-deck) | Gigabyte AORUS AI Box, RTX 5060 Ti | Samsung Odyssey G95SC (HDMI) | **Fully working**: every feature verified | 1khanfusion |
+| Legion Go 1 | SteamOS 3.8 | AOOSTAR AG03, RTX 3080 | Acer X49 ultrawide (DP) | Tested | denver8989 (maintainer) |
+| ROG Xbox Ally X | SteamOS 3.8+ | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | TV (HDMI) | Tested | SilverplayerX |
+| Legion Go S | SteamOS 3.10 | Trebleet TB3 enclosure (Intel JHL7440), AMD RX 9070 XT | TV (HDMI, CEC adapter) | **Beta**: Game Mode, Safe Detach and the TV work; boot and desktop detach fixes being confirmed | ming |
+| Legion Go 1 | SteamOS 3.9 | AOOSTAR AG02, AMD RX 6800 XT | MSI MP275 (HDMI) | **Beta**: plug-in, unplug and games work; sleep and performance fixes being confirmed | RetroMann |
+| Legion Go 1 | CachyOS (Deckify) | Minisforum DEG2, PowerColor AMD RX 9070 | Samsung TV (HDMI) | **Beta**: Game Mode works; heavy games crash (open AMD driver problem with RX 9000 over USB4) | zergpoop |
+| Legion Go 1 | CachyOS (Deckify) | TB3 enclosure (Intel JHL7440), AMD RX 6750 XT | monitor (HDMI) | **Beta**: desktop works; Game Mode on the eGPU being looked at | Ivan C.nunes |
 
-**Operating systems:** SteamOS 3.8 and 3.9, CachyOS (Deckify) and **Bazzite** (handheld image, bazzite-deck) tested; Bazzite fully working. On Bazzite the patched NVIDIA driver is built on the device for its kernel (no
+Details per machine: [TESTED.md](TESTED.md). Testers and contributors: [CREDITS.md](CREDITS.md).
+
+**Operating systems:** SteamOS 3.8 to 3.10, CachyOS (Deckify) and **Bazzite** (handheld image, bazzite-deck) tested; Bazzite fully working. On Bazzite the patched NVIDIA driver is built on the device for its kernel (no
 NVIDIA driver needed from Bazzite) and the NVIDIA picture fix is built into the gamescope Bazzite ships.
 
 **NVIDIA:** RTX 30 and RTX 50 tested here (desktop cards, and a laptop RTX 50 in an XG Mobile); RTX 40 reported working by a user (RTX 4070). **AMD and Intel eGPUs:**
-beta, testing in progress on an AMD RX 6800 XT, RX 9070 and RX 6750 XT (choose "AMD / Intel" at the first install). Reports are welcome. Details: [docs/TECHNICAL.md](docs/TECHNICAL.md).
+beta, testing in progress on an AMD RX 6800 XT, RX 6750 XT, RX 9070 and RX 9070 XT (choose "AMD / Intel" at the first install). Reports are welcome. Details: [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Install
 
@@ -169,12 +173,7 @@ attaching are listed in [docs/TECHNICAL.md](docs/TECHNICAL.md#reporting-problems
 
 This builds on other people's work. Full details, with links and licenses: [CREDITS.md](CREDITS.md).
 
-- **SilverplayerX** (Discord): on-device testing and development on the ROG Xbox Ally X with the ASUS XG Mobile.
-- **1khanfusion** (Discord): on-device testing of Bazzite on the Legion Go 2.
-- **RetroMann** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path (Legion Go 1, AOOSTAR AG02, RX 6800 XT).
-- **Ivan C.nunes** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, RX 6750 XT in a Thunderbolt 3 enclosure).
-- **akamel001** (GitHub): detailed bug reports with root causes and fixes from a ROG Xbox Ally X with the ASUS XG Mobile: the 45-second boot race ([#3](https://github.com/denver8989/EGPU-Buddy/issues/3)), the desktop app's update and version display ([#4](https://github.com/denver8989/EGPU-Buddy/issues/4), [#5](https://github.com/denver8989/EGPU-Buddy/issues/5)) and the monitor blinking after a screen-off ([#6](https://github.com/denver8989/EGPU-Buddy/issues/6)).
-- **zergpoop** (Discord): AMD eGPU tester, on-device testing of the AMD eGPU path on CachyOS (Legion Go 1, PowerColor RX 9070 in a Minisforum DEG2).
+- **Testers:** SilverplayerX, 1khanfusion, ming, RetroMann, zergpoop, Ivan C.nunes, and akamel001 and bbauti on GitHub (details in [CREDITS.md](CREDITS.md)).
 - **seerge ([G-Helper](https://github.com/seerge/g-helper)), RomanYazvinsky** and
   **[Handheld Daemon](https://github.com/hhd-dev/hhd):** the XG Mobile's USB control protocol (fan, lights).
 - **matt-schwartz:** found the root cause of the NVIDIA Game Mode corruption.
@@ -188,7 +187,6 @@ This builds on other people's work. Full details, with links and licenses: [CRED
   AMD/Intel eGPUs.
 - **xXJSONDeruloXx ([cec-mote](https://github.com/xXJSONDeruloXx/cec-mote)):** the approach of the TV remote over
   HDMI-CEC (volume, mute, TV on / off through SteamOS's CEC service).
-- **bbauti** (GitHub): the Steam menu fix's GLX 1.2 pixmap patch ([#8](https://github.com/denver8989/EGPU-Buddy/issues/8)).
 - **Valve** (gamescope, Proton), **dxvk-nvapi**, **Decky Loader**, **CachyOS**, **Bazzite** and **NVIDIA**.
 
 If your work is used here and isn't credited, open an issue and it will be fixed.

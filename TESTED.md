@@ -140,6 +140,20 @@ over HDMI. The same setup works on Windows.
 
 If you try it, `/var/log/egpu-generic.log` is the file to attach to a report.
 
+### Fourth AMD card: Legion Go S + RX 9070 XT in a Thunderbolt 3 enclosure, SteamOS 3.10 (0.7.237-0.7.254)
+
+Tested on the device by **ming** (Discord): Lenovo Legion Go S (83N6, Ryzen Z1 Extreme), SteamOS 3.10 (kernel
+7.2.7-valve2), AMD Radeon RX 9070 XT in a Trebleet Thunderbolt 3 enclosure (Intel JHL7440 Titan Ridge), TV over HDMI, also
+through a CEC-capable DisplayPort-to-HDMI adapter.
+
+| Tested on the device | Result |
+|---|---|
+| Plug-in and Game Mode on the TV | working; handheld screen fully off while on the TV (0.7.247) |
+| Safe Detach in Game Mode | working from 0.7.251: the AMD driver crashed while letting go of the card whenever the adapter's HDMI-CEC link was on (its DP-CEC teardown); Safe Detach now switches CEC off first |
+| Boot with the eGPU attached | fixed in 0.7.253 (Game Mode restarted endlessly when the picked screen was the eGPU's only one); waiting for confirmation |
+| Safe Detach on the desktop | fixed in 0.7.254 (it asked for a password, or ran the NVIDIA detach); waiting for confirmation |
+| TV remote over CEC | new in 0.7.254; waiting for confirmation |
+
 ## Earlier: the reference rig
 
 Legion Go 2 + RTX 5060 Ti eGPU + 5120×1440 DisplayPort monitor, CachyOS Deckify, nvidia-open 610.57.04. Exercised
