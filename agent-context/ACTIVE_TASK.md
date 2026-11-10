@@ -122,3 +122,5 @@ Update: prevention built + proven in isolation (fc69fd3, tests/egpu-touchpad-kil
 2nd live test (21:1x): stuck again on a three-finger drag on Firefox's tab bar; KDE kept the press after the touchpad released everything -> KWin/libinput side. Reboot. Drag reverted to first version (fce6b72). Next: reproduce on a separate udev seat with a nested KWin, or press the drag button on a separate virtual mouse. NO live test until proven.
 
 EGPU-019 update: 0c58916 fixed libinput 'double tracking ID' at drag start; owner live test: three-finger drag on Firefox tab bar works, no stuck press. Not pushed/released.
+
+EGPU-019: owner live tests pass: three-finger drag (Firefox tab bar, no stuck), 4-finger up/down + left/right, 5-finger spread/pinch (1798969). KDE window previews show icons only (KWin thumbnails on eGPU setup, not touchpad). Not pushed/released.
