@@ -186,6 +186,9 @@ This builds on other people's work. Full details, with links and licenses: [CRED
   USB4 link stability fixes.
 - **ewagner12 ([all-ways-egpu](https://github.com/ewagner12/all-ways-egpu)):** the `boot_vga` technique used for
   AMD/Intel eGPUs.
+- **xXJSONDeruloXx ([cec-mote](https://github.com/xXJSONDeruloXx/cec-mote)):** the approach of the TV remote over
+  HDMI-CEC (volume, mute, TV on / off through SteamOS's CEC service).
+- **bbauti** (GitHub): the Steam menu fix's GLX 1.2 pixmap patch ([#8](https://github.com/denver8989/EGPU-Buddy/issues/8)).
 - **Valve** (gamescope, Proton), **dxvk-nvapi**, **Decky Loader**, **CachyOS**, **Bazzite** and **NVIDIA**.
 
 If your work is used here and isn't credited, open an issue and it will be fixed.
