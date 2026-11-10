@@ -1,3 +1,14 @@
+0.7.263 — Touchpad: feels like the desktop in Game Mode; keep the screen on for touch; Legion Go 2 controller touchpad.
+
+**Handheld screen as touchpad** (only when the option is on)
+- Game Mode: the pointer now moves like on the desktop (same speed curve and scrolling), small movements register. Fixed: tap to click in Game Mode.
+- New, off by default, Game Mode only: "Keep the screen on for touch", for touchscreens that stop working while their screen is off. The handheld screen shows a dark touchpad picture at the lowest brightness; nothing is redrawn after that. On LCD screens the backlight glows a little.
+
+**Legion Go 2** (shown only with a Legion Go 2 controller; every other machine unchanged)
+- New, off by default: "Legion Go 2 controller touchpad in Game Mode". The right controller touchpad moves the pointer in Game Mode, with tap to click. The desktop is unchanged.
+
+Nothing about touches is recorded or logged.
+
 0.7.262 — Keep awake stays on.
 
 **Keep awake** (every setup)
