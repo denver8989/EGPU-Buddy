@@ -121,6 +121,22 @@ def main():
         ok("A: kill -9 mid drag: button released before the device goes", lis.btn() == 0)
         ok("A: device gone afterwards", lis.gone or node(PAD_NAME) is None)
         ts.frame({}); time.sleep(0.3)
+        # G: real-hand drags: fingers land and lift a few ms apart, move between, in different orders
+        p, lis = start_pad(ts_path, "three")
+        for order in ((0, 1, 2), (2, 1, 0), (1, 0, 2)):
+            ts.frame({0: (4000, 6000)}); time.sleep(0.008)
+            ts.frame({0: (4010, 6000), 1: (5000, 6000)}); time.sleep(0.008)
+            ts.frame({0: (4020, 6000), 1: (5010, 6000), 2: (6000, 6000)}); time.sleep(0.12)
+            for k in range(1, 15):
+                ts.frame({0: (4020 + 150 * k, 6000 + 40 * k), 1: (5010 + 150 * k, 6000 + 40 * k), 2: (6000 + 150 * k, 6000 + 40 * k)}); time.sleep(0.016)
+            lis.drain(0.1); ok(f"G{order}: drag held while moving", lis.btn() == 1)
+            pts = {s: (6200, 6560) for s in range(3)}
+            for s in order:   # lift one at a time, 10 ms apart
+                del pts[s]; ts.frame(dict(pts)); time.sleep(0.01)
+            lis.drain(0.3); ok(f"G{order}: lifting one by one drops", lis.btn() == 0)
+            ts.frame({0: (3000, 3000)}); time.sleep(0.05); ts.frame({0: (3500, 3000)}); time.sleep(0.05); ts.frame({}); lis.drain(0.3)
+            ok(f"G{order}: next one-finger move does not press", lis.btn() == 0)
+        os.kill(p.pid, signal.SIGTERM); lis.drain(1.0); ts.frame({}); time.sleep(0.3)
         # B: watchdog while running
         p, lis = start_pad(ts_path, "three")
         three_drag(ts, lis); ok("B: drag presses", lis.btn() == 1)
