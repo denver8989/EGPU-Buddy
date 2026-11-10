@@ -2,20 +2,17 @@
 
 Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript, read-only tmux capture, and durable local Claude memory. Owner `unclaimed` means no agent is currently editing that task. Waiting tasks are retained, not silently abandoned. Product changes require their own claim and scope review.
 
-## EGPU-001 — Release AMD/Titan Ridge CEC fix | ready | unclaimed
+## EGPU-001 — Release AMD/Titan Ridge CEC fix | done | Claude session 43bbea5e
 
-- Scope: AMD/Intel install + Titan Ridge dock only; preserve NVIDIA and other scenarios.
-- Approval: Claude asked “Shall I release this as 0.7.251?”; owner replied `yes` on 2026-11-10 at 09:45 JST. Claude hit its usage limit before acting. The old memory's “awaiting OK” is superseded by this explicit reply.
-- Facts: fix `a3feb2d` committed locally; discovers `/sys/bus/cec/devices/cec*` instead of nonexistent `/sys/class/cec`. At initial check, unpushed; VERSION and latest published release both 0.7.250. No version bump, release notes, or release workflow for 0.7.251 completed by this coordination task.
-- Validation: Claude reported a kernel-shaped stand-in test; Codex independently ran `bash -n system/usr/local/sbin/egpu-generic` successfully. Not tested on Ming's hardware.
-- Next: recheck live Claude activity, branch/diff, remote master, releases, and workflow runs to prevent duplicate publication. Review fix and stand-in evidence, bump patch version and concise scoped notes, follow `CLAUDE.md` checks, commit only release-owned paths, push master, verify remote SHA, dispatch `.github/workflows/release.yml`, inspect completion and assets. Mark released only after verification. Do not install on the owner's device.
-- Then: move EGPU-002 to waiting-tester. Keep release progress here even if a session ends mid-workflow.
-- Files owned: none.
+- Owner approved ("yes" / "release it", 2026-11-10). Released 0.7.251: commit 6912dbb on origin/master (verified), release workflow run 42738108610 succeeded, tag v0.7.251 with 5 assets.
+- Validation: bash -n + stand-in sysfs test (cec bus layout). Not hardware-tested; see EGPU-002.
 
-## EGPU-002 — Ming Safe Detach hardware confirmation | deferred, depends on EGPU-001 | unclaimed
+## EGPU-002 — Ming Safe Detach hardware confirmation | waiting-tester | unclaimed
 
 - Legion Go S, RX 9070 XT, Trebleet Titan Ridge. Latest report BS5BEC on 0.7.250 still crashed. Trace from 22HUT6 reaches DP-CEC teardown and AUX NULL dereference; prior fixes never discovered the adapter. The causal fix remains a hardware-unconfirmed hypothesis, not a proven resolution.
-- Next after release: provide a short message asking Ming to update, try Safe Detach once, and send a report either way. Do not send messages externally without an explicit instruction. Inspect all report sections, especially CEC discovery/release lines, `egpu-generic.log`, and detach kernel trace.
+- 0.7.251 released; owner given the Discord message for Ming.
+- Next: on Ming's report, check egpu-generic.log for "CEC cecN on ..." / "CEC cecN released (rc N)" / "no CEC adapter registered" lines, then the kmsg trace.
+- (old) Next after release: provide a short message asking Ming to update, try Safe Detach once, and send a report either way. Do not send messages externally without an explicit instruction. Inspect all report sections, especially CEC discovery/release lines, `egpu-generic.log`, and detach kernel trace.
 - Success requires actual report evidence; publication alone does not close this task.
 - Files owned: none.
 

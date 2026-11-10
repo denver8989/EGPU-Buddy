@@ -2,6 +2,10 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-10 (Claude, session 43bbea5e)
+
+- Released 0.7.251 (6912dbb, run 42738108610, v0.7.251 verified). EGPU-001 done; EGPU-002 waiting for Ming's report. No task ownership retained. Nothing broke; no live machine changes.
+
 ## Checkpoint — 2026-11-10, Asia/Tokyo
 
 - Last writer: Codex, persistent counterpart chat `01a1c2fe-3ae3-7ef0-a7c3-0e4871d91c7c`. No task ownership is retained after this turn.
