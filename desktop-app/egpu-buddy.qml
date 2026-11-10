@@ -303,8 +303,18 @@ ApplicationWindow {
         else body = '<rect x="27" y="3" width="66" height="38" rx="3"/><path d="M60 41 V50 M48 52 H72"/>'
         return "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 56" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">' + body + '</svg>')
     }
-    // XR glasses: the same glasses picture the plugin's screen cards show (index.tsx XR_FRONT), served by the backend
-    function xrPhoto(label) { return win.api + "/xr-front.webp" }
+    // XR glasses: the maker's own picture of that model, as in the plugin's pop-up (index.tsx XR_PHOTOS, loaded from the
+    // maker's shop when shown, not shipped); the ones on a white background, an unknown brand or offline: the plugin's
+    // glasses picture (XR_FRONT) served by the backend
+    function xrPhoto(label) {
+        var l = String(label || ""), shop = "https://cdn.shopify.com/s/files/1/"
+        if (/rog|rokid|rayneo|tcl|nxtwear/i.test(l)) return win.api + "/xr-front.webp"
+        if (/viture.*luma/i.test(l)) return shop + "0762/8760/7065/files/nav-glasses-luma-series.png?width=600"
+        if (/viture.*pro/i.test(l)) return shop + "0762/8760/7065/files/nav-glasses-viture-pro-2.png?width=600"
+        if (/viture/i.test(l)) return shop + "0762/8760/7065/files/nav-glasses-the-beast.png?width=600"
+        if (/xreal|nreal/i.test(l)) return shop + "0832/4671/1067/files/R-6V-N-Gina-04.png?width=600"
+        return win.api + "/xr-front.webp"
+    }
     function portName(p) { return p === "DP" ? "DisplayPort" : p === "HDMI" ? "HDMI" : p === "eDP" ? "Built-in" : (p || "") }
     function pickScreen(sc) {
         if (s.screens_game_only) { act("set-screen", { connector: sc.name }); return }   // ROG Ally / XG Mobile: Game Mode's screen only
@@ -672,9 +682,9 @@ ApplicationWindow {
                                 background: Rectangle { radius: 12; color: sb.sel ? palette.alternateBase : palette.window; border.width: sb.sel ? 2 : 1; border.color: sb.sel ? palette.highlight : palette.mid }
                                 contentItem: ColumnLayout { spacing: 2
                                     Item { Layout.fillHeight: true }
-                                    Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: 44; fillMode: Image.PreserveAspectFit; sourceSize.height: 44 * Screen.devicePixelRatio; smooth: true
+                                    Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: modelData.xr ? 124 : 100; Layout.preferredHeight: modelData.xr ? 52 : 44; fillMode: Image.PreserveAspectFit; sourceSize.height: (modelData.xr ? 52 : 44) * Screen.devicePixelRatio; smooth: true
                                             source: modelData.xr ? win.xrPhoto(modelData.label) : modelData.name.indexOf("eDP") === 0 && win.s.handheld ? win.api + "/handheld.svg" : win.screenArt(modelData, sb.sel ? "#2ee6f0" : "#ece9ff")
- }
+                                            onStatusChanged: if (status === Image.Error && modelData.xr) source = win.api + "/xr-front.webp" }
                                     Label { Layout.alignment: Qt.AlignHCenter; text: modelData.xr ? "XR glasses (USB-C)" : win.portName(modelData.port); font.pixelSize: 11; color: win.subCol }
                                     Label { Layout.alignment: Qt.AlignHCenter; Layout.maximumWidth: 138; elide: Text.ElideRight; text: modelData.label; font.bold: true }
                                     Label { Layout.alignment: Qt.AlignHCenter; text: sb.sel ? "picked" : sb.moves ? "restarts the desktop" : (modelData.mode || ""); font.pixelSize: 11; color: sb.sel ? palette.highlight : win.subCol }

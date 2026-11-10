@@ -346,11 +346,11 @@ const cutWhite = (url: string) => new Promise<string>((ok, fail) => {
   };
   img.src = url;
 });
-const Pic = ({ url, white, crop, width }: { url: string; white?: boolean; crop?: boolean; width: number }) => {
+const Pic = ({ url, white, crop, width, minH = 180 }: { url: string; white?: boolean; crop?: boolean; width: number; minH?: number }) => {
   const [src, setSrc] = useState(white ? "" : url);
   useEffect(() => { if (white) cutWhite(url).then(setSrc, () => setSrc(XR_FRONT)); }, [url, white]);
   const own = src !== XR_FRONT;
-  return <img src={src || undefined} onError={() => setSrc(XR_FRONT)} style={{ width: `${width}px`, height: "auto", display: "block", minHeight: src ? undefined : "180px",
+  return <img src={src || undefined} onError={() => setSrc(XR_FRONT)} style={{ width: `${width}px`, height: "auto", display: "block", minHeight: src ? undefined : `${minH}px`,
     ...(own && crop ? { aspectRatio: "4 / 3", objectFit: "cover", objectPosition: "50% 85%" } : {}),
     ...(own && url !== XR_FRONT ? { filter: "drop-shadow(0 0 14px rgba(150,180,255,0.22))" } : {}) }} />;   // a soft glow keeps dark glasses visible on the dark pop-up
 };
@@ -361,7 +361,7 @@ const modeText = (detail: string) => { const m = detail.match(/(\d+)x(\d+) @ \d+
 // and the eGPU's monitors/TVs (an off TV only when TV control can switch it on)
 const screenTargets = (s: Status, tvWakes: boolean) => [
   { name: "eDP-1", label: "the handheld screen", detail: "Games still run on the eGPU", icon: ICONS.handheld, xr: false },
-  ...(s.handheld_displays ?? []).map((d) => ({ name: d.name, label: d.model || d.name, xr: !!d.xr, icon: d.xr ? glassesIcon(d.brand) : screenIcon(d.model || "", d.detail || ""), photo: d.xr ? XR_FRONT : "",
+  ...(s.handheld_displays ?? []).map((d) => ({ name: d.name, label: d.model || d.name, xr: !!d.xr, icon: d.xr ? glassesIcon(d.brand) : screenIcon(d.model || "", d.detail || ""), photo: d.xr ? glassesPhoto(d.brand, d.model) : null,   // that model's own picture, as in the pop-up
     detail: `${d.xr ? "XR glasses passthrough" : "External display on the handheld's USB-C"} · ${modeText(d.detail)} · games run on the eGPU` })),
   ...s.displays.filter((d) => d.state !== "off" || tvWakes).map((d) => ({ name: d.name, label: d.model || d.name, xr: false, icon: screenIcon(d.model || "", d.detail || ""),
     detail: d.state === "off" ? "Off: choosing it turns it on" : d.detail })),
@@ -761,7 +761,7 @@ function Content() {
               onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${t.label}`} strDescription={`${t.detail}\n\nGame Mode restarts on that screen (the current one goes dark for a few seconds). Switch back the same way.`}
                 strOKButtonText="Switch" onOK={() => run(() => setGameScreen(t.name))} />)}>
                 {/* picture above the text: beside it, the text was squeezed into a narrow column */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}><span style={{ flex: "0 0 auto" }}>{(t as any).photo ? <img src={(t as any).photo} style={{ width: "96px", height: "auto", display: "block" }} /> : <span dangerouslySetInnerHTML={{ __html: t.icon }} />}</span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}><span style={{ flex: "0 0 auto" }}>{(t as any).photo ? <Pic {...(t as any).photo} width={96} minH={40} /> : <span dangerouslySetInnerHTML={{ __html: t.icon }} />}</span>
                   {/* the handheld: bigger outline, its exact model under it, smaller text */}
                   {t.name === "eDP-1" && HH_NAME && <div style={{ fontSize: "10px", opacity: 0.6, marginTop: "-4px" }}>{HH_NAME}</div>}
                   <div style={{ textAlign: "center", fontSize: t.name === "eDP-1" ? "12px" : undefined }}>Show Game Mode on {t.label}{t.xr && <span style={{ fontSize: "10px", background: "#1a9fff", borderRadius: "2px", padding: "0 4px", marginLeft: "6px" }}>XR</span>}
