@@ -308,7 +308,7 @@ ApplicationWindow {
     function portName(p) { return p === "DP" ? "DisplayPort" : p === "HDMI" ? "HDMI" : p === "eDP" ? "Built-in" : (p || "") }
     function pickScreen(sc) {
         if (s.screens_game_only) { act("set-screen", { connector: sc.name }); return }   // ROG Ally / XG Mobile: Game Mode's screen only
-        var moves = !s.game_mode && s.present && s.driver_loaded && sc.kind !== s.desktop_on
+        var moves = !s.game_mode && s.present && s.driver_loaded && (sc.desk || sc.kind) !== s.desktop_on
         if (moves) { confirmScreen.pick = sc; confirmScreen.open() } else act("set-screen", { connector: sc.name })
     }
     component Badge: Rectangle {
@@ -569,7 +569,7 @@ ApplicationWindow {
             Flow { Layout.fillWidth: true; spacing: 8; visible: !win.nl && !win.nvb && !win.s.screens_game_only && (win.s.screens || []).length > 0
                 Repeater { model: win.s.screens || []
                     Button { text: modelData.label + (win.s.screen_pick === modelData.name ? "  ✓" : ""); highlighted: win.s.screen_pick === modelData.name
-                             onClicked: { var moves = !win.s.game_mode && win.s.present && win.s.driver_loaded && modelData.kind !== win.s.desktop_on
+                             onClicked: { var moves = !win.s.game_mode && win.s.present && win.s.driver_loaded && (modelData.desk || modelData.kind) !== win.s.desktop_on
                                           if (moves) { confirmScreen.pick = modelData; confirmScreen.open() } else win.act("set-screen", { connector: modelData.name }) } } }
             }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !win.nl && !win.nvb && !win.s.screens_game_only && (win.s.screens || []).length > 0
@@ -666,7 +666,7 @@ ApplicationWindow {
                         Repeater { model: win.s.screens || []
                             AbstractButton { id: sb
                                 readonly property bool sel: win.s.screen_pick === modelData.name
-                                readonly property bool moves: !win.s.screens_game_only && !win.s.game_mode && !!win.s.present && !!win.s.driver_loaded && modelData.kind !== win.s.desktop_on
+                                readonly property bool moves: !win.s.screens_game_only && !win.s.game_mode && !!win.s.present && !!win.s.driver_loaded && (modelData.desk || modelData.kind) !== win.s.desktop_on
                                 width: 150; height: 118
                                 onClicked: win.pickScreen(modelData)
                                 background: Rectangle { radius: 12; color: sb.sel ? palette.alternateBase : palette.window; border.width: sb.sel ? 2 : 1; border.color: sb.sel ? palette.highlight : palette.mid }

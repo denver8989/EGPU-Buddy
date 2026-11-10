@@ -68,7 +68,9 @@ if [ -s "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-desktop-handheld" ]; then
   # a USB-C screen (XR glasses): its highest resolution and refresh once KWin answers (the handheld's GPU only)
   _hp=$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-desktop-handheld")
   case "$_hp" in eDP-*) ;; *) for _ in $(seq 1 25); do kscreen-doctor -o 2>/dev/null | grep -q "Output" && break; sleep 1; done
-    log "handheld USB-C screen $_hp: $(/usr/local/sbin/egpu-screen best "$_hp" 2>&1 | tail -1)" ;; esac
+    # the desktop runs on the eGPU and the handheld's GPU here: the glasses alone show it (the eGPU's monitors and the
+    # handheld screen off, so no monitor keeps a frozen picture), at their highest resolution and refresh
+    log "handheld USB-C screen $_hp: $(/usr/local/sbin/egpu-screen only "$_hp" 2>&1 | tail -1)" ;; esac
   exit 0
 fi
 w=$(cat "$GDEV/current_link_width" 2>/dev/null)

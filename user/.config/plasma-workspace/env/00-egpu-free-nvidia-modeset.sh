@@ -240,10 +240,28 @@ _egpu_stage_desktop_kwin() {
   if [ "$_egpu_bz" = 0 ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ ! -e /var/lib/nvegpu/xg-mobile-seen ] &&
      [ -n "$_hh_pref" ] && [ -n "$igpu_card" ] && [ -n "$_hh_pcard" ] &&
      { case "$_hh_pref" in eDP-*) true ;; *) [ "$(cat "/sys/class/drm/$_hh_pcard-$_hh_pref/status" 2>/dev/null)" = connected ] ;; esac; }; then
-    export KWIN_DRM_DEVICES="$igpu_card"
-    export KWIN_RENDER_NODES="$(_egpu_render_for_card "$igpu_card")"
-    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
-    export __GLX_VENDOR_LIBRARY_NAME=mesa
+    case "$_hh_pref" in
+      eDP-*)
+        export KWIN_DRM_DEVICES="$igpu_card"
+        export KWIN_RENDER_NODES="$(_egpu_render_for_card "$igpu_card")"
+        export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+        export __GLX_VENDOR_LIBRARY_NAME=mesa ;;
+      *)
+        # a screen on the handheld's USB-C (XR glasses) picked: as in Game Mode, the eGPU keeps rendering the desktop and the
+        # handheld only carries the picture to the glasses: KWin on the eGPU first, the handheld's GPU second (its outputs
+        # get the eGPU's frames). Picking an eGPU screen again starts the eGPU-only desktop (full speed, eDP console lifeboat).
+        if [ -n "${egpu_card:-}" ]; then
+          export KWIN_DRM_DEVICES="$egpu_card:$igpu_card"
+          export KWIN_RENDER_NODES="$(_egpu_render_for_card "$egpu_card")"
+          export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+          export __GLX_VENDOR_LIBRARY_NAME=nvidia DXVK_HDR=0
+        else
+          export KWIN_DRM_DEVICES="$igpu_card"
+          export KWIN_RENDER_NODES="$(_egpu_render_for_card "$igpu_card")"
+          export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json
+          export __GLX_VENDOR_LIBRARY_NAME=mesa
+        fi ;;
+    esac
     export VK_DRIVER_FILES="$_egpu_nv_icd" VK_ICD_FILENAMES="$_egpu_nv_icd"
     export PROTON_ENABLE_NVAPI=1 DXVK_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0
     [ -n "${XDG_RUNTIME_DIR:-}" ] && printf '%s\n' "$_hh_pref" > "$XDG_RUNTIME_DIR/egpu-desktop-handheld" 2>/dev/null

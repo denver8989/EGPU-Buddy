@@ -225,9 +225,10 @@ def screens(bdf):
         if read(d + "/status") != "connected" or conn.startswith("Writeback"): continue
         if card == pcard:
             nm = edid_name(d) or ""; xr = not conn.startswith("eDP") and any(b in nm.lower() for b in XR_BRANDS)
-            out.append({"name": conn, "kind": "handheld", "label": "Handheld screen" if conn.startswith("eDP") else (nm or conn) + ("" if xr else " (USB-C)"), "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d), "xr": xr})
+            out.append({"name": conn, "kind": "handheld", "label": "Handheld screen" if conn.startswith("eDP") else (nm or conn) + ("" if xr else " (USB-C)"), "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d), "xr": xr,
+                        "desk": "handheld" if conn.startswith("eDP") else "both"})   # the desktop a pick needs (see desktop_on)
         elif card == ecard and not conn.startswith("eDP"):
-            out.append({"name": conn, "kind": "egpu", "label": edid_name(d) or conn, "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d)})
+            out.append({"name": conn, "kind": "egpu", "label": edid_name(d) or conn, "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d), "desk": "egpu"})
     out.sort(key=lambda x: x["kind"] != "handheld")
     on = ""
     _, k, _ = sh(["pgrep", "-u", str(UID), "-x", "kwin_wayland"])
@@ -238,7 +239,9 @@ def screens(bdf):
         if not dev:   # kwin_wayland has cap_sys_nice, so its environ is unreadable to us: read what the session started it with
             _, o, _ = sh(["systemctl", "--user", "show-environment"])
             dev = next((l.split("=", 1)[1] for l in o.splitlines() if l.startswith("KWIN_DRM_DEVICES=")), "")
-        on = "egpu" if ecard and f"/dev/dri/{ecard}" in dev.split(":")[:1] else ("handheld" if dev else "")
+        devs = [x for x in dev.split(":") if x]
+        # egpu: eGPU only · both: eGPU first + the handheld's GPU (XR glasses picked: the eGPU renders) · handheld: handheld GPU only
+        on = ("both" if len(devs) > 1 else "egpu") if ecard and f"/dev/dri/{ecard}" in devs[:1] else ("handheld" if dev else "")
     return {"screens": out, "screen_pick": read("/var/lib/nvegpu/game-screen"), "desktop_on": on}
 
 def update_state(installed):
@@ -362,7 +365,7 @@ def action(p):
         if s["game_mode"]: return {"ok": True, "out": f"{pick['label']} picked: Game Mode uses it at its next start."}
         if not (s["present"] and s["driver_loaded"]):
             return {"ok": True, "out": f"{pick['label']} picked: the desktop and Game Mode use it once the eGPU is attached."}
-        if pick["kind"] == s.get("desktop_on"):
+        if pick.get("desk", pick["kind"]) == s.get("desktop_on"):
             # same GPU as now: the picked screen alone shows an image (owner's rule), every other screen KWin drives goes off
             sh(["/usr/local/sbin/egpu-screen", "only", c], 30)
             return {"ok": True, "out": f"The desktop is on {pick['label']} only."}
