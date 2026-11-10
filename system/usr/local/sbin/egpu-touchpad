@@ -5,7 +5,8 @@ While the built-in screen is dark because another screen is in use (XR glasses, 
 eGPU), the touchscreen is taken exclusively (EVIOCGRAB) and every finger is passed on to a virtual multi-touch touchpad
 (uinput). libinput - KDE and Game Mode's gamescope both use it - then gives the whole touchpad: pointer, two-finger
 scroll, pinch, three/four-finger gestures. Taps are turned into clicks here (one finger: left, two: right), because
-libinput leaves tap-to-click off by default. When the built-in screen comes back on, the touchscreen is released at once.
+libinput leaves tap-to-click off by default. Three fingers drag (press, move, lift to drop: windows, files); four fingers
+stay libinput's gestures. When the built-in screen comes back on, the touchscreen is released at once.
 
   egpu-touchpad            run (systemd: egpu-touchpad.service; started by the option, stopped when it is turned off)
   egpu-touchpad selftest   the tap and rotation rules without hardware
@@ -159,7 +160,8 @@ class Pad:
         fcntl.ioctl(self.ui, UI_DEV_SETUP, struct.pack("4H80sI", 0x06, 0x1209, 0x7444, 1, b"EGPU Buddy touchpad (handheld screen)", 0))
         fcntl.ioctl(self.ui, UI_DEV_CREATE)
         fcntl.ioctl(self.src, EVIOCGRAB, 1)
-        self.slot, self.slots, self.held = 0, {}, set()
+        self.slot, self.slots, self.held, self.out = 0, {}, set(), {}
+        self.drag, self.wait_clear, self.drag_tid, self.peak = False, False, 60000, 0
         self.tap = Tap(max(ox[2] - ox[1], oy[2] - oy[1], 1))
         log(f"touchpad on: {name} (rotation {self.rot})")
 
@@ -167,8 +169,8 @@ class Pad:
         os.write(self.ui, EVENT.pack(0, 0, t, c, v))
 
     def handle(self, ev):
+        """Collect one frame of the touchscreen (multi-touch protocol B), then send it on as one touchpad frame."""
         _, _, t, c, v = EVENT.unpack(ev)
-        now = time.monotonic()
         if t == EV_ABS:
             if c == ABS_MT_SLOT:
                 self.slot = v
@@ -176,38 +178,60 @@ class Pad:
                 if v < 0:
                     self.slots.pop(self.slot, None)
                 else:
-                    self.slots[self.slot] = [None, None]
+                    self.slots[self.slot] = [None, None, v]
             elif c in (ABS_MT_POSITION_X, ABS_MT_POSITION_Y):
-                p = self.slots.setdefault(self.slot, [None, None])
-                p[0 if c == ABS_MT_POSITION_X else 1] = v
-                if None not in p:
-                    x, y = rotate(p[0], p[1], self.rot, self.xr, self.yr)
-                    self.tap.down(self.slot, x, y, now); self.tap.move(self.slot, x, y)
-                    self.emit(EV_ABS, ABS_MT_SLOT, self.slot)
-                    self.emit(EV_ABS, ABS_MT_POSITION_X, x); self.emit(EV_ABS, ABS_MT_POSITION_Y, y)
-                    if self.slot == min(self.slots):
-                        self.emit(EV_ABS, ABS_X, x); self.emit(EV_ABS, ABS_Y, y)
-                return
-            elif c in (ABS_X, ABS_Y):
-                return   # single-touch axes: derived from the first finger above (rotated)
-            self.emit(t, c, v)
-        elif t == EV_KEY:
-            return       # the touchscreen's own BTN_TOUCH / tools: rebuilt from the finger count below
+                self.slots.setdefault(self.slot, [None, None, self.slot])[0 if c == ABS_MT_POSITION_X else 1] = v
         elif t == EV_SYN and c == SYN_REPORT:
-            n = len(self.slots)
+            pts = {s: rotate(p[0], p[1], self.rot, self.xr, self.yr) + (p[2],) for s, p in self.slots.items() if None not in p[:2]}
+            self.frame(pts, time.monotonic())
+        # the touchscreen's own keys and single-touch axes: rebuilt from the fingers in frame()
+
+    def frame(self, pts, now):
+        n = len(pts)
+        self.peak = max(self.peak, n) if n else 0   # most fingers since all were lifted
+        # three-finger drag: three fingers down press the button on what is under the pointer, moving them drags it,
+        # lifting them drops it. The pointer follows the middle of the three; four fingers stay libinput's gestures.
+        if not self.drag and not self.wait_clear and n == 3 and self.peak == 3:   # not a four-finger gesture losing one
+            self.drag, self.drag_tid = True, self.drag_tid % 65000 + 1
+            self.tap.reset()
+        if self.drag and n < 2:   # lifted (one finger leaving a moment early does not end it)
+            self.drag, self.wait_clear = False, n > 0
+        if self.wait_clear and n == 0:
+            self.wait_clear = False
+        if self.drag:
+            cx, cy = sum(p[0] for p in pts.values()) // n, sum(p[1] for p in pts.values()) // n
+            target = {0: (self.drag_tid, cx, cy)}
+        elif self.wait_clear:
+            target = {}
+        else:
+            target = {s: (p[2], p[0], p[1]) for s, p in pts.items()}
+            for s, (_, x, y) in target.items():
+                self.tap.down(s, x, y, now); self.tap.move(s, x, y)
             self.tap.fingers(n)
-            want = {TOOLS[min(n, 5)], BTN_TOUCH} if n else set()
-            for k in self.held - want:
-                self.emit(EV_KEY, k, 0)
-            for k in want - self.held:
-                self.emit(EV_KEY, k, 1)
-            self.held = want
-            self.emit(EV_SYN, SYN_REPORT, 0)
-            if n == 0:
-                click = self.tap.up_all(now)
-                if click:
-                    self.emit(EV_KEY, click, 1); self.emit(EV_SYN, SYN_REPORT, 0)
-                    self.emit(EV_KEY, click, 0); self.emit(EV_SYN, SYN_REPORT, 0)
+        for s in set(self.out) - set(target):
+            self.emit(EV_ABS, ABS_MT_SLOT, s); self.emit(EV_ABS, ABS_MT_TRACKING_ID, -1)
+        for s, (tid, x, y) in target.items():
+            old = self.out.get(s)
+            if old is None or old[0] != tid:
+                self.emit(EV_ABS, ABS_MT_SLOT, s); self.emit(EV_ABS, ABS_MT_TRACKING_ID, tid)
+            if old is None or old[0] != tid or old[1:] != (x, y):
+                self.emit(EV_ABS, ABS_MT_SLOT, s); self.emit(EV_ABS, ABS_MT_POSITION_X, x); self.emit(EV_ABS, ABS_MT_POSITION_Y, y)
+        if target:
+            _, x, y = target[min(target)]
+            self.emit(EV_ABS, ABS_X, x); self.emit(EV_ABS, ABS_Y, y)
+        self.out = target
+        want = ({TOOLS[min(len(target), 5)], BTN_TOUCH} if target else set()) | ({BTN_LEFT} if self.drag else set())
+        for k in self.held - want:
+            self.emit(EV_KEY, k, 0)
+        for k in want - self.held:
+            self.emit(EV_KEY, k, 1)
+        self.held = want
+        self.emit(EV_SYN, SYN_REPORT, 0)
+        if n == 0 and not self.drag:
+            click = self.tap.up_all(now)
+            if click:
+                self.emit(EV_KEY, click, 1); self.emit(EV_SYN, SYN_REPORT, 0)
+                self.emit(EV_KEY, click, 0); self.emit(EV_SYN, SYN_REPORT, 0)
 
     def pump(self, timeout):
         r, _, _ = select.select([self.src], [], [], timeout)
@@ -262,6 +286,27 @@ def selftest():
     t.down(0, 10, 10, 0.0); t.fingers(1); assert t.up_all(0.5) is None              # held: no click
     t.down(0, 10, 10, 0.0); t.move(0, 300, 10); t.fingers(1); assert t.up_all(0.1) is None   # moved: no click
     t.down(0, 0, 0, 0.0); t.fingers(3); assert t.up_all(0.1) is None                # three fingers: libinput's gesture
+    class Fake(Pad):   # frame() without hardware: record what the virtual touchpad would get
+        def __init__(self):
+            self.out, self.held, self.drag, self.wait_clear, self.drag_tid, self.tap, self.log, self.peak = {}, set(), False, False, 60000, Tap(1000), [], 0
+        def emit(self, t, c, v):
+            self.log.append((t, c, v))
+    f = Fake()
+    f.frame({0: (100, 100, 5)}, 0.0); f.frame({}, 0.05)
+    assert (EV_KEY, BTN_LEFT, 1) in f.log, "one-finger tap clicks"
+    f.log.clear()
+    pts = {0: (100, 100, 6), 1: (200, 100, 7), 2: (300, 100, 8)}
+    f.frame(pts, 1.0)
+    assert (EV_KEY, BTN_LEFT, 1) in f.log and f.drag and list(f.out) == [0] and f.out[0][1:] == (200, 100), "three fingers press at their middle"
+    f.frame({s: (x + 50, y + 20, t) for s, (x, y, t) in pts.items()}, 1.2)
+    assert f.out[0][1:] == (250, 120) and (EV_KEY, BTN_LEFT, 0) not in f.log, "moving drags with the button held"
+    f.frame({0: (150, 120, 6)}, 1.3)
+    assert (EV_KEY, BTN_LEFT, 0) in f.log and not f.drag and f.out == {}, "lifting drops; the last finger moves nothing"
+    f.frame({}, 1.4); assert not f.wait_clear
+    f.log.clear(); f.frame({0: (1, 1, 9), 1: (2, 2, 10), 2: (3, 3, 11), 3: (4, 4, 12)}, 2.0)
+    assert not f.drag and len(f.out) == 4, "four fingers: libinput's gestures"
+    f.frame({0: (1, 1, 9), 1: (2, 2, 10), 2: (3, 3, 11)}, 2.1)
+    assert not f.drag, "a four-finger gesture losing a finger does not start a drag"
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
     assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
     print("selftest ok")
