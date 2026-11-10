@@ -198,6 +198,8 @@ const rebuildDriver = callable<[], Result>("rebuild_driver");
 const getTouchpad = callable<[], { enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean; keep_screen?: boolean }>("get_touchpad");
 const setTouchpad = callable<[boolean], Result>("set_touchpad");
 const setTouchpadOption = callable<[string, string], Result>("set_touchpad_option");
+const getLegionPad = callable<[], { available: boolean; enabled: boolean }>("get_legion_pad");
+const setLegionPad = callable<[boolean], Result>("set_legion_pad");
 let tpSpeedT: ReturnType<typeof setTimeout> | undefined;   // the slider saves (and restarts the touchpad) once it settles
 const pairTv = callable<[], Result>("pair_tv");
 const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
@@ -513,6 +515,7 @@ function Content() {
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
   const [gr, setGr] = useState<{ enabled: boolean } | null>(null);
   const [sui, setSui] = useState<SteamUi | null>(null);
+  const [lpad, setLpad] = useState<{ available: boolean; enabled: boolean } | null>(null);
   const [awake, setAwake] = useState<{ enabled: boolean; active: boolean; egpu: boolean; prev: number[] } | null>(null);
   useEffect(() => { if (visible && tab === "setup") getKeepAwake().then(setAwake).catch(() => setAwake(null)); }, [visible, tab]);
   const [tr, setTr] = useState<Trial | null>(null);
@@ -529,7 +532,7 @@ function Content() {
   const [intro, setIntro] = useState<{ src: string; fading: boolean } | null>(null);   // XG Mobile intro, once
   const introAsked = useRef(false);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
 
-  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setTrm(await getTvRemote()); setTpad(await getTouchpad()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial()); setSui(await getSteamUi());
+  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setTrm(await getTvRemote()); setTpad(await getTouchpad()); setLpad(await getLegionPad().catch(() => null)); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial()); setSui(await getSteamUi());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -1190,6 +1193,7 @@ function Content() {
             <PanelSectionRow><ToggleField label="Three-finger drag" description="Off: double tap to drag instead (tap, touch again and hold to grab; lifting keeps hold, the next tap lets go)." checked={tpad?.three !== false} onChange={(v) => run(async () => { const r = await setTouchpadOption("drag", v ? "three" : "tap"); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
             <PanelSectionRow><ToggleField label="Keep the screen on for touch" description="Game Mode only. For touchscreens that stop working while their screen is off. Instead of switching it off, the handheld screen shows a dark touchpad picture at the lowest brightness. On LCD screens the backlight still glows a little in the dark; OLED screens stay black." checked={!!tpad?.keep_screen} onChange={(v) => run(async () => { const r = await setTouchpadOption("keepscreen", v ? "on" : "off"); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
           </>}
+          {lpad?.available && <PanelSectionRow><ToggleField label="Legion Go 2 controller touchpad in Game Mode" description="Off by default. In Game Mode the controller's right touchpad moves the pointer as it does on the desktop, with tap to click. Steam receives the touchpad but moves no pointer with it in Game Mode; this moves the pointer itself. The desktop is unchanged." checked={!!lpad?.enabled} onChange={(v) => run(async () => { const r = await setLegionPad(v); setLpad(await getLegionPad()); return r; })} /></PanelSectionRow>}
           <PanelSectionRow><ToggleField label="TV control tricks" description={`Off by default. Choosing the TV for Game Mode turns it on and switches it to the ${nvb ? "GPU" : "eGPU"}'s HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.`} checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
           {tv?.enabled && (<>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>

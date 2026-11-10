@@ -578,6 +578,14 @@ json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json "$_tp_k" "$_tp_v"
       *) die "touchpad takes on, off, speed, invert, drag or keepscreen" 2 ;;
     esac
     ;;
+  legionpad)
+    # "Legion Go 2 controller touchpad in Game Mode" (Extras, opt-in, shown only with a Legion Go 2 controller)
+    case "${1:-}" in
+      on)  systemctl enable --now egpu-legion-pad.service >/dev/null 2>&1 && echo "legion pad on" ;;
+      off) systemctl disable --now egpu-legion-pad.service >/dev/null 2>&1; echo "legion pad off" ;;
+      *) die "legionpad takes on or off" 2 ;;
+    esac
+    ;;
   rebuild-driver)
     # "NVIDIA CEC (DisplayPort adapter)" chosen on a driver built before the CEC patch: build the patched driver again
     # from the installed release (same version, forced), in its own unit; progress in /run/nvegpu/driver-rebuild.json.

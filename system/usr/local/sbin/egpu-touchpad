@@ -193,16 +193,7 @@ class Pad:
         self.guard = guardian(self.ui)
         self.gp = None
         if self.gm:
-            buf = bytearray(64)
-            fcntl.ioctl(self.ui, (2 << 30) | (64 << 16) | (0x55 << 8) | 44, buf)   # UI_GET_SYSNAME
-            sysn = buf.split(b"\0")[0].decode()
-            node = None
-            for _ in range(40):   # the event node, after udev has put it on its own seat
-                ev = glob.glob(f"/sys/devices/virtual/input/{sysn}/event*")
-                if ev and os.path.exists("/dev/input/" + os.path.basename(ev[0])):
-                    node = "/dev/input/" + os.path.basename(ev[0]); break
-                time.sleep(0.05)
-            subprocess.run(["udevadm", "settle", "-t", "2"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            node = uinput_node(self.ui)
             try:
                 self.gp = GmPointer(node, NAME) if node else None
             except OSError as e:
@@ -460,12 +451,27 @@ class Pad:
         log(f"touchpad off: touchscreen released (a touch reached the touchscreen while on: {'yes' if getattr(self, 'reached', False) else 'no'})")
 
 
+def uinput_node(ui):
+    """/dev/input/eventN of a uinput device, once udev has handled it (and put it on its seat)."""
+    buf = bytearray(64)
+    fcntl.ioctl(ui, (2 << 30) | (64 << 16) | (0x55 << 8) | 44, buf)   # UI_GET_SYSNAME
+    sysn = buf.split(b"\0")[0].decode()
+    node = None
+    for _ in range(40):
+        ev = glob.glob(f"/sys/devices/virtual/input/{sysn}/event*")
+        if ev and os.path.exists("/dev/input/" + os.path.basename(ev[0])):
+            node = "/dev/input/" + os.path.basename(ev[0]); break
+        time.sleep(0.05)
+    subprocess.run(["udevadm", "settle", "-t", "2"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return node
+
+
 class GmPointer:
     """Game Mode: gamescope moves the pointer by libinput's raw, unaccelerated motion, so the touchpad was slower, coarser
     and laggier than on the desktop. Here the virtual touchpad sits on its own seat (gamescope does not see it) and the
     same libinput the desktop uses reads it in this process: its accelerated pointer motion, finger scrolling and buttons
     go to gamescope through a plain virtual mouse, so the pointer moves exactly as on the desktop. Nothing is recorded."""
-    def __init__(self, node, name):
+    def __init__(self, node, name, tap=False):
         import ctypes, ctypes.util
         li = self.li = ctypes.CDLL(ctypes.util.find_library("input") or "libinput.so.10")
         OPEN = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p)
@@ -500,7 +506,7 @@ class GmPointer:
         dev = li.libinput_path_add_device(self.ctx, node.encode()) if self.ctx else None
         if not dev:
             self.close(); raise OSError("libinput could not read the Game Mode touchpad")
-        li.libinput_device_config_tap_set_enabled(dev, 0)   # taps are clicks already (Pad)
+        li.libinput_device_config_tap_set_enabled(dev, 1 if tap else 0)   # screen touchpad: taps are clicks already (Pad)
         self.fd, self.rx, self.ry, self.wv, self.wh, self.held = li.libinput_get_fd(self.ctx), 0.0, 0.0, 0, 0, set()
 
     def ev(self, t, c, v):
@@ -702,16 +708,21 @@ def picture_off():
     log("touchpad picture off")
 
 
-def run():
-    import signal
-    for sig in (signal.SIGTERM, signal.SIGHUP):
-        signal.signal(sig, lambda *_: sys.exit(0))   # stop (systemd, timeout, hangup) runs close() below
-    try:   # the Game Mode touchpad on a seat of its own: gamescope and KDE read seat0 only
+def seat_rule():
+    """The Game Mode touchpads on a seat of their own: gamescope and KDE read seat0 only, GmPointer reads them."""
+    try:
         os.makedirs(os.path.dirname(SEAT_RULE), exist_ok=True)
         open(SEAT_RULE, "w").write(f'SUBSYSTEM=="input", ATTRS{{name}}=="*{GM_SUFFIX}", ENV{{ID_SEAT}}="seat-egpu-touchpad"\n')
         subprocess.run(["udevadm", "control", "--reload"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as e:
         log("could not add the Game Mode seat rule:", e)
+
+
+def run():
+    import signal
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: sys.exit(0))   # stop (systemd, timeout, hangup) runs close() below
+    seat_rule()
     pad, tried = None, False
     picture_off()   # left from a stop that could not clean up
     try:
@@ -747,6 +758,135 @@ def run():
         if pad:
             pad.close()
         picture_off()
+
+
+LEGION_NAME = "EGPU Buddy Legion Go 2 controller touchpad"
+
+
+def legion_hidraw():
+    """The Legion Go 2 controller's input interface (hid-lenovo-go, 17EF:61EB-61EE, interface 2), or None."""
+    for h in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
+        try:
+            u = open(h + "/device/uevent").read()
+        except OSError:
+            continue
+        if re_go2(u) and ":1.2/" in os.path.realpath(h + "/device"):
+            return "/dev/" + os.path.basename(h)
+    return None
+
+
+def re_go2(uevent):
+    return any(f"17EF:0000{p}" in uevent for p in ("61EB", "61EC", "61ED", "61EE")) and "hid-lenovo-go" in uevent
+
+
+class LegionPad:
+    """Game Mode only (opt-in, Legion Go 2): the controller's right touchpad as a real touchpad. Steam receives it but
+    moves no pointer in Game Mode (it works on the desktop), so its position is read from the controller's own input
+    reports (shared read, InputPlumber and Steam keep theirs) and put on a virtual touchpad that the desktop's libinput
+    turns into pointer, tap-to-click and scrolling, through GmPointer. Positions are never stored or logged."""
+    def __init__(self, hid):
+        self.hid = os.open(hid, os.O_RDONLY | os.O_NONBLOCK)
+        self.ui = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
+        fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_KEY); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_ABS); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_SYN)
+        for k in (BTN_LEFT, BTN_RIGHT, BTN_TOUCH, BTN_TOOL_FINGER):   # both buttons: libinput takes it for a touchpad, not a clickpad
+            fcntl.ioctl(self.ui, UI_SET_KEYBIT, k)
+        fcntl.ioctl(self.ui, UI_SET_PROPBIT, INPUT_PROP_POINTER)
+        for code in (ABS_X, ABS_Y):   # 0-1024 at 36 units per mm (the controller's own touchpad device)
+            fcntl.ioctl(self.ui, UI_SET_ABSBIT, code)
+            fcntl.ioctl(self.ui, UI_ABS_SETUP, struct.pack("Hxx6i", code, 0, 0, 1024, 0, 0, 36))
+        fcntl.ioctl(self.ui, UI_DEV_SETUP, struct.pack("4H80sI", 0x06, 0x1209, 0x7446, 1, (LEGION_NAME + GM_SUFFIX).encode(), 0))
+        fcntl.ioctl(self.ui, UI_DEV_CREATE)
+        self.guard = guardian(self.ui)
+        self.down, self.last = False, None
+        try:
+            self.gp = GmPointer(uinput_node(self.ui), LEGION_NAME, tap=True)
+        except OSError:
+            self.close(); raise
+
+    def ev(self, t, c, v):
+        os.write(self.ui, EVENT.pack(0, 0, t, c, v))
+
+    def report(self, d):
+        if len(d) < 30 or d[:3] != b"\x04\x3c\x74":
+            return
+        x, y = int.from_bytes(d[26:28], "big"), int.from_bytes(d[28:30], "big")
+        touching = x != 0 and y != 0 and max(x, y) <= 1024
+        if touching:
+            if (x, y) == self.last and self.down:
+                return
+            if not self.down:
+                self.ev(EV_KEY, BTN_TOUCH, 1); self.ev(EV_KEY, BTN_TOOL_FINGER, 1); self.down = True
+            self.ev(EV_ABS, ABS_X, x); self.ev(EV_ABS, ABS_Y, y); self.last = (x, y)
+        elif self.down:
+            self.ev(EV_KEY, BTN_TOUCH, 0); self.ev(EV_KEY, BTN_TOOL_FINGER, 0); self.down, self.last = False, None
+        else:
+            return
+        self.ev(EV_SYN, SYN_REPORT, 0)
+
+    def pump(self, timeout):
+        r, _, _ = select.select([self.hid, self.gp.fd], [], [], timeout)
+        if self.gp.fd in r:
+            self.gp.pump()
+        if self.hid in r:
+            while True:
+                try:
+                    d = os.read(self.hid, 64)
+                except BlockingIOError:
+                    break
+                if not d:
+                    raise OSError("controller gone")
+                self.report(d)
+
+    def close(self):
+        try:
+            if self.down:
+                self.ev(EV_KEY, BTN_TOUCH, 0); self.ev(EV_KEY, BTN_TOOL_FINGER, 0); self.ev(EV_SYN, SYN_REPORT, 0)
+        except OSError:
+            pass
+        if getattr(self, "gp", None):
+            self.gp.close(); self.gp = None
+        for f, op in ((self.ui, lambda: fcntl.ioctl(self.ui, UI_DEV_DESTROY)),):
+            try:
+                op()
+            except OSError:
+                pass
+            os.close(f)
+        for f in ("hid", "guard"):
+            try:
+                os.close(getattr(self, f))
+            except (OSError, AttributeError):
+                pass
+        log("Legion controller touchpad: off")
+
+
+def legion():
+    import signal
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: sys.exit(0))
+    seat_rule()
+    pad = None
+    try:
+        while True:
+            hid = legion_hidraw() if game_mode() else None
+            if hid and pad is None:
+                try:
+                    pad = LegionPad(hid); log("Legion controller touchpad: on (Game Mode)")
+                except OSError as e:
+                    log("Legion controller touchpad: could not start:", e); time.sleep(10)
+            elif not hid and pad is not None:
+                pad.close(); pad = None
+            if pad:
+                end = time.monotonic() + 2
+                try:
+                    while time.monotonic() < end:
+                        pad.pump(0.5)
+                except OSError:
+                    pad.close(); pad = None
+            else:
+                time.sleep(2)
+    finally:
+        if pad:
+            pad.close()
 
 
 def selftest():
@@ -876,4 +1016,4 @@ def selftest():
 
 
 if __name__ == "__main__":
-    selftest() if sys.argv[1:] == ["selftest"] else run()
+    selftest() if sys.argv[1:] == ["selftest"] else legion() if sys.argv[1:] == ["legion"] else run()

@@ -1,0 +1,13 @@
+[Unit]
+Description=EGPU Buddy: Legion Go 2 controller touchpad as a touchpad in Game Mode (opt-in)
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/egpu-touchpad legion
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

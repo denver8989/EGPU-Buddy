@@ -2396,6 +2396,16 @@ class Plugin:
         return {"enabled": on, "active": on and active.startswith("egpu-touchpad: touchpad on"),
                 "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap", "keep_screen": bool(d.get("keep_screen"))}
 
+    async def get_legion_pad(self):
+        """Legion Go 2 controller touchpad in Game Mode: offered only while a Legion Go 2 controller is connected."""
+        found = any(re.search(r"17EF:000061E[BCDE]", _read(u)) and "hid-lenovo-go" in _read(u) for u in glob.glob("/sys/class/hidraw/hidraw*/device/uevent"))
+        on = _sh(["systemctl", "is-enabled", "egpu-legion-pad.service"], 5)[1].strip() == "enabled"
+        return {"available": found or on, "enabled": on}
+
+    async def set_legion_pad(self, enabled: bool):
+        rc, out, err = _sh(["/usr/local/sbin/nv-egpu-buddy-privileged", "legionpad", "on" if enabled else "off"], 20)
+        return {"ok": rc == 0, "message": ("On: in Game Mode the controller's right touchpad moves the pointer." if enabled else "Off: Steam handles the controller touchpad again.") if rc == 0 else (out or err)}
+
     async def set_touchpad_option(self, key: str, value: str):
         rc, out, err = _sh(["/usr/local/sbin/nv-egpu-buddy-privileged", "touchpad", key, value], 20)
         return {"ok": rc == 0, "message": "Saved." if rc == 0 else (out or err)}
