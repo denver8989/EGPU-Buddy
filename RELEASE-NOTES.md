@@ -1,3 +1,8 @@
+0.7.262 — Keep awake stays on.
+
+**Keep awake** (every setup)
+- Without an eGPU it used to switch itself off, so the machine slept after the eGPU came back. Now it pauses and comes back on with the eGPU. Fixed.
+
 0.7.261 — Handheld screen as touchpad: support report shows whether it works on your handheld.
 
 **Handheld screen as touchpad** (only when the option is on; nothing else changed)
