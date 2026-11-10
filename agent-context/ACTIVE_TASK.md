@@ -27,6 +27,11 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 
 - bbauti's patch applied as-is; rebuilt libegpu-steam-ui.so (same toolchain, GLIBC_2.34 like before). Stand-in: preloaded fake steamwebhelper resolves glXDestroyGLXPixmap to our lib (old build: libGLX). Released 0.7.252 (81dd666, run 42742103047), together with EGPU-011 handheld fix (owner OK). Not tested on real hardware; issue not replied to (owner's call).
 
+## EGPU-013 — Desktop app TV->monitor switch left monitor black | waiting-user (release OK) | unclaimed | NVIDIA reference path
+
+- 2026-11-10 11:48 JST owner machine: desktop app set-screen DP-7 -> egpu-screen only DP-7 = one kscreen-doctor change (DP-7 on 5120x1440@144 HDR + HDMI-A-1 off) -> nvidia-drm "Flip event timeout on head 0" -> monitor black (KWin alive, DDC in-use). Cable replug recovered.
+- Fix committed (unreleased): reference path only, enable picked screen first, sleep 4, then disable others. Stand-in tested (fake kscreen-doctor). Not hardware-tested; hypothesis that two commits avoid the timeout.
+
 ## EGPU-003 — egpu-screen CEC discovery path | waiting-user | unclaimed
 
 - `_cec_for` reportedly has the same `/sys/class/cec` bug across all scenarios. Claude told owner but did not change it. No approval to widen the AMD-specific fix was observed.
