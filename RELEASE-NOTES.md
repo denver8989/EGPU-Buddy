@@ -1,3 +1,10 @@
+0.7.256 — XR glasses on the desktop work as in Game Mode.
+
+**XR glasses** (SteamOS and CachyOS with an NVIDIA eGPU; other setups unchanged)
+- Picking the glasses in the desktop app keeps the desktop on the eGPU and shows it on the glasses alone, as in Game Mode; the monitor no longer keeps a frozen picture. Picking a monitor or TV again goes back to the normal desktop.
+- Glasses and other USB-C screens on the handheld get their highest resolution and refresh rate, in Game Mode and on the desktop.
+- The desktop app recognises XR glasses and shows them with the same picture as the plugin.
+
 0.7.255 — TV over CEC wakes the TV and picks the right input; NVIDIA CEC (opt-in); TV controls layout.
 
 **TV extras** (Extras, all off by default; plugin and desktop app)
