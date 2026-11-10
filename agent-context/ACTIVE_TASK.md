@@ -7,7 +7,7 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 - Owner approved ("yes" / "release it", 2026-11-10). Released 0.7.251: commit 6912dbb on origin/master (verified), release workflow run 42738108610 succeeded, tag v0.7.251 with 5 assets.
 - Validation: bash -n + stand-in sysfs test (cec bus layout). Not hardware-tested; see EGPU-002.
 
-## EGPU-002 — Ming Safe Detach hardware confirmation | waiting-tester | unclaimed
+## EGPU-002 — Ming Safe Detach hardware confirmation | done (tester confirmed fixed, report 2PWZYH on 0.7.252) | unclaimed
 
 - Legion Go S, RX 9070 XT, Trebleet Titan Ridge. Latest report BS5BEC on 0.7.250 still crashed. Trace from 22HUT6 reaches DP-CEC teardown and AUX NULL dereference; prior fixes never discovered the adapter. The causal fix remains a hardware-unconfirmed hypothesis, not a proven resolution.
 - 0.7.251 released; owner given the Discord message for Ming.
@@ -31,6 +31,12 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 
 - 2026-11-10 11:48 JST owner machine: desktop app set-screen DP-7 -> egpu-screen only DP-7 = one kscreen-doctor change (DP-7 on 5120x1440@144 HDR + HDMI-A-1 off) -> nvidia-drm "Flip event timeout on head 0" -> monitor black (KWin alive, DDC in-use). Cable replug recovered.
 - Fix committed (unreleased): reference path only, enable picked screen first, sleep 4, then disable others. Stand-in tested (fake kscreen-doctor). Not hardware-tested; hypothesis that two commits avoid the timeout.
+
+## EGPU-014 — AMD boot with eGPU: Game Mode restart loop | waiting-user (release OK) | unclaimed | AMD / Intel install
+
+- Report 2PWZYH (Ming, 0.7.252): Safe Detach now FIXED (tester confirmed; EGPU-002 effectively resolved). Boot with eGPU: TV on Legion logo, handheld black flashing; gamescope-session restarted every ~9 s, script died right after the rebar log line.
+- Cause: AMD branch `gen_outputs="$gen_pref $(... | grep -vx "$gen_pref")"` at top level; picked screen (DP-3) = only eGPU output -> grep exit 1 -> set -e/pipefail ends script. Latent since 9984318 (2026-10-09); exposed once Ming picked the TV. NVIDIA twin lines run inside $(connector_order) (no errexit) - not affected.
+- Fix 1214719 (unreleased): `|| true`; also handheld-route card-id read. Stand-in: one/two outputs, eDP pick, no pick all reach OUTPUT_CONNECTOR. Workaround for Ming until released: delete /var/lib/nvegpu/game-screen (or boot without eGPU and pick another screen).
 
 ## EGPU-003 — egpu-screen CEC discovery path | waiting-user | unclaimed
 
