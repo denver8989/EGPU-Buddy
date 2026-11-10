@@ -5,8 +5,9 @@ While the built-in screen is dark because another screen is in use (XR glasses, 
 eGPU), the touchscreen is taken exclusively (EVIOCGRAB) and every finger is passed on to a virtual multi-touch touchpad
 (uinput). libinput - KDE and Game Mode's gamescope both use it - then gives the whole touchpad: pointer, two-finger
 scroll, pinch, three/four-finger gestures. Taps are turned into clicks here (one finger: left, two: right), because
-libinput leaves tap-to-click off by default. Three fingers drag (press, move, lift to drop: windows, files); four fingers
-stay libinput's gestures. When the built-in screen comes back on, the touchscreen is released at once.
+libinput leaves tap-to-click off by default. Three fingers drag (press, move, lift to drop: windows, files). Four
+fingers are handled here as KDE shortcuts: swipe up or down toggles the Overview, a long swipe left or right switches
+desktop. When the built-in screen comes back on, the touchscreen is released at once.
 
   egpu-touchpad            run (systemd: egpu-touchpad.service; started by the option, stopped when it is turned off)
   egpu-touchpad selftest   the tap and rotation rules without hardware
@@ -14,7 +15,7 @@ stay libinput's gestures. When the built-in screen comes back on, the touchscree
 Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270} - a calibration knob for a touchscreen mounted
 rotated relative to how the screen is used (default: 0, or 90 when the digitizer is portrait and the screen landscape).
 """
-import fcntl, glob, json, os, select, struct, sys, time
+import fcntl, glob, json, os, select, struct, subprocess, sys, time
 
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 SYN_REPORT = 0
@@ -163,10 +164,23 @@ class Pad:
         self.slot, self.slots, self.held, self.out = 0, {}, set(), {}
         self.drag, self.wait_clear, self.drag_tid, self.peak = False, False, 60000, 0
         self.tap = Tap(max(ox[2] - ox[1], oy[2] - oy[1], 1))
+        self.size, self.swipe, self.t3 = (max(ox[2] - ox[1], 1), max(oy[2] - oy[1], 1)), None, None
         log(f"touchpad on: {name} (rotation {self.rot})")
 
     def emit(self, t, c, v):
         os.write(self.ui, EVENT.pack(0, 0, t, c, v))
+
+    def shortcut(self, name):
+        """Run a KWin global shortcut in the logged-in user's session (no-op outside the KDE desktop)."""
+        log("gesture:", name)
+        for bus in sorted(glob.glob("/run/user/*/bus")):
+            uid = os.stat(bus).st_uid
+            if uid >= 1000:
+                subprocess.Popen(["setpriv", f"--reuid={uid}", f"--regid={uid}", "--init-groups", "env",
+                                  f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}", "busctl", "--user", "call", "org.kde.kglobalaccel",
+                                  "/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s", name],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return
 
     def handle(self, ev):
         """Collect one frame of the touchscreen (multi-touch protocol B), then send it on as one touchpad frame."""
@@ -189,19 +203,36 @@ class Pad:
     def frame(self, pts, now):
         n = len(pts)
         self.peak = max(self.peak, n) if n else 0   # most fingers since all were lifted
+        cx, cy = (sum(p[0] for p in pts.values()) // n, sum(p[1] for p in pts.values()) // n) if n else (0, 0)
+        # four-finger swipe: up/down toggles the Overview, a long left/right swipe switches desktop (once per swipe)
+        if n == 4 and self.peak == 4 and not self.swipe and not self.drag and not self.wait_clear:
+            self.swipe = [cx, cy, False]; self.tap.reset()
+        if self.swipe and n == 0:
+            self.swipe = None
+        if self.swipe and n == 4 and not self.swipe[2]:
+            dx, dy = cx - self.swipe[0], cy - self.swipe[1]
+            act = None
+            if abs(dx) > abs(dy) and abs(dx) >= 0.3 * self.size[0]:   # ponytail: fixed thresholds, a knob if people ask
+                act = "Switch One Desktop to the Right" if dx < 0 else "Switch One Desktop to the Left"
+            elif abs(dy) > abs(dx) and abs(dy) >= 0.15 * self.size[1]:
+                act = "Overview"
+            if act:
+                self.swipe[2] = True; self.shortcut(act)
         # three-finger drag: three fingers down press the button on what is under the pointer, moving them drags it,
-        # lifting them drops it. The pointer follows the middle of the three; four fingers stay libinput's gestures.
-        if not self.drag and not self.wait_clear and n == 3 and self.peak == 3:   # not a four-finger gesture losing one
-            self.drag, self.drag_tid = True, self.drag_tid % 65000 + 1
+        # lifting them drops it. The pointer follows the middle of the three. It waits 80 ms so a four-finger swipe
+        # whose fingers land as three first does not become a drag.
+        self.t3 = (self.t3 or now) if n == 3 and self.peak == 3 else None
+        pending = self.t3 is not None and not self.drag and not self.wait_clear and not self.swipe
+        if pending and now - self.t3 >= 0.08:
+            self.drag, self.drag_tid, pending = True, self.drag_tid % 65000 + 1, False
             self.tap.reset()
         if self.drag and n < 2:   # lifted (one finger leaving a moment early does not end it)
             self.drag, self.wait_clear = False, n > 0
         if self.wait_clear and n == 0:
             self.wait_clear = False
         if self.drag:
-            cx, cy = sum(p[0] for p in pts.values()) // n, sum(p[1] for p in pts.values()) // n
             target = {0: (self.drag_tid, cx, cy)}
-        elif self.wait_clear:
+        elif self.wait_clear or self.swipe or pending:
             target = {}
         else:
             target = {s: (p[2], p[0], p[1]) for s, p in pts.items()}
@@ -289,24 +320,38 @@ def selftest():
     class Fake(Pad):   # frame() without hardware: record what the virtual touchpad would get
         def __init__(self):
             self.out, self.held, self.drag, self.wait_clear, self.drag_tid, self.tap, self.log, self.peak = {}, set(), False, False, 60000, Tap(1000), [], 0
+            self.size, self.swipe, self.t3, self.cuts = (1000, 1000), None, None, []
         def emit(self, t, c, v):
             self.log.append((t, c, v))
+        def shortcut(self, name):
+            self.cuts.append(name)
     f = Fake()
     f.frame({0: (100, 100, 5)}, 0.0); f.frame({}, 0.05)
     assert (EV_KEY, BTN_LEFT, 1) in f.log, "one-finger tap clicks"
     f.log.clear()
     pts = {0: (100, 100, 6), 1: (200, 100, 7), 2: (300, 100, 8)}
-    f.frame(pts, 1.0)
+    f.frame(pts, 1.0); assert not f.drag and f.out == {}, "three fingers wait a moment before pressing"
+    f.frame(pts, 1.1)
     assert (EV_KEY, BTN_LEFT, 1) in f.log and f.drag and list(f.out) == [0] and f.out[0][1:] == (200, 100), "three fingers press at their middle"
     f.frame({s: (x + 50, y + 20, t) for s, (x, y, t) in pts.items()}, 1.2)
     assert f.out[0][1:] == (250, 120) and (EV_KEY, BTN_LEFT, 0) not in f.log, "moving drags with the button held"
     f.frame({0: (150, 120, 6)}, 1.3)
     assert (EV_KEY, BTN_LEFT, 0) in f.log and not f.drag and f.out == {}, "lifting drops; the last finger moves nothing"
     f.frame({}, 1.4); assert not f.wait_clear
-    f.log.clear(); f.frame({0: (1, 1, 9), 1: (2, 2, 10), 2: (3, 3, 11), 3: (4, 4, 12)}, 2.0)
-    assert not f.drag and len(f.out) == 4, "four fingers: libinput's gestures"
-    f.frame({0: (1, 1, 9), 1: (2, 2, 10), 2: (3, 3, 11)}, 2.1)
-    assert not f.drag, "a four-finger gesture losing a finger does not start a drag"
+    four = lambda dx, dy: {s: (100 * s + 300 + dx, 500 + dy, 20 + s) for s in range(4)}
+    f.log.clear(); f.frame({s: p for s, p in four(0, 0).items() if s < 3}, 2.0)   # lands as three first
+    f.frame(four(0, 0), 2.03)
+    assert not f.drag and f.out == {} and f.swipe, "four fingers: a swipe, not a drag, nothing forwarded"
+    f.frame(four(0, -200), 2.1); f.frame(four(0, -300), 2.15)
+    assert f.cuts == ["Overview"], "swipe up toggles the Overview once"
+    f.frame({s: p for s, p in four(0, -300).items() if s < 3}, 2.2)
+    assert not f.drag, "a four-finger swipe losing a finger does not start a drag"
+    f.frame({}, 2.3); f.cuts.clear()
+    f.frame(four(0, 0), 3.0); f.frame(four(-200, 0), 3.1); assert f.cuts == [], "a short sideways swipe does nothing"
+    f.frame(four(-350, 0), 3.2); assert f.cuts == ["Switch One Desktop to the Right"], "a long swipe left: next desktop"
+    f.frame({}, 3.3); f.cuts.clear()
+    f.frame(four(0, 0), 4.0); f.frame(four(400, 10), 4.1); f.frame({}, 4.2)
+    assert f.cuts == ["Switch One Desktop to the Left"], "a long swipe right: previous desktop"
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
     assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
     print("selftest ok")
