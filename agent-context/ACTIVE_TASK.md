@@ -44,6 +44,15 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 - egpu-screen: tvset/tvkey/tvoff/tvremote; CEC via cecd D-Bus (busctl --user as uid 1000) on CecN where /sys/bus/cec/devices/cecN is under the eGPU bdf, SteamOS only; LG via webOS (volume needs CONTROL_AUDIO, requested on pairing; owner's existing pairing already allowed it). Safe Detach hooks (egpu-safe-detach NVIDIA, egpu-generic AMD) guarded by grep '"off_at_detach": true'. Plugin: TV controls tab + 2 Extras toggles. Credits: CREDITS.md.
 - Tests: stand-in CEC match/cecd args, toggles off = no routes; LG mute live on owner's TV (toggled and restored during test). CEC not hardware-tested; TV off at detach not run live. Desktop app has no TV controls (not requested).
 
+## EGPU-016 — AMD desktop Safe Detach broken | waiting-user (release OK) | unclaimed | AMD / Intel install
+
+- Report KXD7CD (Ming, 0.7.253): app Safe Detach -> sudo -n egpu-generic detach "a password is required" (sudoers had only rebar); Safely Eject shortcut ran NVIDIA egpu-safe-detach-ui -> "NVIDIA eGPU display card is unavailable". Same report: Game Mode detach with CEC released rc 0 + removed = CEC fix confirmed.
+- Fix 201710c (unreleased): sudoers + launcher --detach AMD branch (systemd-run --user, notify-send). visudo OK. egpu-generic's desktop (KWin logout) branch not hardware-verified.
+
+## EGPU-015b — desktop app TV parity + TV on/off | waiting-user (look OK) | unclaimed
+
+- Uncommitted working tree: desktop-app server/QML TV card + Overview TV controls; TV on/off (egpu-screen tvkey on|off, plugin row, app buttons). Previews on Desktop updated.
+
 ## EGPU-003 — egpu-screen CEC discovery path | waiting-user | unclaimed
 
 - `_cec_for` reportedly has the same `/sys/class/cec` bug across all scenarios. Claude told owner but did not change it. No approval to widen the AMD-specific fix was observed.
