@@ -2496,6 +2496,7 @@ const getSteamUi = callable("get_steam_ui_fix");
 const getHandheldArt = callable("get_handheld_art");
 const getKeepAwake = callable("get_keep_awake");
 const setKeepAwake = callable("set_keep_awake");
+const pauseKeepAwake = callable("pause_keep_awake");
 // Steam's own idle-sleep timers (client setting 24003 battery, 24004 plugged in; seconds, 0 = Never)
 const steamSleep = (bat, ac) => {
     const v = (n) => { const o = []; do {
@@ -3200,7 +3201,7 @@ function Content() {
                                 const back = tr.current === "beta" ? tr.main : tr.old;
                                 DFL.showModal(SP_JSX.jsx(DFL.ConfirmModal, { strTitle: `Return to ${back}`, strDescription: `The eGPU is safely detached, the driver ${back} is put back (offline, a few minutes) and the eGPU is attached again.`, strOKButtonText: "Return", onOK: () => run(revertTrial) }));
                             }, children: tr.current === "beta" ? `Return to the main driver ${tr.main}` : `Return to the previous driver ${tr.old}` }) })), tr.log && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", onClick: () => setLogOpen(logOpen === "trial" ? "" : "trial"), children: logOpen === "trial" ? "Hide driver log" : "Show driver log" }) }), tr.log && logOpen === "trial" && SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }, children: tr.log }) })] })), tab === "setup" && !nvb && s?.present && s.game_mode && (SP_JSX.jsxs(DFL.PanelSection, { title: "Game screen", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.DropdownItem, { label: "Play games on", disabled: busy || gameUp, selectedOption: s.output && s.output !== "*" ? s.output : "eDP-1", rgOptions: screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label })), onChange: (o) => { if (o.data !== s.output)
-                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && awake && (SP_JSX.jsx(DFL.PanelSection, { title: "Sleep", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Keep awake", disabled: !awake.egpu && !awake.enabled, description: `Off by default. On: while the eGPU is plugged in, the machine never goes to sleep by itself (Steam's sleep timers are set to Never and put back when you switch it off). The Sleep button still works, and the screen can still dim. Without an eGPU it switches off.${awake.enabled && !awake.active ? " Not active: switch it off and on." : ""}`, checked: awake.enabled, onChange: (v) => run(async () => {
+                                run(() => setGameScreen(o.data)); } }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)." }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx("div", { style: { fontSize: "12px", opacity: 0.8 }, children: "XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed." }) })] })), tab === "setup" && awake && (SP_JSX.jsx(DFL.PanelSection, { title: "Sleep", children: SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Keep awake", disabled: !awake.egpu && !awake.enabled, description: `Off by default. On: while the eGPU is plugged in, the machine never goes to sleep by itself (Steam's sleep timers are set to Never and put back when you switch it off). The Sleep button still works, and the screen can still dim. Without an eGPU it pauses and comes back with the eGPU.${awake.enabled && !awake.egpu ? " Paused: no eGPU plugged in." : ""}`, checked: awake.enabled, onChange: (v) => run(async () => {
                             const r = await setKeepAwake(v);
                             const a = await getKeepAwake();
                             setAwake(a);
@@ -3279,18 +3280,23 @@ function Title() {
 }
 var index = definePlugin(() => {
     ui("plugin frontend loaded");
-    // Keep awake: Steam's own sleep timers stay at Never while it is on; no eGPU mounted switches it off (timers put back)
-    // ponytail: 3 minutes of no eGPU before switching off — the Thunderbolt link can take minutes to come up after boot/replug
-    let neverSet = false, goneSince = 0;
+    // Keep awake: Steam's own sleep timers stay at Never while it is on and an eGPU is mounted. No eGPU: paused (timers put
+    // back, sleep block dropped) but the user's choice stays on, and it resumes when the eGPU is back (also after a reboot).
+    // ponytail: 3 minutes of no eGPU before pausing — the Thunderbolt link can take minutes to come up after boot/replug
+    let neverSet = false, goneSince = 0, restored = false;
     const awakeCheck = async () => {
         const a = await getKeepAwake();
         if (!a.enabled) {
             neverSet = false;
             goneSince = 0;
+            restored = false;
             return;
         }
         if (a.egpu) {
             goneSince = 0;
+            restored = false;
+            if (!a.active)
+                await setKeepAwake(true);
             if (!neverSet) {
                 await steamSleep(0, 0);
                 neverSet = true;
@@ -3298,11 +3304,11 @@ var index = definePlugin(() => {
             return;
         }
         goneSince = goneSince || Date.now();
-        if (Date.now() - goneSince > 180000) {
-            await setKeepAwake(false);
+        if (!restored && Date.now() - goneSince > 180000) {
+            await pauseKeepAwake();
             await steamSleep(a.prev[0], a.prev[1]);
             neverSet = false;
-            goneSince = 0;
+            restored = true;
         }
     };
     awakeCheck().catch(() => { });

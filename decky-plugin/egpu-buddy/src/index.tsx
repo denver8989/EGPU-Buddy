@@ -140,6 +140,7 @@ const getSteamUi = callable<[], SteamUi>("get_steam_ui_fix");
 const getHandheldArt = callable<[], { svg: string; name: string }>("get_handheld_art");
 const getKeepAwake = callable<[], { enabled: boolean; active: boolean; egpu: boolean; prev: number[] }>("get_keep_awake");
 const setKeepAwake = callable<[boolean], Result>("set_keep_awake");
+const pauseKeepAwake = callable<[], Result>("pause_keep_awake");
 // Steam's own idle-sleep timers (client setting 24003 battery, 24004 plugged in; seconds, 0 = Never)
 const steamSleep = (bat: number, ac: number) => {
   const v = (n: number) => { const o: number[] = []; do { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; o.push(b); } while (n); return o; };
@@ -1049,7 +1050,7 @@ function Content() {
       )}
       {tab === "setup" && awake && (
         <PanelSection title="Sleep">
-          <PanelSectionRow><ToggleField label="Keep awake" disabled={!awake.egpu && !awake.enabled} description={`Off by default. On: while the eGPU is plugged in, the machine never goes to sleep by itself (Steam's sleep timers are set to Never and put back when you switch it off). The Sleep button still works, and the screen can still dim. Without an eGPU it switches off.${awake.enabled && !awake.active ? " Not active: switch it off and on." : ""}`}
+          <PanelSectionRow><ToggleField label="Keep awake" disabled={!awake.egpu && !awake.enabled} description={`Off by default. On: while the eGPU is plugged in, the machine never goes to sleep by itself (Steam's sleep timers are set to Never and put back when you switch it off). The Sleep button still works, and the screen can still dim. Without an eGPU it pauses and comes back with the eGPU.${awake.enabled && !awake.egpu ? " Paused: no eGPU plugged in." : ""}`}
             checked={awake.enabled} onChange={(v) => run(async () => { const r = await setKeepAwake(v); const a = await getKeepAwake(); setAwake(a);
               await (v ? steamSleep(0, 0) : steamSleep(a.prev[0], a.prev[1])); return r; })} /></PanelSectionRow>
         </PanelSection>
@@ -1231,13 +1232,14 @@ function Title() {
 
 export default definePlugin(() => {
   ui("plugin frontend loaded");
-  // Keep awake: Steam's own sleep timers stay at Never while it is on; no eGPU mounted switches it off (timers put back)
-  // ponytail: 3 minutes of no eGPU before switching off — the Thunderbolt link can take minutes to come up after boot/replug
-  let neverSet = false, goneSince = 0;
-  const awakeCheck = async () => { const a = await getKeepAwake(); if (!a.enabled) { neverSet = false; goneSince = 0; return; }
-    if (a.egpu) { goneSince = 0; if (!neverSet) { await steamSleep(0, 0); neverSet = true; } return; }
+  // Keep awake: Steam's own sleep timers stay at Never while it is on and an eGPU is mounted. No eGPU: paused (timers put
+  // back, sleep block dropped) but the user's choice stays on, and it resumes when the eGPU is back (also after a reboot).
+  // ponytail: 3 minutes of no eGPU before pausing — the Thunderbolt link can take minutes to come up after boot/replug
+  let neverSet = false, goneSince = 0, restored = false;
+  const awakeCheck = async () => { const a = await getKeepAwake(); if (!a.enabled) { neverSet = false; goneSince = 0; restored = false; return; }
+    if (a.egpu) { goneSince = 0; restored = false; if (!a.active) await setKeepAwake(true); if (!neverSet) { await steamSleep(0, 0); neverSet = true; } return; }
     goneSince = goneSince || Date.now();
-    if (Date.now() - goneSince > 180000) { await setKeepAwake(false); await steamSleep(a.prev[0], a.prev[1]); neverSet = false; goneSince = 0; } };
+    if (!restored && Date.now() - goneSince > 180000) { await pauseKeepAwake(); await steamSleep(a.prev[0], a.prev[1]); neverSet = false; restored = true; } };
   awakeCheck().catch(() => {});
   // the finish line must reach the user even when the menu was closed or Decky restarted (plugin update) meanwhile
   const notices = setInterval(async () => { try { const t = await popNotice(); if (t) toaster.toast({ title: appName(), body: t, duration: 15000 }); } catch { /* backend not up yet */ }

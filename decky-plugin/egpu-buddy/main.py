@@ -49,7 +49,7 @@ HANDHELD_ART = [
 # Keep awake (opt-in, only while an eGPU is mounted): Steam's own idle-sleep timers set to Never by the menu (the user's
 # values kept in AWAKE_FLAG and put back on off), plus a logind "idle" block for the desktop. Never a "sleep" block: Steam
 # ignores it for its idle sleep, takes its UI down, has the suspend refused and stays half asleep (spinner on wake), and
-# the Sleep button must keep working. No eGPU on the bus: the menu switches it off.
+# the Sleep button must keep working. No eGPU on the bus: the menu pauses it (timers put back) and resumes it when one is back.
 AWAKE_FLAG = "/var/lib/nvegpu/keep-awake"
 AWAKE_WHO = "EGPU Buddy keep awake"
 
@@ -2510,6 +2510,11 @@ class Plugin:
         except (OSError, ValueError):
             prev = []
         return {"enabled": os.path.exists(AWAKE_FLAG), "active": _keep_awake_running(), "egpu": bool(_egpu_on_bus()) or _track(), "prev": prev if len(prev) == 2 else [900, 3600]}
+
+    async def pause_keep_awake(self):
+        """No eGPU for a while: drop the sleep block but keep the user's choice (the menu resumes it when the eGPU is back)."""
+        subprocess.run(["pkill", "-f", f"who={AWAKE_WHO}"], capture_output=True)
+        return {"ok": True}
 
     async def set_keep_awake(self, enabled: bool):
         _keep_awake(bool(enabled))
