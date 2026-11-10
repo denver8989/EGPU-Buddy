@@ -324,6 +324,17 @@ class Pad:
             if click == BTN_LEFT:
                 self.last_tap = now
         self.was = n
+        if any(s in self.out and self.out[s][0] != t[0] for s, t in target.items()):
+            # a slot changes touch (drag start, inverted scroll): end every touch in a frame of its own first. A new
+            # tracking id over a live one is a protocol bug to libinput ("double tracking ID") and can leave a touch
+            # stuck down in KDE (2026-11-10)
+            for s in self.out:
+                self.emit(EV_ABS, ABS_MT_SLOT, s); self.emit(EV_ABS, ABS_MT_TRACKING_ID, -1)
+            for k in sorted(self.held & {BTN_TOUCH, *TOOLS.values()}):
+                self.emit(EV_KEY, k, 0)
+            self.held -= {BTN_TOUCH, *TOOLS.values()}
+            self.emit(EV_SYN, SYN_REPORT, 0)
+            self.out = {}
         for s in set(self.out) - set(target):
             self.emit(EV_ABS, ABS_MT_SLOT, s); self.emit(EV_ABS, ABS_MT_TRACKING_ID, -1)
         for s, (tid, x, y) in target.items():
@@ -478,6 +489,14 @@ def selftest():
             self.lim, self.three, self.invert, self.tdrag, self.last_tap, self.anchor = (0, 1000, 0, 1000), True, False, None, -1.0, None
         def emit(self, t, c, v):
             self.log.append((t, c, v))
+            st = self.__dict__.setdefault("mt", {"slot": 0, "live": {}, "bugs": []})
+            if t == EV_ABS and c == ABS_MT_SLOT:
+                st["slot"] = v
+            elif t == EV_ABS and c == ABS_MT_TRACKING_ID:
+                if v >= 0 and st["slot"] in st["live"]:
+                    st["bugs"].append(("new tracking id over a live one", st["slot"], v))
+                if v < 0: st["live"].pop(st["slot"], None)
+                else: st["live"][st["slot"]] = v
         def kde(self, *call, delay=0):
             self.cuts.append(call[-1])
         def desktop(self):
@@ -554,7 +573,12 @@ def selftest():
     f.three = False; f.tdrag = "locked"; f.held = {BTN_LEFT}; f.last_ev = 40.0; f.watchdog(46.0)
     assert f.tdrag is None and BTN_LEFT not in f.held, "watchdog: a forgotten double-tap lock lets go"
     f.three = True
+    g = Fake(); g.frame({0: (100, 100, 200)}, 50.0); g.frame({0: (101, 100, 200), 1: (200, 100, 201)}, 50.01)
+    g.frame({0: (102, 100, 200), 1: (201, 100, 201), 2: (300, 100, 202)}, 50.02)   # a real hand: 1, 2, then 3 fingers
+    assert g.drag and BTN_LEFT in g.held and not g.mt["bugs"], f"drag start ends old touches first: {g.mt['bugs'][:3]}"
+    g.frame({}, 50.1)
     assert not logged, f"finger activity reached the log: {logged}"
+    assert not f.mt["bugs"], f"multi-touch protocol bug: {f.mt['bugs'][:3]}"
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
     assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
     print("selftest ok")
