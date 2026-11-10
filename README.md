@@ -113,7 +113,7 @@ screen the desktop and Game Mode show on (only the picked screen shows a picture
 | Legion Go 2 (Ryzen Z2) | Bazzite 44 (bazzite-deck) | Gigabyte AORUS AI Box, RTX 5060 Ti | Samsung Odyssey G95SC (HDMI) | **Fully working**: every feature verified | 1khanfusion |
 | Legion Go 1 | SteamOS 3.8 | AOOSTAR AG03, RTX 3080 | Acer X49 ultrawide (DP) | Tested | denver8989 (maintainer) |
 | ROG Xbox Ally X | SteamOS 3.8+ | ASUS XG Mobile 2025, RTX 5070 Ti Laptop GPU | TV (HDMI) | Tested | SilverplayerX |
-| Legion Go S | SteamOS 3.10 | Trebleet TB3 enclosure (Intel JHL7440), AMD RX 9070 XT | TV (HDMI, CEC adapter) | **Beta**: Game Mode, Safe Detach and the TV work; boot and desktop detach fixes being confirmed | ming |
+| Legion Go S (Ryzen Z1 Extreme) | SteamOS 3.10 | Trebleet Thunderbolt 3 enclosure (Intel JHL7440), AMD RX 9070 XT | Fire TV (HDMI, via a CEC-capable DP-to-HDMI adapter) | **Beta**: plug-in, Game Mode on the TV and Safe Detach work (CEC crash fixed in 0.7.251); boot with the eGPU (0.7.253) and desktop Safe Detach (0.7.254) being confirmed | ming |
 | Legion Go 1 | SteamOS 3.9 | AOOSTAR AG02, AMD RX 6800 XT | MSI MP275 (HDMI) | **Beta**: plug-in, unplug and games work; sleep and performance fixes being confirmed | RetroMann |
 | Legion Go 1 | CachyOS (Deckify) | Minisforum DEG2, PowerColor AMD RX 9070 | Samsung TV (HDMI) | **Beta**: Game Mode works; heavy games crash (open AMD driver problem with RX 9000 over USB4) | zergpoop |
 | Legion Go 1 | CachyOS (Deckify) | TB3 enclosure (Intel JHL7440), AMD RX 6750 XT | monitor (HDMI) | **Beta**: desktop works; Game Mode on the eGPU being looked at | Ivan C.nunes |
