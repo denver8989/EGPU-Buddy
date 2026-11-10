@@ -8,7 +8,7 @@
   egpu-screen settle            the only external screen? turn it on and onto our input
   egpu-screen tvctl on|off      TV control tricks on or off
   egpu-screen tvset cec_remote|off_at_detach on|off   TV remote (CEC) / TV off at Safe Detach (opt-in)
-  egpu-screen tvkey up|down|mute  TV volume / mute (eGPU CEC through SteamOS's cecd, else a paired LG TV)
+  egpu-screen tvkey up|down|mute|on|off  TV volume / mute / power (eGPU CEC through SteamOS's cecd, else a paired LG TV)
   egpu-screen tvoff             Safe Detach: TV to standby, only when that option is on
   egpu-screen tvremote          JSON: the routes that work now
   egpu-screen only CONNECTOR    desktop only: that screen alone shows an image (every other KWin screen off)
@@ -520,19 +520,26 @@ def _settings():
 
 
 def _steamos():
-    """SteamOS (its CEC service, cecd, is what the remote talks to)."""
-    return any(os.access(os.path.join(d, "steamos-readonly"), os.X_OK) for d in ("/usr/bin", "/usr/sbin", "/usr/local/bin"))
+    """SteamOS's CEC service (cecd) is there: what the remote talks to (SteamOS, or any system that ships it)."""
+    return any(os.access(os.path.join(d, "steamos-readonly"), os.X_OK) for d in ("/usr/bin", "/usr/sbin", "/usr/local/bin")) or \
+        any(os.path.exists(f) for f in ("/usr/lib/systemd/user/cecd.service", "/etc/systemd/user/cecd.service"))
 
 
 def egpu_cec():
-    """N of /dev/cecN when that CEC adapter belongs to the eGPU (DP-CEC on its connector or a CEC-capable adapter
-    on it), else None: the remote never talks to a CEC adapter of the handheld or a USB one on a guess."""
+    """N of /dev/cecN for the TV the eGPU feeds: the eGPU's own CEC (AMD / Intel: DP-CEC on its connector or a
+    CEC-capable adapter on it), else a USB-CEC adapter; never one of the handheld's own GPU."""
     try:
         bdf = subprocess.run(["/usr/local/sbin/egpu-detect"], capture_output=True, text=True, timeout=10).stdout.split()[0]
     except (OSError, IndexError, subprocess.TimeoutExpired):
         return None
-    for c in sorted(glob.glob("/sys/bus/cec/devices/cec*")):   # cec is a bus: <parent device>/cecN
+    cecs = sorted(glob.glob("/sys/bus/cec/devices/cec*"))   # cec is a bus: <parent device>/cecN
+    for c in cecs:
         if f"/{bdf}/" in os.path.realpath(c) + "/":
+            return int(re.sub(r"\D", "", os.path.basename(c)))
+    # Any eGPU brand: a USB-CEC adapter (e.g. Pulse-Eight) sits in the HDMI cable between the eGPU and the TV; NVIDIA
+    # cards expose no CEC of their own. A CEC adapter on the handheld's own GPU (its USB-C port) is a different screen.
+    for c in cecs:
+        if "/usb" in os.path.realpath(c):
             return int(re.sub(r"\D", "", os.path.basename(c)))
     return None
 
@@ -571,8 +578,28 @@ def remote_routes():
 
 
 def tvkey(key):
-    """Volume up / down / mute on the TV: CEC first (the eGPU's adapter), else the paired LG TV."""
+    """Volume up / down / mute / on / off on the TV: CEC first (the eGPU's adapter), else the paired LG TV."""
     routes = remote_routes()
+    if key in ("on", "off"):
+        if "cec" in routes:
+            n = egpu_cec()
+            if key == "off" and _cecd(n, "call", "Standby", "y", "0")[0]:
+                return "ok (CEC): TV off"
+            if key == "on" and _cecd(n, "call", "Wake")[0]:
+                # then our input: SetActiveSource with our own physical address (as cec-mote's wake does)
+                ok, pa = _cecd(n, "get-property", "PhysicalAddress")
+                if ok and len(pa.split()) == 2:
+                    time.sleep(2); _cecd(n, "call", "SetActiveSource", *pa.split())
+                return "ok (CEC): TV on"
+        if "lg" in routes:
+            tv = _lg_tv()
+            if key == "off":
+                if (webos(tv["ip"], "ssap://system/turnOff", key=tv["key"], wait=4)[1] or {}).get("returnValue"):
+                    return "ok (LG): TV off"
+                return "the TV did not answer (already off?)"
+            r = _net_wake(tv, True)   # wake-on-LAN, then our HDMI input (the TV control tricks' own wake)
+            return "ok (LG): " + r
+        return "no TV to control" if not routes else "the TV did not answer"
     if "cec" in routes:
         n = egpu_cec(); ok, out = _cecd(n, "get-property", "AudioLogicalAddress")
         la = out.split()[-1] if ok and out else "0"
@@ -619,7 +646,7 @@ def main(argv):
         d = _settings(); d[want[0]] = want[1] == "on"
         os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
         print(f"{want[0]} {want[1]}"); return 0
-    if cmd == "tvkey" and want in (["up"], ["down"], ["mute"]):
+    if cmd == "tvkey" and want in (["up"], ["down"], ["mute"], ["on"], ["off"]):
         print(tvkey(want[0])); return 0
     if cmd == "tvoff":
         print(tvoff()); return 0

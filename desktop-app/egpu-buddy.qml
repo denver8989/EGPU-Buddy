@@ -77,6 +77,8 @@ ApplicationWindow {
     function loadEx() { call("GET", "/api/extras", null, function(r) { if (r) ex = r }) }
     function setEx(key, v) { act("set-extra", { key: key, value: v }); loadEx() }
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.pg === 2 && win.visible; onTriggered: win.loadEx() }
+    Timer { interval: 15000; repeat: true; triggeredOnStart: true; running: win.pg === 0 && win.visible; onTriggered: win.loadEx() }   // TV controls on the Overview
+    readonly property var tvr: win.ex.tvr || ({})
     function gsLook(st) { return ({ active: ["#4caf50", "Active"], inactive: ["#f0b429", "Inactive"], overridden: ["#f0b429", "Inactive: the game's own setting"],
                                     default: ["#8b929a", "Default"], na: ["#8b929a", "Not used by this game"] })[st] || ["#8b929a", st] }
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.page === 1 && win.nvShow && win.visible
@@ -460,9 +462,21 @@ ApplicationWindow {
                         Switch { Layout.fillWidth: true; visible: !win.nvb; text: "USB4 link speed check"; checked: !!win.ex.usb4_on; onToggled: win.setEx("usb4", checked) }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; visible: !win.nvb && !!win.ex.usb4_on; color: (win.ex.usb4 || {}).slow ? "#f0b429" : win.subCol
                                 text: (win.ex.usb4 || {}).name ? (win.ex.usb4.name + ": " + win.ex.usb4.total + " Gb/s (" + win.ex.usb4.lanes + " x " + win.ex.usb4.per_lane + ")" + (win.ex.usb4.slow ? " · slower than USB4 should be: try another cable or port" : "")) : "No USB4 link found." }
-                        Switch { Layout.fillWidth: true; text: "TV control: turn on and switch input"; checked: !!(win.ex.tv || {}).enabled; onToggled: { win.act("tv-control", { value: checked }); win.loadEx() } }
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: ((win.ex.tv || {}).paired || []).length > 0; text: "Paired: " + ((win.ex.tv || {}).paired || []).join(", ") }
-                        Button { text: "Pair TV"; enabled: !!(win.ex.tv || {}).enabled; Layout.alignment: Qt.AlignLeft; onClicked: win.act("pair-tv") } }
+                    }
+                    // TV extras (opt-in, off by default): every setup, as in the Game Mode plugin
+                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv_any
+                        RowLayout { spacing: 8
+                            Head { text: "TV" }
+                            Badge { text: "testing · off by default"; lit: false } }
+                        Switch { Layout.fillWidth: true; text: "TV control: turn on and switch input"; checked: !!(win.ex.tv_any || {}).enabled; onToggled: { win.act("tv-control", { value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: ((win.ex.tv_any || {}).paired || []).length > 0; text: "Paired: " + ((win.ex.tv_any || {}).paired || []).join(", ") }
+                        Button { text: "Pair TV"; enabled: !!(win.ex.tv_any || {}).enabled; Layout.alignment: Qt.AlignLeft; onClicked: win.act("pair-tv") }
+                        Switch { Layout.fillWidth: true; visible: !!(win.ex.tv_any || {}).enabled || !!win.tvr.cec_remote; text: "Turn the TV off at Safe Detach"; checked: !!win.tvr.off_at_detach; onToggled: { win.act("tv-option", { key: "off_at_detach", value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!(win.ex.tv_any || {}).enabled || !!win.tvr.cec_remote; font.pixelSize: 12
+                                text: "Standby just before the eGPU lets go of the TV: through CEC with TV remote on, or over the network for a paired LG TV. Not on a cable pull." }
+                        Switch { Layout.fillWidth: true; visible: !!win.tvr.cec_here || !!win.tvr.cec_remote; text: "TV remote (CEC)"; checked: !!win.tvr.cec_remote; onToggled: { win.act("tv-option", { key: "cec_remote", value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!win.tvr.cec_here || !!win.tvr.cec_remote; font.pixelSize: 12
+                                text: "Volume, mute and TV on / off through SteamOS's own CEC service (cecd): an AMD card's HDMI or CEC-capable adapter, or a USB-CEC adapter in the TV's cable (any eGPU, NVIDIA too). Based on cec-mote by xXJSONDeruloXx." } }
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1
                         Head { text: "Look and support" }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Classic is the app as it was before: the same controls on the old layout." }
@@ -548,6 +562,15 @@ ApplicationWindow {
             }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !win.nl && !win.nvb && !win.s.screens_game_only && (win.s.screens || []).length > 0
                 text: "The desktop and Game Mode both start on the screen picked here (or in the plugin). On the handheld's screen the games still render on the eGPU." }
+            Card { visible: (win.tvr.routes || []).length > 0   // TV controls (opt-in TV extras): a paired LG TV or the eGPU's CEC
+                RowLayout { Layout.fillWidth: true; spacing: 8
+                    Head { text: "TV controls"; Layout.fillWidth: true }
+                    Label { text: (win.tvr.routes || []).indexOf("cec") >= 0 ? "through CEC" : "paired LG TV"; color: win.subCol; font.pixelSize: 12 }
+                    Button { text: "Volume −"; onClicked: win.act("tv-key", { key: "down" }) }
+                    Button { text: "Mute"; onClicked: win.act("tv-key", { key: "mute" }) }
+                    Button { text: "Volume +"; onClicked: win.act("tv-key", { key: "up" }) }
+                    Button { text: "TV on"; onClicked: win.act("tv-key", { key: "on" }) }
+                    Button { text: "TV off"; onClicked: win.act("tv-key", { key: "off" }) } } }
             Card {
             Label { text: "Power"; font.bold: true; opacity: 0.7; font.capitalization: Font.AllUppercase; font.pixelSize: 11; visible: !win.nl }
             // ASUS XG Mobile: power target (W), fan mode and lights

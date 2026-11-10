@@ -1182,7 +1182,7 @@ function Content() {
             <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }}>{tv.paired.length ? "Pair again" : "Find and pair TV"}</ButtonItem></PanelSectionRow>
           </>)}
           {(tv?.enabled || trm?.cec_remote) && <PanelSectionRow><ToggleField label="Turn the TV off at Safe Detach" description={'Off by default. Puts the TV to standby just before the eGPU lets go of it: through CEC when "TV remote" is on, or over the network for a paired LG TV (works with NVIDIA cards too). Not on a cable pull.'} checked={!!trm?.off_at_detach} onChange={(v) => run(async () => { const r = await setTvOption("off_at_detach", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
-          {(trm?.cec_here || trm?.cec_remote) && <PanelSectionRow><ToggleField label="TV remote (CEC)" description={'Off by default. Adds "TV controls" to the main page: TV volume and mute through SteamOS\'s own CEC service. Shown only on SteamOS when the eGPU\'s TV connection carries CEC (a CEC-capable adapter or the card\'s HDMI). Remote part based on cec-mote by xXJSONDeruloXx.'} checked={!!trm?.cec_remote} onChange={(v) => run(async () => { const r = await setTvOption("cec_remote", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
+          {(trm?.cec_here || trm?.cec_remote) && <PanelSectionRow><ToggleField label="TV remote (CEC)" description={'Off by default. Adds "TV controls" to the main page: TV volume and mute through SteamOS\'s own CEC service. Shown only on SteamOS when the TV can be reached over CEC: an AMD card\'s HDMI or CEC-capable adapter, or a USB-CEC adapter in the TV\'s cable (any eGPU, NVIDIA too). Remote part based on cec-mote by xXJSONDeruloXx.'} checked={!!trm?.cec_remote} onChange={(v) => run(async () => { const r = await setTvOption("cec_remote", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
         </PanelSection>
       )}
       {tab === "tv" && (
@@ -1192,6 +1192,12 @@ function Content() {
               <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("down"))}>Volume −</DialogButton>
               <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("mute"))}>Mute</DialogButton>
               <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("up"))}>Volume +</DialogButton>
+            </Focusable>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <Focusable style={{ display: "flex", gap: "6px" }}>
+              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("on"))}>TV on</DialogButton>
+              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("off"))}>TV off</DialogButton>
             </Focusable>
           </PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>{trm?.routes.includes("cec") ? "Through CEC (SteamOS's CEC service)." : "Over the network (paired LG TV)."}</div></PanelSectionRow>

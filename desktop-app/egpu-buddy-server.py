@@ -137,18 +137,23 @@ def usb4():
         per = float((re.findall(r"[\d.]+", read(dev + "/rx_speed")) or ["0"])[0]); lanes = int(read(dev + "/rx_lanes") or "0")
         return {"name": " ".join(x for x in (read(dev + "/vendor_name"), read(dev + "/device_name")) if x), "per_lane": per, "lanes": lanes, "total": per * lanes, "slow": lanes < 2 or per < 20}
     return {}
+def tv_remote():
+    """TV controls / TV off at Safe Detach (opt-in; egpu-screen, the plugin's reading): every setup, as in the plugin."""
+    try: return json.loads(sh(["/usr/local/sbin/egpu-screen", "tvremote"], 20)[1])
+    except ValueError: return {}
 def extras():
-    if not extras_on(): return {}
+    net = jread(SCREEN_NET) or {}
+    tv = {"enabled": bool(net.get("enabled")), "paired": [f'{t["ip"]} on {t["input"].replace("_", " ")}' for t in (net.get("tvs") or {}).values()]}
+    if not extras_on(): return {"tv_any": tv, "tvr": tv_remote()}   # the TV card only (the rest stays in the plugin there)
     d = plugin_settings(); fix = {}
     if os.path.exists(STEAM_FIX):
         try: fix = json.loads(sh([STEAM_FIX, "status"], 10)[1])
         except ValueError: fix = {}
-    net = jread(SCREEN_NET) or {}
     on = bool(d.get("addons", {}).get("usb4"))
     return {"auto_update": bool(d.get("auto_update", False)), "game_res": bool(d.get("game_res_native", True)),
             "steam_fix": {"available": bool(fix.get("available")), "enabled": bool(fix.get("enabled"))},
             "usb4_on": on, "usb4": usb4() if on else {},
-            "tv": {"enabled": bool(net.get("enabled")), "paired": [f'{t["ip"]} on {t["input"].replace("_", " ")}' for t in (net.get("tvs") or {}).values()]}}
+            "tv": tv, "tv_any": tv, "tvr": tv_remote()}
 
 def status():
     _, l, _ = sh(["lspci", "-Dn"]); bdf = next((x.split()[0] for x in l.splitlines() if " 0300: 10de:" in x), ""); vendor = "nvidia" if bdf else ""
@@ -290,6 +295,23 @@ def action(p):
     if a == "set-look":   # the app's look: new (default) or classic (the one before); kept per user
         v = "classic" if str((p or {}).get("value", "")) == "classic" else "new"
         os.makedirs(os.path.dirname(LOOK_FILE), exist_ok=True); open(LOOK_FILE, "w").write(v + "\n"); return {"ok": True, "out": "Look: " + v, "silent": True}
+    if a == "tv-option":   # "TV remote (CEC)" / "Turn the TV off at Safe Detach" (opt-in, every setup, as in the plugin)
+        k = str((p or {}).get("key", ""))
+        if k not in ("cec_remote", "off_at_detach"): return {"ok": False, "error": "unknown setting"}
+        rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvset", k, "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
+    if a == "tv-key":   # TV controls: volume / mute (CEC through SteamOS's cecd, or a paired LG TV); runs as the user
+        k = str((p or {}).get("key", ""))
+        if k not in ("up", "down", "mute", "on", "off"): return {"ok": False, "error": "unknown key"}
+        rc, o, e = sh(["/usr/local/sbin/egpu-screen", "tvkey", k], 25); o = o.strip(); return {"ok": o.startswith("ok"), "out": o or e, "silent": o.startswith("ok")}
+    if a in ("tv-control", "pair-tv") and not extras_on():   # TV control tricks: every setup, as in the plugin
+        if a == "tv-control":
+            rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvctl", "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e}
+        ips = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "find"], 30)[1].split()
+        hdmi = [x["name"] for x in s.get("screens", []) if x["name"].startswith("HDMI")] or [x["name"] for x in s.get("displays", []) if x.get("name", "").startswith("HDMI")]
+        if not ips: return {"ok": False, "out": "No LG TV found on the network. Turn the TV on, on the same network as this device."}
+        if len(hdmi) != 1: return {"ok": False, "out": "Connect the TV to the eGPU's HDMI port first." if not hdmi else "More than one HDMI screen: unplug the others while pairing."}
+        rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "pair", ips[0], hdmi[0]], 90)
+        return {"ok": o.startswith("paired"), "out": o or e or "No answer from the TV."}
     if a in ("set-extra", "steam-fix", "tv-control", "wake-screens", "pair-tv"):   # Game Mode settings in the app (NVIDIA reference path)
         if not extras_on(): return {"ok": False, "error": "these settings are in the Game Mode plugin on this setup"}
         v = (p or {}).get("value")

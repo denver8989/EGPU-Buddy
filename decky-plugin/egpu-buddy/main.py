@@ -2365,7 +2365,7 @@ class Plugin:
         return {"ok": True, "message": ("On." if enabled else "Off.")}
 
     async def tv_key(self, key: str):
-        if key not in ("up", "down", "mute"):
+        if key not in ("up", "down", "mute", "on", "off"):
             return {"ok": False, "message": "Unknown key."}
         out = await asyncio.get_running_loop().run_in_executor(None, lambda: _sh(["/usr/local/sbin/egpu-screen", "tvkey", key], 25)[1].strip())
         return {"ok": out.startswith("ok"), "message": out or "No answer."}
