@@ -27,12 +27,12 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 
 - bbauti's patch applied as-is; rebuilt libegpu-steam-ui.so (same toolchain, GLIBC_2.34 like before). Stand-in: preloaded fake steamwebhelper resolves glXDestroyGLXPixmap to our lib (old build: libGLX). Released 0.7.252 (81dd666, run 42742103047), together with EGPU-011 handheld fix (owner OK). Not tested on real hardware; issue not replied to (owner's call).
 
-## EGPU-013 — Desktop app TV->monitor switch left monitor black | waiting-user (release OK) | unclaimed | NVIDIA reference path
+## EGPU-013 — Desktop app TV->monitor switch left monitor black | waiting-owner-test (released 0.7.253) | unclaimed | NVIDIA reference path
 
 - 2026-11-10 11:48 JST owner machine: desktop app set-screen DP-7 -> egpu-screen only DP-7 = one kscreen-doctor change (DP-7 on 5120x1440@144 HDR + HDMI-A-1 off) -> nvidia-drm "Flip event timeout on head 0" -> monitor black (KWin alive, DDC in-use). Cable replug recovered.
 - Fix committed (unreleased): reference path only, enable picked screen first, sleep 4, then disable others. Stand-in tested (fake kscreen-doctor). Not hardware-tested; hypothesis that two commits avoid the timeout.
 
-## EGPU-014 — AMD boot with eGPU: Game Mode restart loop | waiting-user (release OK) | unclaimed | AMD / Intel install
+## EGPU-014 — AMD boot with eGPU: Game Mode restart loop | waiting-tester (released 0.7.253) | unclaimed | AMD / Intel install
 
 - Report 2PWZYH (Ming, 0.7.252): Safe Detach now FIXED (tester confirmed; EGPU-002 effectively resolved). Boot with eGPU: TV on Legion logo, handheld black flashing; gamescope-session restarted every ~9 s, script died right after the rebar log line.
 - Cause: AMD branch `gen_outputs="$gen_pref $(... | grep -vx "$gen_pref")"` at top level; picked screen (DP-3) = only eGPU output -> grep exit 1 -> set -e/pipefail ends script. Latent since 9984318 (2026-10-09); exposed once Ming picked the TV. NVIDIA twin lines run inside $(connector_order) (no errexit) - not affected.
