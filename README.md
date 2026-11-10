@@ -35,8 +35,15 @@ are supported in beta (RX 6800 XT, RX 6750 XT, RX 9070 and RX 9070 XT tested by 
   desktop runs on the handheld's GPU alone and games still render on the eGPU.
 - **Best picture by default:** each screen's native resolution at its highest refresh rate.
 - **Screens wake and switch input** where they support it (DDC/CI or HDMI-CEC).
-- **TV controls (opt-in):** volume, mute, TV on and TV off from the plugin and the desktop app, and the TV switched off
-  at Safe Detach: for a paired LG TV over the network, or over HDMI-CEC through SteamOS's own CEC service.
+- **TV controls (opt-in):** control the TV from the plugin and the desktop app, for a paired LG TV over the network or
+  over HDMI-CEC through SteamOS's own CEC service:
+  - volume, mute, TV on and TV off, and "Switch TV to the eGPU";
+  - when Game Mode or the desktop moves to the TV, it is turned on (only if it is off) and switched to the eGPU's input,
+    whatever HDMI number that is;
+  - the TV switched off at Safe Detach.
+  HDMI-CEC works with an AMD card's HDMI port or a CEC-capable DisplayPort-to-HDMI adapter, a USB-CEC adapter on any
+  eGPU, and on NVIDIA cards through a CEC-capable DisplayPort-to-HDMI adapter with EGPU Buddy's patched driver
+  ("NVIDIA CEC" in Extras).
 - **GPU details and controls:** temperature, power, clocks, VRAM, power limit and clock offset.
 - **NVIDIA settings (experimental):** the Windows NVIDIA control panel's global settings (low latency, V-sync, frame
   limit, anisotropic filtering, sharpening, shader cache size, power mode) for games on the NVIDIA eGPU, in the desktop
