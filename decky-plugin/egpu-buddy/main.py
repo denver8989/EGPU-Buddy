@@ -1668,6 +1668,20 @@ def _support_report():
         lines += ["", "## Programs using a GPU (kernel accounting, render share over 2 s)"] + (gc[:40] or ["(none)"])
     except Exception as ex:  # noqa: BLE001
         lines += ["", f"## Programs using a GPU: could not be read ({ex})"]
+    # "Handheld screen as touchpad" (opt-in): only whether it is on, its touchscreen, and the device-compatibility yes/no
+    # "did any touch reach the touchscreen while on" (some touchscreens stop sensing while their screen is off). Nothing else.
+    try:
+        tj = json.load(open("/var/lib/nvegpu/touchpad.json")) if os.path.exists("/var/lib/nvegpu/touchpad.json") else {}
+        if tj.get("enabled"):
+            tl = [l for l in _sh(["journalctl", "-u", "egpu-touchpad.service", "-b", "-o", "short-iso", "--no-pager"], 8)[1].splitlines()
+                  if "egpu-touchpad: touchpad" in l or "could not take" in l][-10:]
+            live = _sh(["systemctl", "is-active", "egpu-touchpad.service"], 5)[1].strip()
+            on = any(_read(n).strip() == "EGPU Buddy touchpad (handheld screen)" for n in glob.glob("/sys/class/input/event*/device/name"))
+            reached = os.path.exists("/run/egpu-touchpad-reached")
+            lines += ["", "## Handheld screen as touchpad (this boot)", f"service {live} · touchpad {'on' if on else 'off'}"
+                      + (f" · a touch reached the touchscreen since it came on: {'yes' if reached else 'no'}" if on else "")] + (tl or ["(no touchpad log lines this boot)"])
+    except Exception as ex:  # noqa: BLE001
+        lines += ["", f"## Handheld screen as touchpad: could not be read ({ex})"]
     try:
         dp = _decky_plugins()
         lines += ["", f"## Other Decky plugins ({len(dp)})"] + (dp or ["(none)"])

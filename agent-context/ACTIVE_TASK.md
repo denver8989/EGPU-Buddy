@@ -131,3 +131,4 @@ EGPU-020: KDE previews icons-only = kdeglobals SceneGraphBackend=software, remov
 EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 
 - 2026-11-11 0.7.260 RELEASED (19729df, run 42876727688): AMD Titan Ridge Safe Detach recorder held attach lock 120 s -> replug ignored (ming MYFGH4). Open: ming Fire TV goes home on CEC standby (told: turn option off); touchpad dead on Legion Go S (suspect Novatek TDDI touch sleeps with panel off; ming test cmd sent).
+- 2026-11-11 touchpad compat check (owner OK): daemon keeps one yes/no 'a touch reached the touchscreen while on' (/run/egpu-touchpad-reached, mtime = on time; also in the 'touchpad off' log line); report section 'Handheld screen as touchpad'. Owner OK'd for touchscreens that sleep with the panel off (pending ming/SilverplayerX data): panel on at zero brightness instead of off, ONLY on that hardware; LCD devices need a disclaimer (backlight glows), OLED fine.

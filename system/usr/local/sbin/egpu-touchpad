@@ -16,6 +16,9 @@ KDE desktop only; in Game Mode they do nothing. When the built-in screen comes b
 Privacy: nothing about touches is recorded. Fingers go only to the virtual touchpad, in memory, as they happen. Nothing
 is written to the log (only "touchpad on" / "touchpad off" and errors), to a file or to the network, and the touchscreen
 is only taken while the built-in screen is dark. The selftest checks that no finger activity reaches the log.
+One exception, for device compatibility (some touchscreens stop sensing while their screen is off): a single yes/no,
+"did any touch reach the touchscreen while the touchpad was on", in REACHED (dated to when the touchpad came on, not
+to the touch) and in the "touchpad off" line. No position, count or time of any touch.
 
 Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270, "speed": 2.0}. speed: pointer speed (1 = the true size).
 rotate: for a touchscreen mounted rotated relative to how the screen is used (default: 0, or 90 when the digitizer is
@@ -31,6 +34,7 @@ BTN_TOOL_FINGER, BTN_TOOL_QUINTTAP, BTN_TOOL_DOUBLETAP, BTN_TOOL_TRIPLETAP, BTN_
 TOOLS = {1: BTN_TOOL_FINGER, 2: BTN_TOOL_DOUBLETAP, 3: BTN_TOOL_TRIPLETAP, 4: BTN_TOOL_QUADTAP, 5: BTN_TOOL_QUINTTAP}
 INPUT_PROP_POINTER, INPUT_PROP_DIRECT = 0, 1
 EVIOCGRAB = 0x40044590
+REACHED = "/run/egpu-touchpad-reached"   # "yes" once any touch arrived since the touchpad came on (support report)
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045565, 0x40045567, 0x4004556E
 UI_DEV_SETUP, UI_ABS_SETUP, UI_DEV_CREATE, UI_DEV_DESTROY = 0x405C5503, 0x401C5504, 0x5501, 0x5502
 EVENT = struct.Struct("llHHi")   # struct input_event on 64-bit
@@ -174,7 +178,11 @@ class Pad:
         fcntl.ioctl(self.ui, UI_DEV_CREATE)
         self.guard = guardian(self.ui)
         fcntl.ioctl(self.src, EVIOCGRAB, 1)
-        self.last_ev = time.monotonic()
+        self.last_ev, self.t_on, self.reached = time.monotonic(), time.time(), False
+        try:
+            os.remove(REACHED)
+        except OSError:
+            pass
         self.lastpos = mt_positions(self.src, islot[2] + 1)
         self.slot, self.slots, self.held, self.out = 0, {}, set(), {}
         self.drag, self.wait_clear, self.drag_tid, self.peak, self.pressed, self.drag_t0 = False, False, 60000, 0, False, 0.0
@@ -232,6 +240,12 @@ class Pad:
                     self.slots.pop(self.slot, None)
                 else:   # the kernel does not repeat a position equal to the slot's last one: start from it
                     self.slots[self.slot] = [*self.lastpos.get(self.slot, (None, None)), v]
+                    if not self.reached:   # once: yes/no only, file dated to when the touchpad came on
+                        self.reached = True
+                        try:
+                            open(REACHED, "w").write("yes\n"); os.utime(REACHED, (self.t_on, self.t_on))
+                        except OSError:
+                            pass
             elif c in (ABS_MT_POSITION_X, ABS_MT_POSITION_Y):
                 i = 0 if c == ABS_MT_POSITION_X else 1
                 self.slots.setdefault(self.slot, [None, None, self.slot])[i] = v
@@ -401,7 +415,11 @@ class Pad:
             os.close(self.guard)   # the guardian finds the device gone and exits
         except (OSError, AttributeError):
             pass
-        log("touchpad off: touchscreen released")
+        try:
+            os.remove(REACHED)
+        except OSError:
+            pass
+        log(f"touchpad off: touchscreen released (a touch reached the touchscreen while on: {'yes' if getattr(self, 'reached', False) else 'no'})")
 
 
 def mt_positions(fd, n):
@@ -590,6 +608,13 @@ def selftest():
     g.frame({0: (102, 100, 200), 1: (201, 100, 201), 2: (300, 100, 202)}, 50.1)
     assert g.drag and BTN_LEFT in g.held and not g.mt["bugs"], f"drag start ends old touches first: {g.mt['bugs'][:3]}"
     g.frame({}, 50.1)
+    # device-compatibility flag: yes/no only, dated to when the touchpad came on, never to the touch, nothing logged
+    import tempfile
+    globals()["REACHED"] = os.path.join(tempfile.mkdtemp(), "reached")
+    fr = Fake(); fr.reached, fr.t_on, fr.slot, fr.slots = False, 1000.0, 0, {}
+    fr.handle(EVENT.pack(0, 0, EV_ABS, ABS_MT_TRACKING_ID, 5))
+    assert fr.reached and open(REACHED).read() == "yes\n" and os.stat(REACHED).st_mtime == 1000.0, "touch-reached flag"
+    os.remove(REACHED); os.rmdir(os.path.dirname(REACHED))
     assert not logged, f"finger activity reached the log: {logged}"
     assert not f.mt["bugs"], f"multi-touch protocol bug: {f.mt['bugs'][:3]}"
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
