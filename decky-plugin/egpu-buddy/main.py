@@ -1676,7 +1676,7 @@ def _support_report():
             tl = [l for l in _sh(["journalctl", "-u", "egpu-touchpad.service", "-b", "-o", "short-iso", "--no-pager"], 8)[1].splitlines()
                   if "egpu-touchpad: touchpad" in l or "could not take" in l][-10:]
             live = _sh(["systemctl", "is-active", "egpu-touchpad.service"], 5)[1].strip()
-            on = any(_read(n).strip() == "EGPU Buddy touchpad (handheld screen)" for n in glob.glob("/sys/class/input/event*/device/name"))
+            on = any(_read(n).strip().startswith("EGPU Buddy touchpad (handheld screen)") for n in glob.glob("/sys/class/input/event*/device/name"))
             reached = os.path.exists("/run/egpu-touchpad-reached")
             # no touch needed: which touchscreen the kernel has (direct-touch multi-touch) and whether the handheld screen is lit
             ts = [_read(os.path.dirname(c) + "/name").strip() for c in glob.glob("/sys/class/input/event*/device/properties")
