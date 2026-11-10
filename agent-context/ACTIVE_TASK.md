@@ -119,3 +119,4 @@ Commits fda8530..68b7c4e (local, not pushed). Live test left KWin with a stuck p
 mid three-finger drag; machine restarted. Owner: must never happen again before release. Next: watchdog auto-release of held
 drags, release on every exit path, test kills mid-drag in a nested KWin only. Do not push/release until done and owner OKs.
 Update: prevention built + proven in isolation (fc69fd3, tests/egpu-touchpad-killtest.py ALL PASS). Next: one short live test with owner, then release on OK.
+2nd live test (21:1x): stuck again on a three-finger drag on Firefox's tab bar; KDE kept the press after the touchpad released everything -> KWin/libinput side. Reboot. Drag reverted to first version (fce6b72). Next: reproduce on a separate udev seat with a nested KWin, or press the drag button on a separate virtual mouse. NO live test until proven.
