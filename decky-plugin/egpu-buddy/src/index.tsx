@@ -1,4 +1,4 @@
-import { ButtonItem, ConfirmModal, DialogButton, DropdownItem, Field, Focusable, ModalRoot, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
+import { ButtonItem, ConfirmModal, DropdownItem, Field, Focusable, ModalRoot, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
 import { callable, definePlugin, toaster, useQuickAccessVisible } from "@decky/api";
 import { useEffect, useState, useRef } from "react";
 import { FaPlug } from "react-icons/fa";
@@ -1187,19 +1187,12 @@ function Content() {
       )}
       {tab === "tv" && (
         <PanelSection title="TV controls">
-          <PanelSectionRow>
-            <Focusable style={{ display: "flex", gap: "6px" }}>
-              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("down"))}>Volume −</DialogButton>
-              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("mute"))}>Mute</DialogButton>
-              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("up"))}>Volume +</DialogButton>
-            </Focusable>
-          </PanelSectionRow>
-          <PanelSectionRow>
-            <Focusable style={{ display: "flex", gap: "6px" }}>
-              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("on"))}>TV on</DialogButton>
-              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("off"))}>TV off</DialogButton>
-            </Focusable>
-          </PanelSectionRow>
+          {/* Steam's own full-width buttons, one per row: side-by-side buttons overlapped in the Quick Access menu */}
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("up"))}>Volume up</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("down"))}>Volume down</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("mute"))}>Mute</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("on"))}>TV on</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("off"))}>TV off</ButtonItem></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>{trm?.routes.includes("cec") ? "Through CEC (SteamOS's CEC service)." : "Over the network (paired LG TV)."}</div></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("main")}>Back</ButtonItem></PanelSectionRow>
         </PanelSection>
