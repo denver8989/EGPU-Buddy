@@ -1,3 +1,13 @@
+0.7.258 — Handheld screen as touchpad (new, opt-in).
+
+**Handheld screen as touchpad** (Extras, off by default; plugin and desktop app; every setup)
+- While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, pinch.
+- Drag with three fingers, or turn that off for double tap to drag (tap, touch again and hold; lifting keeps hold, the next tap lets go).
+- Settings: pointer speed, invert scroll direction, three-finger drag on/off.
+- Desktop only: four fingers up or down show the window previews, a long swipe left or right switches desktop, five fingers spread out show the desktop and pinched in bring the windows back.
+- A held button can never stay stuck: it lets go if the fingers stop, and whenever the touchpad stops for any reason.
+- Privacy: nothing about touches is recorded. Nothing goes to a log, a file or the network.
+
 0.7.257 — XR glasses show their own picture.
 
 **XR glasses** (plugin and desktop app)
