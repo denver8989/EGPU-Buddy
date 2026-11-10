@@ -12,6 +12,7 @@
   egpu-screen tvoff             Safe Detach: TV to standby, only when that option is on
   egpu-screen tvremote          JSON: the routes that work now
   egpu-screen only CONNECTOR    desktop only: that screen alone shows an image (every other KWin screen off)
+  egpu-screen best CONNECTOR    desktop only: a USB-C screen on the handheld to its highest resolution, then refresh
   egpu-screen replug [CONNECTOR] desktop only: software unplug + replug, for a monitor stuck on "no signal"
   egpu-screen watch             desktop session: settle on plug-in; with 2+ screens, leave a TV that is
                                 on another input (or off) out of the desktop until it is switched to us
@@ -412,6 +413,29 @@ def _reference_path():
     return subprocess.run(["/usr/local/sbin/egpu-detect", "--device"], capture_output=True, text=True).stdout.strip() != "rog-ally"
 
 
+def best(conn):
+    """Desktop (KWin): a USB-C screen on the handheld (XR glasses, a portable monitor) to its highest resolution, then its
+    highest refresh, not just the mode it marks preferred. Never an output of the eGPU: a live mode change there left an
+    NVIDIA monitor black. NVIDIA reference path only."""
+    if conn.startswith("eDP") or not _reference_path():
+        return "left as is"
+    for node in glob.glob(f"/sys/class/drm/card*-{conn}"):
+        drv = os.path.basename(os.path.realpath(os.path.dirname(node) + "/device/driver"))
+        panel_card = glob.glob(os.path.dirname(node) + "/" + os.path.basename(node).split("-")[0] + "-eDP-*")
+        if drv == "nvidia" or not panel_card:   # only the handheld's own GPU (the card with the built-in panel)
+            return "not a screen of the handheld's GPU"
+    try:
+        out = next(o for o in json.loads(subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=10).stdout)["outputs"]
+                   if o["name"] == conn and o.get("enabled"))
+    except (StopIteration, ValueError, KeyError, OSError, subprocess.TimeoutExpired):
+        return "not on"
+    m = max(out["modes"], key=lambda m: (m["size"]["width"] * m["size"]["height"], m["refreshRate"]))
+    if str(m["id"]) == str(out.get("currentModeId")):
+        return f"already {m['name']}"
+    subprocess.run(["kscreen-doctor", f"output.{conn}.mode.{m['id']}"], capture_output=True, timeout=20)
+    return f"set {m['name']}"
+
+
 def only(conn):
     """Desktop (KWin): CONN is the only screen showing an image; every other screen KWin drives goes off, in one
     KWin change (the owner's rule: picking a screen in the app = an image on that screen alone). The handheld's own
@@ -431,7 +455,8 @@ def only(conn):
         subprocess.run(["kscreen-doctor"] + on + off, capture_output=True, timeout=20)
     if not conn.startswith("eDP") and not any(n.startswith("eDP") for n in names):
         subprocess.run(["sudo", "-n", "/usr/local/sbin/nv-egpu-buddy-privileged", "panel-off"], capture_output=True, timeout=20)
-    return "only " + conn
+    b = best(conn)   # a USB-C screen on the handheld: its best mode (the eGPU's screens are never changed here)
+    return "only " + conn + ("" if b in ("left as is", "not a screen of the handheld's GPU") else f" ({b})")
 
 
 def _connected():
@@ -757,6 +782,8 @@ def main(argv):
                 open(st, "w").write("off"); time.sleep(3); open(st, "w").write("detect")
             print(conn, "replugged")
         return 0
+    if cmd == "best" and len(want) == 1:
+        print(best(want[0])); return 0
     if cmd == "only" and len(want) == 1:
         print(only(want[0])); return 0
     if cmd == "settle":

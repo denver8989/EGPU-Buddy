@@ -408,9 +408,9 @@ best_sysfs_mode() {
 }
 
 best_egpu_drm_mode() {
-  local output=$1
+  local output=$1 sel=${2:--M nvidia-drm}   # sel: which card modetest reads (-D pci:<bdf> for the handheld's GPU)
   command -v modetest >/dev/null 2>&1 || return 1
-  modetest -M nvidia-drm -c 2>/dev/null | awk -v output="$output" -v max_refresh="$EGPU_GAMESCOPE_MAX_REFRESH" '
+  modetest $sel -c 2>/dev/null | awk -v output="$output" -v max_refresh="$EGPU_GAMESCOPE_MAX_REFRESH" '
     $0 ~ "connected[[:space:]]+" output "[[:space:]]" {
       in_connector = 1
       next
@@ -653,6 +653,16 @@ if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && [ -z 
   export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
   hh=$(handheld_screen || echo "$PANEL")
   export OUTPUT_CONNECTOR="$hh"; [ "$hh" = "$PANEL" ] || OUTPUT_CONNECTOR="$hh,$PANEL"   # back to the built-in screen if it goes
+  # a USB-C screen on the handheld (XR glasses, a portable monitor): its highest resolution, then its highest refresh,
+  # not just the mode it marks preferred (as the eGPU's monitors get). NVIDIA reference path only.
+  unset NV_EGPU_GAMESCOPE_HANDHELD_MODE
+  if [ "$hh" != "$PANEL" ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ ! -e /var/lib/nvegpu/xg-mobile-seen ]; then
+    _hc=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"$PANEL" 2>/dev/null | head -1)"); _hc=${_hc%%-*}
+    _hb=$(basename "$(readlink -f "/sys/class/drm/$_hc/device" 2>/dev/null)")
+    _hm=$( [ -n "$_hb" ] && best_egpu_drm_mode "$hh" "-D pci:$_hb" || true)
+    [ -n "$_hm" ] && { export NV_EGPU_GAMESCOPE_HANDHELD_MODE="$_hm"; log "handheld USB-C screen $hh: ${_hm// /x} (highest resolution, then refresh)"; }
+    unset _hc _hb _hm
+  fi
   # games render through Vulkan (Proton, native) -> the eGPU. Steam's own interface (OpenGL/EGL) stays on the handheld
   # GPU like the compositor: drawn on the eGPU it reached gamescope unsynchronised (black, flickering on cursor moves).
   export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json

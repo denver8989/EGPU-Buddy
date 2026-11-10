@@ -169,6 +169,12 @@ if [ "${NV_EGPU_GAMESCOPE_HANDHELD_GPU:-0}" = 1 ]; then
   [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && unset MESA_VK_DEVICE_SELECT DRI_PRIME
   prefix=()   # exactly like stock Game Mode on the handheld: none of the eGPU-monitor workarounds
   [ -n "$_v" ] && [ -n "$_d" ] && prefix+=(--prefer-vk-device "${_v#0x}:${_d#0x}")
+  # a USB-C screen on the handheld (XR glasses): its highest resolution and refresh ("W H R" from the session)
+  if [ -n "${NV_EGPU_GAMESCOPE_HANDHELD_MODE:-}" ]; then
+    read -r _hw _hh _hr <<< "$NV_EGPU_GAMESCOPE_HANDHELD_MODE"
+    [ -n "$_hw" ] && [ -n "$_hh" ] && prefix+=(-W "$_hw" -H "$_hh")
+    [ -n "${_hr:-}" ] && [[ " $* " != *" -r "* ]] && prefix+=(-r "$_hr")
+  fi
 fi
 case "${VK_DRIVER_FILES:-}${VK_ICD_FILENAMES:-}" in *nvidia*)
   if [ -n "$(getcap "$gamescope_bin" 2>/dev/null)" ] && [[ " $* " != *" --prefer-vk-device "* ]]; then
