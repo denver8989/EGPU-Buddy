@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+"""egpu-touchpad - the handheld's touchscreen as a full touchpad while its screen is off (opt-in, Extras).
+
+While the built-in screen is dark because another screen is in use (XR glasses, a monitor or a TV; with or without an
+eGPU), the touchscreen is taken exclusively (EVIOCGRAB) and every finger is passed on to a virtual multi-touch touchpad
+(uinput). libinput - KDE and Game Mode's gamescope both use it - then gives the whole touchpad: pointer, two-finger
+scroll, pinch, three/four-finger gestures. Taps are turned into clicks here (one finger: left, two: right), because
+libinput leaves tap-to-click off by default. When the built-in screen comes back on, the touchscreen is released at once.
+
+  egpu-touchpad            run (systemd: egpu-touchpad.service; started by the option, stopped when it is turned off)
+  egpu-touchpad selftest   the tap and rotation rules without hardware
+
+Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270} - a calibration knob for a touchscreen mounted
+rotated relative to how the screen is used (default: 0, or 90 when the digitizer is portrait and the screen landscape).
+"""
+import fcntl, glob, json, os, select, struct, sys, time
+
+EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
+SYN_REPORT = 0
+ABS_X, ABS_Y, ABS_MT_SLOT, ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_MT_TRACKING_ID = 0, 1, 0x2F, 0x35, 0x36, 0x39
+BTN_LEFT, BTN_RIGHT, BTN_TOUCH = 0x110, 0x111, 0x14A
+BTN_TOOL_FINGER, BTN_TOOL_QUINTTAP, BTN_TOOL_DOUBLETAP, BTN_TOOL_TRIPLETAP, BTN_TOOL_QUADTAP = 0x145, 0x148, 0x14D, 0x14E, 0x14F
+TOOLS = {1: BTN_TOOL_FINGER, 2: BTN_TOOL_DOUBLETAP, 3: BTN_TOOL_TRIPLETAP, 4: BTN_TOOL_QUADTAP, 5: BTN_TOOL_QUINTTAP}
+INPUT_PROP_POINTER, INPUT_PROP_DIRECT = 0, 1
+EVIOCGRAB = 0x40044590
+UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045565, 0x40045567, 0x4004556E
+UI_DEV_SETUP, UI_ABS_SETUP, UI_DEV_CREATE, UI_DEV_DESTROY = 0x405C5503, 0x401C5504, 0x5501, 0x5502
+EVENT = struct.Struct("llHHi")   # struct input_event on 64-bit
+ON = "/var/lib/nvegpu/touchpad.json"
+TAP_MS, TAP_MOVE = 220, 0.03       # a tap: shorter than this, moving less than this share of the touchpad
+
+
+def log(*a):
+    print("egpu-touchpad:", *a, flush=True)
+
+
+def settings():
+    try:
+        return json.load(open(ON))
+    except (OSError, ValueError):
+        return {}
+
+
+def absinfo(fd, code):
+    buf = bytearray(24)
+    fcntl.ioctl(fd, 0x80184540 + code, buf)   # EVIOCGABS(code)
+    return list(struct.unpack("6i", buf))      # value, min, max, fuzz, flat, resolution
+
+
+def touchscreen():
+    """The handheld's own touchscreen: a direct-touch multi-touch device (never an XR glasses' IMU or a controller)."""
+    for ev in sorted(glob.glob("/sys/class/input/event*")):
+        try:
+            prop = int(open(ev + "/device/properties").read().split()[-1], 16)
+            absbits = int("".join(open(ev + "/device/capabilities/abs").read().split()), 16)
+        except (OSError, ValueError):
+            continue
+        if prop & (1 << INPUT_PROP_DIRECT) and absbits & (1 << ABS_MT_POSITION_X) and absbits & (1 << ABS_MT_SLOT):
+            return "/dev/input/" + os.path.basename(ev), open(ev + "/device/name").read().strip()
+    return None, ""
+
+
+def panel_size_mm():
+    for e in glob.glob("/sys/class/drm/card*-eDP-*/edid"):
+        try:
+            b = open(e, "rb").read()
+            if len(b) >= 23 and b[21] and b[22]:
+                return b[21] * 10, b[22] * 10
+        except OSError:
+            pass
+    return None
+
+
+def screen_state():
+    """(built-in screen dark, another screen showing a picture) from the kernel's own view: no compositor needed."""
+    dark, other = True, False
+    for c in glob.glob("/sys/class/drm/card*-*"):
+        conn = os.path.basename(c).split("-", 1)[1]
+        rd = lambda f: open(f"{c}/{f}").read().strip() if os.path.exists(f"{c}/{f}") else ""
+        if conn.startswith("Writeback") or rd("status") != "connected":
+            continue
+        lit = rd("enabled") == "enabled" and rd("dpms") == "On"
+        if conn.startswith("eDP"):
+            bl = [open(p).read().strip() for p in glob.glob("/sys/class/backlight/*/bl_power")]
+            dark = not lit or (bool(bl) and all(v != "0" for v in bl))
+        elif lit:
+            other = True
+    return dark, other
+
+
+def rotation(info_x, info_y):
+    r = settings().get("rotate")
+    if r in (0, 90, 180, 270):
+        return r
+    portrait_digitizer = (info_y[2] - info_y[1]) > (info_x[2] - info_x[1])
+    return 90 if portrait_digitizer else 0
+
+
+def rotate(x, y, rot, xr, yr):
+    """Digitizer (x, y) -> touchpad (x, y); xr / yr: (min, max) of the digitizer's axes."""
+    if rot == 90:
+        return y, xr[1] - (x - xr[0])
+    if rot == 180:
+        return xr[1] - (x - xr[0]), yr[1] - (y - yr[0])
+    if rot == 270:
+        return yr[1] - (y - yr[0]), x
+    return x, y
+
+
+class Tap:
+    """One left click for a short one-finger tap, a right click for a short two-finger tap."""
+    def __init__(self, span):
+        self.span = span; self.reset()
+
+    def reset(self):
+        self.t0, self.most, self.start, self.moved = None, 0, {}, 0.0
+
+    def down(self, slot, x, y, t):
+        if self.t0 is None:
+            self.t0 = t
+        self.start.setdefault(slot, (x, y))
+
+    def move(self, slot, x, y):
+        if slot in self.start:
+            sx, sy = self.start[slot]
+            self.moved = max(self.moved, max(abs(x - sx), abs(y - sy)) / self.span)
+
+    def fingers(self, n):
+        self.most = max(self.most, n)
+
+    def up_all(self, t):
+        click = None
+        if self.t0 is not None and (t - self.t0) * 1000 <= TAP_MS and self.moved <= TAP_MOVE:
+            click = {1: BTN_LEFT, 2: BTN_RIGHT}.get(self.most)
+        self.reset()
+        return click
+
+
+class Pad:
+    def __init__(self, src, name):
+        self.src = os.open(src, os.O_RDONLY | os.O_NONBLOCK)
+        ix, iy = absinfo(self.src, ABS_MT_POSITION_X), absinfo(self.src, ABS_MT_POSITION_Y)
+        islot, itrack = absinfo(self.src, ABS_MT_SLOT), absinfo(self.src, ABS_MT_TRACKING_ID)
+        self.rot = rotation(ix, iy)
+        self.xr, self.yr = (ix[1], ix[2]), (iy[1], iy[2])
+        ox, oy = (iy, ix) if self.rot in (90, 270) else (ix, iy)
+        mm = panel_size_mm()
+        if mm and not ox[5]:   # units per millimetre: libinput's gesture and scroll thresholds are in mm
+            w, h = (mm[1], mm[0]) if self.rot in (90, 270) else mm
+            ox[5], oy[5] = max(1, round((ox[2] - ox[1]) / max(w, 1))), max(1, round((oy[2] - oy[1]) / max(h, 1)))
+        self.ui = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
+        fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_KEY); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_ABS); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_SYN)
+        for k in (BTN_LEFT, BTN_RIGHT, BTN_TOUCH, *TOOLS.values()):
+            fcntl.ioctl(self.ui, UI_SET_KEYBIT, k)
+        fcntl.ioctl(self.ui, UI_SET_PROPBIT, INPUT_PROP_POINTER)
+        for code, info in ((ABS_X, ox), (ABS_Y, oy), (ABS_MT_POSITION_X, ox), (ABS_MT_POSITION_Y, oy), (ABS_MT_SLOT, islot), (ABS_MT_TRACKING_ID, itrack)):
+            fcntl.ioctl(self.ui, UI_SET_ABSBIT, code)
+            fcntl.ioctl(self.ui, UI_ABS_SETUP, struct.pack("Hxx6i", code, 0, *info[1:]))   # struct uinput_abs_setup
+        fcntl.ioctl(self.ui, UI_DEV_SETUP, struct.pack("4H80sI", 0x06, 0x1209, 0x7444, 1, b"EGPU Buddy touchpad (handheld screen)", 0))
+        fcntl.ioctl(self.ui, UI_DEV_CREATE)
+        fcntl.ioctl(self.src, EVIOCGRAB, 1)
+        self.slot, self.slots, self.held = 0, {}, set()
+        self.tap = Tap(max(ox[2] - ox[1], oy[2] - oy[1], 1))
+        log(f"touchpad on: {name} (rotation {self.rot})")
+
+    def emit(self, t, c, v):
+        os.write(self.ui, EVENT.pack(0, 0, t, c, v))
+
+    def handle(self, ev):
+        _, _, t, c, v = EVENT.unpack(ev)
+        now = time.monotonic()
+        if t == EV_ABS:
+            if c == ABS_MT_SLOT:
+                self.slot = v
+            elif c == ABS_MT_TRACKING_ID:
+                if v < 0:
+                    self.slots.pop(self.slot, None)
+                else:
+                    self.slots[self.slot] = [None, None]
+            elif c in (ABS_MT_POSITION_X, ABS_MT_POSITION_Y):
+                p = self.slots.setdefault(self.slot, [None, None])
+                p[0 if c == ABS_MT_POSITION_X else 1] = v
+                if None not in p:
+                    x, y = rotate(p[0], p[1], self.rot, self.xr, self.yr)
+                    self.tap.down(self.slot, x, y, now); self.tap.move(self.slot, x, y)
+                    self.emit(EV_ABS, ABS_MT_SLOT, self.slot)
+                    self.emit(EV_ABS, ABS_MT_POSITION_X, x); self.emit(EV_ABS, ABS_MT_POSITION_Y, y)
+                    if self.slot == min(self.slots):
+                        self.emit(EV_ABS, ABS_X, x); self.emit(EV_ABS, ABS_Y, y)
+                return
+            elif c in (ABS_X, ABS_Y):
+                return   # single-touch axes: derived from the first finger above (rotated)
+            self.emit(t, c, v)
+        elif t == EV_KEY:
+            return       # the touchscreen's own BTN_TOUCH / tools: rebuilt from the finger count below
+        elif t == EV_SYN and c == SYN_REPORT:
+            n = len(self.slots)
+            self.tap.fingers(n)
+            want = {TOOLS[min(n, 5)], BTN_TOUCH} if n else set()
+            for k in self.held - want:
+                self.emit(EV_KEY, k, 0)
+            for k in want - self.held:
+                self.emit(EV_KEY, k, 1)
+            self.held = want
+            self.emit(EV_SYN, SYN_REPORT, 0)
+            if n == 0:
+                click = self.tap.up_all(now)
+                if click:
+                    self.emit(EV_KEY, click, 1); self.emit(EV_SYN, SYN_REPORT, 0)
+                    self.emit(EV_KEY, click, 0); self.emit(EV_SYN, SYN_REPORT, 0)
+
+    def pump(self, timeout):
+        r, _, _ = select.select([self.src], [], [], timeout)
+        if r:
+            data = os.read(self.src, EVENT.size * 64)
+            for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
+                self.handle(data[i:i + EVENT.size])
+
+    def close(self):
+        for f, op in ((self.src, lambda: fcntl.ioctl(self.src, EVIOCGRAB, 0)), (self.ui, lambda: fcntl.ioctl(self.ui, UI_DEV_DESTROY))):
+            try:
+                op()
+            except OSError:
+                pass
+            os.close(f)
+        log("touchpad off: touchscreen released")
+
+
+def run():
+    pad = None
+    try:
+        while True:
+            dark, other = screen_state()
+            active = dark and other
+            if active and pad is None:
+                src, name = touchscreen()
+                if src:
+                    try:
+                        pad = Pad(src, name)
+                    except OSError as e:
+                        log("could not take the touchscreen:", e); time.sleep(5)
+            elif not active and pad is not None:
+                pad.close(); pad = None
+            if pad:
+                deadline = time.monotonic() + 1
+                while time.monotonic() < deadline:
+                    try:
+                        pad.pump(0.2)
+                    except OSError:   # the touchscreen went away (suspend, unplug): release and look again
+                        pad.close(); pad = None; break
+            else:
+                time.sleep(1)
+    finally:
+        if pad:
+            pad.close()
+
+
+def selftest():
+    t = Tap(1000)
+    t.down(0, 10, 10, 0.0); t.fingers(1); assert t.up_all(0.1) == BTN_LEFT
+    t.down(0, 10, 10, 0.0); t.down(1, 50, 50, 0.01); t.fingers(2); assert t.up_all(0.15) == BTN_RIGHT
+    t.down(0, 10, 10, 0.0); t.fingers(1); assert t.up_all(0.5) is None              # held: no click
+    t.down(0, 10, 10, 0.0); t.move(0, 300, 10); t.fingers(1); assert t.up_all(0.1) is None   # moved: no click
+    t.down(0, 0, 0, 0.0); t.fingers(3); assert t.up_all(0.1) is None                # three fingers: libinput's gesture
+    assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
+    assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
+    print("selftest ok")
+
+
+if __name__ == "__main__":
+    selftest() if sys.argv[1:] == ["selftest"] else run()

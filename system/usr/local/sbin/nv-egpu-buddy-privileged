@@ -547,6 +547,22 @@ case "$action" in
       *) die "nvidia-perf takes lock or reset" 2 ;;
     esac
     ;;
+  touchpad)
+    # "Handheld screen as touchpad" (Extras, opt-in): on = the service runs (it acts only while the built-in screen is dark
+    # and another screen shows a picture); off = stopped, the touchscreen is the touchscreen again
+    case "${1:-}" in
+      on)  mkdir -p /var/lib/nvegpu; python3 -c 'import json,sys;p=sys.argv[1]
+try: d=json.load(open(p))
+except Exception: d={}
+d["enabled"]=True; json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json
+           systemctl enable --now egpu-touchpad.service >/dev/null 2>&1 && echo "touchpad on" ;;
+      off) systemctl disable --now egpu-touchpad.service >/dev/null 2>&1; python3 -c 'import json,sys;p=sys.argv[1]
+try: d=json.load(open(p))
+except Exception: d={}
+d["enabled"]=False; json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json 2>/dev/null; echo "touchpad off" ;;
+      *) die "touchpad takes on or off" 2 ;;
+    esac
+    ;;
   rebuild-driver)
     # "NVIDIA CEC (DisplayPort adapter)" chosen on a driver built before the CEC patch: build the patched driver again
     # from the installed release (same version, forced), in its own unit; progress in /run/nvegpu/driver-rebuild.json.

@@ -1,0 +1,12 @@
+[Unit]
+Description=EGPU Buddy: the handheld's touchscreen as a touchpad while its screen is off (opt-in)
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/egpu-touchpad
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

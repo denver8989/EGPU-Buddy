@@ -2366,6 +2366,19 @@ class Plugin:
             return {"ok": True, "message": "Saved: it takes effect the next time the eGPU is plugged in (or after a restart)."}
         return {"ok": True, "message": ("On." if enabled else "Off.")}
 
+    # "Handheld screen as touchpad" (Extras, opt-in, every setup; also without an eGPU, e.g. XR glasses alone)
+    async def get_touchpad(self):
+        try:
+            on = bool(json.load(open("/var/lib/nvegpu/touchpad.json")).get("enabled"))
+        except (OSError, ValueError):
+            on = False
+        active = _sh(["journalctl", "-u", "egpu-touchpad.service", "-n", "1", "-o", "cat", "--no-pager"], 5)[1]
+        return {"enabled": on, "active": on and active.startswith("egpu-touchpad: touchpad on")}
+
+    async def set_touchpad(self, enabled: bool):
+        rc, out, err = _sh(["/usr/local/sbin/nv-egpu-buddy-privileged", "touchpad", "on" if enabled else "off"], 20)
+        return {"ok": rc == 0, "message": ("On: while the handheld screen is off and another screen is in use, the touchscreen works as a touchpad." if enabled else "Off: the touchscreen is a touchscreen again.") if rc == 0 else (out or err)}
+
     async def rebuild_driver(self):
         """NVIDIA CEC chosen on a driver built before the CEC patch: build the patched driver again (same version)."""
         if _installed_vendor() == "amd":

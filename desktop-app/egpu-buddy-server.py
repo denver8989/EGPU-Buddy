@@ -140,6 +140,10 @@ def usb4():
         per = float((re.findall(r"[\d.]+", read(dev + "/rx_speed")) or ["0"])[0]); lanes = int(read(dev + "/rx_lanes") or "0")
         return {"name": " ".join(x for x in (read(dev + "/vendor_name"), read(dev + "/device_name")) if x), "per_lane": per, "lanes": lanes, "total": per * lanes, "slow": lanes < 2 or per < 20}
     return {}
+def touchpad():
+    try: on = bool(json.load(open("/var/lib/nvegpu/touchpad.json")).get("enabled"))
+    except (OSError, ValueError): on = False
+    return {"enabled": on}
 def tv_remote():
     """TV controls / TV off at Safe Detach (opt-in; egpu-screen, the plugin's reading): every setup, as in the plugin."""
     try: return json.loads(sh(["/usr/local/sbin/egpu-screen", "tvremote"], 20)[1])
@@ -147,7 +151,7 @@ def tv_remote():
 def extras():
     net = jread(SCREEN_NET) or {}
     tv = {"enabled": bool(net.get("enabled")), "paired": [f'{t["ip"]} on {t["input"].replace("_", " ")}' for t in (net.get("tvs") or {}).values()]}
-    if not extras_on(): return {"tv_any": tv, "tvr": tv_remote()}   # the TV card only (the rest stays in the plugin there)
+    if not extras_on(): return {"tv_any": tv, "tvr": tv_remote(), "touchpad": touchpad()}   # the TV card only (the rest stays in the plugin there)
     d = plugin_settings(); fix = {}
     if os.path.exists(STEAM_FIX):
         try: fix = json.loads(sh([STEAM_FIX, "status"], 10)[1])
@@ -156,7 +160,7 @@ def extras():
     return {"auto_update": bool(d.get("auto_update", False)), "game_res": bool(d.get("game_res_native", True)),
             "steam_fix": {"available": bool(fix.get("available")), "enabled": bool(fix.get("enabled"))},
             "usb4_on": on, "usb4": usb4() if on else {},
-            "tv": tv, "tv_any": tv, "tvr": tv_remote()}
+            "tv": tv, "tv_any": tv, "tvr": tv_remote(), "touchpad": touchpad()}
 
 def status():
     _, l, _ = sh(["lspci", "-Dn"]); bdf = next((x.split()[0] for x in l.splitlines() if " 0300: 10de:" in x), ""); vendor = "nvidia" if bdf else ""
@@ -306,6 +310,8 @@ def action(p):
         k = str((p or {}).get("key", ""))
         if k not in ("cec_remote", "off_at_detach", "nvidia_dp_cec"): return {"ok": False, "error": "unknown setting"}
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvset", k, "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
+    if a == "touchpad":   # "Handheld screen as touchpad" (opt-in, every setup)
+        rc, o, e = sh(["sudo", "-n", PRIV, "touchpad", "on" if (p or {}).get("value") else "off"], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "rebuild-driver":   # NVIDIA CEC on a driver built before the CEC patch: build the patched driver again
         rc, o, e = sh(["sudo", "-n", PRIV, "rebuild-driver"], 20)
         return {"ok": rc == 0, "out": "Rebuilding the patched NVIDIA driver with CEC (10-20 minutes). It is used the next time the eGPU is plugged in, or after a restart." if rc == 0 else (o or e)}

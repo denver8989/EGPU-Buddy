@@ -194,6 +194,8 @@ const getTvRemote = callable<[], TvRemote>("get_tv_remote");
 const setTvOption = callable<[string, boolean], Result>("set_tv_option");
 const tvKey = callable<[string], Result>("tv_key");
 const rebuildDriver = callable<[], Result>("rebuild_driver");
+const getTouchpad = callable<[], { enabled: boolean; active: boolean }>("get_touchpad");
+const setTouchpad = callable<[boolean], Result>("set_touchpad");
 const pairTv = callable<[], Result>("pair_tv");
 const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
 // Steam's own screen mode for the screen Game Mode is on: its native mode at the highest refresh rate. Native = the mode
@@ -502,6 +504,7 @@ function Content() {
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
   const [trm, setTrm] = useState<TvRemote | null>(null);
+  const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean } | null>(null);
   const [ad, setAd] = useState<Addons | null>(null);
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
@@ -523,7 +526,7 @@ function Content() {
   const [intro, setIntro] = useState<{ src: string; fading: boolean } | null>(null);   // XG Mobile intro, once
   const introAsked = useRef(false);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
 
-  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setTrm(await getTvRemote()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial()); setSui(await getSteamUi());
+  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setTrm(await getTvRemote()); setTpad(await getTouchpad()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial()); setSui(await getSteamUi());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -1177,6 +1180,7 @@ function Content() {
         <PanelSection title="Extras (testing)">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>All off by default.</div></PanelSectionRow>
           {!nvb && <PanelSectionRow><ToggleField label="USB4 link speed" description="Adds a USB4 row to the Details tab and warns about a slow cable or port." checked={!!ad?.usb4} onChange={(v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; })} /></PanelSectionRow>}
+          <PanelSectionRow><ToggleField label="Handheld screen as touchpad" description={`Off by default. While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, pinch and three/four-finger gestures. Game Mode and the desktop.${tpad?.active ? " Active now." : ""}`} checked={!!tpad?.enabled} onChange={(v) => run(async () => { const r = await setTouchpad(v); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
           <PanelSectionRow><ToggleField label="TV control tricks" description={`Off by default. Choosing the TV for Game Mode turns it on and switches it to the ${nvb ? "GPU" : "eGPU"}'s HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.`} checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
           {tv?.enabled && (<>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>

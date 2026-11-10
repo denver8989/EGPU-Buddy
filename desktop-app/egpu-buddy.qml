@@ -480,6 +480,14 @@ ApplicationWindow {
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; visible: !win.nvb && !!win.ex.usb4_on; color: (win.ex.usb4 || {}).slow ? "#f0b429" : win.subCol
                                 text: (win.ex.usb4 || {}).name ? (win.ex.usb4.name + ": " + win.ex.usb4.total + " Gb/s (" + win.ex.usb4.lanes + " x " + win.ex.usb4.per_lane + ")" + (win.ex.usb4.slow ? " · slower than USB4 should be: try another cable or port" : "")) : "No USB4 link found." }
                     }
+                    // Handheld screen as touchpad (opt-in, off by default): every setup, as in the Game Mode plugin
+                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.touchpad
+                        RowLayout { spacing: 8
+                            Head { text: "Touchpad" }
+                            Badge { text: "testing · off by default"; lit: false } }
+                        Switch { Layout.fillWidth: true; text: "Handheld screen as touchpad"; checked: !!(win.ex.touchpad || {}).enabled; onToggled: { win.act("touchpad", { value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; font.pixelSize: 12
+                                text: "While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, pinch and three/four-finger gestures. Game Mode and the desktop." } }
                     // TV extras (opt-in, off by default): every setup, as in the Game Mode plugin
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv_any
                         RowLayout { spacing: 8
