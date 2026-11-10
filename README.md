@@ -69,18 +69,27 @@ Fix: gamescope GBM scan-out route by NightHammer1000 and antheas; root cause fou
 
 ### The Decky plugin in Game Mode
 
+<p align="center"><sub>Taken in Game Mode on a Legion Go 2 with an RTX 5060 Ti (0.7.254).</sub></p>
 <table align="center">
   <tr>
-    <th width="25%" valign="top">Main page<br><sub>Switch Game Mode between the handheld, XR glasses, a TV and a monitor; Safe Detach.</sub></th>
-    <th width="25%" valign="top">Details<br><sub>GPU, driver, PCIe and USB4 link, screens, live readings, support report.</sub></th>
-    <th width="25%" valign="top">Setup<br><sub>System integration, NVIDIA driver, game screen, best resolution, updates, extras.</sub></th>
-    <th width="25%" valign="top">ASUS XG Mobile<br><sub>RTX 5070 Ti Laptop GPU on a ROG Xbox Ally X: power target, fan mode, lights, clock offsets.</sub></th>
+    <th width="33%" valign="top">Main page<br><sub>Switch Game Mode between the handheld, a TV and a monitor; TV controls; Safe Detach.</sub></th>
+    <th width="33%" valign="top">TV controls<br><sub>Volume, mute, TV on and off: a paired LG TV, or HDMI-CEC.</sub></th>
+    <th width="33%" valign="top">Details<br><sub>GPU, driver, PCIe link, screens, live readings, support report, power limit and clocks.</sub></th>
   </tr>
   <tr>
-    <td valign="top"><img src="docs/assets/screenshot-main.png" alt="EGPU Buddy main page: Game Mode on the handheld screen with games on the eGPU, switch to XR glasses, the TV or a monitor, Safe Detach" width="200"></td>
-    <td valign="top"><img src="docs/assets/screenshot-details.png" alt="EGPU Buddy details: GPU, driver, PCIe and USB4 link, screens, telemetry, support report" width="200"></td>
-    <td valign="top"><img src="docs/assets/screenshot-setup.png" alt="EGPU Buddy setup: system integration, NVIDIA driver, game screen, games, updates, extras" width="200"></td>
-    <td valign="top"><img src="docs/assets/screenshot-xg-mobile.png" alt="EGPU Buddy plugin in Game Mode with an ASUS XG Mobile: details with the 115 W cap and the fan mode, then the XG Mobile section with power target, fan mode, lights and clock offsets" width="200"></td>
+    <td valign="top"><img src="docs/assets/screenshot-main.png" alt="EGPU Buddy main page in Game Mode: Show details, Setup and updates, NVIDIA settings, TV controls, status, screen choices for the handheld and the LG TV, Safe Detach" width="220"></td>
+    <td valign="top"><img src="docs/assets/screenshot-tv.png" alt="EGPU Buddy TV controls in Game Mode: volume down, mute, volume up, TV on, TV off" width="220"></td>
+    <td valign="top"><img src="docs/assets/screenshot-details.png" alt="EGPU Buddy details in Game Mode: GPU, driver, PCIe, session, screens, audio, temperature, power, clocks, VRAM, load, fan, support report, power controls" width="220"></td>
+  </tr>
+  <tr>
+    <th width="33%" valign="top">Setup &amp; updates<br><sub>System integration, NVIDIA driver, game screen, keep awake, best resolution, Steam menu fix, updates, extras (TV).</sub></th>
+    <th width="33%" valign="top">NVIDIA settings<br><sub>The control panel's global settings for games on the eGPU, plus Steam's live Game Mode settings.</sub></th>
+    <th width="33%" valign="top">ASUS XG Mobile<br><sub>RTX 5070 Ti Laptop GPU on a ROG Xbox Ally X: power target, fan mode, lights, clock offsets.</sub></th>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/screenshot-setup.png" alt="EGPU Buddy setup and updates in Game Mode: system integration, NVIDIA driver, game screen, sleep, games, Steam menu, NVIDIA settings, updates, extras with TV control and TV off at Safe Detach" width="220"></td>
+    <td valign="top"><img src="docs/assets/screenshot-nvidia.png" alt="EGPU Buddy NVIDIA settings in Game Mode" width="220"></td>
+    <td valign="top"><img src="docs/assets/screenshot-xg-mobile.png" alt="EGPU Buddy plugin in Game Mode with an ASUS XG Mobile: details with the 115 W cap and the fan mode, then the XG Mobile section with power target, fan mode, lights and clock offsets" width="220"></td>
   </tr>
 </table>
 
