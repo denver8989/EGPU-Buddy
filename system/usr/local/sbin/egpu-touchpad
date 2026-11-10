@@ -12,8 +12,9 @@ desktop. When the built-in screen comes back on, the touchscreen is released at 
   egpu-touchpad            run (systemd: egpu-touchpad.service; started by the option, stopped when it is turned off)
   egpu-touchpad selftest   the tap and rotation rules without hardware
 
-Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270} - a calibration knob for a touchscreen mounted
-rotated relative to how the screen is used (default: 0, or 90 when the digitizer is portrait and the screen landscape).
+Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270, "speed": 2.0}. speed: pointer speed (1 = the true size).
+rotate: for a touchscreen mounted rotated relative to how the screen is used (default: 0, or 90 when the digitizer is
+portrait and the screen landscape).
 """
 import fcntl, glob, json, os, select, struct, subprocess, sys, time
 
@@ -150,6 +151,10 @@ class Pad:
         if mm and not ox[5]:   # units per millimetre: libinput's gesture and scroll thresholds are in mm
             w, h = (mm[1], mm[0]) if self.rot in (90, 270) else mm
             ox[5], oy[5] = max(1, round((ox[2] - ox[1]) / max(w, 1))), max(1, round((oy[2] - oy[1]) / max(h, 1)))
+        # speed: report fewer units per mm, so libinput sees a bigger pad and moves the pointer further per finger mm
+        sp = settings().get("speed", 2.0)
+        sp = sp if isinstance(sp, (int, float)) and 0.25 <= sp <= 8 else 2.0
+        ox[5], oy[5] = max(1, round(ox[5] / sp)), max(1, round(oy[5] / sp))
         self.ui = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
         fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_KEY); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_ABS); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_SYN)
         for k in (BTN_LEFT, BTN_RIGHT, BTN_TOUCH, *TOOLS.values()):
