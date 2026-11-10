@@ -124,3 +124,5 @@ Update: prevention built + proven in isolation (fc69fd3, tests/egpu-touchpad-kil
 EGPU-019 update: 0c58916 fixed libinput 'double tracking ID' at drag start; owner live test: three-finger drag on Firefox tab bar works, no stuck press. Not pushed/released.
 
 EGPU-019: owner live tests pass: three-finger drag (Firefox tab bar, no stuck), 4-finger up/down + left/right, 5-finger spread/pinch (1798969). KDE window previews show icons only (KWin thumbnails on eGPU setup, not touchpad). Not pushed/released.
+
+EGPU-019 RELEASED 0.7.258 (7c9b22f, run 42818354635, owner OK). Settings UI not previewed before release (owner said release); take real screenshots after update. Game Mode touchpad not live-tested yet. Next: KWin window previews show icons only (EGPU-020).
