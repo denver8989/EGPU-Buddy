@@ -113,3 +113,8 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 - Files owned: README.md, docs/assets/gear-playground.gif, AGENT_HANDOFF.md, agent-context/ACTIVE_TASK.md, agent-context/HISTORY.md.
 - Validated locally: 960×400, 180 frames, 18 seconds, infinite loop; device labels centered. README uses the new GIF. Publication verification follows the commit; no app or hardware changes.
 - Files currently owned: none.
+
+## EGPU-019 touchpad (Claude) — BLOCKED for release (2026-11-10)
+Commits fda8530..68b7c4e (local, not pushed). Live test left KWin with a stuck pressed button after the test process was killed
+mid three-finger drag; machine restarted. Owner: must never happen again before release. Next: watchdog auto-release of held
+drags, release on every exit path, test kills mid-drag in a nested KWin only. Do not push/release until done and owner OKs.
