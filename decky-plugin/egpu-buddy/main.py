@@ -2366,6 +2366,13 @@ class Plugin:
             return {"ok": True, "message": "Saved: it takes effect the next time the eGPU is plugged in (or after a restart)."}
         return {"ok": True, "message": ("On." if enabled else "Off.")}
 
+    async def rebuild_driver(self):
+        """NVIDIA CEC chosen on a driver built before the CEC patch: build the patched driver again (same version)."""
+        if _installed_vendor() == "amd":
+            return {"ok": False, "message": "Not on the AMD / Intel install."}
+        rc, out = _sh(["/usr/local/sbin/nv-egpu-buddy-privileged", "rebuild-driver"], 20)[:2]
+        return {"ok": rc == 0, "message": "Rebuilding the patched NVIDIA driver with CEC (10-20 minutes, keep the charger in). It is used the next time the eGPU is plugged in, or after a restart." if rc == 0 else (out or "Could not start the rebuild.")}
+
     async def tv_key(self, key: str):
         if key not in ("up", "down", "mute", "on", "off", "input"):
             return {"ok": False, "message": "Unknown key."}

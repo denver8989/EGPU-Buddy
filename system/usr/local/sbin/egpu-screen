@@ -577,11 +577,15 @@ NVCEC = "/etc/modprobe.d/egpu-buddy-dp-cec.conf"   # NVIDIA CEC (patched driver 
 def nv_cec_state():
     """NVIDIA install: whether the patched driver offers DP CEC, the option is set, and the loaded driver has it on."""
     if open("/etc/nv-egpu-buddy/gpu-vendor").read().strip() == "amd" if os.path.exists("/etc/nv-egpu-buddy/gpu-vendor") else False:
-        return {"supported": False, "on": False, "loaded": False}
+        return {"nvidia": False, "supported": False, "on": False, "loaded": False, "rebuild": ""}
+    try:
+        rb = json.load(open("/run/nvegpu/driver-rebuild.json")).get("state", "")   # running / done / failed (this boot)
+    except (OSError, ValueError):
+        rb = ""
     par = "/sys/module/nvidia_drm/parameters/dp_cec"
     sup = os.path.exists(par) or "dp_cec:" in subprocess.run(["modinfo", "-p", "nvidia_drm"], capture_output=True, text=True).stdout
     loaded = os.path.exists(par) and open(par).read().strip() in ("Y", "1")
-    return {"supported": sup, "on": os.path.exists(NVCEC), "loaded": loaded}
+    return {"nvidia": True, "supported": sup, "on": os.path.exists(NVCEC), "loaded": loaded, "rebuild": rb}
 
 
 def remote_routes():

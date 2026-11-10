@@ -12,7 +12,7 @@ pkgname=(
     'nvidia-open-egpu'
     'nvidia-open-egpu-dkms')
 pkgver=620.70.06
-pkgrel=2
+pkgrel=1
 epoch=1
 pkgdesc='NVIDIA open kernel modules with thunderbolt 4 force egpu and hotplug patches'
 arch=('x86_64')

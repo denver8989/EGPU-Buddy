@@ -299,6 +299,9 @@ def action(p):
         k = str((p or {}).get("key", ""))
         if k not in ("cec_remote", "off_at_detach", "nvidia_dp_cec"): return {"ok": False, "error": "unknown setting"}
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvset", k, "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
+    if a == "rebuild-driver":   # NVIDIA CEC on a driver built before the CEC patch: build the patched driver again
+        rc, o, e = sh(["sudo", "-n", PRIV, "rebuild-driver"], 20)
+        return {"ok": rc == 0, "out": "Rebuilding the patched NVIDIA driver with CEC (10-20 minutes). It is used the next time the eGPU is plugged in, or after a restart." if rc == 0 else (o or e)}
     if a == "tv-key":   # TV controls: volume / mute (CEC through SteamOS's cecd, or a paired LG TV); runs as the user
         k = str((p or {}).get("key", ""))
         if k not in ("up", "down", "mute", "on", "off", "input"): return {"ok": False, "error": "unknown key"}

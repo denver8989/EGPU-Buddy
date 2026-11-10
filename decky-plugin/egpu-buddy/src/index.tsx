@@ -189,10 +189,11 @@ const makeReport = callable<[], { code: string; file: string; url: string }>("ma
 const qrSvg = (text: string) => { const q = qrcode(0, "L"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); };
 const setTvControl = callable<[boolean], Result>("set_tv_control");
 // TV controls (volume / mute) and "Turn the TV off at Safe Detach" (opt-in): the eGPU's CEC adapter via SteamOS's cecd, or a paired LG TV
-type TvRemote = { routes: string[]; cec_remote: boolean; off_at_detach: boolean; cec_here: boolean; nv_cec?: { supported: boolean; on: boolean; loaded: boolean } };
+type TvRemote = { routes: string[]; cec_remote: boolean; off_at_detach: boolean; cec_here: boolean; nv_cec?: { nvidia: boolean; supported: boolean; on: boolean; loaded: boolean; rebuild: string } };
 const getTvRemote = callable<[], TvRemote>("get_tv_remote");
 const setTvOption = callable<[string, boolean], Result>("set_tv_option");
 const tvKey = callable<[string], Result>("tv_key");
+const rebuildDriver = callable<[], Result>("rebuild_driver");
 const pairTv = callable<[], Result>("pair_tv");
 const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
 // Steam's own screen mode for the screen Game Mode is on: its native mode at the highest refresh rate. Native = the mode
@@ -1183,7 +1184,14 @@ function Content() {
           </>)}
           {(tv?.enabled || trm?.cec_remote) && <PanelSectionRow><ToggleField label="Turn the TV off at Safe Detach" description={'Off by default. Puts the TV to standby just before the eGPU lets go of it: through CEC when "TV remote" is on, or over the network for a paired LG TV (works with NVIDIA cards too). Not on a cable pull.'} checked={!!trm?.off_at_detach} onChange={(v) => run(async () => { const r = await setTvOption("off_at_detach", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
           {(trm?.cec_here || trm?.cec_remote) && <PanelSectionRow><ToggleField label="TV remote (CEC)" description={'Off by default. Adds "TV controls" to the main page: TV volume and mute through SteamOS\'s own CEC service. Shown only on SteamOS when the TV can be reached over CEC: an AMD card\'s HDMI or CEC-capable adapter, or a USB-CEC adapter in the TV\'s cable (any eGPU, NVIDIA too). Remote part based on cec-mote by xXJSONDeruloXx.'} checked={!!trm?.cec_remote} onChange={(v) => run(async () => { const r = await setTvOption("cec_remote", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
-          {(trm?.nv_cec?.supported || trm?.nv_cec?.on) && <PanelSectionRow><ToggleField label="NVIDIA CEC (DisplayPort adapter)" description={`Off by default. Lets the NVIDIA card carry HDMI-CEC through a CEC-capable DisplayPort-to-HDMI adapter (EGPU Buddy's patched driver), so "TV remote (CEC)" works on NVIDIA too. Takes effect the next time the eGPU is plugged in.${trm?.nv_cec?.loaded ? " Active now." : ""}`} checked={!!trm?.nv_cec?.on} onChange={(v) => run(async () => { const r = await setTvOption("nvidia_dp_cec", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
+          {(trm?.nv_cec?.nvidia && !nvb) && <PanelSectionRow><ToggleField label="NVIDIA CEC (DisplayPort adapter)" description={`Off by default. Lets the NVIDIA card carry HDMI-CEC through a CEC-capable DisplayPort-to-HDMI adapter (EGPU Buddy's patched driver), so "TV remote (CEC)" works on NVIDIA too. Takes effect the next time the eGPU is plugged in.${trm?.nv_cec?.loaded ? " Active now." : ""}${trm?.nv_cec?.rebuild === "running" ? " Driver rebuild running…" : trm?.nv_cec?.rebuild === "done" ? " Driver rebuilt with CEC." : trm?.nv_cec?.rebuild === "failed" ? " The driver rebuild failed: see /var/log/egpu-driver-rebuild.log." : ""}`} checked={!!trm?.nv_cec?.on} onChange={(v) => run(async () => {
+            const r = await setTvOption("nvidia_dp_cec", v); setTrm(await getTvRemote());
+            // a driver built before the CEC patch: offer to build it again now (the patch is in every build from now on)
+            if (v && !trm?.nv_cec?.supported && trm?.nv_cec?.rebuild !== "running") {
+              showModal(<ConfirmModal strTitle="Rebuild the NVIDIA driver with CEC?" strDescription="Your patched NVIDIA driver was built before CEC support was added. EGPU Buddy can build it again now with CEC (10-20 minutes, keep the charger in; games keep running on the current driver). The new driver is used the next time the eGPU is plugged in, or after a restart." strOKButtonText="Rebuild now" strCancelButtonText="Later"
+                onOK={() => run(async () => { const x = await rebuildDriver(); setTrm(await getTvRemote()); return x; })} />);
+            }
+            return r; })} /></PanelSectionRow>}
         </PanelSection>
       )}
       {tab === "tv" && (

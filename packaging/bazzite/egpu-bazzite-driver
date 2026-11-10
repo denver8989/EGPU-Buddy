@@ -23,7 +23,6 @@ W=/var/lib/nvegpu/bazzite; KEYD=/var/lib/nvegpu/mok; NAME=egpu-nvidia; EXT=/var/
 LOG=/var/log/egpu-bazzite-driver.log; MOKPW=egpubuddy; IMG="registry.fedoraproject.org/fedora:${IMG_VERSION:-${VERSION_ID:-44}}"
 EGL_PKGS="egl-wayland egl-wayland2 egl-gbm egl-x11"
 K=${EGPU_KERNEL:-$(uname -r)}; MODROOT=${EGPU_MODROOT:-/usr/lib/modules}; PV=$(sed -n 's/^pkgver=//p' "$PKG/PKGBUILD" 2>/dev/null)
-PR=$(sed -n 's/^pkgrel=//p' "$PKG/PKGBUILD" 2>/dev/null)   # the patch set's revision: a new patch rebuilds (0.7.255: DP CEC)
 say(){ printf '%s\n' "$*"; printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG" 2>/dev/null; }
 host_nv(){ rpm -q --qf '%{VERSION}\n' nvidia-driver 2>/dev/null | grep -E '^[0-9]' | head -1; }   # Bazzite's own NVIDIA driver, if any
 # full = no NVIDIA driver in the image (bazzite-deck); modules = the image's driver is our version; conflict = another
@@ -33,7 +32,7 @@ key_enrolled(){ [ -s "$KEYD/egpu-buddy.der" ] && mokutil --test-key "$KEYD/egpu-
 key_pending(){ [ -s "$KEYD/egpu-buddy.der" ] && [ -e "$KEYD/queued" ] && ! key_enrolled; }
 # built for this kernel, this version and this image's driver situation; with Secure Boot on, also signed (Secure Boot
 # switched on after an unsigned build makes it "not built": the guard drops it and --boot builds it again, signed)
-built(){ [ -s "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" ] && [ "$(cat "$EXT/.egpu-version" 2>/dev/null)" = "$PV $K $(mode_now) r$PR" ] \
+built(){ [ -s "$EXT/usr/lib/modules/$K/extra/nvidia/nvidia.ko.xz" ] && [ "${EGPU_DRIVER_FORCE:-0}" != 1 ] && [ "$(cat "$EXT/.egpu-version" 2>/dev/null)" = "$PV $K $(mode_now)" ] \
          && { ! sb_on || [ -e "$EXT/.signed" ]; }; }
 can_load(){ ! sb_on || key_enrolled; }
 merged(){ [ -L "$LINK" ] && systemd-sysext status 2>/dev/null | grep -qw "$NAME"; }
@@ -211,7 +210,7 @@ build(){ # one build at a time (install, boot, prebuild timer)
   cp "$W/out/$K"/*.ko.xz "$N/usr/lib/modules/$K/extra/nvidia/"
   module_index "$N" || { say "could not build the module index"; drop "$N"; return 10; }
   printf 'ID=_any\nARCHITECTURE=x86-64\n' > "$N/usr/lib/extension-release.d/extension-release.$NAME"
-  echo "$PV $K $mode r$PR" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"
+  echo "$PV $K $mode" > "$N/.egpu-version"; [ ${#keyarg[@]} -gt 0 ] && touch "$N/.signed"
   label "$N" || { drop "$N"; return 12; }
   if [ "${EGPU_STAGE_ONLY:-0}" = 1 ]; then   # prebuild for the NEXT Bazzite deployment: waits as .staged for its first boot
     drop "$EXT.staged"; mv "$N" "$EXT.staged"; drop "$W/kernel-devel-$K.rpm" "$W/out"; say "built for kernel $K and staged for its first boot"; return 0; fi

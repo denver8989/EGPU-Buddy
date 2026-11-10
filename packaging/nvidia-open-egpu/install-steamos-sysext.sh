@@ -125,6 +125,8 @@ if [ ! -f "$BR/usr/lib/modules/$K/build/Makefile" ]; then
 fi
 
 # ---- 2. the tested driver, installed and built inside the build root ------------------------------------------------
+# EGPU_DRIVER_FORCE=1: build again even though modules are there (a patch added since, e.g. NVIDIA CEC, chosen in Extras)
+[ "${EGPU_DRIVER_FORCE:-0}" = 1 ] && rm -f "$BR/usr/lib/modules/$K"/kernel/drivers/video/nvidia*.ko*
 if ! ls "$BR/usr/lib/modules/$K"/kernel/drivers/video/nvidia.ko* >/dev/null 2>&1 || ! ls "$BR"/usr/lib/libnvidia-ml.so.$PV >/dev/null 2>&1; then
   say "building the patched NVIDIA $PV modules for $K (several minutes)"
   rm -rf "$BR/opt/pkg"; mkdir -p "$BR/opt/pkg" "$BR/usr/local/bin"; cp -a "$HERE"/. "$BR/opt/pkg/"

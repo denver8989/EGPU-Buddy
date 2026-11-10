@@ -610,7 +610,7 @@ if want driver; then
       [ -L /etc/extensions/egpu-nvidia ] && { systemctl enable egpu-bazzite-driver-guard.service egpu-bazzite-boot-ok.service >/dev/null 2>&1; mkdir -p /var/lib/nvegpu/bazzite; echo 0 > /var/lib/nvegpu/bazzite/boot-attempts; } || true
       udevadm control --reload 2>/dev/null || true' _ "$BZ" "$ROOT/packaging/nvidia-open-egpu-615"
     say "== Bazzite: building the patched NVIDIA driver (10-20 minutes the first time: about 1 GB of downloads)"
-    sudo /usr/local/sbin/egpu-bazzite-driver --build; brc=$?
+    sudo env EGPU_DRIVER_FORCE="${EGPU_DRIVER_FORCE:-0}" /usr/local/sbin/egpu-bazzite-driver --build; brc=$?
     case $brc in
       0) ;;
       11) echo "note: Secure Boot is on. At the next reboot a blue screen (MokManager) appears: choose \"Enroll MOK\" -> Continue -> Yes,"
@@ -623,7 +623,7 @@ if want driver; then
     # SteamOS: the system partition has ~870 MB free (measured on Valve's 3.8.14 image) and an update replaces it, so the
     # driver goes into a system extension on /home, built in a SteamOS build root there. Nothing is written to /usr.
     say "== SteamOS: building the patched NVIDIA driver into a system extension on /home (10-20 minutes the first time, mostly downloads)"
-    sudo bash "$DRVDIR/install-steamos-sysext.sh" || { DRIVER_FAILED=1; echo "warning: the driver extension was not built (see above); the rest is installed. Do NOT connect the eGPU until it is."; }
+    sudo env EGPU_DRIVER_FORCE="${EGPU_DRIVER_FORCE:-0}" bash "$DRVDIR/install-steamos-sysext.sh" || { DRIVER_FAILED=1; echo "warning: the driver extension was not built (see above); the rest is installed. Do NOT connect the eGPU until it is."; }
   elif command -v pacman >/dev/null; then say "== building the patched nvidia-open kernel modules (several minutes)"; EGPU_TARGET_USER="$USER_NAME" "$DRVDIR/install-patched-nvidia.sh" || echo "warning: patched driver build failed; the stock driver stays (safe detach works, cable yank may hang)"; else echo "the patched driver package needs pacman (Arch-based distro); skipping"; fi
 else
   # Do not cry wolf: on SteamOS the patched driver is delivered as a system extension, not as a

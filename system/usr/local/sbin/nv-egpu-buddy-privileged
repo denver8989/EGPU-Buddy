@@ -547,6 +547,17 @@ case "$action" in
       *) die "nvidia-perf takes lock or reset" 2 ;;
     esac
     ;;
+  rebuild-driver)
+    # "NVIDIA CEC (DisplayPort adapter)" chosen on a driver built before the CEC patch: build the patched driver again
+    # from the installed release (same version, forced), in its own unit; progress in /run/nvegpu/driver-rebuild.json.
+    [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] || die "rebuild-driver: the AMD / Intel install has no NVIDIA driver" 2
+    _rb_u=$(id -nu 1000); _rb_h=$(getent passwd "$_rb_u" | cut -d: -f6); _rb_s=$_rb_h/.local/share/steamos-egpu-buddy
+    [ -f "$_rb_s/install.sh" ] || die "rebuild-driver: the installed release is missing ($_rb_s)" 2
+    systemctl is-active -q egpu-driver-rebuild.service 2>/dev/null && { echo "already running"; exit 0; }
+    mkdir -p /run/nvegpu; echo '{"state":"running"}' > /run/nvegpu/driver-rebuild.json
+    systemd-run --quiet --collect --unit=egpu-driver-rebuild /bin/bash -c "cd '$_rb_s' && env EGPU_TARGET_USER='$_rb_u' HOME='$_rb_h' EGPU_AUTO_YES=1 EGPU_COMPONENTS=driver EGPU_DRIVER_FORCE=1 bash install.sh > /var/log/egpu-driver-rebuild.log 2>&1; rc=\$?; if [ \$rc = 0 ] && ! grep -qi 'warning:.*driver' /var/log/egpu-driver-rebuild.log; then s=done; else s=failed; fi; printf '{\"state\":\"%s\",\"rc\":%s}\n' \$s \$rc > /run/nvegpu/driver-rebuild.json"
+    echo "driver rebuild started"
+    ;;
   set-game-screen)
     # The screen picked in the desktop app (the Game Mode plugin writes the same file as root itself): Game Mode and the
     # desktop both start there. Only a connector this machine has right now (a card's connector in sysfs, connected).
