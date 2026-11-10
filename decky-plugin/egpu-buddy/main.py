@@ -2369,11 +2369,17 @@ class Plugin:
     # "Handheld screen as touchpad" (Extras, opt-in, every setup; also without an eGPU, e.g. XR glasses alone)
     async def get_touchpad(self):
         try:
-            on = bool(json.load(open("/var/lib/nvegpu/touchpad.json")).get("enabled"))
+            d = json.load(open("/var/lib/nvegpu/touchpad.json"))
         except (OSError, ValueError):
-            on = False
+            d = {}
+        on = bool(d.get("enabled"))
         active = _sh(["journalctl", "-u", "egpu-touchpad.service", "-n", "1", "-o", "cat", "--no-pager"], 5)[1]
-        return {"enabled": on, "active": on and active.startswith("egpu-touchpad: touchpad on")}
+        return {"enabled": on, "active": on and active.startswith("egpu-touchpad: touchpad on"),
+                "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap"}
+
+    async def set_touchpad_option(self, key: str, value: str):
+        rc, out, err = _sh(["/usr/local/sbin/nv-egpu-buddy-privileged", "touchpad", key, value], 20)
+        return {"ok": rc == 0, "message": "Saved." if rc == 0 else (out or err)}
 
     async def set_touchpad(self, enabled: bool):
         rc, out, err = _sh(["/usr/local/sbin/nv-egpu-buddy-privileged", "touchpad", "on" if enabled else "off"], 20)

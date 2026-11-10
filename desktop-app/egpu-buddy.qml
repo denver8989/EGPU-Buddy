@@ -486,8 +486,17 @@ ApplicationWindow {
                             Head { text: "Touchpad" }
                             Badge { text: "testing · off by default"; lit: false } }
                         Switch { Layout.fillWidth: true; text: "Handheld screen as touchpad"; checked: !!(win.ex.touchpad || {}).enabled; onToggled: { win.act("touchpad", { value: checked }); win.loadEx() } }
+                        RowLayout { Layout.fillWidth: true; visible: !!(win.ex.touchpad || {}).enabled
+                            Label { text: "Speed"; color: win.subCol }
+                            Slider { id: tpSpeed; Layout.fillWidth: true; from: 0.5; to: 4; stepSize: 0.25; value: (win.ex.touchpad || {}).speed || 2
+                                     onPressedChanged: if (!pressed) win.act("touchpad-option", { key: "speed", value: value.toFixed(2) }) }
+                            Label { text: tpSpeed.value.toFixed(2) + "×"; color: win.subCol } }
+                        Switch { Layout.fillWidth: true; visible: !!(win.ex.touchpad || {}).enabled; text: "Invert scroll direction"; checked: !!(win.ex.touchpad || {}).invert
+                                 onToggled: { win.act("touchpad-option", { key: "invert", value: checked ? "on" : "off" }); win.loadEx() } }
+                        Switch { Layout.fillWidth: true; visible: !!(win.ex.touchpad || {}).enabled; text: "Three-finger drag (off: double tap to drag)"; checked: (win.ex.touchpad || {}).three !== false
+                                 onToggled: { win.act("touchpad-option", { key: "drag", value: checked ? "three" : "tap" }); win.loadEx() } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; font.pixelSize: 12
-                                text: "While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, three-finger drag (windows, files), pinch and four-finger gestures. Game Mode and the desktop." } }
+                                text: "While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, three-finger drag or double tap to drag. Game Mode and the desktop. Desktop only: four fingers up or down show the window previews, a long swipe left or right switches desktop, five fingers spread out show the desktop and pinched in bring the windows back." } }
                     // TV extras (opt-in, off by default): every setup, as in the Game Mode plugin
                     Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv_any
                         RowLayout { spacing: 8

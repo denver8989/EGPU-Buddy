@@ -194,8 +194,10 @@ const getTvRemote = callable<[], TvRemote>("get_tv_remote");
 const setTvOption = callable<[string, boolean], Result>("set_tv_option");
 const tvKey = callable<[string], Result>("tv_key");
 const rebuildDriver = callable<[], Result>("rebuild_driver");
-const getTouchpad = callable<[], { enabled: boolean; active: boolean }>("get_touchpad");
+const getTouchpad = callable<[], { enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean }>("get_touchpad");
 const setTouchpad = callable<[boolean], Result>("set_touchpad");
+const setTouchpadOption = callable<[string, string], Result>("set_touchpad_option");
+let tpSpeedT: ReturnType<typeof setTimeout> | undefined;   // the slider saves (and restarts the touchpad) once it settles
 const pairTv = callable<[], Result>("pair_tv");
 const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
 // Steam's own screen mode for the screen Game Mode is on: its native mode at the highest refresh rate. Native = the mode
@@ -504,7 +506,7 @@ function Content() {
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
   const [trm, setTrm] = useState<TvRemote | null>(null);
-  const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean } | null>(null);
+  const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean } | null>(null);
   const [ad, setAd] = useState<Addons | null>(null);
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
@@ -1180,7 +1182,12 @@ function Content() {
         <PanelSection title="Extras (testing)">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>All off by default.</div></PanelSectionRow>
           {!nvb && <PanelSectionRow><ToggleField label="USB4 link speed" description="Adds a USB4 row to the Details tab and warns about a slow cable or port." checked={!!ad?.usb4} onChange={(v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; })} /></PanelSectionRow>}
-          <PanelSectionRow><ToggleField label="Handheld screen as touchpad" description={`Off by default. While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, three-finger drag (windows, files), pinch and four-finger gestures. Game Mode and the desktop.${tpad?.active ? " Active now." : ""}`} checked={!!tpad?.enabled} onChange={(v) => run(async () => { const r = await setTouchpad(v); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
+          <PanelSectionRow><ToggleField label="Handheld screen as touchpad" description={`Off by default. While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, three-finger drag or double tap to drag. Game Mode and the desktop. Desktop only: four fingers up or down show the window previews, a long swipe left or right switches desktop, five fingers spread out show the desktop and pinched in bring the windows back.${tpad?.active ? " Active now." : ""}`} checked={!!tpad?.enabled} onChange={(v) => run(async () => { const r = await setTouchpad(v); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
+          {tpad?.enabled && <>
+            <PanelSectionRow><SliderField label="Touchpad speed" value={tpad?.speed ?? 2} min={0.5} max={4} step={0.25} showValue editableValue={false} onChange={(v) => { setTpad({ ...tpad, speed: v }); clearTimeout(tpSpeedT); tpSpeedT = setTimeout(() => setTouchpadOption("speed", v.toFixed(2)), 600); }} /></PanelSectionRow>
+            <PanelSectionRow><ToggleField label="Invert scroll direction" checked={!!tpad?.invert} onChange={(v) => run(async () => { const r = await setTouchpadOption("invert", v ? "on" : "off"); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
+            <PanelSectionRow><ToggleField label="Three-finger drag" description="Off: double tap to drag instead (tap, touch again and hold to grab; lifting keeps hold, the next tap lets go)." checked={tpad?.three !== false} onChange={(v) => run(async () => { const r = await setTouchpadOption("drag", v ? "three" : "tap"); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
+          </>}
           <PanelSectionRow><ToggleField label="TV control tricks" description={`Off by default. Choosing the TV for Game Mode turns it on and switches it to the ${nvb ? "GPU" : "eGPU"}'s HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.`} checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
           {tv?.enabled && (<>
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>

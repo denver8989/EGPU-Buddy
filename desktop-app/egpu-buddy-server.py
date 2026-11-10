@@ -141,9 +141,9 @@ def usb4():
         return {"name": " ".join(x for x in (read(dev + "/vendor_name"), read(dev + "/device_name")) if x), "per_lane": per, "lanes": lanes, "total": per * lanes, "slow": lanes < 2 or per < 20}
     return {}
 def touchpad():
-    try: on = bool(json.load(open("/var/lib/nvegpu/touchpad.json")).get("enabled"))
-    except (OSError, ValueError): on = False
-    return {"enabled": on}
+    try: d = json.load(open("/var/lib/nvegpu/touchpad.json"))
+    except (OSError, ValueError): d = {}
+    return {"enabled": bool(d.get("enabled")), "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap"}
 def tv_remote():
     """TV controls / TV off at Safe Detach (opt-in; egpu-screen, the plugin's reading): every setup, as in the plugin."""
     try: return json.loads(sh(["/usr/local/sbin/egpu-screen", "tvremote"], 20)[1])
@@ -310,6 +310,10 @@ def action(p):
         k = str((p or {}).get("key", ""))
         if k not in ("cec_remote", "off_at_detach", "nvidia_dp_cec"): return {"ok": False, "error": "unknown setting"}
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvset", k, "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
+    if a == "touchpad-option":   # speed / invert / drag (the plugin's same settings)
+        k, v = str((p or {}).get("key")), str((p or {}).get("value"))
+        if k not in ("speed", "invert", "drag"): return {"ok": False, "out": "unknown touchpad option"}
+        rc, o, e = sh(["sudo", "-n", PRIV, "touchpad", k, v], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "touchpad":   # "Handheld screen as touchpad" (opt-in, every setup)
         rc, o, e = sh(["sudo", "-n", PRIV, "touchpad", "on" if (p or {}).get("value") else "off"], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "rebuild-driver":   # NVIDIA CEC on a driver built before the CEC patch: build the patched driver again

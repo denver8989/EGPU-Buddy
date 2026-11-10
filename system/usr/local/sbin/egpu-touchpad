@@ -6,8 +6,9 @@ eGPU), the touchscreen is taken exclusively (EVIOCGRAB) and every finger is pass
 (uinput). libinput - KDE and Game Mode's gamescope both use it - then gives the whole touchpad: pointer, two-finger
 scroll, pinch, three/four-finger gestures. Taps are turned into clicks here (one finger: left, two: right), because
 libinput leaves tap-to-click off by default. Three fingers drag (press, move, lift to drop: windows, files). Four
-fingers are handled here as KDE shortcuts: swipe up or down toggles the Overview, a long swipe left or right switches
-desktop. Five fingers spread out show the desktop, pinched in bring the windows back. When the built-in screen comes back on, the touchscreen is released at once.
+fingers are handled here as KDE shortcuts: swipe up or down shows the window previews (Present Windows), a long swipe left or right switches
+desktop. Five fingers spread out show the desktop, pinched in bring the windows back. Four and five fingers are for the
+KDE desktop only; in Game Mode they do nothing. When the built-in screen comes back on, the touchscreen is released at once.
 
   egpu-touchpad            run (systemd: egpu-touchpad.service; started by the option, stopped when it is turned off)
   egpu-touchpad selftest   the tap and rotation rules without hardware
@@ -30,6 +31,7 @@ UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045
 UI_DEV_SETUP, UI_ABS_SETUP, UI_DEV_CREATE, UI_DEV_DESTROY = 0x405C5503, 0x401C5504, 0x5501, 0x5502
 EVENT = struct.Struct("llHHi")   # struct input_event on 64-bit
 ON = "/var/lib/nvegpu/touchpad.json"
+NAME = "EGPU Buddy touchpad (handheld screen)"
 TAP_MS, TAP_MOVE = 220, 0.03       # a tap: shorter than this, moving less than this share of the touchpad
 
 
@@ -148,12 +150,13 @@ class Pad:
         self.xr, self.yr = (ix[1], ix[2]), (iy[1], iy[2])
         ox, oy = (iy, ix) if self.rot in (90, 270) else (ix, iy)
         mm = panel_size_mm()
+        sp = 2.0
         if mm and not ox[5]:   # units per millimetre: libinput's gesture and scroll thresholds are in mm
             w, h = (mm[1], mm[0]) if self.rot in (90, 270) else mm
             ox[5], oy[5] = max(1, round((ox[2] - ox[1]) / max(w, 1))), max(1, round((oy[2] - oy[1]) / max(h, 1)))
         # speed: report fewer units per mm, so libinput sees a bigger pad and moves the pointer further per finger mm
         sp = settings().get("speed", 2.0)
-        sp = sp if isinstance(sp, (int, float)) and 0.25 <= sp <= 8 else 2.0
+        sp = float(sp) if isinstance(sp, (int, float)) and 0.25 <= sp <= 8 else 2.0
         ox[5], oy[5] = max(1, round(ox[5] / sp)), max(1, round(oy[5] / sp))
         self.ui = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
         fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_KEY); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_ABS); fcntl.ioctl(self.ui, UI_SET_EVBIT, EV_SYN)
@@ -163,34 +166,51 @@ class Pad:
         for code, info in ((ABS_X, ox), (ABS_Y, oy), (ABS_MT_POSITION_X, ox), (ABS_MT_POSITION_Y, oy), (ABS_MT_SLOT, islot), (ABS_MT_TRACKING_ID, itrack)):
             fcntl.ioctl(self.ui, UI_SET_ABSBIT, code)
             fcntl.ioctl(self.ui, UI_ABS_SETUP, struct.pack("Hxx6i", code, 0, *info[1:]))   # struct uinput_abs_setup
-        fcntl.ioctl(self.ui, UI_DEV_SETUP, struct.pack("4H80sI", 0x06, 0x1209, 0x7444, 1, b"EGPU Buddy touchpad (handheld screen)", 0))
+        fcntl.ioctl(self.ui, UI_DEV_SETUP, struct.pack("4H80sI", 0x06, 0x1209, 0x7444, 1, NAME.encode(), 0))
         fcntl.ioctl(self.ui, UI_DEV_CREATE)
         fcntl.ioctl(self.src, EVIOCGRAB, 1)
         self.slot, self.slots, self.held, self.out = 0, {}, set(), {}
         self.drag, self.wait_clear, self.drag_tid, self.peak = False, False, 60000, 0
         self.tap = Tap(max(ox[2] - ox[1], oy[2] - oy[1], 1))
         self.size, self.swipe, self.t3 = (max(ox[2] - ox[1], 1), max(oy[2] - oy[1], 1)), None, None
-        log(f"touchpad on: {name} (rotation {self.rot})")
+        self.lim = (ox[1], ox[2], oy[1], oy[2])
+        cfg = settings()
+        self.three, self.invert = cfg.get("drag", "three") != "tap", bool(cfg.get("invert_scroll"))
+        self.tdrag, self.last_tap, self.anchor = None, -1.0, None
+        # KDE turns libinput's own tap-to-click on for touchpads; taps are clicks here already (also in Game Mode),
+        # so switch KDE's off for this touchpad or every tap clicks twice
+        for d in glob.glob("/sys/class/input/event*/device/name"):
+            if open(d).read().strip() == NAME:
+                ev = d.split("/")[4]
+                for prop in ("tapToClick", "tapAndDrag"):
+                    self.kde("set-property", "org.kde.KWin", f"/org/kde/KWin/InputDevice/{ev}", "org.kde.KWin.InputDevice", prop, "b", "false", delay=2)
+        log(f"touchpad on: {name} (rotation {self.rot}, speed {sp}, {'three-finger drag' if self.three else 'double tap to drag'}"
+            f"{', inverted scroll' if self.invert else ''})")
 
     def emit(self, t, c, v):
         os.write(self.ui, EVENT.pack(0, 0, t, c, v))
 
-    def kde(self, *call):
-        """A D-Bus call in the logged-in user's KDE session (no-op outside the KDE desktop)."""
-        log("gesture:", call[-1])
+    def kde(self, *call, delay=0):
+        """busctl --user <call> in the logged-in user's KDE session (no-op outside the KDE desktop)."""
         for bus in sorted(glob.glob("/run/user/*/bus")):
             uid = os.stat(bus).st_uid
             if uid >= 1000:
                 subprocess.Popen(["setpriv", f"--reuid={uid}", f"--regid={uid}", "--init-groups", "env",
-                                  f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}", "busctl", "--user", "call", *call],
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                  f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}", "sh", "-c", 'sleep "$0"; exec busctl --user "$@"',
+                                  str(delay), *call], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
 
+    def desktop(self):
+        """The KDE desktop is up (not Game Mode); checked once per gesture."""
+        return subprocess.run(["pgrep", "-x", "kwin_wayland"], stdout=subprocess.DEVNULL).returncode == 0
+
     def shortcut(self, name):
-        self.kde("org.kde.kglobalaccel", "/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s", name)
+        log("gesture:", name)
+        self.kde("call", "org.kde.kglobalaccel", "/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s", name)
 
     def show_desktop(self, on):
-        self.kde("org.kde.KWin", "/KWin", "org.kde.KWin", "showDesktop", "b", "true" if on else "false")
+        log("gesture: show desktop" if on else "gesture: windows back")
+        self.kde("call", "org.kde.KWin", "/KWin", "org.kde.KWin", "showDesktop", "b", "true" if on else "false")
 
     def handle(self, ev):
         """Collect one frame of the touchscreen (multi-touch protocol B), then send it on as one touchpad frame."""
@@ -214,17 +234,23 @@ class Pad:
         n = len(pts)
         self.peak = max(self.peak, n) if n else 0   # most fingers since all were lifted
         cx, cy = (sum(p[0] for p in pts.values()) // n, sum(p[1] for p in pts.values()) // n) if n else (0, 0)
-        # four-finger swipe: up/down toggles the Overview, a long left/right swipe switches desktop (once per swipe)
+        # four and five fingers are KDE desktop shortcuts: in Game Mode (no KWin) they do nothing
+        if n in (4, 5) and not self.swipe and not self.wait_clear and not self.drag and self.peak == n and not self.desktop():
+            self.wait_clear = True; self.tap.reset()
+        # four-finger swipe: up/down toggles Present Windows, a long left/right swipe switches desktop (once per swipe)
         # five fingers: spread out shows the desktop, pinched in brings the windows back (once per gesture)
         if n in (4, 5) and self.peak == n and not self.swipe and not self.drag and not self.wait_clear:
-            self.swipe = [cx, cy, False, None]; self.tap.reset()   # [start x, start y, fired, five-finger spread]
+            self.swipe = [cx, cy, False, None, 1.0]; self.tap.reset()   # [start x, start y, fired, five-finger spread, ratio]
         if self.swipe and n == 0:
+            if self.swipe[3] and not self.swipe[2]:
+                log(f"five fingers: spread x{self.swipe[4]:.2f}, no action (needs x1.25 out or x0.80 in)")
             self.swipe = None
         spread = sum(math.hypot(p[0] - cx, p[1] - cy) for p in pts.values()) / n if n else 0
         if self.swipe and n == 5 and self.swipe[3] is None:
-            self.swipe[3] = max(spread, 1)
+            self.swipe[3:] = [max(spread, 1), 1.0]
         if self.swipe and n == 5 and not self.swipe[2]:
-            if spread >= 1.4 * self.swipe[3] or spread <= 0.7 * self.swipe[3]:
+            self.swipe[4] = spread / self.swipe[3]
+            if spread >= 1.25 * self.swipe[3] or spread <= 0.8 * self.swipe[3]:
                 self.swipe[2] = True; self.show_desktop(spread > self.swipe[3])
         if self.swipe and n == 4 and not self.swipe[2] and self.swipe[3] is None:
             dx, dy = cx - self.swipe[0], cy - self.swipe[1]
@@ -232,13 +258,13 @@ class Pad:
             if abs(dx) > abs(dy) and abs(dx) >= 0.3 * self.size[0]:   # ponytail: fixed thresholds, a knob if people ask
                 act = "Switch One Desktop to the Right" if dx < 0 else "Switch One Desktop to the Left"
             elif abs(dy) > abs(dx) and abs(dy) >= 0.15 * self.size[1]:
-                act = "Overview"
+                act = "Expose"   # Present Windows: previews of this desktop's windows
             if act:
                 self.swipe[2] = True; self.shortcut(act)
         # three-finger drag: three fingers down press the button on what is under the pointer, moving them drags it,
         # lifting them drops it. The pointer follows the middle of the three. It waits 50 ms so a four-finger swipe
         # whose fingers land as three first does not become a drag.
-        self.t3 = (self.t3 or now) if n == 3 and self.peak == 3 else None
+        self.t3 = (self.t3 or now) if self.three and n == 3 and self.peak == 3 else None
         pending = self.t3 is not None and not self.drag and not self.wait_clear and not self.swipe
         if pending and now - self.t3 >= 0.05:
             self.drag, self.drag_tid, pending, self.dragpos = True, self.drag_tid % 65000 + 1, False, [cx, cy]
@@ -262,6 +288,40 @@ class Pad:
             for s, (_, x, y) in target.items():
                 self.tap.down(s, x, y, now); self.tap.move(s, x, y)
             self.tap.fingers(n)
+            # inverted scroll: two fingers are mirrored through where they landed, so scrolling runs the other way while a
+            # pinch (their distance) stays the same; new tracking ids on the way in and out keep the pointer from jumping
+            if self.invert and n == 2:
+                key = {s: p[2] for s, p in pts.items()}
+                if not self.anchor or self.anchor[0] != key:
+                    self.anchor = (key, {s: (p[0], p[1]) for s, p in pts.items()})
+                lx0, lx1, ly0, ly1 = self.lim
+                target = {s: ((tid + 32768) % 65536, min(lx1, max(lx0, 2 * self.anchor[1][s][0] - x)),
+                              min(ly1, max(ly0, 2 * self.anchor[1][s][1] - y))) for s, (tid, x, y) in target.items()}
+            else:
+                self.anchor = None
+        # double tap to drag (when three-finger drag is off): tap, touch again and hold or move: the button is held; lifting
+        # keeps it held (locked), the next tap lets go
+        click = self.tap.up_all(now) if n == 0 and not self.drag and not self.swipe and not pending else None
+        if not self.three:
+            started = n == 1 and self.peak == 1 and not getattr(self, "was", 0)
+            if started and self.tdrag == "locked":
+                self.tdrag = "relock"
+            elif started and now - self.last_tap < 0.3:
+                self.tdrag, self.tdrag_t0 = "armed", now
+            if self.tdrag == "armed" and n == 1 and (now - self.tdrag_t0 > 0.18 or self.tap.moved > TAP_MOVE):
+                self.tdrag = "held"; self.tap.reset()
+            if n >= 2 and self.tdrag in ("held", "relock", "locked"):
+                self.tdrag = None
+            if n == 0:
+                if self.tdrag == "held" or (self.tdrag == "relock" and not click):
+                    self.tdrag = "locked"
+                elif self.tdrag == "relock":
+                    self.tdrag, click = None, None   # the tap that lets go clicks nothing more
+                elif self.tdrag == "armed":
+                    self.tdrag = None
+            if click == BTN_LEFT:
+                self.last_tap = now
+        self.was = n
         for s in set(self.out) - set(target):
             self.emit(EV_ABS, ABS_MT_SLOT, s); self.emit(EV_ABS, ABS_MT_TRACKING_ID, -1)
         for s, (tid, x, y) in target.items():
@@ -274,16 +334,14 @@ class Pad:
             _, x, y = target[min(target)]
             self.emit(EV_ABS, ABS_X, x); self.emit(EV_ABS, ABS_Y, y)
         self.out = target
-        want = ({TOOLS[min(len(target), 5)], BTN_TOUCH} if target else set()) | ({BTN_LEFT} if self.drag else set())
+        want = ({TOOLS[min(len(target), 5)], BTN_TOUCH} if target else set()) | ({BTN_LEFT} if self.drag or self.tdrag in ("held", "locked", "relock") else set())
         for k in self.held - want:
             self.emit(EV_KEY, k, 0)
         for k in want - self.held:
             self.emit(EV_KEY, k, 1)
         self.held = want
         self.emit(EV_SYN, SYN_REPORT, 0)
-        if n == 0 and not self.drag:
-            click = self.tap.up_all(now)
-            if click:
+        if click:
                 self.emit(EV_KEY, click, 1); self.emit(EV_SYN, SYN_REPORT, 0)
                 self.emit(EV_KEY, click, 0); self.emit(EV_SYN, SYN_REPORT, 0)
 
@@ -344,10 +402,14 @@ def selftest():
         def __init__(self):
             self.out, self.held, self.drag, self.wait_clear, self.drag_tid, self.tap, self.log, self.peak = {}, set(), False, False, 60000, Tap(1000), [], 0
             self.size, self.swipe, self.t3, self.cuts = (1000, 1000), None, None, []
+            self.on_desktop = True
+            self.lim, self.three, self.invert, self.tdrag, self.last_tap, self.anchor = (0, 1000, 0, 1000), True, False, None, -1.0, None
         def emit(self, t, c, v):
             self.log.append((t, c, v))
-        def kde(self, *call):
+        def kde(self, *call, delay=0):
             self.cuts.append(call[-1])
+        def desktop(self):
+            return self.on_desktop
     f = Fake()
     f.frame({0: (100, 100, 5)}, 0.0); f.frame({}, 0.05)
     assert (EV_KEY, BTN_LEFT, 1) in f.log, "one-finger tap clicks"
@@ -368,7 +430,7 @@ def selftest():
     f.frame(four(0, 0), 2.03)
     assert not f.drag and f.out == {} and f.swipe, "four fingers: a swipe, not a drag, nothing forwarded"
     f.frame(four(0, -200), 2.1); f.frame(four(0, -300), 2.15)
-    assert f.cuts == ["Overview"], "swipe up toggles the Overview once"
+    assert f.cuts == ["Expose"], "swipe up shows the window previews once"
     f.frame({s: p for s, p in four(0, -300).items() if s < 3}, 2.2)
     assert not f.drag, "a four-finger swipe losing a finger does not start a drag"
     f.frame({}, 2.3); f.cuts.clear()
@@ -379,11 +441,33 @@ def selftest():
     assert f.cuts == ["Switch One Desktop to the Left"], "a long swipe right: previous desktop"
     five = lambda rad: {s: (500 + round(rad * math.cos(s * 1.2566)), 500 + round(rad * math.sin(s * 1.2566)), 30 + s) for s in range(5)}
     f.cuts.clear(); f.frame({s: p for s, p in five(100).items() if s < 4}, 5.0); f.frame(five(100), 5.02)
-    f.frame(five(130), 5.1); assert f.cuts == [], "a small spread does nothing"
-    f.frame(five(160), 5.2); f.frame(five(200), 5.3); f.frame({}, 5.4)
+    f.frame(five(115), 5.1); assert f.cuts == [], "a small spread does nothing"
+    f.frame(five(120), 5.2); f.frame(five(200), 5.3); f.frame({}, 5.4)
     assert f.cuts == ["true"] and not f.drag, "five fingers spread out: show the desktop, once"
     f.cuts.clear(); f.frame(five(200), 6.0); f.frame(five(120), 6.1); f.frame({}, 6.2)
     assert f.cuts == ["false"], "five fingers pinched in: windows back"
+    f.on_desktop = False; f.cuts.clear(); f.frame(four(0, 0), 6.5); f.frame(four(0, -300), 6.6); f.frame({}, 6.7)
+    assert f.cuts == [] and f.out == {}, "Game Mode: four fingers do nothing"
+    f.on_desktop = True
+    # double tap to drag, with three-finger drag off
+    f.three, f.held = False, set()
+    f.frame({0: (100, 100, 40)}, 7.0); f.frame({}, 7.05)                     # tap: a click
+    f.frame({0: (100, 100, 41)}, 7.15); f.frame({0: (100, 100, 41)}, 7.4)   # touch again and hold
+    assert f.tdrag == "held" and BTN_LEFT in f.held, "double tap and hold: button held"
+    f.frame({0: (300, 100, 41)}, 7.5); f.frame({}, 7.6)
+    assert f.tdrag == "locked" and BTN_LEFT in f.held, "lifting keeps it held (locked)"
+    f.frame({0: (300, 100, 42)}, 8.0); f.frame({0: (400, 100, 42)}, 8.3); f.frame({}, 8.4)
+    assert f.tdrag == "locked" and BTN_LEFT in f.held, "moving again keeps dragging"
+    f.log.clear(); f.frame({0: (400, 100, 43)}, 9.0); f.frame({}, 9.05)
+    assert f.tdrag is None and BTN_LEFT not in f.held and (EV_KEY, BTN_LEFT, 1) not in f.log, "a tap lets go, no extra click"
+    f.frame({0: (100, 100, 44)}, 10.0); f.frame({}, 10.05); f.log.clear(); f.frame({0: (100, 100, 45)}, 10.15); f.frame({}, 10.2)
+    assert f.tdrag is None and f.log.count((EV_KEY, BTN_LEFT, 1)) == 1, "a quick double tap is a double click"
+    f.frame(pts, 11.0); f.frame(pts, 11.2); assert not f.drag, "three-finger drag off"
+    f.frame({}, 11.3)
+    # inverted scroll: two fingers mirrored through where they landed, distance kept
+    f.invert = True; f.frame({0: (400, 400, 50), 1: (600, 400, 51)}, 12.0); f.frame({0: (400, 300, 50), 1: (600, 300, 51)}, 12.1)
+    assert f.out[0][1:] == (400, 500) and f.out[1][1:] == (600, 500) and f.out[0][0] != 50, "two fingers up scroll the other way"
+    f.frame({}, 12.2)
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
     assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
     print("selftest ok")
