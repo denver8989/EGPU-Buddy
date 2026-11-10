@@ -1,3 +1,8 @@
+0.7.260 — AMD: plugging back in right after Safe Detach works.
+
+**AMD / Intel eGPU, Thunderbolt 3 docks** (AMD / Intel install only; NVIDIA unchanged)
+- Plugging the eGPU back in within 2 minutes of a desktop Safe Detach attached nothing until it was unplugged again. Fixed.
+
 0.7.259 — Desktop app uses the space on bigger screens.
 
 **Desktop app** (every setup)
