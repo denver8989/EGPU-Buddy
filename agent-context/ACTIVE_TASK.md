@@ -128,3 +128,4 @@ EGPU-019: owner live tests pass: three-finger drag (Firefox tab bar, no stuck), 
 EGPU-019 RELEASED 0.7.258 (7c9b22f, run 42818354635, owner OK). Settings UI not previewed before release (owner said release); take real screenshots after update. Game Mode touchpad not live-tested yet. Next: KWin window previews show icons only (EGPU-020).
 
 EGPU-020: KDE previews icons-only = kdeglobals SceneGraphBackend=software, removed (backup kept), applies next login. EGPU-021: desktop app layout (screen-sized window, masonry Extras, 2-col NVIDIA) committed locally, preview sent, awaiting OK.
+EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
