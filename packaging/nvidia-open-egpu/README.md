@@ -17,3 +17,14 @@ IgnorePkg on this machine). Runtime: `options nvidia NVreg_RegistryDwords="RmFor
 Do NOT enable the AUR package's own `nvidia-egpu-hotplug.rules` — NV-EGPU-Buddy's `98-egpu-surprise-remove.rules`
 + `egpu-surprise-recover` handle the removal (override with an empty /etc/udev/rules.d/90-nvidia-egpu-hotplug.rules).
 Verified 2026-09-11 with a real cable yank (RTX 5060 Ti, TB5, Strix Halo, kernel 7.1.8, 610.57.04).
+
+## 180-nvidia-open-dp-cec-over-aux.patch (not wired in yet)
+
+HDMI-CEC through a DisplayPort-to-HDMI adapter that tunnels CEC over AUX (the kernel's drm_dp_cec helper), which
+nvidia-drm never hooked up: a kernel-only NVKMS ioctl + KAPI call for native AUX (the RM control nvkms already uses
+for DPCD), a drm_dp_aux per SST DisplayPort connector, drm_dp_cec register / set_edid / unset_edid, a 100 ms poll for
+the CEC IRQ bit (no DP short-pulse reaches nvidia-drm), and AUX refused once the card is being removed (the
+inRemoval / inSurpriseRemoval flags of 165/166) so a Safe Detach or cable pull can't crash in the CEC teardown.
+Off unless `nvidia_drm.dp_cec=1`. Builds on 610.57.04, 615.78.08 (this file) and 620.70.06 (its own copy: 620
+dropped the disp handle from GetPerOpenConnector). Not in the PKGBUILDs yet: untested on hardware (needs a CEC-capable
+active DP-to-HDMI adapter), and adding it to the patch list rebuilds the driver for every NVIDIA install.

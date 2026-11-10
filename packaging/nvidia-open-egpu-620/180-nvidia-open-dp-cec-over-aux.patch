@@ -1,0 +1,455 @@
+--- a/kernel-open/common/inc/nvkms-kapi.h
++++ b/kernel-open/common/inc/nvkms-kapi.h
+@@ -1708,6 +1708,18 @@
+         struct NvKmsKapiDevice *device,
+         const NvU32 head,
+         struct NvKmsKapiVblankIntrCallback *pCallback);
++
++    /*!
++     * NV-EGPU-Buddy: one native AUX read or write (1..16 bytes) on a DisplayPort
++     * connector, for the kernel's DP CEC-tunneling-over-AUX helper.
++     * \return NV_TRUE on success; *size is the number of bytes transferred.
++     */
++    NvBool (*dpAuxTransfer)
++    (
++        struct NvKmsKapiDevice *device,
++        NvKmsKapiConnector connector,
++        NvBool write, NvU32 address, NvU8 *data, NvU32 *size
++    );
+ };
+ 
+ /** @} */
+--- a/kernel-open/nvidia-drm/nvidia-drm-connector.c
++++ b/kernel-open/nvidia-drm/nvidia-drm-connector.c
+@@ -140,10 +140,95 @@
+ }
+ #endif /* NV_DRM_CONNECTOR_ATTACH_HDR_OUTPUT_METADATA_PROPERTY_PRESENT */
+ 
++#if defined(NV_DRM_DP_CEC)
++static ssize_t nv_drm_dp_aux_transfer(struct drm_dp_aux *aux,
++                                      struct drm_dp_aux_msg *msg)
++{
++    struct nv_drm_connector *nv_connector =
++        container_of(aux, struct nv_drm_connector, aux);
++    struct nv_drm_device *nv_dev = to_nv_device(nv_connector->base.dev);
++    NvU32 size = msg->size;
++    NvBool write;
++
++    switch (msg->request) {
++    case DP_AUX_NATIVE_WRITE: write = NV_TRUE; break;
++    case DP_AUX_NATIVE_READ:  write = NV_FALSE; break;
++    default: return -EOPNOTSUPP;   /* native DPCD only (all the CEC helper uses) */
++    }
++
++    /* card going or gone (eGPU Safe Detach / cable pull): never touch it */
++    if (READ_ONCE(nv_dev->inRemoval) || READ_ONCE(nv_dev->inSurpriseRemoval) ||
++        nv_dev->pDevice == NULL) {
++        return -ENODEV;
++    }
++
++    if (size == 0) {
++        msg->reply = DP_AUX_NATIVE_REPLY_ACK;
++        return 0;
++    }
++    if (size > 16) {
++        size = 16;
++    }
++
++    if (!nvKms->dpAuxTransfer(nv_dev->pDevice, nv_connector->hConnector,
++                              write, msg->address, msg->buffer, &size)) {
++        return -EIO;
++    }
++
++    msg->reply = DP_AUX_NATIVE_REPLY_ACK;
++    return size;
++}
++
++static void nv_drm_dp_cec_poll(struct work_struct *work)
++{
++    struct nv_drm_connector *nv_connector =
++        container_of(to_delayed_work(work), struct nv_drm_connector, cec_poll);
++    struct nv_drm_device *nv_dev = to_nv_device(nv_connector->base.dev);
++
++    if (READ_ONCE(nv_dev->inRemoval) || READ_ONCE(nv_dev->inSurpriseRemoval)) {
++        return;
++    }
++    /* cheap while the adapter is off: drm_dp_cec_irq returns before any AUX access */
++    drm_dp_cec_irq(&nv_connector->aux);
++    schedule_delayed_work(&nv_connector->cec_poll, msecs_to_jiffies(100));
++}
++
++void nv_drm_connector_cec_init(struct drm_connector *connector,
++                               NvKmsKapiConnector hConnector)
++{
++    struct nv_drm_connector *nv_connector = to_nv_connector(connector);
++
++    if (!nv_drm_dp_cec_module_param || nv_connector->cec ||
++        nv_connector->type != NVKMS_CONNECTOR_TYPE_DP ||
++        nv_connector->dpAddress[0] != '\0') {   /* SST DisplayPort connectors only */
++        return;
++    }
++
++    nv_connector->hConnector = hConnector;
++    drm_dp_aux_init(&nv_connector->aux);
++    nv_connector->aux.name = "NVIDIA DP AUX (CEC)";
++    nv_connector->aux.dev = connector->dev->dev;
++    nv_connector->aux.drm_dev = connector->dev;
++    nv_connector->aux.transfer = nv_drm_dp_aux_transfer;
++    drm_dp_cec_register_connector(&nv_connector->aux, connector);
++    INIT_DELAYED_WORK(&nv_connector->cec_poll, nv_drm_dp_cec_poll);
++    nv_connector->cec = true;
++    schedule_delayed_work(&nv_connector->cec_poll, msecs_to_jiffies(100));
++}
++#endif /* NV_DRM_DP_CEC */
++
+ static void nv_drm_connector_destroy(struct drm_connector *connector)
+ {
+     struct nv_drm_connector *nv_connector = to_nv_connector(connector);
+ 
++#if defined(NV_DRM_DP_CEC)
++    if (nv_connector->cec) {
++        cancel_delayed_work_sync(&nv_connector->cec_poll);
++        drm_dp_cec_unregister_connector(&nv_connector->aux);   /* AUX refuses once the card is going */
++        nv_connector->cec = false;
++    }
++#endif
++
+     drm_connector_unregister(connector);
+ 
+     drm_connector_cleanup(connector);
+@@ -311,6 +396,16 @@
+ 
+     nv_drm_free(pDetectParams);
+ 
++#if defined(NV_DRM_DP_CEC)
++    if (nv_connector->cec) {
++        if (status == connector_status_connected && nv_connector->edid != NULL) {
++            drm_dp_cec_set_edid(&nv_connector->aux, nv_connector->edid);
++        } else {
++            drm_dp_cec_unset_edid(&nv_connector->aux);
++        }
++    }
++#endif
++
+     if (status == connector_status_disconnected &&
+         nv_connector->modeset_permission_filep) {
+         nv_drm_connector_revoke_permissions(dev, nv_connector);
+--- a/kernel-open/nvidia-drm/nvidia-drm-connector.h
++++ b/kernel-open/nvidia-drm/nvidia-drm-connector.h
+@@ -33,6 +33,13 @@
+ 
+ #include <drm/drm_connector.h>
+ 
++/* NV-EGPU-Buddy: DP CEC-tunneling-over-AUX (the kernel's drm_dp_cec helper) */
++#if defined(CONFIG_DRM_DISPLAY_DP_AUX_CEC) && __has_include(<drm/display/drm_dp_helper.h>)
++#include <drm/display/drm_dp_helper.h>
++#include <linux/workqueue.h>
++#define NV_DRM_DP_CEC 1
++#endif
++
+ #include "nvtypes.h"
+ #include "nvkms-api-types.h"
+ 
+@@ -56,6 +63,14 @@
+     enum NvKmsContentProtection cp;
+     bool cp_event_pending;
+ 
++#if defined(NV_DRM_DP_CEC)
++    /* NV-EGPU-Buddy: native AUX for the kernel's DP CEC-tunneling helper (nvidia_drm.dp_cec=1) */
++    NvKmsKapiConnector hConnector;
++    struct drm_dp_aux aux;
++    struct delayed_work cec_poll;   /* no DP short-pulse IRQ reaches nvidia-drm: poll the CEC IRQ bit */
++    bool cec;
++#endif
++
+     atomic_t connection_status_dirty;
+ 
+     /**
+@@ -136,6 +151,10 @@
+                                               const void *topology);
+ 
+ 
++#if defined(NV_DRM_DP_CEC)
++void nv_drm_connector_cec_init(struct drm_connector *connector, NvKmsKapiConnector hConnector);
++#endif
++
+ #endif /* NV_DRM_AVAILABLE */
+ 
+ #endif /* __NVIDIA_DRM_CONNECTOR_H__ */
+--- a/kernel-open/nvidia-drm/nvidia-drm-encoder.c
++++ b/kernel-open/nvidia-drm/nvidia-drm-encoder.c
+@@ -221,6 +221,10 @@
+         goto failed_connector_encoder_attach;
+     }
+ 
++#if defined(NV_DRM_DP_CEC)
++    nv_drm_connector_cec_init(connector, connectorInfo->handle);   /* NV-EGPU-Buddy, off unless dp_cec=1 */
++#endif
++
+     /* Attach encoder and connector */
+ 
+     ret = nv_drm_connector_attach_encoder(connector, encoder);
+--- a/kernel-open/nvidia-drm/nvidia-drm-linux.c
++++ b/kernel-open/nvidia-drm/nvidia-drm-linux.c
+@@ -42,6 +42,11 @@
+ #endif
+ 
+ MODULE_PARM_DESC(
++    dp_cec,
++    "NV-EGPU-Buddy: HDMI-CEC through a DisplayPort-to-HDMI adapter that tunnels it over AUX (1 = enable, 0 = disable (default))");
++module_param_named(dp_cec, nv_drm_dp_cec_module_param, bool, 0400);
++
++MODULE_PARM_DESC(
+     vblank,
+     "Enable drm vblank notification support (1 = enable, 0 = disable (default))");
+ module_param_named(vblank, nv_drm_vblank_module_param, bool, 0444);
+--- a/kernel-open/nvidia-drm/nvidia-drm-os-interface.c
++++ b/kernel-open/nvidia-drm/nvidia-drm-os-interface.c
+@@ -44,6 +44,7 @@
+ 
+ bool nv_drm_modeset_module_param = true;
+ bool nv_drm_fbdev_module_param = true;
++bool nv_drm_dp_cec_module_param = false;
+ bool nv_drm_vblank_module_param = false;
+ bool nv_drm_color_pipeline_module_param = true;
+ 
+--- a/kernel-open/nvidia-drm/nvidia-drm-os-interface.h
++++ b/kernel-open/nvidia-drm/nvidia-drm-os-interface.h
+@@ -66,6 +66,8 @@
+ #endif
+ /* Set to true when the vblank support feature is enabled. */
+ extern bool nv_drm_vblank_module_param;
++/* NV-EGPU-Buddy: DP CEC-tunneling-over-AUX on DisplayPort connectors (off by default). */
++extern bool nv_drm_dp_cec_module_param;
+ #if defined(NV_DRM_HAS_COLOROP)
+ /* Set to true when DRM color pipeline support is enabled. */
+ extern bool nv_drm_color_pipeline_module_param;
+--- a/src/nvidia-modeset/include/nvkms-rm.h
++++ b/src/nvidia-modeset/include/nvkms-rm.h
+@@ -36,6 +36,9 @@
+ #define NVKMS_RM_HANDLE_SPACE_DEVICE(_i)    ((_i) + 1)
+ #define NVKMS_RM_HANDLE_SPACE_FRAMELOCK(_i) (NV_MAX_DEVICES + (_i) + 1)
+ 
++NvBool nvDpAuxTransfer(NVConnectorEvoPtr pConnectorEvo, NvBool write,
++                       NvU32 address, NvU8 *data, NvU8 size, NvU8 *pDone);
++
+ NvBool nvWriteDPCDReg(NVConnectorEvoPtr pConnectorEvo,
+                       NvU32 dpcdAddr,
+                       NvU8 dpcdData);
+--- a/src/nvidia-modeset/interface/nvkms-api.h
++++ b/src/nvidia-modeset/interface/nvkms-api.h
+@@ -270,6 +270,7 @@
+     NVKMS_IOCTL_FRAMEBUFFER_CONSOLE_DISABLED,
+     NVKMS_IOCTL_REGISTER_VBLANK_INTR_CALLBACK,
+     NVKMS_IOCTL_UNREGISTER_VBLANK_INTR_CALLBACK,
++    NVKMS_IOCTL_DP_AUX_TRANSFER,   /* NV-EGPU-Buddy: native DPCD AUX for DP CEC-tunneling (kernel clients only) */
+ };
+ 
+ 
+@@ -4526,4 +4527,29 @@
+ };
+ 
+ 
++/*
++ * NVKMS_IOCTL_DP_AUX_TRANSFER (NV-EGPU-Buddy): one native AUX read or write of up to
++ * 16 bytes on a DisplayPort connector. Kernel clients only (nvidia-drm's drm_dp_aux for
++ * the kernel's DP CEC-tunneling-over-AUX helper).
++ */
++struct NvKmsDpAuxTransferRequest {
++    NvKmsDeviceHandle deviceHandle;
++    NvKmsDispHandle dispHandle;
++    NvKmsConnectorHandle connectorHandle;
++    NvU32 address;
++    NvU8 write;
++    NvU8 size;                 /* 1..16 */
++    NvU8 data[16];
++};
++
++struct NvKmsDpAuxTransferReply {
++    NvU8 size;                 /* bytes transferred */
++    NvU8 data[16];
++};
++
++struct NvKmsDpAuxTransferParams {
++    struct NvKmsDpAuxTransferRequest request; /*! in */
++    struct NvKmsDpAuxTransferReply reply;     /*! out */
++};
++
+ #endif /* NVKMS_API_H */
+--- a/src/nvidia-modeset/kapi/interface/nvkms-kapi.h
++++ b/src/nvidia-modeset/kapi/interface/nvkms-kapi.h
+@@ -1708,6 +1708,18 @@
+         struct NvKmsKapiDevice *device,
+         const NvU32 head,
+         struct NvKmsKapiVblankIntrCallback *pCallback);
++
++    /*!
++     * NV-EGPU-Buddy: one native AUX read or write (1..16 bytes) on a DisplayPort
++     * connector, for the kernel's DP CEC-tunneling-over-AUX helper.
++     * \return NV_TRUE on success; *size is the number of bytes transferred.
++     */
++    NvBool (*dpAuxTransfer)
++    (
++        struct NvKmsKapiDevice *device,
++        NvKmsKapiConnector connector,
++        NvBool write, NvU32 address, NvU8 *data, NvU32 *size
++    );
+ };
+ 
+ /** @} */
+--- a/src/nvidia-modeset/kapi/src/nvkms-kapi.c
++++ b/src/nvidia-modeset/kapi/src/nvkms-kapi.c
+@@ -1404,6 +1404,43 @@
+     return NV_TRUE;
+ }
+ 
++/* NV-EGPU-Buddy: native AUX for DP CEC-tunneling */
++static NvBool DpAuxTransfer
++(
++    struct NvKmsKapiDevice *device,
++    NvKmsKapiConnector connector,
++    NvBool write, NvU32 address, NvU8 *data, NvU32 *size
++)
++{
++    struct NvKmsDpAuxTransferParams params = { };
++
++    if (device == NULL || data == NULL || size == NULL ||
++        *size == 0 || *size > sizeof(params.request.data)) {
++        return NV_FALSE;
++    }
++
++    params.request.deviceHandle    = device->hKmsDevice;
++    params.request.dispHandle      = device->hKmsDisp;
++    params.request.connectorHandle = connector;
++    params.request.address         = address;
++    params.request.write           = write ? 1 : 0;
++    params.request.size            = (NvU8)*size;
++    if (write) {
++        nvkms_memcpy(params.request.data, data, *size);
++    }
++
++    if (!nvkms_ioctl_from_kapi(device->pKmsOpen, NVKMS_IOCTL_DP_AUX_TRANSFER,
++                               &params, sizeof(params))) {
++        return NV_FALSE;
++    }
++
++    if (!write) {
++        nvkms_memcpy(data, params.reply.data, params.reply.size);
++    }
++    *size = params.reply.size;
++    return NV_TRUE;
++}
++
+ static NvBool GetConnectorInfo
+ (
+     struct NvKmsKapiDevice *device,
+@@ -4270,6 +4307,7 @@
+     funcsTable->getDeviceResourcesInfo = GetDeviceResourcesInfo;
+     funcsTable->getDisplays            = GetDisplays;
+     funcsTable->getConnectorInfo       = GetConnectorInfo;
++    funcsTable->dpAuxTransfer          = DpAuxTransfer;
+ 
+     funcsTable->getStaticDisplayInfo   = GetStaticDisplayInfo;
+     funcsTable->getDynamicDisplayInfo  = GetDynamicDisplayInfo;
+--- a/src/nvidia-modeset/src/nvkms-rm.c
++++ b/src/nvidia-modeset/src/nvkms-rm.c
+@@ -1501,6 +1501,44 @@
+     return TRUE;
+ }
+ 
++/* NV-EGPU-Buddy: a native AUX read/write of 1..16 bytes (DP CEC-tunneling) */
++NvBool nvDpAuxTransfer(NVConnectorEvoPtr pConnectorEvo, NvBool write,
++                       NvU32 address, NvU8 *data, NvU8 size, NvU8 *pDone)
++{
++    NV0073_CTRL_DP_AUXCH_CTRL_PARAMS params = { };
++    NVDevEvoPtr pDevEvo = pConnectorEvo->pDispEvo->pDevEvo;
++
++    if (size == 0 || size > NV0073_CTRL_DP_AUXCH_MAX_DATA_SIZE) {
++        return FALSE;
++    }
++
++    params.displayId = nvDpyIdToNvU32(pConnectorEvo->displayId);
++    params.cmd = DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_TYPE, _AUX);
++    params.cmd |= write ? DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_REQ_TYPE, _WRITE) :
++                          DRF_DEF(0073_CTRL, _DP, _AUXCH_CMD_REQ_TYPE, _READ);
++    params.addr = address;
++    if (write) {
++        nvkms_memcpy(params.data, data, size);
++    }
++    params.size = size - 1;   /* 0-based on input */
++
++    if (nvRmApiControl(nvEvoGlobal.clientHandle,
++                       pDevEvo->displayCommonHandle,
++                       NV0073_CTRL_CMD_DP_AUXCH_CTRL,
++                       &params, sizeof(params)) != NVOS_STATUS_SUCCESS) {
++        return FALSE;
++    }
++
++    if (params.size > size) {
++        return FALSE;
++    }
++    if (!write) {
++        nvkms_memcpy(data, params.data, params.size);
++    }
++    *pDone = (NvU8)params.size;
++    return TRUE;
++}
++
+ NvBool nvWriteDPCDReg(NVConnectorEvoPtr pConnectorEvo,
+                       NvU32 dpcdAddr,
+                       NvU8 dpcdData)
+--- a/src/nvidia-modeset/src/nvkms.c
++++ b/src/nvidia-modeset/src/nvkms.c
+@@ -1776,6 +1776,44 @@
+  * Get the connector dynamic data.  This information should reflects changes to
+  * the connector over time (e.g. for DisplayPort MST devices).
+  */
++/* NV-EGPU-Buddy: native AUX for DP CEC-tunneling; kernel clients (nvidia-drm) only */
++static NvBool DpAuxTransfer(struct NvKmsPerOpen *pOpen, void *pParamsVoid)
++{
++    struct NvKmsDpAuxTransferParams *pParams = pParamsVoid;
++    struct NvKmsPerOpenConnector *pOpenConnector;
++    NVConnectorEvoPtr pConnectorEvo;
++    NvU8 done = 0;
++
++    if (pOpen->clientType != NVKMS_CLIENT_KERNEL_SPACE) {
++        return FALSE;
++    }
++
++    pOpenConnector = GetPerOpenConnector(pOpen,
++                                         pParams->request.deviceHandle,
++                                         pParams->request.connectorHandle);
++    if (pOpenConnector == NULL) {
++        return FALSE;
++    }
++
++    pConnectorEvo = pOpenConnector->pConnectorEvo;
++    if (!nvConnectorUsesDPLib(pConnectorEvo)) {
++        return FALSE;
++    }
++
++    nvkms_memset(&pParams->reply, 0, sizeof(pParams->reply));
++    if (pParams->request.write) {
++        nvkms_memcpy(pParams->reply.data, pParams->request.data,
++                     sizeof(pParams->reply.data));
++    }
++    if (!nvDpAuxTransfer(pConnectorEvo, pParams->request.write,
++                         pParams->request.address, pParams->reply.data,
++                         pParams->request.size, &done)) {
++        return FALSE;
++    }
++    pParams->reply.size = done;
++    return TRUE;
++}
++
+ static NvBool QueryConnectorDynamicData(struct NvKmsPerOpen *pOpen,
+                                         void *pParamsVoid)
+ {
+@@ -5062,6 +5100,7 @@
+         ENTRY(NVKMS_IOCTL_FRAMEBUFFER_CONSOLE_DISABLED, FramebufferConsoleDisabled),
+         ENTRY(NVKMS_IOCTL_REGISTER_VBLANK_INTR_CALLBACK, RegisterVblankIntrCallback),
+         ENTRY(NVKMS_IOCTL_UNREGISTER_VBLANK_INTR_CALLBACK, UnregisterVblankIntrCallback),
++        ENTRY(NVKMS_IOCTL_DP_AUX_TRANSFER, DpAuxTransfer),
+     };
+ 
+     struct NvKmsPerOpen *pOpen = pOpenVoid;
