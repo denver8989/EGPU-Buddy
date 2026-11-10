@@ -11,6 +11,7 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 
 - Legion Go S, RX 9070 XT, Trebleet Titan Ridge. Latest report BS5BEC on 0.7.250 still crashed. Trace from 22HUT6 reaches DP-CEC teardown and AUX NULL dereference; prior fixes never discovered the adapter. The causal fix remains a hardware-unconfirmed hypothesis, not a proven resolution.
 - 0.7.251 released; owner given the Discord message for Ming.
+- Tester evidence (2026-11-10, via owner): with cec-mote UNINSTALLED the crash still happened; detach worked once the CEC-capable DP->HDMI adapter was unplugged. Confirms DP-CEC adapter as the trigger, independent of cec-mote (SteamOS's own CEC service / cec-wake may configure it). Open risk: if a CEC service reconfigures the adapter between our clear and the unbind, the crash could remain; the 'released (rc N)' line will show.
 - Next: on Ming's report, check egpu-generic.log for "CEC cecN on ..." / "CEC cecN released (rc N)" / "no CEC adapter registered" lines, then the kmsg trace.
 - (old) Next after release: provide a short message asking Ming to update, try Safe Detach once, and send a report either way. Do not send messages externally without an explicit instruction. Inspect all report sections, especially CEC discovery/release lines, `egpu-generic.log`, and detach kernel trace.
 - Success requires actual report evidence; publication alone does not close this task.
