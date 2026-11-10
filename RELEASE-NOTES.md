@@ -1,3 +1,8 @@
+0.7.257 — XR glasses show their own picture.
+
+**XR glasses** (plugin and desktop app)
+- The screen picker shows each glasses model's own picture (XREAL, VITURE), in Game Mode and on the desktop; it showed the same generic glasses for every brand.
+
 0.7.256 — XR glasses on the desktop work as in Game Mode.
 
 **XR glasses** (SteamOS and CachyOS with an NVIDIA eGPU; other setups unchanged)
