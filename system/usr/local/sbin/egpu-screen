@@ -412,8 +412,16 @@ def only(conn):
     names = _kwin_outputs()
     if conn not in names:
         return f"{conn} is not a screen KWin drives"
-    args = [f"output.{conn}.enable", f"output.{conn}.priority.1"] + [f"output.{n}.disable" for n in names if n != conn]
-    subprocess.run(["kscreen-doctor"] + args, capture_output=True, timeout=20)
+    on, off = [f"output.{conn}.enable", f"output.{conn}.priority.1"], [f"output.{n}.disable" for n in names if n != conn]
+    if _reference_path() and off:
+        # NVIDIA reference path: one KWin change that turned the monitor on AND the TV off (DP-7 5120x1440@144 HDR,
+        # HDMI-A-1 off; RTX 5060 Ti, 2026-11-10) hit "Flip event timeout on head 0" in nvidia-drm and the monitor stayed
+        # black until its cable was replugged. The picked screen on first, the others off once it is up: two smaller changes.
+        subprocess.run(["kscreen-doctor"] + on, capture_output=True, timeout=20)
+        time.sleep(4)   # ponytail: fixed settle; poll KWin for the output's first frame if 4 s ever proves short
+        subprocess.run(["kscreen-doctor"] + off, capture_output=True, timeout=20)
+    else:
+        subprocess.run(["kscreen-doctor"] + on + off, capture_output=True, timeout=20)
     if not conn.startswith("eDP") and not any(n.startswith("eDP") for n in names):
         subprocess.run(["sudo", "-n", "/usr/local/sbin/nv-egpu-buddy-privileged", "panel-off"], capture_output=True, timeout=20)
     return "only " + conn
