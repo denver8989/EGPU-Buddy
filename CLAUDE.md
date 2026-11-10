@@ -1,5 +1,9 @@
 # EGPU Buddy: hard rules for every change
 
+## Shared continuity — read before starting or resuming
+
+Read `AGENT_HANDOFF.md`, `agent-context/ACTIVE_TASK.md`, and `AGENTS.md` before substantive work. They hold the shared task queue, ownership, approvals, validation gaps, and next actions for both Claude and Codex. Update them at meaningful checkpoints and before stopping; local Claude memory alone does not reach Codex Remote. The global `agent-handoff` helper targets a different repo; do not run it here. Preserve all unfinished tasks and other agents' dirty work. See `AGENTS.md` for the startup and transfer protocol.
+
 These rules come from the project owner. They are not suggestions. Every fix, feature and release follows them.
 
 ## 1. One hardware scenario per fix. Everything else stays byte-for-byte as it was.
