@@ -533,6 +533,15 @@ if want desktopapp; then
   rm -f "$USER_HOME/.config/autostart/egpu-buddy-tray.desktop"
   userctl enable egpu-buddy-tray.service >/dev/null 2>&1 || true
   uown "$D" "$USER_HOME/.local/bin/egpu-buddy" "$USER_HOME/.config/autostart/egpu-buddy-tray.desktop"
+  # NVIDIA reference path: an update that doesn't come from the app's own Update (the plugin's auto-update, Setup in the
+  # plugin, a manual install) left the running app on its old backend until a reboot: new desktop features missing
+  # (0.7.254's TV controls, owner's Legion Go 2). Restart the backend and the tray app on the new files, as the app's
+  # Update does (egpu-buddy-update does it itself while its run is in progress).
+  if [ "$IS_BAZZITE" = 0 ] && [ "$GPU_VENDOR" = nvidia ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ ! -e /var/lib/nvegpu/xg-mobile-seen ] &&
+     pgrep -u "$USER_UID" -f 'egpu-buddy-server[.]py' >/dev/null 2>&1 && ! grep -qs '"state": *"running"' /run/nvegpu/update-status.json; then
+    sudo systemd-run --quiet --collect --on-active=4 --unit="egpu-buddy-app-restart-$(date +%s)" /bin/sh -c "pkill -u $USER_UID -f 'egpu-buddy-server[.]py'; runuser -u $USER_NAME -- env XDG_RUNTIME_DIR=/run/user/$USER_UID DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$USER_UID/bus systemctl --user try-restart egpu-buddy-tray.service" >/dev/null 2>&1 || true
+    say "   the running desktop app restarts on the new version"
+  fi
 fi
 
 # ---- Decky plugin --------------------------------------------------------------------------------
