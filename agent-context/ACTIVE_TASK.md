@@ -59,6 +59,11 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 - 2026-11-10: wired into all PKGBUILDs (pkgrel 610->4, 615/620->2 => every NVIDIA install rebuilds on release), Bazzite stamp includes pkgrel; option nvidia_dp_cec writes /etc/modprobe.d/egpu-buddy-dp-cec.conf (uninstall removes); CEC upgrade (power read via SendReceiveRawMessage, wake-if-off + SetActiveSource on move to TV matched by EDID PA, Switch TV button). Not released, not hardware-tested.
 - (old) Next when adapter arrives: add to PKGBUILD source/sha256/prepare of the active driver dir (CachyOS, SteamOS installer and Bazzite build-modules.sh all read that list), a modprobe option toggle, then test /dev/cecN + cecd + Safe Detach/yank.
 
+## EGPU-018 — XR glasses on the desktop like Game Mode | waiting-owner-test (released 0.7.256, untested on hardware) | unclaimed | NVIDIA reference path
+
+- Owner: desktop app glasses pick must work as Game Mode (eGPU renders, glasses only). 0.7.256: env script handheld branch: USB-C pick -> KWIN_DRM_DEVICES=egpu:igpu (NVIDIA EGL), autostart -> egpu-screen only <glasses> (+best mode); app desktop_on egpu/both/handheld, screens carry "desk". Also glasses detection + XR_FRONT picture in app, best mode (highest res then refresh) for handheld USB-C screens.
+- Risk: multi-GPU KWin (disabled by default since 2026-07 for desktop sluggishness + eDP console lifeboat) only while glasses picked. First real run must be watched by the owner; recovery = pick monitor (restart eGPU-only) or set-game-screen DP-7 + logout.
+
 ## EGPU-003 — egpu-screen CEC discovery path | waiting-user | unclaimed
 
 - `_cec_for` reportedly has the same `/sys/class/cec` bug across all scenarios. Claude told owner but did not change it. No approval to widen the AMD-specific fix was observed.
