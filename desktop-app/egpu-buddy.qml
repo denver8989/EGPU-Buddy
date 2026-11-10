@@ -15,7 +15,18 @@ ApplicationWindow {
     // Shown from onCompleted, after the domain is cleared: the window's Wayland app id is then the runner's name, which the
     // launcher sets to "egpu-buddy" (= egpu-buddy.desktop), so the taskbar shows the app's icon and name, not "qml".
     visible: false
-    Component.onCompleted: { Qt.application.domain = ""; if (!startHidden) show() }
+    // opens sized to the screen: up to 1600 x 1100, never smaller than the old 1060 x 660 (--size WxH: test hook)
+    readonly property var forcedSize: Qt.application.arguments.indexOf("--size") >= 0 ? Qt.application.arguments[Qt.application.arguments.indexOf("--size") + 1].split("x").map(Number) : null
+    Component.onCompleted: {
+        Qt.application.domain = ""
+        if (forcedSize) { width = forcedSize[0]; height = forcedSize[1] }
+        else if (Screen.desktopAvailableWidth > 0) {
+            width = Math.max(1060, Math.min(1600, Math.round(Screen.desktopAvailableWidth * 0.9)))
+            height = Math.max(660, Math.min(1100, Math.round(Screen.desktopAvailableHeight * 0.9)))
+        }
+        exPlace()
+        if (!startHidden) show()
+    }
     property int showSeq: -1                   // the launcher asks a running instance to show itself through the backend
     // NV GPU Buddy mode (experimental, a BUILT-IN NVIDIA card): the same app under its own name, without the eGPU parts.
     // Every `nvb` binding is for that mode only; an eGPU install never reports the track and looks as before.
@@ -63,6 +74,15 @@ ApplicationWindow {
     readonly property int clkMax: isNum(g["clocks.max.graphics"]) ? Math.round(+g["clocks.max.graphics"]) : 0
     property bool clkTouched: false
     // NVIDIA settings (experimental)
+    // Extras page: the cards in 1, 2 or 3 columns by window width, each column stacked without holes
+    readonly property int exCols: width < 760 ? 1 : width < 1500 ? 2 : 3
+    function exPlace() {
+        var cols = [exC0, exC1, exC2]
+        var plan = { 1: [[cGame, cUpd, cExtras, cTouch, cTV, cLook]], 2: [[cGame, cExtras, cTV], [cUpd, cTouch, cLook]],
+                     3: [[cGame, cExtras, cLook], [cUpd, cTouch], [cTV]] }[exCols]
+        plan.forEach(function(col, i) { col.forEach(function(c) { c.parent = cols[i] }) })
+    }
+    onExColsChanged: exPlace()
     property int page: Qt.application.arguments.indexOf("--page") >= 0 ? +(Qt.application.arguments[Qt.application.arguments.indexOf("--page") + 1] || 0) : 0   // --page N: test hook
     readonly property int pg: (nl && page === 2) ? 2 : (page === 1 && nvShow ? 1 : 0)
     readonly property bool nvShow: !!(s.present && (s.vendor === "nvidia" || s.vendor === ""))
@@ -254,6 +274,7 @@ ApplicationWindow {
     // a card of the new look; in the classic look it is invisible (no box, no padding), so the classic layout is unchanged
     component Card: Rectangle {
         default property alias content: col.data
+        property bool show: true; visible: show
         readonly property int pad: win.nl ? 16 : 0
         Layout.fillWidth: true
         radius: 14; color: win.nl ? palette.base : "transparent"; border.color: win.nl ? palette.light : "transparent"
@@ -414,32 +435,35 @@ ApplicationWindow {
                     Badge { text: "Experimental"; lit: true }
                     Button { text: "Restore"; onClicked: win.saveNv(Object.assign({}, win.nv.defaults || {})) }
                 }
-                NvRow { key: "low_latency"; title: "Low latency mode"; desc: "Frames queued ahead of the screen (DirectX 9-12 games). Ultra adds NVIDIA's latency pacing in DirectX 11 games."
-                        opts: [["off", "Off (game decides)"], ["on", "On"], ["ultra", "Ultra"]] }
-                // Ultra needs a recent Proton (DXVK 2.6+): offer the latest GE-Proton when none is installed
-                Frame { Layout.fillWidth: true; padding: 10; visible: win.nvEdit.low_latency === "ultra"
-                    RowLayout { anchors.fill: parent; spacing: 10
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12
-                            text: (win.nv.proton || {}).ready
-                                  ? "Ultra: pick " + ((win.nv.proton.tools || []).filter(function(t) { return t.ok }).map(function(t) { return t.name }).join(" or ")) + " for the game (Properties > Compatibility), or for every game in Steam Settings > Compatibility."
-                                  : "Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: " + (((win.nv.proton || {}).tools || []).map(function(t) { return t.name }).join(", ") || "none found") + "). " + (((win.nv.proton || {}).install || {}).message || "") }
-                        Button { text: (((win.nv.proton || {}).install || {}).state === "running") ? "Installing…" : "Install latest GE-Proton"
-                                 visible: !(win.nv.proton || {}).ready; enabled: (((win.nv.proton || {}).install || {}).state !== "running")
-                                 onClicked: { win.act("proton-install"); win.loadNv() } } } }
-                NvRow { key: "power"; when: "Instant"; title: "Power management mode"; desc: "Prefer maximum performance holds the GPU clock up while a game runs, and lets go when it closes. Not with a GPU clock limit or on an ASUS XG Mobile."
-                        opts: [["adaptive", "Adaptive (driver)"], ["max", "Prefer maximum performance"]] }
-                NvRow { key: "vsync"; title: "Vertical sync"; desc: "Waits for the screen refresh to avoid tearing (DirectX 9-12 and OpenGL games). Game Mode tears only with Steam's Allow tearing."
-                        opts: [["app", "Use the program setting"], ["off", "Off"], ["on", "On"]] }
-                NvRow { key: "fps_limit"; title: "Max frame rate"; desc: "Caps frames per second to save power and heat (DirectX 9-12 games). In Game Mode, Steam's own limit works too; the lower one wins."
-                        opts: [[0, "Off"], [30, "30 FPS"], [40, "40 FPS"], [45, "45 FPS"], [60, "60 FPS"], [72, "72 FPS"], [90, "90 FPS"], [120, "120 FPS"], [144, "144 FPS"], [165, "165 FPS"]] }
-                NvRow { key: "aniso"; title: "Anisotropic filtering"; desc: "Sharper textures at steep angles (DirectX 9-11 and OpenGL games; DirectX 12 games use their own setting)."
-                        opts: [[0, "Program-controlled"], [2, "2x"], [4, "4x"], [8, "8x"], [16, "16x"]] }
-                NvRow { key: "sharpen"; title: "Image sharpening"; desc: "The NVIDIA driver's own sharpening (Vulkan and OpenGL games)."
-                        opts: [[0, "Off"], [20, "Low (20)"], [50, "Medium (50)"], [80, "High (80)"], [100, "Maximum (100)"]] }
-                NvRow { key: "shader_cache"; title: "Shader cache size"; desc: "Disk space the driver keeps for compiled shaders. Larger means less stutter in big games (the driver's default is 1 GB)."
-                        opts: [["default", "Driver default"], ["1", "1 GB"], ["5", "5 GB"], ["10", "10 GB"], ["unlimited", "Unlimited"]] }
-                NvRow { key: "gl_threaded"; title: "Threaded optimization"; desc: "Spreads driver work over several CPU cores (OpenGL games only; Vulkan and Proton games already do)."
-                        opts: [["auto", "Auto"], ["on", "On"], ["off", "Off"]] }
+                // two settings per row on a wide window
+                GridLayout { Layout.fillWidth: true; columns: win.width >= 1300 ? 2 : 1; columnSpacing: 10; rowSpacing: win.nl ? 10 : 12
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "low_latency"; title: "Low latency mode"; desc: "Frames queued ahead of the screen (DirectX 9-12 games). Ultra adds NVIDIA's latency pacing in DirectX 11 games."
+                            opts: [["off", "Off (game decides)"], ["on", "On"], ["ultra", "Ultra"]] }
+                    // Ultra needs a recent Proton (DXVK 2.6+): offer the latest GE-Proton when none is installed
+                    Frame { Layout.fillWidth: true; padding: 10; visible: win.nvEdit.low_latency === "ultra"
+                        RowLayout { anchors.fill: parent; spacing: 10
+                            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12
+                                text: (win.nv.proton || {}).ready
+                                      ? "Ultra: pick " + ((win.nv.proton.tools || []).filter(function(t) { return t.ok }).map(function(t) { return t.name }).join(" or ")) + " for the game (Properties > Compatibility), or for every game in Steam Settings > Compatibility."
+                                      : "Ultra needs Proton 10, GE-Proton 10 or Proton Experimental (installed now: " + (((win.nv.proton || {}).tools || []).map(function(t) { return t.name }).join(", ") || "none found") + "). " + (((win.nv.proton || {}).install || {}).message || "") }
+                            Button { text: (((win.nv.proton || {}).install || {}).state === "running") ? "Installing…" : "Install latest GE-Proton"
+                                     visible: !(win.nv.proton || {}).ready; enabled: (((win.nv.proton || {}).install || {}).state !== "running")
+                                     onClicked: { win.act("proton-install"); win.loadNv() } } } }
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "power"; when: "Instant"; title: "Power management mode"; desc: "Prefer maximum performance holds the GPU clock up while a game runs, and lets go when it closes. Not with a GPU clock limit or on an ASUS XG Mobile."
+                            opts: [["adaptive", "Adaptive (driver)"], ["max", "Prefer maximum performance"]] }
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "vsync"; title: "Vertical sync"; desc: "Waits for the screen refresh to avoid tearing (DirectX 9-12 and OpenGL games). Game Mode tears only with Steam's Allow tearing."
+                            opts: [["app", "Use the program setting"], ["off", "Off"], ["on", "On"]] }
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "fps_limit"; title: "Max frame rate"; desc: "Caps frames per second to save power and heat (DirectX 9-12 games). In Game Mode, Steam's own limit works too; the lower one wins."
+                            opts: [[0, "Off"], [30, "30 FPS"], [40, "40 FPS"], [45, "45 FPS"], [60, "60 FPS"], [72, "72 FPS"], [90, "90 FPS"], [120, "120 FPS"], [144, "144 FPS"], [165, "165 FPS"]] }
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "aniso"; title: "Anisotropic filtering"; desc: "Sharper textures at steep angles (DirectX 9-11 and OpenGL games; DirectX 12 games use their own setting)."
+                            opts: [[0, "Program-controlled"], [2, "2x"], [4, "4x"], [8, "8x"], [16, "16x"]] }
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "sharpen"; title: "Image sharpening"; desc: "The NVIDIA driver's own sharpening (Vulkan and OpenGL games)."
+                            opts: [[0, "Off"], [20, "Low (20)"], [50, "Medium (50)"], [80, "High (80)"], [100, "Maximum (100)"]] }
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "shader_cache"; title: "Shader cache size"; desc: "Disk space the driver keeps for compiled shaders. Larger means less stutter in big games (the driver's default is 1 GB)."
+                            opts: [["default", "Driver default"], ["1", "1 GB"], ["5", "5 GB"], ["10", "10 GB"], ["unlimited", "Unlimited"]] }
+                    NvRow { Layout.preferredWidth: 1; Layout.fillHeight: true; key: "gl_threaded"; title: "Threaded optimization"; desc: "Spreads driver work over several CPU cores (OpenGL games only; Vulkan and Proton games already do)."
+                            opts: [["auto", "Auto"], ["on", "On"], ["off", "Off"]] }
+                }
                 // when changes take effect: with the loader in Steam, at the next game launch; before that, one Steam restart
                 Frame { Layout.fillWidth: true; padding: 10
                     RowLayout { anchors.fill: parent; spacing: 10
@@ -457,13 +481,18 @@ ApplicationWindow {
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11
                     text: "* Experimental. Done with what Linux offers rather than NVIDIA's control panel: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options, and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and its own dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Turn off removes it from games completely. In Game Mode the plugin also has Steam's own live settings (frame limit, tearing, VRR, sharpness). Not available yet: FXAA, texture filtering quality, page flipping." } }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 2
-                GridLayout { Layout.fillWidth: true; columns: win.width < 760 ? 1 : 2; columnSpacing: 14; rowSpacing: 14
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv
+                // cards stack in columns (no hole under a short card): 1 column on a small window, 2, or 3 on a wide one
+                RowLayout { Layout.fillWidth: true; spacing: 14
+                    ColumnLayout { id: exC0; Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; spacing: 14 }
+                    ColumnLayout { id: exC1; visible: win.exCols > 1; Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; spacing: 14 }
+                    ColumnLayout { id: exC2; visible: win.exCols > 2; Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; spacing: 14 } }
+                Item { id: exHold; visible: false; Layout.preferredHeight: 0
+                    Card { id: cGame; show: !!win.ex.tv
                         Head { text: "Game Mode" }
                         Switch { Layout.fillWidth: true; text: "Best resolution and refresh rate on every screen"; checked: !!win.ex.game_res; onToggled: win.setEx("game_res_native", checked) }
                         Switch { Layout.fillWidth: true; text: "Steam menu fix"; visible: !!(win.ex.steam_fix || {}).available; checked: !!(win.ex.steam_fix || {}).enabled; onToggled: { win.act("steam-fix", { value: checked }); win.loadEx() } }
                         Button { text: "Wake screens"; onClicked: win.act("wake-screens") } }
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1
+                    Card { id: cUpd
                         Head { text: "Updates" }
                         Switch { Layout.fillWidth: true; visible: !!win.ex.tv; text: "Automatic updates"; checked: !!win.ex.auto_update; onToggled: win.setEx("auto_update", checked) }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Installed " + (win.s.installed || "unknown") + (win.s.latest ? " · newest " + win.s.latest : "") }
@@ -472,7 +501,7 @@ ApplicationWindow {
                             Button { text: "Check for updates"; onClicked: win.act("check-update") }
                             Button { text: "Repair install"; onClicked: updateDlg.open() }   // the update window offers Reinstall: it repairs the system files and the plugin
                             Button { text: "What's new"; onClicked: updateDlg.open() } } }
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv
+                    Card { id: cExtras; show: !!win.ex.tv
                         RowLayout { spacing: 8
                             Head { text: "Extras" }
                             Badge { text: "testing · off by default"; lit: false } }
@@ -481,7 +510,7 @@ ApplicationWindow {
                                 text: (win.ex.usb4 || {}).name ? (win.ex.usb4.name + ": " + win.ex.usb4.total + " Gb/s (" + win.ex.usb4.lanes + " x " + win.ex.usb4.per_lane + ")" + (win.ex.usb4.slow ? " · slower than USB4 should be: try another cable or port" : "")) : "No USB4 link found." }
                     }
                     // Handheld screen as touchpad (opt-in, off by default): every setup, as in the Game Mode plugin
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.touchpad
+                    Card { id: cTouch; show: !!win.ex.touchpad
                         RowLayout { spacing: 8
                             Head { text: "Touchpad" }
                             Badge { text: "testing · off by default"; lit: false } }
@@ -498,7 +527,7 @@ ApplicationWindow {
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; font.pixelSize: 12
                                 text: "While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, three-finger drag or double tap to drag. Game Mode and the desktop. Desktop only: four fingers up or down show the window previews, a long swipe left or right switches desktop, five fingers spread out show the desktop and pinched in bring the windows back." } }
                     // TV extras (opt-in, off by default): every setup, as in the Game Mode plugin
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; visible: !!win.ex.tv_any
+                    Card { id: cTV; show: !!win.ex.tv_any
                         RowLayout { spacing: 8
                             Head { text: "TV" }
                             Badge { text: "testing · off by default"; lit: false } }
@@ -516,19 +545,19 @@ ApplicationWindow {
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!(win.tvr.nv_cec || {}).nvidia && !win.nvb; font.pixelSize: 12
                                 text: "HDMI-CEC from the NVIDIA card through a CEC-capable DisplayPort-to-HDMI adapter (EGPU Buddy's patched driver). Takes effect the next time the eGPU is plugged in." + ((win.tvr.nv_cec || {}).loaded ? " Active now." : "")
                                       + ({ running: " Driver rebuild running…", done: " Driver rebuilt with CEC.", failed: " The driver rebuild failed: see /var/log/egpu-driver-rebuild.log." }[(win.tvr.nv_cec || {}).rebuild] || "") } }
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1
+                    Card { id: cLook
                         Head { text: "Look and support" }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; text: "Classic is the app as it was before: the same controls on the old layout." }
                         RowLayout { spacing: 8
                             Button { text: "New look"; highlighted: true; enabled: false }
                             Button { text: "Classic look"; onClicked: { win.act("set-look", { value: "classic" }); win.page = 0 } }
                             Button { text: "Save support report"; onClicked: win.act("report") } } }
-                    Card { Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 1; Layout.columnSpan: win.width < 760 ? 1 : 2
+                }
+                Card {
                         Head { text: "Only in the Game Mode plugin for now" }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol
                                 text: win.nvb ? "Keep awake (it uses Steam's own sleep settings, which only Game Mode has) and uninstall."
                                     : "Keep awake (it uses Steam's own sleep settings, which only Game Mode has), the NVIDIA beta driver and revert, and uninstall (both detach the eGPU from Game Mode first)." } }
-                }
             }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 0
             // ---- new look: Overview ----
