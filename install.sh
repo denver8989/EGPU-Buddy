@@ -523,7 +523,7 @@ fi
 if want desktopapp; then
   say "== installing the EGPU Buddy desktop app"
   D="$USER_HOME/.local/share/egpu-buddy"; A="$USER_HOME/.local/share/applications"; umkdir "$D" "$USER_HOME/.local/bin" "$A" "$USER_HOME/.config/autostart"
-  cp "$ROOT"/desktop-app/egpu-buddy "$ROOT"/desktop-app/egpu-buddy-server.py "$ROOT"/desktop-app/egpu-buddy-window.py "$ROOT"/desktop-app/egpu-buddy.qml "$ROOT"/desktop-app/index.html "$ROOT"/desktop-app/egpu-buddy.png "$D/"
+  cp "$ROOT"/desktop-app/egpu-buddy "$ROOT"/desktop-app/egpu-buddy-server.py "$ROOT"/desktop-app/egpu-buddy-window.py "$ROOT"/desktop-app/egpu-buddy.qml "$ROOT"/desktop-app/index.html "$ROOT"/desktop-app/egpu-buddy.png "$ROOT"/desktop-app/xr-front.webp "$D/"
   [ -d "$ROOT/decky-plugin/egpu-buddy/handhelds" ] && { rm -rf "$D/handhelds"; cp -a "$ROOT/decky-plugin/egpu-buddy/handhelds" "$D/handhelds"; }   # the new look's handheld pictures (the plugin's files)
   chmod +x "$D/egpu-buddy" "$D"/*.py; ln -sf "$D/egpu-buddy" "$USER_HOME/.local/bin/egpu-buddy"
   # menu: the app and "Safely Eject eGPU"; Plasma autostart: the tray icon; desktop folder (when there is one): both launchers

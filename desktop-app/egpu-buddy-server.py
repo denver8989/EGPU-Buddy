@@ -444,6 +444,10 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p == "/handheld.svg":
             b = handheld_svg()
             self.send_response(200 if b else 404); self.send_header("content-type", "image/svg+xml"); self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b); return
+        if p == "/xr-front.webp":   # XR glasses picture (the plugin's XR_FRONT), for screens that are glasses
+            try: b = open(os.path.join(HERE, "xr-front.webp"), "rb").read()
+            except OSError: b = b""
+            self.send_response(200 if b else 404); self.send_header("content-type", "image/webp"); self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b); return
         if p == "/api/extras": return self._json(extras())
         if p == "/api/notes": return self._json(release_notes())
         if p == "/api/nvidia": return self._json(nvidia_settings())
