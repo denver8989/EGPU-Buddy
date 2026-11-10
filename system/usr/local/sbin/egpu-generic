@@ -412,7 +412,9 @@ detach)
   # removal in /var/log/egpu-detach-kmsg.log, written line by line, so the next report shows the step and the oops.
   if [ "${tr:-0}" = 1 ]; then
     K=/var/log/egpu-detach-kmsg.log; : > $K
-    ( timeout 120 stdbuf -oL dmesg -W 2>/dev/null | while IFS= read -r l; do printf '%s\n' "$l" >> $K; sync $K; done ) &
+    # 9>&-: the recorder must not keep the attach lock for its 2 minutes, or a plug-in right after the detach is skipped
+    # (Legion Go S + Trebleet, report MYFGH4: eGPU back on the bus 70 s after Safe Detach, every attach "another instance")
+    ( exec 9>&-; timeout 120 stdbuf -oL dmesg -W 2>/dev/null | while IFS= read -r l; do printf '%s\n' "$l" >> $K; sync $K; done ) &
     sleep 5
     # 0.7.247 report 5232ST: the GPU unbind hit "BUG: kernel NULL pointer dereference, address 0x138" right after "ttm
     # finalized" and the machine reset before the stack trace was written. So: (1) the eGPU's outputs are switched off
