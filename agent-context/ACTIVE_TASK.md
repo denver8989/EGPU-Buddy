@@ -53,6 +53,11 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 
 - Uncommitted working tree: desktop-app server/QML TV card + Overview TV controls; TV on/off (egpu-screen tvkey on|off, plugin row, app buttons). Previews on Desktop updated.
 
+## EGPU-017 — NVIDIA DP-CEC driver patch | waiting-user (adapter on order) | unclaimed | NVIDIA, all distros
+
+- 7fcc5e6: 180-nvidia-open-dp-cec-over-aux.patch (610 + 615 same file; 620 own copy). Compiles on all three against 7.1.8-cachyos. Off unless nvidia_drm.dp_cec=1. NOT in PKGBUILDs (would rebuild every NVIDIA driver). Untested on hardware.
+- Next when adapter arrives: add to PKGBUILD source/sha256/prepare of the active driver dir (CachyOS, SteamOS installer and Bazzite build-modules.sh all read that list), a modprobe option toggle, then test /dev/cecN + cecd + Safe Detach/yank.
+
 ## EGPU-003 — egpu-screen CEC discovery path | waiting-user | unclaimed
 
 - `_cec_for` reportedly has the same `/sys/class/cec` bug across all scenarios. Claude told owner but did not change it. No approval to widen the AMD-specific fix was observed.
