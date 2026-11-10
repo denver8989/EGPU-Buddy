@@ -7,6 +7,10 @@ Type=simple
 ExecStart=/usr/bin/python3 /usr/local/sbin/egpu-touchpad
 Restart=on-failure
 RestartSec=3
+# stop: the touchpad lets go of every button itself; its guardian (a child that releases everything if the touchpad
+# dies) ignores the stop signal and exits only after releasing. Keep the default KillMode=control-group: "mixed" would
+# kill the guardian the moment the touchpad exits (a device removed with its button down leaves KDE holding the press).
+TimeoutStopSec=5
 
 [Install]
 WantedBy=multi-user.target
