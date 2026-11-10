@@ -1,3 +1,11 @@
+0.7.252 — Big Art mode menu fix: no more error flood; AMD eGPU: Game Mode on the handheld screen.
+
+**Steam menu fix (Big Art mode)** (NVIDIA, only when the fix is turned on; off = unchanged)
+- No more stream of X errors in Steam's log while menus animate (about 50 per second). Found and patched by bbauti (issue #8).
+
+**AMD / Intel eGPU** (AMD / Intel install only; NVIDIA unchanged)
+- "Show Game Mode on the handheld screen" works: Game Mode stays on the handheld screen and games run on the eGPU; it restarted on the TV.
+
 0.7.251 — AMD eGPU Safe Detach on Thunderbolt 3 docks: TV-remote (CEC) fix now finds the link.
 
 **AMD / Intel eGPU** (Intel Titan Ridge dock, AMD / Intel install only; NVIDIA unchanged)

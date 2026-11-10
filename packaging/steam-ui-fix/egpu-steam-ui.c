@@ -132,6 +132,12 @@ static void my_destroy(Display *d, GLXPixmap p) {
   if (passthrough) { void (*rf)(Display *, GLXPixmap) = rgpa("glXDestroyPixmap"); rf(d, p); return; }
   pthread_mutex_lock(&mu); for (int i = 0; i < MAXP; i++) if (tab[i].pix == p) tab[i].pix = 0; pthread_mutex_unlock(&mu);
 }
+/* Steam also frees pixmaps through the GLX 1.2 name; unhandled, each call reaches Xwayland as a
+ * GLXBadPixmap error (about 50 per second while the UI animates). Found and patched by bbauti (issue #8). */
+static void my_destroy_glx(Display *d, GLXPixmap p) {
+  if (passthrough) { void (*rf)(Display *, GLXPixmap) = rgpa("glXDestroyGLXPixmap"); rf(d, p); return; }
+  my_destroy(d, p);
+}
 
 /* ---------------- GPU path: DRI3 buffer -> Vulkan (NVIDIA) blit -> GL texture via GL_EXT_memory_object_fd ---------------- */
 static int vk_state;   /* 0 untried, 1 ok, -1 unavailable */
@@ -385,6 +391,7 @@ static void *mine(const char *n) {
   if (!strcmp(n, "glXGetFBConfigAttrib")) return (void *)my_getattr;
   if (!strcmp(n, "glXCreatePixmap")) return (void *)my_create;
   if (!strcmp(n, "glXDestroyPixmap")) return (void *)my_destroy;
+  if (!strcmp(n, "glXDestroyGLXPixmap")) return (void *)my_destroy_glx;
   if (!strcmp(n, "glXBindTexImageEXT")) return (void *)my_bind;
   if (!strcmp(n, "glXReleaseTexImageEXT")) return (void *)my_release;
   return NULL;
