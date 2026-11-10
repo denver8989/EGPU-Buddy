@@ -297,7 +297,8 @@ ApplicationWindow {
     // a screen's picture from what it reports (any brand): shape from its resolution, TV from its name or an HDMI screen of 40" or more
     function screenArt(sc, col) {
         var m = String(sc.mode || "").match(/(\d+)x(\d+)/), r = m ? +m[1] / +m[2] : 16 / 9, body
-        if (r >= 3.2) body = '<path d="M4 7 Q60 2 116 7 V38 Q60 33 4 38 Z"/><path d="M60 36 V48 M48 50 H72"/>'
+        if (sc.xr) body = '<path d="M6 16 H114 M10 16 Q10 42 34 42 Q52 42 54 24 Q60 19 66 24 Q68 42 86 42 Q110 42 110 16"/><path d="M6 16 L3 12 M114 16 L117 12"/>'
+        else if (r >= 3.2) body = '<path d="M4 7 Q60 2 116 7 V38 Q60 33 4 38 Z"/><path d="M60 36 V48 M48 50 H72"/>'
         else if (r >= 2.2) body = '<rect x="19" y="4" width="82" height="34" rx="2"/><path d="M60 38 V48 M48 50 H72"/>'
         else if (/\bTV\b/i.test(sc.label || "") || (sc.port === "HDMI" && (sc.inch || 0) >= 40)) body = '<rect x="14" y="3" width="92" height="42" rx="1.5"/><path d="M28 45 L22 53 H30 M92 45 L98 53 H90"/>'
         else body = '<rect x="27" y="3" width="66" height="38" rx="3"/><path d="M60 41 V50 M48 52 H72"/>'
@@ -672,7 +673,7 @@ ApplicationWindow {
                                     Item { Layout.fillHeight: true }
                                     Image { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 100; Layout.preferredHeight: 44; fillMode: Image.PreserveAspectFit; sourceSize.height: 44 * Screen.devicePixelRatio; smooth: true
                                             source: modelData.name.indexOf("eDP") === 0 && win.s.handheld ? win.api + "/handheld.svg" : win.screenArt(modelData, sb.sel ? "#2ee6f0" : "#ece9ff") }
-                                    Label { Layout.alignment: Qt.AlignHCenter; text: win.portName(modelData.port); font.pixelSize: 11; color: win.subCol }
+                                    Label { Layout.alignment: Qt.AlignHCenter; text: modelData.xr ? "XR glasses (USB-C)" : win.portName(modelData.port); font.pixelSize: 11; color: win.subCol }
                                     Label { Layout.alignment: Qt.AlignHCenter; Layout.maximumWidth: 138; elide: Text.ElideRight; text: modelData.label; font.bold: true }
                                     Label { Layout.alignment: Qt.AlignHCenter; text: sb.sel ? "picked" : sb.moves ? "restarts the desktop" : (modelData.mode || ""); font.pixelSize: 11; color: sb.sel ? palette.highlight : win.subCol }
                                     Item { Layout.fillHeight: true } } } } }

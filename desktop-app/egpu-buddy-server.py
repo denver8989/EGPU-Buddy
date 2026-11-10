@@ -125,6 +125,9 @@ def plugin_settings():
     except Exception: return {}
 def save_plugin_settings(d):
     os.makedirs(os.path.dirname(PLUGIN_SETTINGS), exist_ok=True); json.dump(d, open(PLUGIN_SETTINGS, "w"))
+# XR glasses identify themselves by the display name in their EDID: brands only, as the plugin (main.py XR_BRANDS)
+XR_BRANDS = ("viture", "xreal", "nreal", "rayneo", "rokid", "legion glasses", "nxtwear", "rog xreal", "dream glass",
+             "lenovo glasses", "tcl glasses")
 def extras_on():
     """The Game Mode settings the app shows: the NVIDIA reference path and NV GPU Buddy (the plugin has them there too); Bazzite,
     ROG Ally / XG Mobile and AMD / Intel keep the plugin as the one place."""
@@ -221,7 +224,8 @@ def screens(bdf):
         card, conn = os.path.basename(d).split("-", 1)
         if read(d + "/status") != "connected" or conn.startswith("Writeback"): continue
         if card == pcard:
-            out.append({"name": conn, "kind": "handheld", "label": "Handheld screen" if conn.startswith("eDP") else (edid_name(d) or conn) + " (USB-C)", "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d)})
+            nm = edid_name(d) or ""; xr = not conn.startswith("eDP") and any(b in nm.lower() for b in XR_BRANDS)
+            out.append({"name": conn, "kind": "handheld", "label": "Handheld screen" if conn.startswith("eDP") else (nm or conn) + ("" if xr else " (USB-C)"), "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d), "xr": xr})
         elif card == ecard and not conn.startswith("eDP"):
             out.append({"name": conn, "kind": "egpu", "label": edid_name(d) or conn, "mode": best_mode(d), "port": conn.split("-")[0], "inch": edid_inch(d)})
     out.sort(key=lambda x: x["kind"] != "handheld")
