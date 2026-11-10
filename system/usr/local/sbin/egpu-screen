@@ -7,6 +7,10 @@
   egpu-screen wake --input ...  also switch screens on another input back to us
   egpu-screen settle            the only external screen? turn it on and onto our input
   egpu-screen tvctl on|off      TV control tricks on or off
+  egpu-screen tvset cec_remote|off_at_detach on|off   TV remote (CEC) / TV off at Safe Detach (opt-in)
+  egpu-screen tvkey up|down|mute  TV volume / mute (eGPU CEC through SteamOS's cecd, else a paired LG TV)
+  egpu-screen tvoff             Safe Detach: TV to standby, only when that option is on
+  egpu-screen tvremote          JSON: the routes that work now
   egpu-screen only CONNECTOR    desktop only: that screen alone shows an image (every other KWin screen off)
   egpu-screen replug [CONNECTOR] desktop only: software unplug + replug, for a monitor stuck on "no signal"
   egpu-screen watch             desktop session: settle on plug-in; with 2+ screens, leave a TV that is
@@ -21,7 +25,7 @@ Optional third route, the "TV control tricks" extra (off by default): an LG webO
 network - read its input, wake it (wake-on-LAN), switch it to our HDMI. Used before CEC/DDC when set up.
 A screen that answers none reads "unknown" and is treated as in use - never hidden on a guess.
 """
-import base64, concurrent.futures, fcntl, glob, json, os, re, socket, ssl, struct, subprocess, sys, time
+import base64, concurrent.futures, fcntl, glob, json, os, pwd, re, socket, ssl, struct, subprocess, sys, time
 
 I2C_SLAVE = 0x0703
 STORE = "/var/lib/nvegpu/screen-inputs.json"  # EDID -> input code seen while in use
@@ -179,7 +183,7 @@ def _net(edid):
     return d.get("tvs", {}).get(edid.hex()) if d.get("enabled") else None
 
 
-def webos(ip, uri, payload=None, key=None, wait=5):
+def webos(ip, uri, payload=None, key=None, wait=5, perms=()):
     """One LG webOS (SSAP) call over its websocket -> (client key, response payload); (None, None) if the TV
     is not answering (standby). Without a key the TV shows an "allow" prompt and `wait` must cover it."""
     try:
@@ -221,7 +225,7 @@ def webos(ip, uri, payload=None, key=None, wait=5):
                     return json.loads(data)
 
         reg = {"pairingType": "PROMPT", "manifest": {"manifestVersion": 1, "appVersion": "1.0", "permissions": [
-            "CONTROL_POWER", "CONTROL_INPUT_TV", "READ_INPUT_DEVICE_LIST", "READ_RUNNING_APPS", "LAUNCH"]}}
+            "CONTROL_POWER", "CONTROL_INPUT_TV", "READ_INPUT_DEVICE_LIST", "READ_RUNNING_APPS", "LAUNCH", *perms]}}
         if key:
             reg["client-key"] = key
         send({"type": "register", "id": "reg", "payload": reg})
@@ -292,7 +296,7 @@ def pair(ip, conn):
     edid = next((e for c, _, e in screens() if c == conn), None)
     if edid is None:
         return f"{conn} is not connected"
-    key, inputs = webos(ip, "ssap://tv/getExternalInputList", wait=60)
+    key, inputs = webos(ip, "ssap://tv/getExternalInputList", wait=60, perms=("CONTROL_AUDIO"))
     if not key:
         return "not allowed on the TV (or no answer) - choose Allow on the TV's prompt"
     hdmi = [d["id"] for d in inputs.get("devices", []) if d.get("connected") and d["id"].startswith("HDMI")]
@@ -501,6 +505,108 @@ def watch():
         time.sleep(5)
 
 
+# ---- TV controls (volume / mute) and "Turn the TV off at Safe Detach" (both opt-in, off by default; NET's
+# "cec_remote" and "off_at_detach"). Two routes: the eGPU's own CEC adapter through SteamOS's CEC service (cecd; the
+# remote part follows cec-mote by xXJSONDeruloXx, BSD-3) and a paired LG webOS TV over the network. Neither touches
+# /dev/cec* itself: cecd owns the adapter, and Safe Detach releases it before the GPU driver goes (egpu-generic).
+CECD = "com.steampowered.CecDaemon1"
+
+
+def _settings():
+    try:
+        return json.load(open(NET))
+    except (OSError, ValueError):
+        return {}
+
+
+def _steamos():
+    """SteamOS (its CEC service, cecd, is what the remote talks to)."""
+    return any(os.access(os.path.join(d, "steamos-readonly"), os.X_OK) for d in ("/usr/bin", "/usr/sbin", "/usr/local/bin"))
+
+
+def egpu_cec():
+    """N of /dev/cecN when that CEC adapter belongs to the eGPU (DP-CEC on its connector or a CEC-capable adapter
+    on it), else None: the remote never talks to a CEC adapter of the handheld or a USB one on a guess."""
+    try:
+        bdf = subprocess.run(["/usr/local/sbin/egpu-detect"], capture_output=True, text=True, timeout=10).stdout.split()[0]
+    except (OSError, IndexError, subprocess.TimeoutExpired):
+        return None
+    for c in sorted(glob.glob("/sys/bus/cec/devices/cec*")):   # cec is a bus: <parent device>/cecN
+        if f"/{bdf}/" in os.path.realpath(c) + "/":
+            return int(re.sub(r"\D", "", os.path.basename(c)))
+    return None
+
+
+def _cecd(n, *args, timeout=6):
+    """busctl --user against cecd's device CecN, as the session user (cecd runs in the user's session)."""
+    env = {"PATH": "/usr/bin:/bin", "XDG_RUNTIME_DIR": "/run/user/1000", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus"}
+    cmd = ["busctl", "--user", *args[:1], CECD, f"/com/steampowered/CecDaemon1/Devices/Cec{n}", CECD + ".CecDevice1", *args[1:]]
+    if os.getuid() == 0:
+        cmd = ["runuser", "-u", pwd.getpwuid(1000).pw_name, "--", "env", *[f"{k}={v}" for k, v in env.items()], *cmd]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+        return r.returncode == 0, r.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+
+
+def _lg_tv():
+    """The paired LG TV that is connected to us right now (EDID from the kernel: no I2C), only with TV control on."""
+    d = _settings()
+    if not d.get("enabled"):
+        return None
+    for _, edid in _connected():
+        if edid.hex() in d.get("tvs", {}):
+            return d["tvs"][edid.hex()]
+    return None
+
+
+def remote_routes():
+    d, out = _settings(), []
+    if d.get("cec_remote") and _steamos() and egpu_cec() is not None:
+        out.append("cec")
+    if _lg_tv():
+        out.append("lg")
+    return out
+
+
+def tvkey(key):
+    """Volume up / down / mute on the TV: CEC first (the eGPU's adapter), else the paired LG TV."""
+    routes = remote_routes()
+    if "cec" in routes:
+        n = egpu_cec(); ok, out = _cecd(n, "get-property", "AudioLogicalAddress")
+        la = out.split()[-1] if ok and out else "0"
+        ok, _ = _cecd(n, "call", {"up": "VolumeUp", "down": "VolumeDown", "mute": "Mute"}[key], "y", la)
+        if ok:
+            return "ok (CEC)"
+    if "lg" in routes:
+        tv = _lg_tv()
+        if key == "mute":
+            st = webos(tv["ip"], "ssap://audio/getStatus", key=tv["key"], perms=("CONTROL_AUDIO",))[1] or {}
+            uri, pl = "ssap://audio/setMute", {"mute": not st.get("mute", False)}
+        else:
+            uri, pl = {"up": "ssap://audio/volumeUp", "down": "ssap://audio/volumeDown"}[key], None
+        r = webos(tv["ip"], uri, pl, key=tv["key"], perms=("CONTROL_AUDIO",), wait=8)[1]
+        if r and r.get("returnValue"):
+            return "ok (LG)"
+        return "the TV did not allow it: choose Allow on the TV, or Pair again in Setup > Extras"
+    return "no TV to control" if not routes else "the TV did not answer"
+
+
+def tvoff():
+    """Safe Detach, only with "Turn the TV off at Safe Detach" on: TV to standby while it can still be reached."""
+    if not _settings().get("off_at_detach"):
+        return "off at detach: not enabled"
+    routes = remote_routes()
+    if "cec" in routes and _cecd(egpu_cec(), "call", "Standby", "y", "0")[0]:
+        return "TV standby (CEC)"
+    if "lg" in routes:
+        tv = _lg_tv()
+        if (webos(tv["ip"], "ssap://system/turnOff", key=tv["key"], wait=4)[1] or {}).get("returnValue"):
+            return "TV off (LG)"
+    return "TV not reached"
+
+
 def main(argv):
     cmd, want = (argv[1] if len(argv) > 1 else "list"), argv[2:]
     if cmd == "tvctl" and want in (["on"], ["off"]):   # TV control tricks on / off (the file is root's; the app and the plugin both switch it)
@@ -509,6 +615,18 @@ def main(argv):
         d["enabled"] = want[0] == "on"
         os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
         print("TV control " + want[0]); return 0
+    if cmd in ("tvset",) and len(want) == 2 and want[0] in ("cec_remote", "off_at_detach") and want[1] in ("on", "off"):
+        d = _settings(); d[want[0]] = want[1] == "on"
+        os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
+        print(f"{want[0]} {want[1]}"); return 0
+    if cmd == "tvkey" and want in (["up"], ["down"], ["mute"]):
+        print(tvkey(want[0])); return 0
+    if cmd == "tvoff":
+        print(tvoff()); return 0
+    if cmd == "tvremote":   # what the plugin shows: which routes work right now
+        d = _settings()
+        print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")),
+                          "cec_here": _steamos() and egpu_cec() is not None})); return 0
     take_input = "--input" in want
     want = [w for w in want if w != "--input"]
     found = [s for s in screens() if not want or s[0] in want]

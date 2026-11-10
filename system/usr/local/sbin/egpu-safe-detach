@@ -65,6 +65,8 @@ say(){ printf '  %s\n' "$*"; }
 
 GPU=$(lspci -Dnn 2>/dev/null | awk '/\[0300\]: .*\[10de:/{print $1; exit}')
 [ -n "$GPU" ] || { say "no eGPU on the bus — nothing to detach."; exit 0; }
+# "Turn the TV off at Safe Detach" (TV extras, opt-in, off by default): standby while the TV can still be reached
+grep -qs '"off_at_detach": true' /var/lib/nvegpu/screen-net.json && { say "TV: $(timeout 12 /usr/local/sbin/egpu-screen tvoff 2>&1 | tail -1)"; } || true
 HDA=${GPU%.*}.1
 
 # the authorized AORUS TB device

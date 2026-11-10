@@ -1,4 +1,4 @@
-import { ButtonItem, ConfirmModal, DropdownItem, Field, Focusable, ModalRoot, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
+import { ButtonItem, ConfirmModal, DialogButton, DropdownItem, Field, Focusable, ModalRoot, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
 import { callable, definePlugin, toaster, useQuickAccessVisible } from "@decky/api";
 import { useEffect, useState, useRef } from "react";
 import { FaPlug } from "react-icons/fa";
@@ -188,6 +188,11 @@ const makeReport = callable<[], { code: string; file: string; url: string }>("ma
 // a QR code as an SVG (scanned with a phone, it opens the GitHub issue form with the report summary filled in)
 const qrSvg = (text: string) => { const q = qrcode(0, "L"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); };
 const setTvControl = callable<[boolean], Result>("set_tv_control");
+// TV controls (volume / mute) and "Turn the TV off at Safe Detach" (opt-in): the eGPU's CEC adapter via SteamOS's cecd, or a paired LG TV
+type TvRemote = { routes: string[]; cec_remote: boolean; off_at_detach: boolean; cec_here: boolean };
+const getTvRemote = callable<[], TvRemote>("get_tv_remote");
+const setTvOption = callable<[string, boolean], Result>("set_tv_option");
+const tvKey = callable<[string], Result>("tv_key");
 const pairTv = callable<[], Result>("pair_tv");
 const getGameRes = callable<[], { enabled: boolean; skip_mode?: boolean }>("get_game_res");
 // Steam's own screen mode for the screen Game Mode is on: its native mode at the highest refresh rate. Native = the mode
@@ -472,14 +477,14 @@ const maybeOfferSteamUi = async () => {
 
 // ROG Ally / XG Mobile: the page (main, details, setup, NVIDIA settings) is kept for the plugin's lifetime, so a re-render
 // of the panel does not drop the user back on the main page. Set from the status (ally_xgm); elsewhere it always opens on main.
-const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" | "amd" } = { on: false, tab: "main" };
+const keepPage: { on: boolean; tab: "main" | "details" | "setup" | "nvidia" | "amd" | "tv" } = { on: false, tab: "main" };
 // ROG Ally / XG Mobile: opening an NVIDIA settings dropdown remounts the menu there, which dropped the picked value before
 // Apply (SilverplayerX, 0.7.226: "nothing can be changed"). Kept here like the page, on that machine only.
 const keepNv: { v: Record<string, string | number> | null } = { v: null };
 function Content() {
   const visible = useQuickAccessVisible();
-  const [tab, setTab_] = useState<"main" | "details" | "setup" | "nvidia" | "amd">(keepPage.on ? keepPage.tab : "main");
-  const setTab = (t: "main" | "details" | "setup" | "nvidia" | "amd") => { ui(`page ${keepPage.tab} -> ${t}`); keepPage.tab = t; setTab_(t); };
+  const [tab, setTab_] = useState<"main" | "details" | "setup" | "nvidia" | "amd" | "tv">(keepPage.on ? keepPage.tab : "main");
+  const setTab = (t: "main" | "details" | "setup" | "nvidia" | "amd" | "tv") => { ui(`page ${keepPage.tab} -> ${t}`); keepPage.tab = t; setTab_(t); };
   useEffect(() => { ui(`menu mounted on page ${keepPage.on ? keepPage.tab : "main"} (kept: ${keepPage.on})`); return () => ui(`menu unmounted (page ${keepPage.tab})`); }, []);
   useEffect(() => { ui(`panel ${visible ? "open" : "closed"} (page ${keepPage.tab})`); }, [visible]);
   const [nv, setNv] = useState<NvSettings | null>(null);
@@ -495,6 +500,7 @@ function Content() {
   const [su, setSu] = useState<Setup | null>(null);
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
+  const [trm, setTrm] = useState<TvRemote | null>(null);
   const [ad, setAd] = useState<Addons | null>(null);
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
@@ -516,7 +522,7 @@ function Content() {
   const [intro, setIntro] = useState<{ src: string; fading: boolean } | null>(null);   // XG Mobile intro, once
   const introAsked = useRef(false);   // ASUS XG Mobile core / memory clock offsets (MHz)   // laptop-class GPUs: a GPU clock limit is their power control
 
-  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial()); setSui(await getSteamUi());
+  const refresh = async () => { try { const st = await getStatus(); keepPage.on = !!st?.ally_xgm; setS(st); setSu(await getSetup()); const u = await getUpdate(); setUp(u); setTv(await getTvControl()); setTrm(await getTvRemote()); const a = await getAddons(); setAd(a); setUsb4(a.usb4 ? await getUsb4() : {}); setGr(await getGameRes()); setTr(await getTrial()); setSui(await getSteamUi());
     // the hourly check only counts awake time: after a night of sleep the status is stale, so re-check on open (wall clock)
     if (!staleChecked.current && (!u.checked || Date.now() / 1000 - u.checked > 600)) { staleChecked.current = true; checkUpdate(false); }
   } catch (e) { setMsg(`status error: ${e}`); } };
@@ -687,6 +693,11 @@ function Content() {
         {tab !== "nvidia" && su?.installed_version && su.installed_vendor !== "amd" && (
           <PanelSectionRow>
             <ButtonItem layout="below" onClick={() => { setNvEdit(null); setTab("nvidia"); }}>NVIDIA settings</ButtonItem>
+          </PanelSectionRow>
+        )}
+        {tab === "main" && !!trm?.routes.length && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => setTab("tv")}>TV controls</ButtonItem>
           </PanelSectionRow>
         )}
       </PanelSection>
@@ -1170,6 +1181,21 @@ function Content() {
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{tv.paired.length ? `Paired: ${tv.paired.join(", ")}` : "No TV paired yet."}</div></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => { setMsg("Choose Allow on the TV's prompt…"); run(pairTv); }}>{tv.paired.length ? "Pair again" : "Find and pair TV"}</ButtonItem></PanelSectionRow>
           </>)}
+          {(tv?.enabled || trm?.cec_remote) && <PanelSectionRow><ToggleField label="Turn the TV off at Safe Detach" description={'Off by default. Puts the TV to standby just before the eGPU lets go of it: through CEC when "TV remote" is on, or over the network for a paired LG TV (works with NVIDIA cards too). Not on a cable pull.'} checked={!!trm?.off_at_detach} onChange={(v) => run(async () => { const r = await setTvOption("off_at_detach", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
+          {(trm?.cec_here || trm?.cec_remote) && <PanelSectionRow><ToggleField label="TV remote (CEC)" description={'Off by default. Adds "TV controls" to the main page: TV volume and mute through SteamOS\'s own CEC service. Shown only on SteamOS when the eGPU\'s TV connection carries CEC (a CEC-capable adapter or the card\'s HDMI). Remote part based on cec-mote by xXJSONDeruloXx.'} checked={!!trm?.cec_remote} onChange={(v) => run(async () => { const r = await setTvOption("cec_remote", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
+        </PanelSection>
+      )}
+      {tab === "tv" && (
+        <PanelSection title="TV controls">
+          <PanelSectionRow>
+            <Focusable style={{ display: "flex", gap: "6px" }}>
+              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("down"))}>Volume −</DialogButton>
+              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("mute"))}>Mute</DialogButton>
+              <DialogButton style={{ minWidth: 0, flex: 1 }} disabled={lock} onClick={() => run(() => tvKey("up"))}>Volume +</DialogButton>
+            </Focusable>
+          </PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>{trm?.routes.includes("cec") ? "Through CEC (SteamOS's CEC service)." : "Over the network (paired LG TV)."}</div></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("main")}>Back</ButtonItem></PanelSectionRow>
         </PanelSection>
       )}
     </>

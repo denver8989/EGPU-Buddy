@@ -132,6 +132,10 @@ say where it came from.
   gamescope session script, this project wraps the distro's. Checked side by side: no shared code. Three of the later
   optional add-ons under Extras (testing) follow ideas seen there: the USB4 link row, TV control (Wake-on-LAN / ADB),
   and the support report. Each was written separately for this project.
+- [xXJSONDeruloXx/cec-mote](https://github.com/xXJSONDeruloXx/cec-mote) (BSD-3-Clause, Kurt Himebauch) — a Decky
+  plugin that sends TV volume / mute / standby through SteamOS's own CEC service (cecd). The optional "TV remote (CEC)"
+  and the CEC route of "Turn the TV off at Safe Detach" (Extras) follow its approach: the same cecd D-Bus calls, never
+  the CEC adapter directly. Written separately for this project; no code copied.
 - [djanice1980/eGPU-Blackwell-Stability](https://github.com/djanice1980/eGPU-Blackwell-Stability) — Blackwell eGPU on a
   Strix Halo host (Flow Z13) with apnex's driver patches; it uses the card for render offload only and does not drive a
   display from it, which is why it never meets the display-path problems solved here.

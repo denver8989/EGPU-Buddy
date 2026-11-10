@@ -2349,6 +2349,27 @@ class Plugin:
         json.dump(d, open(SCREEN_NET, "w")); os.chmod(SCREEN_NET, 0o644)
         return {"ok": True, "message": "TV control on." if enabled else "TV control off: screens are handled as before."}
 
+    # TV controls (volume / mute) and "Turn the TV off at Safe Detach": opt-in, off by default; egpu-screen does the work
+    # (the eGPU's CEC adapter through SteamOS's cecd, else a paired LG TV over the network)
+    async def get_tv_remote(self):
+        out = await asyncio.get_running_loop().run_in_executor(None, lambda: _sh(["/usr/local/sbin/egpu-screen", "tvremote"], 20)[1])
+        try:
+            return json.loads(out)
+        except ValueError:
+            return {"routes": [], "cec_remote": False, "off_at_detach": False, "cec_here": False}
+
+    async def set_tv_option(self, name: str, enabled: bool):
+        if name not in ("cec_remote", "off_at_detach"):
+            return {"ok": False, "message": "Unknown option."}
+        _sh(["/usr/local/sbin/egpu-screen", "tvset", name, "on" if enabled else "off"], 10)
+        return {"ok": True, "message": ("On." if enabled else "Off.")}
+
+    async def tv_key(self, key: str):
+        if key not in ("up", "down", "mute"):
+            return {"ok": False, "message": "Unknown key."}
+        out = await asyncio.get_running_loop().run_in_executor(None, lambda: _sh(["/usr/local/sbin/egpu-screen", "tvkey", key], 25)[1].strip())
+        return {"ok": out.startswith("ok"), "message": out or "No answer."}
+
     async def pair_tv(self):
         def work():
             ips = _sh(["/usr/local/sbin/egpu-screen", "find"], 20)[1].split()
