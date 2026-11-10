@@ -1,3 +1,13 @@
+0.7.254 — TV controls and TV off at Safe Detach; AMD eGPU desktop Safe Detach fixed.
+
+**TV extras** (Extras, all off by default; plugin and desktop app)
+- TV controls: volume, mute, TV on and TV off for a paired LG TV, or over HDMI-CEC with "TV remote (CEC)" (SteamOS's CEC service; an AMD card's HDMI or CEC-capable adapter, or a USB-CEC adapter). Based on cec-mote by xXJSONDeruloXx.
+- Turn the TV off at Safe Detach (CEC or a paired LG TV).
+- The desktop app now has all TV settings on every setup.
+
+**AMD / Intel eGPU** (AMD / Intel install only; NVIDIA unchanged)
+- Safe Detach from the desktop app and the Safely Eject shortcut works; it asked for a password, or said "NVIDIA eGPU display card is unavailable".
+
 0.7.253 — AMD eGPU: Game Mode starts again with a picked TV; desktop screen switch no longer leaves the monitor black.
 
 **AMD / Intel eGPU** (AMD / Intel install only; NVIDIA unchanged)
