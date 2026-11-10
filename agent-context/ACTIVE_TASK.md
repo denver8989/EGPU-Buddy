@@ -53,7 +53,7 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 
 - Uncommitted working tree: desktop-app server/QML TV card + Overview TV controls; TV on/off (egpu-screen tvkey on|off, plugin row, app buttons). Previews on Desktop updated.
 
-## EGPU-017 — NVIDIA DP-CEC driver patch | wired, unreleased; waiting for owner's UGREEN adapter (2026-11-11) | unclaimed | NVIDIA, all distros
+## EGPU-017 — NVIDIA DP-CEC driver patch | released 0.7.255 (opt-in, rebuild on request); waiting for owner's UGREEN adapter test | unclaimed | NVIDIA, all distros
 
 - 7fcc5e6: 180-nvidia-open-dp-cec-over-aux.patch (610 + 615 same file; 620 own copy). Compiles on all three against 7.1.8-cachyos. Off unless nvidia_drm.dp_cec=1. NOT in PKGBUILDs (would rebuild every NVIDIA driver). Untested on hardware.
 - 2026-11-10: wired into all PKGBUILDs (pkgrel 610->4, 615/620->2 => every NVIDIA install rebuilds on release), Bazzite stamp includes pkgrel; option nvidia_dp_cec writes /etc/modprobe.d/egpu-buddy-dp-cec.conf (uninstall removes); CEC upgrade (power read via SendReceiveRawMessage, wake-if-off + SetActiveSource on move to TV matched by EDID PA, Switch TV button). Not released, not hardware-tested.

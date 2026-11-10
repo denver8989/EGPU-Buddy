@@ -1,3 +1,13 @@
+0.7.255 — TV over CEC wakes the TV and picks the right input; NVIDIA CEC (opt-in); TV controls layout.
+
+**TV extras** (Extras, all off by default; plugin and desktop app)
+- When Game Mode or the desktop moves to a TV on HDMI-CEC, the TV is turned on (only if it is off) and switched to the eGPU's input. New "Switch TV to the eGPU" button.
+- NVIDIA CEC (DisplayPort adapter): HDMI-CEC from an NVIDIA card through a CEC-capable DisplayPort-to-HDMI adapter, with EGPU Buddy's patched driver. New driver builds include it; turning it on offers to rebuild an older driver once.
+- TV controls in the plugin: one full-width button per row (they overlapped).
+
+**Fix**
+- After an update from the plugin, the desktop app restarts on the new version; it kept the old one until a reboot. (SteamOS and CachyOS with an NVIDIA eGPU; other setups unchanged)
+
 0.7.254 — TV controls and TV off at Safe Detach; AMD eGPU desktop Safe Detach fixed.
 
 **TV extras** (Extras, all off by default; plugin and desktop app)
