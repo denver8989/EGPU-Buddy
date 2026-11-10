@@ -13,6 +13,10 @@ KDE desktop only; in Game Mode they do nothing. When the built-in screen comes b
   egpu-touchpad            run (systemd: egpu-touchpad.service; started by the option, stopped when it is turned off)
   egpu-touchpad selftest   the tap and rotation rules without hardware
 
+Privacy: nothing about touches is recorded. Fingers go only to the virtual touchpad, in memory, as they happen. Nothing
+is written to the log (only "touchpad on" / "touchpad off" and errors), to a file or to the network, and the touchscreen
+is only taken while the built-in screen is dark. The selftest checks that no finger activity reaches the log.
+
 Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270, "speed": 2.0}. speed: pointer speed (1 = the true size).
 rotate: for a touchscreen mounted rotated relative to how the screen is used (default: 0, or 90 when the digitizer is
 portrait and the screen landscape).
@@ -208,11 +212,9 @@ class Pad:
         return subprocess.run(["pgrep", "-x", "kwin_wayland"], stdout=subprocess.DEVNULL).returncode == 0
 
     def shortcut(self, name):
-        log("gesture:", name)
         self.kde("call", "org.kde.kglobalaccel", "/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s", name)
 
     def show_desktop(self, on):
-        log("gesture: show desktop" if on else "gesture: windows back")
         self.kde("call", "org.kde.KWin", "/KWin", "org.kde.KWin", "showDesktop", "b", "true" if on else "false")
 
     def handle(self, ev):
@@ -233,8 +235,6 @@ class Pad:
                 lp = list(self.lastpos.get(self.slot, (None, None))); lp[i] = v; self.lastpos[self.slot] = tuple(lp)
         elif (t == EV_KEY and c == BTN_TOUCH and v == 0) or (t == EV_SYN and c == SYN_DROPPED):
             # nothing touches (or events were lost): every finger is up, so a lost lift cannot leave a drag held
-            if c == SYN_DROPPED:
-                log("touchscreen events dropped: all fingers counted as lifted")
             self.slots.clear()
             if c == SYN_DROPPED:
                 self.frame({}, time.monotonic())
@@ -255,8 +255,6 @@ class Pad:
         if n in (4, 5) and self.peak == n and not self.swipe and not self.drag and not self.wait_clear:
             self.swipe = [cx, cy, False, None, 1.0]; self.tap.reset()   # [start x, start y, fired, five-finger spread, ratio]
         if self.swipe and n == 0:
-            if self.swipe[3] and not self.swipe[2]:
-                log(f"five fingers: spread x{self.swipe[4]:.2f}, no action (needs x1.25 out or x0.80 in)")
             self.swipe = None
         spread = sum(math.hypot(p[0] - cx, p[1] - cy) for p in pts.values()) / n if n else 0
         if self.swipe and n == 5 and self.swipe[3] is None:
@@ -281,7 +279,6 @@ class Pad:
         pending = self.t3 is not None and not self.drag and not self.wait_clear and not self.swipe
         if pending and now - self.t3 >= 0.05:
             self.drag, self.drag_tid, pending, self.dragpos = True, self.drag_tid % 65000 + 1, False, [cx, cy]
-            log("three-finger drag: grab")
             self.tap.reset()
         elif self.drag:   # follow how the fingers move, not their middle: a finger landing or lifting does not jump it
             prev = getattr(self, "prev", {})
@@ -291,7 +288,6 @@ class Pad:
         self.prev = pts
         if self.drag and n < 2:   # lifted (one finger leaving a moment early does not end it)
             self.drag, self.wait_clear = False, n > 0
-            log("three-finger drag: drop")
         if self.wait_clear and n == 0:
             self.wait_clear = False
         if self.drag:
@@ -324,7 +320,7 @@ class Pad:
             elif started and now - self.last_tap < 0.3:
                 self.tdrag, self.tdrag_t0 = "armed", now
             if self.tdrag == "armed" and n == 1 and (now - self.tdrag_t0 > 0.18 or self.tap.moved > TAP_MOVE):
-                self.tdrag = "held"; self.tap.reset(); log("double tap drag: grab")
+                self.tdrag = "held"; self.tap.reset()
             if n >= 2 and self.tdrag in ("held", "relock", "locked"):
                 self.tdrag = None
             if n == 0:
@@ -332,7 +328,6 @@ class Pad:
                     self.tdrag = "locked"
                 elif self.tdrag == "relock":
                     self.tdrag, click = None, None   # the tap that lets go clicks nothing more
-                    log("double tap drag: drop")
                 elif self.tdrag == "armed":
                     self.tdrag = None
             if click == BTN_LEFT:
@@ -366,7 +361,6 @@ class Pad:
         double-tap lock (no finger on the glass) after 5 s. Fingers still down are then ignored until all are lifted."""
         idle = now - self.last_ev
         if (self.drag or self.tdrag in ("held", "relock")) and idle > 3 or self.tdrag == "locked" and idle > 5:
-            log("watchdog: no finger movement, button released")
             self.drag, self.tdrag = False, None
             self.frame({}, now)
             self.wait_clear = bool(self.slots)
@@ -483,6 +477,8 @@ def selftest():
     t.down(0, 10, 10, 0.0); t.fingers(1); assert t.up_all(0.5) is None              # held: no click
     t.down(0, 10, 10, 0.0); t.move(0, 300, 10); t.fingers(1); assert t.up_all(0.1) is None   # moved: no click
     t.down(0, 0, 0, 0.0); t.fingers(3); assert t.up_all(0.1) is None                # three fingers: libinput's gesture
+    logged = []
+    globals()["log"] = lambda *a: logged.append(a)   # nothing about touches may reach the log
     class Fake(Pad):   # frame() without hardware: record what the virtual touchpad would get
         def __init__(self):
             self.out, self.held, self.drag, self.wait_clear, self.drag_tid, self.tap, self.log, self.peak = {}, set(), False, False, 60000, Tap(1000), [], 0
@@ -569,6 +565,7 @@ def selftest():
     f.three = False; f.tdrag = "locked"; f.held = {BTN_LEFT}; f.last_ev = 40.0; f.watchdog(46.0)
     assert f.tdrag is None and BTN_LEFT not in f.held, "watchdog: a forgotten double-tap lock lets go"
     f.three = True
+    assert not logged, f"finger activity reached the log: {logged}"
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
     assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
     print("selftest ok")
