@@ -481,7 +481,8 @@ class GmPointer:
                         ("libinput_get_fd", I, [V]), ("libinput_dispatch", I, [V]), ("libinput_get_event", V, [V]),
                         ("libinput_event_get_type", I, [V]), ("libinput_event_destroy", None, [V]),
                         ("libinput_event_get_pointer_event", V, [V]), ("libinput_event_pointer_get_dx", D, [V]),
-                        ("libinput_event_pointer_get_dy", D, [V]), ("libinput_event_pointer_get_button", U, [V]),
+                        ("libinput_event_pointer_get_dy", D, [V]), ("libinput_event_pointer_get_dx_unaccelerated", D, [V]),
+                        ("libinput_event_pointer_get_dy_unaccelerated", D, [V]), ("libinput_event_pointer_get_button", U, [V]),
                         ("libinput_event_pointer_get_button_state", I, [V]), ("libinput_event_pointer_has_axis", I, [V, I]),
                         ("libinput_event_pointer_get_scroll_value", D, [V, I]), ("libinput_device_config_tap_set_enabled", I, [V, I]),
                         ("libinput_unref", V, [V])):
@@ -517,7 +518,13 @@ class GmPointer:
             pe = li.libinput_event_get_pointer_event(e) if 400 <= t < 500 else None
             if t == 400:   # motion, accelerated: whole pixels out, the rest carried over (gamescope takes raw mouse counts
                 # as pixels and ignores a mouse's DPI, so finer steps are not possible)
-                self.rx += li.libinput_event_pointer_get_dx(pe); self.ry += li.libinput_event_pointer_get_dy(pe)
+                # slow movement is slowed down for precision; gamescope only has whole pixels, so that felt like nothing
+                # then a jump: never less than 0.22 x the raw motion, about 3/4 of what normal speed gives (libinput scales
+                # touchpads by ~0.3; ponytail: fixed floor, a knob if asked)
+                for ax, get, raw in (("rx", li.libinput_event_pointer_get_dx, li.libinput_event_pointer_get_dx_unaccelerated),
+                                     ("ry", li.libinput_event_pointer_get_dy, li.libinput_event_pointer_get_dy_unaccelerated)):
+                    v, r = get(pe), raw(pe) * 0.22
+                    setattr(self, ax, getattr(self, ax) + (v if abs(v) >= abs(r) else r))
                 dx, dy = int(self.rx), int(self.ry); self.rx -= dx; self.ry -= dy
                 if dx: self.ev(EV_REL, REL_X, dx); out = True
                 if dy: self.ev(EV_REL, REL_Y, dy); out = True
