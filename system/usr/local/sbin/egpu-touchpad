@@ -197,13 +197,13 @@ class Pad:
     def emit(self, t, c, v):
         os.write(self.ui, EVENT.pack(0, 0, t, c, v))
 
-    def kde(self, *call, delay=0):
-        """busctl --user <call> in the logged-in user's KDE session (no-op outside the KDE desktop)."""
+    def kde(self, *call, delay=0, script='sleep "$0"; exec busctl --user "$@"'):
+        """busctl --user <call> (or a short sh script) in the logged-in user's KDE session (no-op outside KDE)."""
         for bus in sorted(glob.glob("/run/user/*/bus")):
             uid = os.stat(bus).st_uid
             if uid >= 1000:
                 subprocess.Popen(["setpriv", f"--reuid={uid}", f"--regid={uid}", "--init-groups", "env",
-                                  f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}", "sh", "-c", 'sleep "$0"; exec busctl --user "$@"',
+                                  f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}", "sh", "-c", script,
                                   str(delay), *call], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
 
@@ -215,7 +215,10 @@ class Pad:
         self.kde("call", "org.kde.kglobalaccel", "/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s", name)
 
     def show_desktop(self, on):
-        self.kde("call", "org.kde.KWin", "/KWin", "org.kde.KWin", "showDesktop", "b", "true" if on else "false")
+        # KWin 6.8 ignores org.kde.KWin.showDesktop; its "Show Desktop" shortcut is a toggle, so flip it only when the
+        # current state differs from the one wanted
+        self.kde("true" if on else "false", script='[ "$(busctl --user get-property org.kde.KWin /KWin org.kde.KWin showingDesktop)" = "b $1" ] '
+                 '|| exec busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component invokeShortcut s "Show Desktop"')
 
     def handle(self, ev):
         """Collect one frame of the touchscreen (multi-touch protocol B), then send it on as one touchpad frame."""
@@ -503,7 +506,7 @@ def selftest():
                     st["bugs"].append(("new tracking id over a live one", st["slot"], v))
                 if v < 0: st["live"].pop(st["slot"], None)
                 else: st["live"][st["slot"]] = v
-        def kde(self, *call, delay=0):
+        def kde(self, *call, delay=0, **kw):
             self.cuts.append(call[-1])
         def desktop(self):
             return self.on_desktop
