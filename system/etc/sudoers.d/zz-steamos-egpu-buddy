@@ -12,5 +12,5 @@ deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-desktop-detach
 deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-rearm
 deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-report
 deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-buddy-update
-deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-generic rebar
-deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-screen wake *, /usr/local/sbin/egpu-screen find, /usr/local/sbin/egpu-screen pair *, /usr/local/sbin/egpu-screen tvctl *
+deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-generic rebar, /usr/local/sbin/egpu-generic detach
+deck ALL=(root) NOPASSWD: /usr/local/sbin/egpu-screen wake *, /usr/local/sbin/egpu-screen find, /usr/local/sbin/egpu-screen pair *, /usr/local/sbin/egpu-screen tvctl *, /usr/local/sbin/egpu-screen tvset *

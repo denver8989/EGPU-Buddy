@@ -12,6 +12,12 @@ if [ "${1:-}" = --report ]; then   # the "Save EGPU Buddy report" icon: one file
   echo "$m"; exit 0
 fi
 if [ "${1:-}" = --detach ]; then
+  # AMD / Intel install: its own Safe Detach (egpu-generic), in its own unit so the desktop restart it does cannot end it.
+  # Before, this ran the NVIDIA desktop detach: "NVIDIA eGPU display card is unavailable" (Legion Go S + RX 9070 XT, KXD7CD)
+  if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
+    command -v notify-send >/dev/null 2>&1 && notify-send "EGPU Buddy" "Safe Detach: the desktop restarts on the handheld screen. Unplug only when EGPU Buddy says it is safe."
+    exec systemd-run --user --collect --quiet sudo -n /usr/local/sbin/egpu-generic detach
+  fi
   if pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1; then exec sudo -n /usr/local/sbin/egpu-gamemode-detach; fi
   exec "$HOME/.local/bin/egpu-safe-detach-ui"
 fi
