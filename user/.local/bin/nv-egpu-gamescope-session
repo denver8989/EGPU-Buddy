@@ -785,7 +785,10 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # set -e the failed cat ended this script, so every Game Mode start on an AMD eGPU died here (black screen, restart loop;
   # first real AMD eGPU, Legion Go 1 + RX 6800 XT, 2026-10-24)
   gen_pref=$(cat /var/lib/nvegpu/game-screen 2>/dev/null || true)
-  case " $gen_outputs " in *" $gen_pref "*) [ -n "$gen_pref" ] && gen_outputs="$gen_pref $(printf '%s\n' $gen_outputs | grep -vx "$gen_pref")" ;; esac
+  # "|| true": with the picked screen as the ONLY eGPU output, grep -vx finds nothing, exits 1, and under set -e /
+  # pipefail that ended this script: every Game Mode start died, the TV stuck on the boot logo (Legion Go S + RX 9070 XT,
+  # TV picked, report 2PWZYH)
+  case " $gen_outputs " in *" $gen_pref "*) [ -n "$gen_pref" ] && gen_outputs="$gen_pref $(printf '%s\n' $gen_outputs | grep -vx "$gen_pref" || true)" ;; esac
   if handheld_chosen; then
     # "Show Game Mode on the handheld screen" (AMD / Intel install; this branch is walled off to it): it was ignored here,
     # so Game Mode restarted on the TV again (Legion Go S + RX 9070 XT, report YPJKMT). Same as the NVIDIA handheld route:
@@ -794,7 +797,7 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
     export OUTPUT_CONNECTOR="$hh"; [ "$hh" = "$PANEL" ] || OUTPUT_CONNECTOR="$hh,$PANEL"
     export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
     export NV_EGPU_GAMESCOPE_HANDHELD_GPU=1   # the shim keeps gamescope on the handheld GPU (and drops the eGPU-only pin for it)
-    NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)"
+    NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)" || true   # set -e: a card gone mid-start must not end the script
     export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK!"   # games: the eGPU only
     sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1 || true
     log "handheld screen: Game Mode on $hh, games rendered on the eGPU $gen_bdf (chosen in the plugin)"
