@@ -12,7 +12,7 @@ pkgname=(
     'nvidia-open-egpu'
     'nvidia-open-egpu-dkms')
 pkgver=620.70.06
-pkgrel=1
+pkgrel=2
 epoch=1
 pkgdesc='NVIDIA open kernel modules with thunderbolt 4 force egpu and hotplug patches'
 arch=('x86_64')
@@ -30,6 +30,7 @@ source=("https://download.nvidia.com/XFree86/NVIDIA-kernel-module-source/NVIDIA-
         '165-nvidia-drm-defer-modeconfig-cleanup-on-removal.patch'
         '166-nvidia-drm-software-commit-during-removal.patch'
         '167-nvkms-detach-kapi-events-on-surprise-removal.patch'
+        '180-nvidia-open-dp-cec-over-aux.patch'
         'nvidia-egpu-hotplug.rules'
         'nvidia-egpu-hotplug.sh')
 sha256sums=('d65c8bbea3abebc64f83119e4fb7ecb6601fc43d718dbecbec8e3758a246355e'
@@ -42,6 +43,7 @@ sha256sums=('d65c8bbea3abebc64f83119e4fb7ecb6601fc43d718dbecbec8e3758a246355e'
             '554f6132cf9e04c7a512b49e63aceba252c3806644e593ab648cfe4596401696'
             '26f4f7c6a3c03f913333783852c9bddfc40bec6cc4a2487c2683fb91c7d7c2a8'
             '53d7a9dd62408afa8391a878e9e6190e23f7297e7e73da2fe9e05995d0b25654'
+            'b80ab21fd0924120b55a7f23706aa69bcace736406120de603a73390f16edd14'
             'f502e8062d6458792a08d54479eb82d16592e1981e46f3e9e3838cd7a3bd03eb'
             '31a057be4dce6e4e9587adf317cf2ed9df1dd2968e1e2866bad4e9fd7a6f47eb')
 
@@ -58,6 +60,8 @@ prepare() {
     patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/165-nvidia-drm-defer-modeconfig-cleanup-on-removal.patch"
     patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/166-nvidia-drm-software-commit-during-removal.patch"
     patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/167-nvkms-detach-kapi-events-on-surprise-removal.patch"
+    # NV-EGPU-Buddy: HDMI-CEC through a CEC-capable DP-to-HDMI adapter (DP CEC-tunneling); off unless nvidia_drm.dp_cec=1
+    patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/180-nvidia-open-dp-cec-over-aux.patch"
     
     # Substitute version placeholder in dkms.conf
     sed -i "s/@@PKGVER@@/${pkgver}/" "NVIDIA-kernel-module-source-${pkgver}/kernel-open/dkms.conf"
