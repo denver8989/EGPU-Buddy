@@ -17,11 +17,15 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 - Success requires actual report evidence; publication alone does not close this task.
 - Files owned: none.
 
-## EGPU-011 — AMD: "Show Game Mode on handheld" ignored; Desktop eGPU drop | active->waiting-user | Claude 43bbea5e | AMD / Intel install
+## EGPU-011 — AMD: "Show Game Mode on handheld" ignored; Desktop eGPU drop | waiting-tester (handheld fix released 0.7.252) | unclaimed | AMD / Intel install
 
 - Report YPJKMT (Ming, 0.7.250, card's own HDMI, no DP-HDMI adapter): Safe Detach WORKED twice (no CEC adapter = no crash; supports EGPU-002 cause). Dock re-links ~20 s after detach and Game Mode auto-returns to the TV (not yet addressed).
 - Handheld button: AMD session branch ignored game-screen=eDP-1 (OUTPUT_CONNECTOR=HDMI-A-1 first). Fixed (unreleased, commit after a3feb2d series): handheld route for AMD (gamescope on iGPU via shim NV_EGPU_GAMESCOPE_HANDHELD_GPU, shim unsets MESA_VK_DEVICE_SELECT/DRI_PRIME on AMD install, games pinned to eGPU), egpu-generic stale-move check skips when pick = panel. Shim stand-in tested; session not run on hardware.
 - Desktop attach: eGPU fell off the bus (pciehp Link Down, amdgpu device lost) ~17 s after Game Mode->Desktop at 20:07:50, BEFORE Attach was pressed; cause not in the report. Next: targeted logging if owner wants.
+
+## EGPU-012 — Issue #8 Steam menu fix glXDestroyGLXPixmap | done (released) | Claude 43bbea5e | Steam menu fix on (NVIDIA)
+
+- bbauti's patch applied as-is; rebuilt libegpu-steam-ui.so (same toolchain, GLIBC_2.34 like before). Stand-in: preloaded fake steamwebhelper resolves glXDestroyGLXPixmap to our lib (old build: libGLX). Released 0.7.252 (81dd666, run 42742103047), together with EGPU-011 handheld fix (owner OK). Not tested on real hardware; issue not replied to (owner's call).
 
 ## EGPU-003 — egpu-screen CEC discovery path | waiting-user | unclaimed
 
