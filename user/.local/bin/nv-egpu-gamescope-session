@@ -786,17 +786,31 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
   # first real AMD eGPU, Legion Go 1 + RX 6800 XT, 2026-10-24)
   gen_pref=$(cat /var/lib/nvegpu/game-screen 2>/dev/null || true)
   case " $gen_outputs " in *" $gen_pref "*) [ -n "$gen_pref" ] && gen_outputs="$gen_pref $(printf '%s\n' $gen_outputs | grep -vx "$gen_pref")" ;; esac
-  export OUTPUT_CONNECTOR="$(printf '%s,' $gen_outputs)*,${PANEL}"
-  export WLR_DRM_DEVICES="/dev/dri/$gen_card"
-  export DRI_PRIME="pci-$(printf '%s' "$gen_bdf" | tr ':.' '__')!"
-  # gamescope picks the GPU it drives from the Vulkan device it chooses, not from WLR_DRM_DEVICES; with an AMD eGPU next
-  # to an AMD built-in GPU both use the same Vulkan driver, so name the eGPU (the shim adds --prefer-vk-device, nothing else)
-  export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
-  export NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)"
-  # Vulkan sees ONLY the eGPU (Mesa: a trailing "!" exposes nothing else), the AMD counterpart of the NVIDIA route's
-  # driver-file pin: with two AMD GPUs on one driver, nothing in this session can route through the handheld's chip.
-  # (Without the "!" this variable outranks DRI_PRIME's own "!" and made the built-in GPU visible again.)
-  export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK!"
+  if handheld_chosen; then
+    # "Show Game Mode on the handheld screen" (AMD / Intel install; this branch is walled off to it): it was ignored here,
+    # so Game Mode restarted on the TV again (Legion Go S + RX 9070 XT, report YPJKMT). Same as the NVIDIA handheld route:
+    # gamescope stays on the handheld GPU and drives its screen (stock), games render on the eGPU through Vulkan only.
+    hh=$(handheld_screen || echo "$PANEL")
+    export OUTPUT_CONNECTOR="$hh"; [ "$hh" = "$PANEL" ] || OUTPUT_CONNECTOR="$hh,$PANEL"
+    export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
+    export NV_EGPU_GAMESCOPE_HANDHELD_GPU=1   # the shim keeps gamescope on the handheld GPU (and drops the eGPU-only pin for it)
+    NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)"
+    export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK!"   # games: the eGPU only
+    sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1 || true
+    log "handheld screen: Game Mode on $hh, games rendered on the eGPU $gen_bdf (chosen in the plugin)"
+  else
+    export OUTPUT_CONNECTOR="$(printf '%s,' $gen_outputs)*,${PANEL}"
+    export WLR_DRM_DEVICES="/dev/dri/$gen_card"
+    export DRI_PRIME="pci-$(printf '%s' "$gen_bdf" | tr ':.' '__')!"
+    # gamescope picks the GPU it drives from the Vulkan device it chooses, not from WLR_DRM_DEVICES; with an AMD eGPU next
+    # to an AMD built-in GPU both use the same Vulkan driver, so name the eGPU (the shim adds --prefer-vk-device, nothing else)
+    export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"
+    export NV_EGPU_GAMESCOPE_GENERIC_VK="$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/vendor" 2>/dev/null):$(cut -c3- "/sys/bus/pci/devices/$gen_bdf/device" 2>/dev/null)"
+    # Vulkan sees ONLY the eGPU (Mesa: a trailing "!" exposes nothing else), the AMD counterpart of the NVIDIA route's
+    # driver-file pin: with two AMD GPUs on one driver, nothing in this session can route through the handheld's chip.
+    # (Without the "!" this variable outranks DRI_PRIME's own "!" and made the built-in GPU visible again.)
+    export MESA_VK_DEVICE_SELECT="$NV_EGPU_GAMESCOPE_GENERIC_VK!"
+  fi
   # CPU-written GPU buffers in system RAM, not in the eGPU's VRAM. With the full 16 GB BAR, DXVK / vkd3d-proton put the
   # buffers a game rewrites every frame straight into VRAM; across USB4 every CPU access to them crosses the cable and the
   # game's render thread stalls on it: RX 6800 XT in CALX at 20 % busy, UnityGfxDeviceWorker maxing a CPU core, 24-37 fps.

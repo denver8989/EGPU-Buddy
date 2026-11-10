@@ -224,7 +224,8 @@ bringup|attach)
   # left the mark behind, and every later plug-in was then skipped without a word (first real AMD eGPU, 2026-10-24)
   # (only an old mark: right after an attach the session is still restarting onto the card, and the monitor's hot-plug
   # events land here too; treating those as stale would restart Game Mode in a loop)
-  if [ -e $MOVED ] && [ -n "$card" ] && [ $(( $(date +%s) - $(stat -c %Y $MOVED 2>/dev/null || date +%s) )) -gt 90 ] && ! session_on_card "$card"; then log "stale attach mark (the session is not on $card): attaching again"; rm -f $MOVED $MARK; fi
+  # (not while "Show Game Mode on the handheld screen" is picked: then the session is on the handheld GPU on purpose)
+  if [ -e $MOVED ] && [ -n "$card" ] && [ $(( $(date +%s) - $(stat -c %Y $MOVED 2>/dev/null || date +%s) )) -gt 90 ] && ! session_on_card "$card" && [ "$(cat /var/lib/nvegpu/game-screen 2>/dev/null)" != "$PANEL" ]; then log "stale attach mark (the session is not on $card): attaching again"; rm -f $MOVED $MARK; fi
   # a press of Attach always tries again unless the session really is on the card
   [ "$manual" = 1 ] && [ -e $MOVED ] && ! session_on_card "$card" && rm -f $MOVED
   [ -e $MOVED ] && exit 0
