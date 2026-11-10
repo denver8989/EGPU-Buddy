@@ -560,21 +560,22 @@ d["enabled"]=True; json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json
 try: d=json.load(open(p))
 except Exception: d={}
 d["enabled"]=False; json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json 2>/dev/null; echo "touchpad off" ;;
-      speed|invert|drag)   # pointer speed 0.5-4, inverted scroll on/off, drag three/tap; applied by restarting the service
+      speed|invert|drag|keepscreen)   # pointer speed 0.5-4, inverted scroll on/off, drag three/tap, Game Mode screen kept on; applied by restarting the service
         _tp_k=$1 _tp_v=${2:-}
         case "$_tp_k:$_tp_v" in
-          speed:[0-4].[0-9]|speed:[0-4].[0-9][0-9]|speed:[1-4]|invert:on|invert:off|drag:three|drag:tap) ;;
-          *) die "touchpad speed 0.5-4 | invert on|off | drag three|tap" 2 ;;
+          speed:[0-4].[0-9]|speed:[0-4].[0-9][0-9]|speed:[1-4]|invert:on|invert:off|drag:three|drag:tap|keepscreen:on|keepscreen:off) ;;
+          *) die "touchpad speed 0.5-4 | invert on|off | drag three|tap | keepscreen on|off" 2 ;;
         esac
         mkdir -p /var/lib/nvegpu; python3 -c 'import json,sys;p,k,v=sys.argv[1:]
 try: d=json.load(open(p))
 except Exception: d={}
 if k=="speed": d["speed"]=min(4.0,max(0.5,float(v)))
 elif k=="invert": d["invert_scroll"]=v=="on"
+elif k=="keepscreen": d["keep_screen"]=v=="on"
 else: d["drag"]=v
 json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json "$_tp_k" "$_tp_v"
         systemctl try-restart egpu-touchpad.service >/dev/null 2>&1 || true; echo "touchpad $_tp_k $_tp_v" ;;
-      *) die "touchpad takes on, off, speed, invert or drag" 2 ;;
+      *) die "touchpad takes on, off, speed, invert, drag or keepscreen" 2 ;;
     esac
     ;;
   rebuild-driver)

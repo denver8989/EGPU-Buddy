@@ -2394,7 +2394,7 @@ class Plugin:
         on = bool(d.get("enabled"))
         active = _sh(["journalctl", "-u", "egpu-touchpad.service", "-n", "1", "-o", "cat", "--no-pager"], 5)[1]
         return {"enabled": on, "active": on and active.startswith("egpu-touchpad: touchpad on"),
-                "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap"}
+                "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap", "keep_screen": bool(d.get("keep_screen"))}
 
     async def set_touchpad_option(self, key: str, value: str):
         rc, out, err = _sh(["/usr/local/sbin/nv-egpu-buddy-privileged", "touchpad", key, value], 20)

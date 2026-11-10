@@ -195,7 +195,7 @@ const getTvRemote = callable<[], TvRemote>("get_tv_remote");
 const setTvOption = callable<[string, boolean], Result>("set_tv_option");
 const tvKey = callable<[string], Result>("tv_key");
 const rebuildDriver = callable<[], Result>("rebuild_driver");
-const getTouchpad = callable<[], { enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean }>("get_touchpad");
+const getTouchpad = callable<[], { enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean; keep_screen?: boolean }>("get_touchpad");
 const setTouchpad = callable<[boolean], Result>("set_touchpad");
 const setTouchpadOption = callable<[string, string], Result>("set_touchpad_option");
 let tpSpeedT: ReturnType<typeof setTimeout> | undefined;   // the slider saves (and restarts the touchpad) once it settles
@@ -1188,6 +1188,7 @@ function Content() {
             <PanelSectionRow><SliderField label="Touchpad speed" value={tpad?.speed ?? 2} min={0.5} max={4} step={0.25} showValue editableValue={false} onChange={(v) => { setTpad({ ...tpad, speed: v }); clearTimeout(tpSpeedT); tpSpeedT = setTimeout(() => setTouchpadOption("speed", v.toFixed(2)), 600); }} /></PanelSectionRow>
             <PanelSectionRow><ToggleField label="Invert scroll direction" checked={!!tpad?.invert} onChange={(v) => run(async () => { const r = await setTouchpadOption("invert", v ? "on" : "off"); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
             <PanelSectionRow><ToggleField label="Three-finger drag" description="Off: double tap to drag instead (tap, touch again and hold to grab; lifting keeps hold, the next tap lets go)." checked={tpad?.three !== false} onChange={(v) => run(async () => { const r = await setTouchpadOption("drag", v ? "three" : "tap"); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
+            <PanelSectionRow><ToggleField label="Keep the screen on for touch" description="Game Mode only. For touchscreens that stop working while their screen is off. Instead of switching it off, the handheld screen shows a dark touchpad picture at the lowest brightness. On LCD screens the backlight still glows a little in the dark; OLED screens stay black." checked={!!tpad?.keep_screen} onChange={(v) => run(async () => { const r = await setTouchpadOption("keepscreen", v ? "on" : "off"); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
           </>}
           <PanelSectionRow><ToggleField label="TV control tricks" description={`Off by default. Choosing the TV for Game Mode turns it on and switches it to the ${nvb ? "GPU" : "eGPU"}'s HDMI input; while it shows live TV or another input, the desktop leaves it out. LG webOS TVs over the network for now.`} checked={!!tv?.enabled} onChange={(v) => run(() => setTvControl(v))} /></PanelSectionRow>
           {tv?.enabled && (<>

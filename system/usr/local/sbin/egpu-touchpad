@@ -20,6 +20,12 @@ One exception, for device compatibility (some touchscreens stop sensing while th
 "did any touch reach the touchscreen while the touchpad was on", in REACHED (dated to when the touchpad came on, not
 to the touch) and in the "touchpad off" line. No position, count or time of any touch.
 
+Keep the screen on for touch (setting keep_screen, Game Mode only): for touchscreens that stop sensing while their screen
+is off. gamescope drives only the screen it shows on, so the handheld's own graphics leave its panel to the kernel's
+framebuffer: one still dark touchpad picture is put there once at about 3 % backlight, and nothing is redrawn after
+that (no rendering, nothing on the eGPU). The screen counts as dark for the touchpad while it shows the picture.
+Turned off (backlight put back) when the touchpad goes off, the desktop starts or the option is switched off.
+
 Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270, "speed": 2.0}. speed: pointer speed (1 = the true size).
 rotate: for a touchscreen mounted rotated relative to how the screen is used (default: 0, or 90 when the digitizer is
 portrait and the screen landscape).
@@ -34,6 +40,8 @@ BTN_TOOL_FINGER, BTN_TOOL_QUINTTAP, BTN_TOOL_DOUBLETAP, BTN_TOOL_TRIPLETAP, BTN_
 TOOLS = {1: BTN_TOOL_FINGER, 2: BTN_TOOL_DOUBLETAP, 3: BTN_TOOL_TRIPLETAP, 4: BTN_TOOL_QUADTAP, 5: BTN_TOOL_QUINTTAP}
 INPUT_PROP_POINTER, INPUT_PROP_DIRECT = 0, 1
 EVIOCGRAB = 0x40044590
+PIC = "/run/egpu-touchpad-picture"   # while the Game Mode touchpad picture is up: its framebuffer and the backlight to put back
+ART = "/usr/local/share/egpu-buddy/touchpad-%dx%d.gray.gz"   # 8-bit grey, drawn for 1920x1200 and 1920x1080
 REACHED = "/run/egpu-touchpad-reached"   # "yes" once any touch arrived since the touchpad came on (support report)
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045565, 0x40045567, 0x4004556E
 UI_DEV_SETUP, UI_ABS_SETUP, UI_DEV_CREATE, UI_DEV_DESTROY = 0x405C5503, 0x401C5504, 0x5501, 0x5502
@@ -94,6 +102,8 @@ def screen_state():
             continue
         lit = rd("enabled") == "enabled" and rd("dpms") == "On"
         if conn.startswith("eDP"):
+            if os.path.exists(PIC):   # lit only by our touchpad picture
+                continue
             bl = [open(p).read().strip() for p in glob.glob("/sys/class/backlight/*/bl_power")]
             dark = not lit or (bool(bl) and all(v != "0" for v in bl))
         elif lit:
@@ -466,15 +476,116 @@ def guardian(ui):
     os._exit(0)
 
 
+_gm = [0.0, False]
+
+
+def game_mode():
+    """gamescope running and no KDE desktop. Looked up at most every 10 s (a /proc scan each second cost ~0.5 % of a core)."""
+    if time.monotonic() - _gm[0] < 10:
+        return _gm[1]
+    comms = set()
+    for c in glob.glob("/proc/[0-9]*/comm"):
+        try:
+            comms.add(open(c).read().strip())
+        except OSError:
+            pass
+    _gm[:] = time.monotonic(), any(c.startswith("gamescope") for c in comms) and "kwin_wayland" not in comms
+    return _gm[1]
+
+
+def picture_art(w, h):
+    """The touchpad picture as w*h grey bytes: the drawing for that size (turned for a portrait panel), else the closest
+    one centred on black. ponytail: two drawn sizes; other panels get the nearer one cropped/padded, draw more if needed."""
+    import gzip
+    sizes = [(1920, 1200), (1920, 1080)]
+    port = h > w
+    lw, lh = (h, w) if port else (w, h)
+    aw, ah = min(sizes, key=lambda z: abs(z[0] / z[1] - lw / lh))
+    g = gzip.open(ART % (aw, ah)).read()
+    if (aw, ah) != (lw, lh):   # centre on a black canvas of the panel's size
+        out = bytearray(lw * lh); ox, oy = (lw - aw) // 2, (lh - ah) // 2
+        for y in range(max(0, -oy), min(ah, lh - oy)):
+            x0 = max(0, -ox); x1 = min(aw, lw - ox)
+            out[(y + oy) * lw + x0 + ox:(y + oy) * lw + x1 + ox] = g[y * aw + x0:y * aw + x1]
+        g = bytes(out)
+    if port:   # ponytail: portrait panels turned 90° clockwise (Steam Deck / Legion Go 1 style); add the panel's own orientation if one shows upside down
+        g = b"".join(g[r::lw][::-1] for r in range(lw))
+    return g
+
+
+def picture_on():
+    """Light the handheld panel with the touchpad picture through its framebuffer. Only works while nothing else drives
+    that graphics chip (Game Mode with gamescope on another card); otherwise it is undone at once."""
+    for c in glob.glob("/sys/class/drm/card*-eDP-*"):
+        dev = os.path.realpath(c.rsplit("-eDP-", 1)[0] + "/device")
+        fb = next((f for f in glob.glob("/sys/class/graphics/fb[0-9]*") if os.path.realpath(f + "/device") == dev), None)
+        if not fb:
+            continue
+        try:
+            w, h = map(int, open(fb + "/virtual_size").read().split(","))
+            stride = int(open(fb + "/stride").read()) if os.path.exists(fb + "/stride") else w * 4
+            if int(open(fb + "/bits_per_pixel").read()) != 32:
+                continue
+            g = picture_art(w, h)
+            px = bytearray(len(g) * 4); px[0::4] = g; px[1::4] = g; px[2::4] = g
+            bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*")
+                  if os.path.realpath(b).startswith(dev)} or {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*")}
+            json.dump({"fb": fb, "bl": bl}, open(PIC, "w"))
+            with open("/dev/" + os.path.basename(fb), "r+b") as f:
+                for y in range(h):
+                    f.seek(y * stride); f.write(px[y * w * 4:(y + 1) * w * 4])
+            for b in bl:
+                mx = int(open(b + "/max_brightness").read())
+                open(b + "/brightness", "w").write(str(max(1, mx * 3 // 100)))
+            open(fb + "/blank", "w").write("0")
+            time.sleep(0.5)
+            if open(c + "/dpms").read().strip() != "On":
+                log("touchpad picture: the handheld screen is in use, not shown"); picture_off(); return False
+            log("touchpad picture on")
+            return True
+        except (OSError, ValueError) as e:
+            log("touchpad picture: could not show it:", e); picture_off(); return False
+    return False
+
+
+def picture_off():
+    try:
+        d = json.load(open(PIC))
+    except (OSError, ValueError):
+        return
+    for b, v in d.get("bl", {}).items():
+        try:
+            open(b + "/brightness", "w").write(v)
+        except OSError:
+            pass
+    try:
+        open(d["fb"] + "/blank", "w").write("4")
+    except (OSError, KeyError):
+        pass
+    try:
+        os.remove(PIC)
+    except OSError:
+        pass
+    log("touchpad picture off")
+
+
 def run():
     import signal
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(0))   # stop (systemd, timeout, hangup) runs close() below
-    pad = None
+    pad, tried = None, False
+    picture_off()   # left from a stop that could not clean up
     try:
         while True:
             dark, other = screen_state()
             active = dark and other
+            want = bool(active and settings().get("keep_screen") and game_mode())
+            if want and not os.path.exists(PIC) and not tried:
+                tried = True; picture_on()   # once per touchpad session: no retry loop if the screen is in use
+            elif not want and os.path.exists(PIC):
+                picture_off()
+            if not active:
+                tried = False
             if active and pad is None:
                 src, name = touchscreen()
                 if src:
@@ -496,6 +607,7 @@ def run():
     finally:
         if pad:
             pad.close()
+        picture_off()
 
 
 def selftest():
