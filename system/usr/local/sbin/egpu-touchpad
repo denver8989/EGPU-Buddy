@@ -363,6 +363,14 @@ class Pad:
                 self.handle(data[i:i + EVENT.size])
 
     def close(self):
+        try:   # let go of every finger and button first: a device removed with the button down leaves KDE holding it
+            for sl in self.out:
+                self.emit(EV_ABS, ABS_MT_SLOT, sl); self.emit(EV_ABS, ABS_MT_TRACKING_ID, -1)
+            for k in self.held | {BTN_LEFT, BTN_RIGHT}:
+                self.emit(EV_KEY, k, 0)
+            self.emit(EV_SYN, SYN_REPORT, 0); time.sleep(0.1)
+        except OSError:
+            pass
         for f, op in ((self.src, lambda: fcntl.ioctl(self.src, EVIOCGRAB, 0)), (self.ui, lambda: fcntl.ioctl(self.ui, UI_DEV_DESTROY))):
             try:
                 op()
@@ -373,6 +381,8 @@ class Pad:
 
 
 def run():
+    import signal
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # stop (systemd, timeout) runs close() below
     pad = None
     try:
         while True:
