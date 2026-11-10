@@ -101,3 +101,10 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 - Local source: `/home/deck/.claude/projects/-home-deck/memory/ACTIVE_TASK.md` (about 3,500 lines) plus `MEMORY.md` and referenced memories. Recent open items and the final NV GPU Buddy section were reconciled for this initial ledger; the entire historical backlog has NOT been audited.
 - Next: compare older open requests with later commits/releases/reports, promoting only still-open project work into stable entries. Record evidence for superseded/completed items rather than reviving old fixes. Never upload raw home-directory history or private reports into the public repo.
 - Remote agents cannot read local-only source files; leave this task open until reconciliation or a reviewed, sanitized project-only archive is available.
+
+## EGPU-018 — Animated repository banner | done | unclaimed | documentation only
+
+- Owner requested replacing the old GitHub banner with the approved 18-second animation.
+- Files owned: README.md, docs/assets/gear-playground.gif, AGENT_HANDOFF.md, agent-context/ACTIVE_TASK.md, agent-context/HISTORY.md.
+- Validated locally: 960×400, 180 frames, 18 seconds, infinite loop; device labels centered. README uses the new GIF. Publication verification follows the commit; no app or hardware changes.
+- Files currently owned: none.

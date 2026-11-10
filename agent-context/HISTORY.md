@@ -7,3 +7,5 @@
 - Captured the owner's existing 0.7.251 approval, recent open tasks, and incomplete historical reconciliation. Claude was observed paused at its usage limit; no keys sent or process started.
 - Reviewed coordination changes for runtime impact and internal links. Publication uses only the coordination paths, based on remote master, so pending product code stays local.
 - 2026-11-10 Claude: released 0.7.251 (AMD/Titan Ridge Safe Detach releases DP-CEC adapter via /sys/bus/cec). Awaiting Ming report.
+
+- 2026-11-10 — Codex: owner-approved animated GitHub banner replaces the static README header; validated GIF dimensions, 180 frames / 18 seconds / infinite loop and label alignment. Documentation/media only, no hardware actions. EGPU-018.

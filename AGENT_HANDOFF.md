@@ -2,6 +2,12 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-10 (Codex banner-publish-20261110)
+
+- Owner approved replacing the old repository banner with the animated gear banner. README now uses docs/assets/gear-playground.gif (18-second infinite loop, centered opening labels). Documentation/media only; nothing broke or changed on the live machine.
+- Work prepared in an isolated checkout from origin/master; no unrelated code included. No task ownership retained. Prior waiting tasks remain in the ledger.
+
+
 ## Checkpoint — 2026-11-10 (Claude, session 43bbea5e)
 
 - Released 0.7.251 (6912dbb, run 42738108610, v0.7.251 verified). EGPU-001 done; EGPU-002 waiting for Ming's report. No task ownership retained. Nothing broke; no live machine changes.

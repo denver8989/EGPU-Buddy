@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="EGPU Buddy — connect, switch, optimise, play" width="100%">
+  <img src="docs/assets/gear-playground.gif" alt="EGPU Buddy — tested handhelds and docks, SteamOS, CachyOS and Bazzite, plus Desktop and Game Mode previews" width="100%">
 </p>
 
 <p align="center">
