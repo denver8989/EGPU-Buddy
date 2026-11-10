@@ -7,7 +7,7 @@ eGPU), the touchscreen is taken exclusively (EVIOCGRAB) and every finger is pass
 scroll, pinch, three/four-finger gestures. Taps are turned into clicks here (one finger: left, two: right), because
 libinput leaves tap-to-click off by default. Three fingers drag (press, move, lift to drop: windows, files). Four
 fingers are handled here as KDE shortcuts: swipe up or down toggles the Overview, a long swipe left or right switches
-desktop. When the built-in screen comes back on, the touchscreen is released at once.
+desktop. Five fingers spread out show the desktop, pinched in bring the windows back. When the built-in screen comes back on, the touchscreen is released at once.
 
   egpu-touchpad            run (systemd: egpu-touchpad.service; started by the option, stopped when it is turned off)
   egpu-touchpad selftest   the tap and rotation rules without hardware
@@ -16,7 +16,7 @@ Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270, "speed": 2.0}. 
 rotate: for a touchscreen mounted rotated relative to how the screen is used (default: 0, or 90 when the digitizer is
 portrait and the screen landscape).
 """
-import fcntl, glob, json, os, select, struct, subprocess, sys, time
+import fcntl, glob, json, math, os, select, struct, subprocess, sys, time
 
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 SYN_REPORT = 0
@@ -175,17 +175,22 @@ class Pad:
     def emit(self, t, c, v):
         os.write(self.ui, EVENT.pack(0, 0, t, c, v))
 
-    def shortcut(self, name):
-        """Run a KWin global shortcut in the logged-in user's session (no-op outside the KDE desktop)."""
-        log("gesture:", name)
+    def kde(self, *call):
+        """A D-Bus call in the logged-in user's KDE session (no-op outside the KDE desktop)."""
+        log("gesture:", call[-1])
         for bus in sorted(glob.glob("/run/user/*/bus")):
             uid = os.stat(bus).st_uid
             if uid >= 1000:
                 subprocess.Popen(["setpriv", f"--reuid={uid}", f"--regid={uid}", "--init-groups", "env",
-                                  f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}", "busctl", "--user", "call", "org.kde.kglobalaccel",
-                                  "/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s", name],
+                                  f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}", "busctl", "--user", "call", *call],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return
+
+    def shortcut(self, name):
+        self.kde("org.kde.kglobalaccel", "/component/kwin", "org.kde.kglobalaccel.Component", "invokeShortcut", "s", name)
+
+    def show_desktop(self, on):
+        self.kde("org.kde.KWin", "/KWin", "org.kde.KWin", "showDesktop", "b", "true" if on else "false")
 
     def handle(self, ev):
         """Collect one frame of the touchscreen (multi-touch protocol B), then send it on as one touchpad frame."""
@@ -210,11 +215,18 @@ class Pad:
         self.peak = max(self.peak, n) if n else 0   # most fingers since all were lifted
         cx, cy = (sum(p[0] for p in pts.values()) // n, sum(p[1] for p in pts.values()) // n) if n else (0, 0)
         # four-finger swipe: up/down toggles the Overview, a long left/right swipe switches desktop (once per swipe)
-        if n == 4 and self.peak == 4 and not self.swipe and not self.drag and not self.wait_clear:
-            self.swipe = [cx, cy, False]; self.tap.reset()
+        # five fingers: spread out shows the desktop, pinched in brings the windows back (once per gesture)
+        if n in (4, 5) and self.peak == n and not self.swipe and not self.drag and not self.wait_clear:
+            self.swipe = [cx, cy, False, None]; self.tap.reset()   # [start x, start y, fired, five-finger spread]
         if self.swipe and n == 0:
             self.swipe = None
-        if self.swipe and n == 4 and not self.swipe[2]:
+        spread = sum(math.hypot(p[0] - cx, p[1] - cy) for p in pts.values()) / n if n else 0
+        if self.swipe and n == 5 and self.swipe[3] is None:
+            self.swipe[3] = max(spread, 1)
+        if self.swipe and n == 5 and not self.swipe[2]:
+            if spread >= 1.4 * self.swipe[3] or spread <= 0.7 * self.swipe[3]:
+                self.swipe[2] = True; self.show_desktop(spread > self.swipe[3])
+        if self.swipe and n == 4 and not self.swipe[2] and self.swipe[3] is None:
             dx, dy = cx - self.swipe[0], cy - self.swipe[1]
             act = None
             if abs(dx) > abs(dy) and abs(dx) >= 0.3 * self.size[0]:   # ponytail: fixed thresholds, a knob if people ask
@@ -328,8 +340,8 @@ def selftest():
             self.size, self.swipe, self.t3, self.cuts = (1000, 1000), None, None, []
         def emit(self, t, c, v):
             self.log.append((t, c, v))
-        def shortcut(self, name):
-            self.cuts.append(name)
+        def kde(self, *call):
+            self.cuts.append(call[-1])
     f = Fake()
     f.frame({0: (100, 100, 5)}, 0.0); f.frame({}, 0.05)
     assert (EV_KEY, BTN_LEFT, 1) in f.log, "one-finger tap clicks"
@@ -357,6 +369,13 @@ def selftest():
     f.frame({}, 3.3); f.cuts.clear()
     f.frame(four(0, 0), 4.0); f.frame(four(400, 10), 4.1); f.frame({}, 4.2)
     assert f.cuts == ["Switch One Desktop to the Left"], "a long swipe right: previous desktop"
+    five = lambda rad: {s: (500 + round(rad * math.cos(s * 1.2566)), 500 + round(rad * math.sin(s * 1.2566)), 30 + s) for s in range(5)}
+    f.cuts.clear(); f.frame({s: p for s, p in five(100).items() if s < 4}, 5.0); f.frame(five(100), 5.02)
+    f.frame(five(130), 5.1); assert f.cuts == [], "a small spread does nothing"
+    f.frame(five(160), 5.2); f.frame(five(200), 5.3); f.frame({}, 5.4)
+    assert f.cuts == ["true"] and not f.drag, "five fingers spread out: show the desktop, once"
+    f.cuts.clear(); f.frame(five(200), 6.0); f.frame(five(120), 6.1); f.frame({}, 6.2)
+    assert f.cuts == ["false"], "five fingers pinched in: windows back"
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
     assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
     print("selftest ok")
