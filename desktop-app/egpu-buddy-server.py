@@ -297,11 +297,11 @@ def action(p):
         os.makedirs(os.path.dirname(LOOK_FILE), exist_ok=True); open(LOOK_FILE, "w").write(v + "\n"); return {"ok": True, "out": "Look: " + v, "silent": True}
     if a == "tv-option":   # "TV remote (CEC)" / "Turn the TV off at Safe Detach" (opt-in, every setup, as in the plugin)
         k = str((p or {}).get("key", ""))
-        if k not in ("cec_remote", "off_at_detach"): return {"ok": False, "error": "unknown setting"}
+        if k not in ("cec_remote", "off_at_detach", "nvidia_dp_cec"): return {"ok": False, "error": "unknown setting"}
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvset", k, "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "tv-key":   # TV controls: volume / mute (CEC through SteamOS's cecd, or a paired LG TV); runs as the user
         k = str((p or {}).get("key", ""))
-        if k not in ("up", "down", "mute", "on", "off"): return {"ok": False, "error": "unknown key"}
+        if k not in ("up", "down", "mute", "on", "off", "input"): return {"ok": False, "error": "unknown key"}
         rc, o, e = sh(["/usr/local/sbin/egpu-screen", "tvkey", k], 25); o = o.strip(); return {"ok": o.startswith("ok"), "out": o or e, "silent": o.startswith("ok")}
     if a in ("tv-control", "pair-tv") and not extras_on():   # TV control tricks: every setup, as in the plugin
         if a == "tv-control":

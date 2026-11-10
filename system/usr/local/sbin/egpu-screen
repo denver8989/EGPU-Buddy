@@ -354,6 +354,9 @@ def wake(conn, bus, edid, take_input=False):
     tv = _net(edid)
     if tv:
         return _net_wake(tv, take_input)
+    r = _cec_wake(conn, take_input)   # "TV remote (CEC)" on and CONN is that TV: power state, wake, our input
+    if r:
+        return r
     cec = _cec_for(conn)
     if cec:
         if not take_input and read(conn, bus, edid)[0] == "other-input":
@@ -568,6 +571,19 @@ def _lg_tv():
     return None
 
 
+NVCEC = "/etc/modprobe.d/egpu-buddy-dp-cec.conf"   # NVIDIA CEC (patched driver 180): nvidia_drm dp_cec=1
+
+
+def nv_cec_state():
+    """NVIDIA install: whether the patched driver offers DP CEC, the option is set, and the loaded driver has it on."""
+    if open("/etc/nv-egpu-buddy/gpu-vendor").read().strip() == "amd" if os.path.exists("/etc/nv-egpu-buddy/gpu-vendor") else False:
+        return {"supported": False, "on": False, "loaded": False}
+    par = "/sys/module/nvidia_drm/parameters/dp_cec"
+    sup = os.path.exists(par) or "dp_cec:" in subprocess.run(["modinfo", "-p", "nvidia_drm"], capture_output=True, text=True).stdout
+    loaded = os.path.exists(par) and open(par).read().strip() in ("Y", "1")
+    return {"supported": sup, "on": os.path.exists(NVCEC), "loaded": loaded}
+
+
 def remote_routes():
     d, out = _settings(), []
     if d.get("cec_remote") and _steamos() and egpu_cec() is not None:
@@ -577,27 +593,71 @@ def remote_routes():
     return out
 
 
+def _edid_pa(conn):
+    """The HDMI physical address in a screen's EDID (HDMI vendor block, OUI 00-0C-03): the TV port it sits on."""
+    for f in glob.glob(f"/sys/class/drm/card*-{conn}/edid"):
+        try:
+            e = open(f, "rb").read()
+        except OSError:
+            continue
+        i = e.find(b"\x03\x0c\x00", 128)
+        if i > 0 and i + 5 <= len(e):
+            return (e[i + 3] << 8) | e[i + 4]
+    return None
+
+
+def cec_power(n):
+    """The TV's power state over CEC (Give Device Power Status -> Report Power Status), through cecd's
+    SendReceiveRawMessage: "on", "standby", or None when this cecd or the TV doesn't answer."""
+    ok, out = _cecd(n, "call", "SendReceiveRawMessage", "ayyyq", "1", "143", "0", "144", "1500")
+    v = out.split()
+    if ok and len(v) >= 4 and v[2] == "144":
+        return {"0": "on", "2": "on"}.get(v[3], "standby")   # 2 = turning on
+    return None
+
+
+def cec_on_input(n, take_input=True):
+    """TV on (only if it isn't) and onto our HDMI input (SetActiveSource with our own physical address: the TV
+    picks the right port itself, whatever it is numbered)."""
+    pw = cec_power(n)
+    if pw != "on":
+        _cecd(n, "call", "Wake"); time.sleep(2)
+    if take_input:
+        ok, pa = _cecd(n, "get-property", "PhysicalAddress")
+        if ok and len(pa.split()) == 2:
+            _cecd(n, "call", "SetActiveSource", *pa.split())
+    return ("was " + pw if pw else "power state unknown") + (", woken" if pw != "on" else "") + (", our input" if take_input else "")
+
+
+def _cec_wake(conn, take_input):
+    """Moving Game Mode / the desktop to CONN with "TV remote (CEC)" on: only when CONN is the TV on the CEC link
+    (the screen's EDID physical address is the one cecd reports)."""
+    if "cec" not in remote_routes():
+        return None
+    n = egpu_cec()
+    ok, pa = _cecd(n, "get-property", "PhysicalAddress")
+    if not ok or len(pa.split()) != 2 or _edid_pa(conn) != int(pa.split()[1]):
+        return None
+    return "CEC: " + cec_on_input(n, take_input)
+
+
 def tvkey(key):
     """Volume up / down / mute / on / off on the TV: CEC first (the eGPU's adapter), else the paired LG TV."""
     routes = remote_routes()
-    if key in ("on", "off"):
+    if key in ("on", "off", "input"):
         if "cec" in routes:
             n = egpu_cec()
             if key == "off" and _cecd(n, "call", "Standby", "y", "0")[0]:
                 return "ok (CEC): TV off"
-            if key == "on" and _cecd(n, "call", "Wake")[0]:
-                # then our input: SetActiveSource with our own physical address (as cec-mote's wake does)
-                ok, pa = _cecd(n, "get-property", "PhysicalAddress")
-                if ok and len(pa.split()) == 2:
-                    time.sleep(2); _cecd(n, "call", "SetActiveSource", *pa.split())
-                return "ok (CEC): TV on"
+            if key in ("on", "input"):
+                return "ok (CEC): " + cec_on_input(n, True)
         if "lg" in routes:
             tv = _lg_tv()
             if key == "off":
                 if (webos(tv["ip"], "ssap://system/turnOff", key=tv["key"], wait=4)[1] or {}).get("returnValue"):
                     return "ok (LG): TV off"
                 return "the TV did not answer (already off?)"
-            r = _net_wake(tv, True)   # wake-on-LAN, then our HDMI input (the TV control tricks' own wake)
+            r = _net_wake(tv, True)   # wake-on-LAN (if off), then our HDMI input (the TV control tricks' own wake)
             return "ok (LG): " + r
         return "no TV to control" if not routes else "the TV did not answer"
     if "cec" in routes:
@@ -642,18 +702,25 @@ def main(argv):
         d["enabled"] = want[0] == "on"
         os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
         print("TV control " + want[0]); return 0
+    if cmd == "tvset" and len(want) == 2 and want[0] == "nvidia_dp_cec" and want[1] in ("on", "off"):
+        # takes effect the next time the NVIDIA driver loads (eGPU plugged in again, or a restart)
+        if want[1] == "on":
+            open(NVCEC, "w").write("# EGPU Buddy: HDMI-CEC through a CEC-capable DisplayPort-to-HDMI adapter (patched nvidia-drm)\noptions nvidia_drm dp_cec=1\n")
+        elif os.path.exists(NVCEC):
+            os.remove(NVCEC)
+        print(f"nvidia_dp_cec {want[1]}"); return 0
     if cmd in ("tvset",) and len(want) == 2 and want[0] in ("cec_remote", "off_at_detach") and want[1] in ("on", "off"):
         d = _settings(); d[want[0]] = want[1] == "on"
         os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
         print(f"{want[0]} {want[1]}"); return 0
-    if cmd == "tvkey" and want in (["up"], ["down"], ["mute"], ["on"], ["off"]):
+    if cmd == "tvkey" and want in (["up"], ["down"], ["mute"], ["on"], ["off"], ["input"]):
         print(tvkey(want[0])); return 0
     if cmd == "tvoff":
         print(tvoff()); return 0
     if cmd == "tvremote":   # what the plugin shows: which routes work right now
         d = _settings()
         print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")),
-                          "cec_here": _steamos() and egpu_cec() is not None})); return 0
+                          "cec_here": _steamos() and egpu_cec() is not None, "nv_cec": nv_cec_state()})); return 0
     take_input = "--input" in want
     want = [w for w in want if w != "--input"]
     found = [s for s in screens() if not want or s[0] in want]

@@ -189,7 +189,7 @@ const makeReport = callable<[], { code: string; file: string; url: string }>("ma
 const qrSvg = (text: string) => { const q = qrcode(0, "L"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); };
 const setTvControl = callable<[boolean], Result>("set_tv_control");
 // TV controls (volume / mute) and "Turn the TV off at Safe Detach" (opt-in): the eGPU's CEC adapter via SteamOS's cecd, or a paired LG TV
-type TvRemote = { routes: string[]; cec_remote: boolean; off_at_detach: boolean; cec_here: boolean };
+type TvRemote = { routes: string[]; cec_remote: boolean; off_at_detach: boolean; cec_here: boolean; nv_cec?: { supported: boolean; on: boolean; loaded: boolean } };
 const getTvRemote = callable<[], TvRemote>("get_tv_remote");
 const setTvOption = callable<[string, boolean], Result>("set_tv_option");
 const tvKey = callable<[string], Result>("tv_key");
@@ -1183,6 +1183,7 @@ function Content() {
           </>)}
           {(tv?.enabled || trm?.cec_remote) && <PanelSectionRow><ToggleField label="Turn the TV off at Safe Detach" description={'Off by default. Puts the TV to standby just before the eGPU lets go of it: through CEC when "TV remote" is on, or over the network for a paired LG TV (works with NVIDIA cards too). Not on a cable pull.'} checked={!!trm?.off_at_detach} onChange={(v) => run(async () => { const r = await setTvOption("off_at_detach", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
           {(trm?.cec_here || trm?.cec_remote) && <PanelSectionRow><ToggleField label="TV remote (CEC)" description={'Off by default. Adds "TV controls" to the main page: TV volume and mute through SteamOS\'s own CEC service. Shown only on SteamOS when the TV can be reached over CEC: an AMD card\'s HDMI or CEC-capable adapter, or a USB-CEC adapter in the TV\'s cable (any eGPU, NVIDIA too). Remote part based on cec-mote by xXJSONDeruloXx.'} checked={!!trm?.cec_remote} onChange={(v) => run(async () => { const r = await setTvOption("cec_remote", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
+          {(trm?.nv_cec?.supported || trm?.nv_cec?.on) && <PanelSectionRow><ToggleField label="NVIDIA CEC (DisplayPort adapter)" description={`Off by default. Lets the NVIDIA card carry HDMI-CEC through a CEC-capable DisplayPort-to-HDMI adapter (EGPU Buddy's patched driver), so "TV remote (CEC)" works on NVIDIA too. Takes effect the next time the eGPU is plugged in.${trm?.nv_cec?.loaded ? " Active now." : ""}`} checked={!!trm?.nv_cec?.on} onChange={(v) => run(async () => { const r = await setTvOption("nvidia_dp_cec", v); setTrm(await getTvRemote()); return r; })} /></PanelSectionRow>}
         </PanelSection>
       )}
       {tab === "tv" && (
@@ -1193,6 +1194,7 @@ function Content() {
           <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("mute"))}>Mute</ButtonItem></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("on"))}>TV on</ButtonItem></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("off"))}>TV off</ButtonItem></PanelSectionRow>
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => tvKey("input"))}>Switch TV to the {nvb ? "GPU" : "eGPU"}</ButtonItem></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>{trm?.routes.includes("cec") ? "Through CEC (SteamOS's CEC service)." : "Over the network (paired LG TV)."}</div></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" onClick={() => setTab("main")}>Back</ButtonItem></PanelSectionRow>
         </PanelSection>

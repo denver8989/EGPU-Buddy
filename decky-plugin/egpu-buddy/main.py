@@ -2359,13 +2359,15 @@ class Plugin:
             return {"routes": [], "cec_remote": False, "off_at_detach": False, "cec_here": False}
 
     async def set_tv_option(self, name: str, enabled: bool):
-        if name not in ("cec_remote", "off_at_detach"):
+        if name not in ("cec_remote", "off_at_detach", "nvidia_dp_cec"):
             return {"ok": False, "message": "Unknown option."}
         _sh(["/usr/local/sbin/egpu-screen", "tvset", name, "on" if enabled else "off"], 10)
+        if name == "nvidia_dp_cec":
+            return {"ok": True, "message": "Saved: it takes effect the next time the eGPU is plugged in (or after a restart)."}
         return {"ok": True, "message": ("On." if enabled else "Off.")}
 
     async def tv_key(self, key: str):
-        if key not in ("up", "down", "mute", "on", "off"):
+        if key not in ("up", "down", "mute", "on", "off", "input"):
             return {"ok": False, "message": "Unknown key."}
         out = await asyncio.get_running_loop().run_in_executor(None, lambda: _sh(["/usr/local/sbin/egpu-screen", "tvkey", key], 25)[1].strip())
         return {"ok": out.startswith("ok"), "message": out or "No answer."}
