@@ -1,3 +1,10 @@
+0.7.259 — Desktop app uses the space on bigger screens.
+
+**Desktop app** (every setup)
+- Opens sized to the screen (up to 1600 x 1100) instead of a fixed small window.
+- Extras and setup: the cards stack in columns without empty holes, three columns on a wide window.
+- NVIDIA settings: two settings per row on a wide window. On a big screen every page fits without scrolling.
+
 0.7.258 — Handheld screen as touchpad (new, opt-in).
 
 **Handheld screen as touchpad** (Extras, off by default; plugin and desktop app; every setup)
