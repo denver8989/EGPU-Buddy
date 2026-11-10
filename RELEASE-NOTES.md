@@ -1,3 +1,8 @@
+0.7.261 — Handheld screen as touchpad: support report shows whether it works on your handheld.
+
+**Handheld screen as touchpad** (only when the option is on; nothing else changed)
+- The support report now shows whether the touchpad is on, which touchscreen it uses, whether the handheld screen is off, and yes/no "a touch reached the touchscreen". It keeps only that yes/no: never where, when or how often you touched.
+
 0.7.260 — AMD: plugging back in right after Safe Detach works.
 
 **AMD / Intel eGPU, Thunderbolt 3 docks** (AMD / Intel install only; NVIDIA unchanged)

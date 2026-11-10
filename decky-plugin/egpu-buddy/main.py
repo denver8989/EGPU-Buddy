@@ -1678,8 +1678,13 @@ def _support_report():
             live = _sh(["systemctl", "is-active", "egpu-touchpad.service"], 5)[1].strip()
             on = any(_read(n).strip() == "EGPU Buddy touchpad (handheld screen)" for n in glob.glob("/sys/class/input/event*/device/name"))
             reached = os.path.exists("/run/egpu-touchpad-reached")
+            # no touch needed: which touchscreen the kernel has (direct-touch multi-touch) and whether the handheld screen is lit
+            ts = [_read(os.path.dirname(c) + "/name").strip() for c in glob.glob("/sys/class/input/event*/device/properties")
+                  if int((_read(c).split() or ["0"])[-1], 16) & 2 and "EGPU Buddy" not in _read(os.path.dirname(c) + "/name")]
+            edp = [f"{os.path.basename(c)} {_read(c + '/enabled').strip()} {_read(c + '/dpms').strip()}" for c in glob.glob("/sys/class/drm/card*-eDP-*")]
             lines += ["", "## Handheld screen as touchpad (this boot)", f"service {live} · touchpad {'on' if on else 'off'}"
-                      + (f" · a touch reached the touchscreen since it came on: {'yes' if reached else 'no'}" if on else "")] + (tl or ["(no touchpad log lines this boot)"])
+                      + (f" · a touch reached the touchscreen since it came on: {'yes' if reached else 'no'}" if on else ""),
+                      f"touchscreen: {', '.join(ts) or 'none found'} · handheld screen: {', '.join(edp) or 'not found'}"] + (tl or ["(no touchpad log lines this boot)"])
     except Exception as ex:  # noqa: BLE001
         lines += ["", f"## Handheld screen as touchpad: could not be read ({ex})"]
     try:
