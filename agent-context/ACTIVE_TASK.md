@@ -118,3 +118,4 @@ Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript,
 Commits fda8530..68b7c4e (local, not pushed). Live test left KWin with a stuck pressed button after the test process was killed
 mid three-finger drag; machine restarted. Owner: must never happen again before release. Next: watchdog auto-release of held
 drags, release on every exit path, test kills mid-drag in a nested KWin only. Do not push/release until done and owner OKs.
+Update: prevention built + proven in isolation (fc69fd3, tests/egpu-touchpad-killtest.py ALL PASS). Next: one short live test with owner, then release on OK.
