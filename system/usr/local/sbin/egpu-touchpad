@@ -177,7 +177,7 @@ class Pad:
         self.last_ev = time.monotonic()
         self.lastpos = mt_positions(self.src, islot[2] + 1)
         self.slot, self.slots, self.held, self.out = 0, {}, set(), {}
-        self.drag, self.wait_clear, self.drag_tid, self.peak = False, False, 60000, 0
+        self.drag, self.wait_clear, self.drag_tid, self.peak, self.pressed, self.drag_t0 = False, False, 60000, 0, False, 0.0
         self.tap = Tap(max(ox[2] - ox[1], oy[2] - oy[1], 1))
         self.size, self.swipe = (max(ox[2] - ox[1], 1), max(oy[2] - oy[1], 1)), None
         self.lim = (ox[1], ox[2], oy[1], oy[2])
@@ -248,11 +248,14 @@ class Pad:
         self.peak = max(self.peak, n) if n else 0   # most fingers since all were lifted
         cx, cy = (sum(p[0] for p in pts.values()) // n, sum(p[1] for p in pts.values()) // n) if n else (0, 0)
         # four and five fingers are KDE desktop shortcuts: in Game Mode (no KWin) they do nothing
-        if n in (4, 5) and not self.swipe and not self.wait_clear and not self.drag and self.peak == n and not self.desktop():
+        early = self.drag and not self.pressed   # a drag that has not clicked yet can still become a gesture
+        if n in (4, 5) and not self.swipe and not self.wait_clear and (early or not self.drag) and self.peak == n and not self.desktop():
+            self.drag = False
             self.wait_clear = True; self.tap.reset()
         # four-finger swipe: up/down toggles Present Windows, a long left/right swipe switches desktop (once per swipe)
         # five fingers: spread out shows the desktop, pinched in brings the windows back (once per gesture)
-        if n in (4, 5) and self.peak == n and not self.swipe and not self.drag and not self.wait_clear:
+        if n in (4, 5) and self.peak == n and not self.swipe and (early or not self.drag) and not self.wait_clear:
+            self.drag = False
             self.swipe = [cx, cy, False, None, 1.0]; self.tap.reset()   # [start x, start y, fired, five-finger spread, ratio]
         if self.swipe and n == 0:
             self.swipe = None
@@ -275,7 +278,9 @@ class Pad:
         # three-finger drag: three fingers down press the button on what is under the pointer, moving them drags it,
         # lifting them drops it. The pointer follows the middle of the three (as in the first, owner-approved version).
         if self.three and not self.drag and not self.wait_clear and not self.swipe and n == 3 and self.peak == 3:
-            self.drag, self.drag_tid = True, self.drag_tid % 65000 + 1
+            self.drag, self.drag_tid, self.pressed, self.drag_t0 = True, self.drag_tid % 65000 + 1, False, now
+        if self.drag and not self.pressed and now - self.drag_t0 >= 0.06:   # the grab clicks 60 ms in: a 4th/5th finger
+            self.pressed = True                                               # landing before that makes it a gesture
             self.tap.reset()
         if self.drag and n < 2:   # lifted (one finger leaving a moment early does not end it)
             self.drag, self.wait_clear = False, n > 0
@@ -347,7 +352,7 @@ class Pad:
             _, x, y = target[min(target)]
             self.emit(EV_ABS, ABS_X, x); self.emit(EV_ABS, ABS_Y, y)
         self.out = target
-        want = ({TOOLS[min(len(target), 5)], BTN_TOUCH} if target else set()) | ({BTN_LEFT} if self.drag or self.tdrag in ("held", "locked", "relock") else set())
+        want = ({TOOLS[min(len(target), 5)], BTN_TOUCH} if target else set()) | ({BTN_LEFT} if self.drag and self.pressed or self.tdrag in ("held", "locked", "relock") else set())
         for k in self.held - want:
             self.emit(EV_KEY, k, 0)
         for k in want - self.held:
@@ -484,6 +489,7 @@ def selftest():
     class Fake(Pad):   # frame() without hardware: record what the virtual touchpad would get
         def __init__(self):
             self.out, self.held, self.drag, self.wait_clear, self.drag_tid, self.tap, self.log, self.peak = {}, set(), False, False, 60000, Tap(1000), [], 0
+            self.pressed, self.drag_t0 = False, 0.0
             self.size, self.swipe, self.cuts = (1000, 1000), None, []
             self.on_desktop = True; self.last_ev = 0.0; self.lastpos = {}
             self.lim, self.three, self.invert, self.tdrag, self.last_tap, self.anchor = (0, 1000, 0, 1000), True, False, None, -1.0, None
@@ -506,7 +512,8 @@ def selftest():
     assert (EV_KEY, BTN_LEFT, 1) in f.log, "one-finger tap clicks"
     f.log.clear()
     pts = {0: (100, 100, 6), 1: (200, 100, 7), 2: (300, 100, 8)}
-    f.frame(pts, 1.0)
+    f.frame(pts, 1.0); assert f.drag and (EV_KEY, BTN_LEFT, 1) not in f.log, "the pointer follows at once, the click waits"
+    f.frame(pts, 1.07)
     assert (EV_KEY, BTN_LEFT, 1) in f.log and f.drag and list(f.out) == [0] and f.out[0][1:] == (200, 100), "three fingers press at their middle"
     f.frame({s: (x + 50, y + 20, t) for s, (x, y, t) in pts.items()}, 1.2)
     assert f.out[0][1:] == (250, 120) and (EV_KEY, BTN_LEFT, 0) not in f.log, "moving drags with the button held"
@@ -516,7 +523,9 @@ def selftest():
     assert (EV_KEY, BTN_LEFT, 0) in f.log and not f.drag and f.out == {}, "lifting drops; the last finger moves nothing"
     f.frame({}, 1.4); assert not f.wait_clear
     four = lambda dx, dy: {s: (100 * s + 300 + dx, 500 + dy, 20 + s) for s in range(4)}
-    f.log.clear(); f.frame(four(0, 0), 2.03)   # ponytail: a 4th finger landing after 3 starts a drag (first-version drag)
+    f.log.clear(); f.frame({s: p for s, p in four(0, 0).items() if s < 3}, 2.0)   # lands as three first
+    f.frame(four(0, 0), 2.03)
+    assert (EV_KEY, BTN_LEFT, 1) not in f.log, "a late 4th finger: no click"
     assert not f.drag and f.out == {} and f.swipe, "four fingers: a swipe, not a drag, nothing forwarded"
     f.frame(four(0, -200), 2.1); f.frame(four(0, -300), 2.15)
     assert f.cuts == ["Expose"], "swipe up shows the window previews once"
@@ -575,6 +584,7 @@ def selftest():
     f.three = True
     g = Fake(); g.frame({0: (100, 100, 200)}, 50.0); g.frame({0: (101, 100, 200), 1: (200, 100, 201)}, 50.01)
     g.frame({0: (102, 100, 200), 1: (201, 100, 201), 2: (300, 100, 202)}, 50.02)   # a real hand: 1, 2, then 3 fingers
+    g.frame({0: (102, 100, 200), 1: (201, 100, 201), 2: (300, 100, 202)}, 50.1)
     assert g.drag and BTN_LEFT in g.held and not g.mt["bugs"], f"drag start ends old touches first: {g.mt['bugs'][:3]}"
     g.frame({}, 50.1)
     assert not logged, f"finger activity reached the log: {logged}"
