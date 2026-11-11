@@ -784,16 +784,21 @@ def kde_screen_off(conn_dir):
     """The screen given back to KDE was dark before the touchpad took it (the touchpad only runs then): KDE would switch
     it on from an older saved layout, so switch it off again in every running KDE session (as its user)."""
     name = os.path.basename(conn_dir).split("-", 1)[1]
+    if subprocess.run(["pgrep", "-x", "kwin_wayland"], stdout=subprocess.DEVNULL).returncode:
+        return   # KDE has quit (Game Mode next): nothing to switch off
     for sock in sorted(glob.glob("/run/user/*/wayland-[0-9]")):
         if not os.path.exists(sock + ".lock"):
             continue
         uid = os.stat(sock).st_uid; rt = os.path.dirname(sock)
         env = ["env", f"XDG_RUNTIME_DIR={rt}", f"WAYLAND_DISPLAY={os.path.basename(sock)}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={rt}/bus"]
         run = ["setpriv", f"--reuid={uid}", f"--regid={uid}", "--init-groups", *env, "kscreen-doctor"]
-        for _ in range(10):   # KDE takes a moment to list it again
-            if name in subprocess.run(run + ["-o"], capture_output=True, text=True, timeout=10).stdout:
-                subprocess.run(run + [f"output.{name}.disable"], capture_output=True, timeout=10); break
-            time.sleep(0.5)
+        try:
+            for _ in range(10):   # KDE takes a moment to list it again
+                if name in subprocess.run(run + ["-o"], capture_output=True, text=True, timeout=3).stdout:
+                    subprocess.run(run + [f"output.{name}.disable"], capture_output=True, timeout=3); break
+                time.sleep(0.5)
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def lease_screen(drm_dev, conn_name):
@@ -902,7 +907,7 @@ def drm_show(fd, conn_id, desk):
 def picture_lease_on(c, dev, bl):
     """No eGPU, desktop: the VR flag, the lease and the picture (see LEASE above)."""
     if vr_running():
-        log("touchpad picture: a VR runtime is running, not shown"); return False
+        say_once("touchpad picture: a VR runtime is running, not shown"); return False
     raw = open(c + "/edid", "rb").read()
     if len(raw) < 128:
         return False
@@ -924,7 +929,7 @@ def picture_lease_on(c, dev, bl):
         for b in bl:
             mx = int(open(b + "/max_brightness").read())
             open(b + "/brightness", "w").write(str(max(1, mx * 3 // 100)))
-        log("touchpad picture on (handed over by the desktop)")
+        log("touchpad picture on (handed over by the desktop)"); _said[0] = ""
         return True
     except (OSError, ValueError, struct.error) as e:
         log("touchpad picture: could not show it:", e); picture_off(); return False
@@ -955,6 +960,11 @@ def picture_draw(fb, desk):
             f.seek(y * stride); f.write(px[y * w * 4:(y + 1) * w * 4])
 
 
+def socket_peek():
+    import socket
+    return socket.MSG_PEEK | socket.MSG_DONTWAIT
+
+
 def picture_mode():
     """Game Mode <-> desktop while the picture is up: redraw it for the new mode (the screen stays on)."""
     try:
@@ -963,6 +973,10 @@ def picture_mode():
         if "fb" in d and any(chip_shared(c) for c in glob.glob("/sys/class/drm/card*-eDP-*")):
             log("touchpad picture: another screen joined the handheld's chip (XR glasses?), picture off")
             picture_off(); return
+        if d.get("lease") and LEASE.get("wl"):
+            r, _, _ = select.select([LEASE["wl"].s], [], [], 0)
+            if r and not LEASE["wl"].s.recv(4096, socket_peek()):   # KDE quit (desktop -> Game Mode): give the screen back now
+                log("touchpad picture: the desktop closed, screen given back"); picture_off(); return
         if d.get("lease"):
             if gm or vr_running():   # the desktop left (its lease ended) or SteamVR started: give the screen back
                 picture_off()
@@ -971,6 +985,15 @@ def picture_mode():
             picture_draw(d["fb"], not gm); d["gm"] = gm; json.dump(d, open(PIC, "w"))
     except (OSError, ValueError, KeyError):
         pass
+
+
+_said = [""]
+
+
+def say_once(msg):
+    """A refusal is logged when its reason changes, not at every retry."""
+    if msg != _said[0]:
+        _said[0] = msg; log(msg)
 
 
 def picture_on():
@@ -984,12 +1007,12 @@ def picture_on():
         node = "/dev/dri/" + os.path.basename(c.rsplit("-eDP-", 1)[0])
         held = card_held(node)
         if not held and chip_shared(c):
-            log("touchpad picture: another screen is on the handheld's chip (XR glasses?), not shown"); return False
+            say_once("touchpad picture: another screen is on the handheld's chip (XR glasses?), not shown"); return False
         if held.startswith("kwin") and not game_mode():   # no eGPU, desktop: KDE hands the screen over
             bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
             return picture_lease_on(c, dev, bl)
         if held:   # gamescope drives this chip (no eGPU, Game Mode): it cannot lend a screen
-            log("touchpad picture: the handheld screen is driven by Game Mode, not shown"); return False
+            say_once("touchpad picture: the handheld screen is driven by Game Mode, not shown"); return False
         try:
             if int(open(fb + "/bits_per_pixel").read()) != 32:
                 continue
@@ -1012,7 +1035,7 @@ def picture_on():
                 time.sleep(1)
             if open(c + "/dpms").read().strip() != "On":
                 log("touchpad picture: the handheld screen is in use, not shown"); picture_off(); return False
-            log("touchpad picture on")
+            log("touchpad picture on"); _said[0] = ""
             return True
         except (OSError, ValueError) as e:
             log("touchpad picture: could not show it:", e); picture_off(); return False
@@ -1073,21 +1096,22 @@ def run():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(0))   # stop (systemd, timeout, hangup) runs close() below
     seat_rule()
-    pad, tried = None, False
+    pad, tried = None, 0.0
     picture_off()   # left from a stop that could not clean up
     try:
         while True:
             dark, other = screen_state()
             active = dark and other
             want = bool(active and settings().get("keep_screen"))
-            if want and not os.path.exists(PIC) and not tried:
-                tried = True; picture_on()   # once per touchpad session: no retry loop if the screen is in use
+            if want and not os.path.exists(PIC) and time.monotonic() - tried > 15:
+                # retried every 15 s: Game Mode -> Desktop (or glasses unplugged) can free or lend the screen later
+                tried = time.monotonic(); picture_on()
             elif not want and os.path.exists(PIC):
                 picture_off()
             elif want and os.path.exists(PIC):
                 picture_mode()
             if not active:
-                tried = False
+                tried = 0.0
             if active and pad is None:
                 src, name = touchscreen()
                 if src:
