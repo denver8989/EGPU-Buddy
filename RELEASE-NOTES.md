@@ -1,3 +1,11 @@
+0.7.265 — XR glasses on the desktop with the ROG Ally / XG Mobile; touchpad picture without an eGPU.
+
+**ROG Ally / XG Mobile** (glasses on the Ally's USB-C picked as the screen; every other machine unchanged)
+- Fixed: the desktop ran on the Ally's own GPU with the glasses. It now runs on the eGPU as in Game Mode, the glasses alone show it at their best mode. Log out and back in after picking the glasses.
+
+**Handheld screen as touchpad** (only when "Keep the screen on for touch" is on)
+- The picture now also works on the desktop without an eGPU (e.g. XR glasses on the handheld): the desktop lends the handheld screen, it never becomes part of the desktop. Never while SteamVR runs.
+
 0.7.264 — Keep the screen on for touch: also on the desktop.
 
 **Handheld screen as touchpad** (only when the option is on)
