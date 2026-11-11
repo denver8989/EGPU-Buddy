@@ -656,7 +656,7 @@ else
      { f=$(modinfo -n nvidia 2>/dev/null); case "$f" in
          *.zst) zstd -dcq "$f" 2>/dev/null ;; *.xz) xz -dcq "$f" 2>/dev/null ;;
          *.gz) gzip -dcq "$f" 2>/dev/null ;; *) cat "$f" 2>/dev/null ;; esac; } |
-     grep -qaF 'External GPU disconnected.'; then
+     grep -caF 'External GPU disconnected.' | grep -qv '^0$'; then   # -c reads it all: -q stopped early and pipefail called the SIGPIPE a miss
     say "== the installed NVIDIA modules are this project's patched build (surprise unplug is handled)"
   else
     say "== patched driver not installed. Without it a cable yank can hang the compositor (safe detach still works)."
