@@ -488,7 +488,17 @@ def only(conn):
     names = _kwin_outputs()
     if conn not in names:
         return f"{conn} is not a screen KWin drives"
-    on, off = [f"output.{conn}.enable", f"output.{conn}.priority.1"], [f"output.{n}.disable" for n in names if n != conn]
+    # the handheld panel stays on beside XR glasses on its own chip while "Keep the screen on for touch" is on: it shows
+    # the touchpad picture there (switched off, the picture went with it)
+    keep = ""
+    try:
+        t = json.load(open("/var/lib/nvegpu/touchpad.json"))
+        if t.get("enabled") and t.get("keep_screen") and not conn.startswith("eDP"):
+            keep = next((os.path.basename(e).split("-", 1)[1] for e in glob.glob("/sys/class/drm/card*-eDP-*")
+                         if glob.glob(e.rsplit("-eDP-", 1)[0] + f"-{conn}")), "")
+    except (OSError, ValueError):
+        pass
+    on, off = [f"output.{conn}.enable", f"output.{conn}.priority.1"], [f"output.{n}.disable" for n in names if n not in (conn, keep)]
     if (_reference_path() or _ally_glasses(conn)) and off:
         # NVIDIA reference path: one KWin change that turned the monitor on AND the TV off (DP-7 5120x1440@144 HDR,
         # HDMI-A-1 off; RTX 5060 Ti, 2026-11-10) hit "Flip event timeout on head 0" in nvidia-drm and the monitor stayed
