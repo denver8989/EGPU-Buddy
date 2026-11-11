@@ -557,7 +557,9 @@ ApplicationWindow {
                                 text: "Standby just before the eGPU lets go of the TV: through CEC with TV remote on, or over the network for a paired LG TV. Not on a cable pull." }
                         Switch { Layout.fillWidth: true; visible: !!win.tvr.cec_here || !!win.tvr.cec_remote; text: "TV remote (CEC)"; checked: !!win.tvr.cec_remote; onToggled: { win.act("tv-option", { key: "cec_remote", value: checked }); win.loadEx() } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!win.tvr.cec_here || !!win.tvr.cec_remote; font.pixelSize: 12
-                                text: "Volume, mute and TV on / off through SteamOS's own CEC service (cecd): an AMD card's HDMI or CEC-capable adapter, or a USB-CEC adapter in the TV's cable (any eGPU, NVIDIA too). Based on cec-mote by xXJSONDeruloXx." }
+                                text: "Volume, mute and TV on / off over CEC (SteamOS's CEC service, or the adapter directly): an AMD card's HDMI or CEC-capable adapter, or a USB-CEC adapter in the TV's cable (any eGPU, NVIDIA too). Based on cec-mote by xXJSONDeruloXx." }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.accent || win.subCol; visible: !!win.tvr.cec_here && !!win.tvr.cec_hint; font.pixelSize: 12
+                                text: "Your TV: " + (win.tvr.cec_hint || "") + ". Without it the TV answers but ignores TV on, input and volume over CEC." }
                         Switch { Layout.fillWidth: true; visible: !!(win.tvr.nv_cec || {}).nvidia && !win.nvb; text: "NVIDIA CEC (DisplayPort adapter)"; checked: !!(win.tvr.nv_cec || {}).on
                                  onToggled: { win.act("tv-option", { key: "nvidia_dp_cec", value: checked }); if (checked && !(win.tvr.nv_cec || {}).supported && (win.tvr.nv_cec || {}).rebuild !== "running") rebuildDlg.open(); win.loadEx() } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!(win.tvr.nv_cec || {}).nvidia && !win.nvb; font.pixelSize: 12
