@@ -382,11 +382,19 @@ def settle():
         print(found[0][0], wake(*found[0], take_input=True))
 
 
+def _kscreen_j():
+    """kscreen-doctor -j, only while a KDE desktop runs: in Game Mode it aborted every time it was asked (a core dump
+    every few seconds from this watcher). ValueError without KDE, as for unreadable output."""
+    if subprocess.run(["pgrep", "-x", "kwin_wayland"], stdout=subprocess.DEVNULL).returncode:
+        raise ValueError("no KDE desktop")
+    return json.loads(subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=10).stdout)
+
+
 def _kwin_layout(conn):
     """KDE's main-screen order and scale for a screen, so turning it back on restores both (KDE brings a re-enabled
     screen back as a secondary screen at its default scale: a TV that was the main screen lost the taskbar)."""
     try:
-        o = next(x for x in json.loads(subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=10).stdout)["outputs"] if x.get("name") == conn)
+        o = next(x for x in _kscreen_j()["outputs"] if x.get("name") == conn)
         return {"priority": int(o["priority"]), "scale": float(o["scale"])}
     except Exception:
         return {}
@@ -399,7 +407,7 @@ def _kwin_enable(conn, on, layout=None):
 
 def _kwin_outputs():
     try:
-        return [o["name"] for o in json.loads(subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=10).stdout)["outputs"] if o.get("connected")]
+        return [o["name"] for o in _kscreen_j()["outputs"] if o.get("connected")]
     except Exception:
         return []
 
@@ -462,7 +470,7 @@ def best(conn):
         if drv == "nvidia" or not panel_card:   # only the handheld's own GPU (the card with the built-in panel)
             return "not a screen of the handheld's GPU"
     try:
-        out = next(o for o in json.loads(subprocess.run(["kscreen-doctor", "-j"], capture_output=True, text=True, timeout=10).stdout)["outputs"]
+        out = next(o for o in _kscreen_j()["outputs"]
                    if o["name"] == conn and o.get("enabled"))
     except (StopIteration, ValueError, KeyError, OSError, subprocess.TimeoutExpired):
         return "not on"
