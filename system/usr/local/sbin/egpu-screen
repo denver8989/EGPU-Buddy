@@ -544,9 +544,20 @@ def watch():
     if pick and os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") != 0 and pick in _kwin_outputs():
         print(f"{pick}: picked screen -> {only(pick)}", flush=True)
     seen = None
+    # a picked screen on the handheld's own chip (XR glasses): the handheld panel is its fallback while it is away, as in
+    # Game Mode (KDE brought the eGPU's monitors back instead, the panel a side screen with only wallpaper); it alone
+    # again when it returns
+    hh_pick = next((os.path.basename(e).split("-", 1)[1] for e in glob.glob(f"/sys/class/drm/card*-eDP-*")
+                    for n in glob.glob(f"/sys/class/drm/card*-{pick}") if pick and os.path.dirname(e) == os.path.dirname(n)
+                    and os.path.basename(e).split("-")[0] == os.path.basename(n).split("-")[0]), None)
+    pick_here = True
     while True:
         if os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") != 0:
             cur = _connected()
+            if hh_pick and (pick in {c for c, _ in cur}) != pick_here:
+                pick_here = not pick_here
+                time.sleep(3)   # KDE takes the change in first
+                print(f"{pick}: {'back' if pick_here else 'gone'} -> {only(pick if pick_here else hh_pick)}", flush=True)
             if cur == seen and len(cur) <= 1:
                 time.sleep(5); continue
             seen = cur
