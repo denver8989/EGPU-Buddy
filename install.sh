@@ -409,6 +409,17 @@ if [ "$IS_BAZZITE" = 1 ] && want core; then
   sudo bash -c 'command -v restorecon >/dev/null && restorecon /usr/local/bin/qdbus6 /usr/local/sbin/egpu-buddy-jobs /etc/systemd/system/egpu-buddy-jobs.* 2>/dev/null
     systemctl daemon-reload; systemctl enable --now egpu-buddy-jobs.path' >/dev/null 2>&1 || true
 fi
+# Valve's CEC service (cecd, linux-cec, LGPL-2.1+) where the system has none (SteamOS ships it): installed, never started
+# here. Turning on "TV remote (CEC)" grants the CEC / input-device access and starts it (egpu-screen tvset); off: undone.
+if [ ! -e /usr/lib/systemd/user/cecd.service ] && [ -x "$ROOT/prebuilt/cecd/usr/bin/cecd" ] && ! ldd "$ROOT/prebuilt/cecd/usr/bin/cecd" 2>/dev/null | grep -q 'not found'; then
+  sudo install -D -m755 "$ROOT/prebuilt/cecd/usr/bin/cecd" /usr/local/lib/egpu-buddy/cecd/cecd
+  sudo install -D -m644 "$ROOT/prebuilt/cecd/LICENSE" /usr/local/lib/egpu-buddy/cecd/LICENSE 2>/dev/null || true
+  sudo mkdir -p /etc/systemd/user
+  printf '%s\n' "[Unit]" "Description=Consumer Electronics Control (CEC) Daemon (Valve's cecd, bundled by EGPU Buddy)" "" "[Service]" \
+    "Type=notify-reload" "BusName=com.steampowered.CecDaemon1" "Environment=RUST_LOG=info" "ExecStart=/usr/local/lib/egpu-buddy/cecd/cecd -e" "" \
+    "[Install]" "WantedBy=graphical-session.target" | sudo tee /etc/systemd/user/cecd.service >/dev/null
+  say "== Valve's CEC service bundled ($(cat "$ROOT/prebuilt/cecd/BUILT-FROM" 2>/dev/null)); used once 'TV remote (CEC)' is on"
+fi
 # Bazzite only: Fedora ships Qt's qml tool only in a -devel package; the desktop app gets a QML runner of its own
 if [ "$IS_BAZZITE" = 1 ] && want desktopapp; then
   QR="$ROOT/prebuilt/bazzite-qml-runner/egpu-buddy-qml"

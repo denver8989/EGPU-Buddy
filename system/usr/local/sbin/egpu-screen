@@ -616,10 +616,50 @@ def _settings():
         return {}
 
 
+CECD_BUNDLED = "/usr/local/lib/egpu-buddy/cecd/cecd"   # Valve's cecd, installed by EGPU Buddy where the system has none
+CECD_ON = "/var/lib/nvegpu/cecd-on"                    # ...and switched on with "TV remote (CEC)" (tvset)
+
+
 def _steamos():
-    """SteamOS's CEC service (cecd) is there: what the remote talks to (SteamOS, or any system that ships it)."""
+    """Valve's CEC service (cecd) is there to talk to: SteamOS, a system that ships it, or our bundled copy while "TV
+    remote (CEC)" has it running (it cannot start without the input-device access that option grants)."""
     return any(os.access(os.path.join(d, "steamos-readonly"), os.X_OK) for d in ("/usr/bin", "/usr/sbin", "/usr/local/bin")) or \
-        any(os.path.exists(f) for f in ("/usr/lib/systemd/user/cecd.service", "/etc/systemd/user/cecd.service"))
+        os.path.exists("/usr/lib/systemd/user/cecd.service") or (os.path.exists(CECD_BUNDLED) and os.path.exists(CECD_ON))
+
+
+def cecd_bundled(on):
+    """Root, on "TV remote (CEC)": with our bundled cecd, grant the CEC devices and the input device (uinput: the TV
+    remote's keys) to the logged-in user and start cecd as their user service; off: stopped and both taken back."""
+    if not os.path.exists(CECD_BUNDLED) or os.path.exists("/usr/lib/systemd/user/cecd.service"):
+        return ""
+    rule = "/etc/udev/rules.d/60-egpu-buddy-cecd.rules"
+    bus = "/usr/local/share/dbus-1/services/com.steampowered.CecDaemon1.service"   # on demand for D-Bus callers (Steam too)
+    user = pwd.getpwuid(1000).pw_name
+    sysctl = ["systemctl", "--user", "-M", f"{user}@"]
+    if on:
+        open(rule, "w").write('# EGPU Buddy, "TV remote (CEC)" on: the bundled cecd (Valve) needs these as the user\n'
+                              'SUBSYSTEM=="cec", TAG+="uaccess"\nSUBSYSTEM=="misc", KERNEL=="uinput", TAG+="uaccess"\n')
+        open(CECD_ON, "w").write("on\n")
+        os.makedirs(os.path.dirname(bus), exist_ok=True)
+        open(bus, "w").write("[D-BUS Service]\nName=com.steampowered.CecDaemon1\nExec=/bin/false\nSystemdService=cecd.service\n")
+    else:
+        subprocess.run(sysctl + ["disable", "--now", "cecd.service"], capture_output=True, timeout=20)
+        for f in (rule, CECD_ON, bus):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    subprocess.run(["udevadm", "control", "--reload"], capture_output=True, timeout=20)
+    subprocess.run(["udevadm", "trigger", "-s", "cec", "-s", "misc"], capture_output=True, timeout=20)
+    subprocess.run(["udevadm", "settle", "-t", "5"], capture_output=True, timeout=10)
+    if not on:   # a grant already given stays after the re-trigger: taken back by hand
+        for dev in ["/dev/uinput"] + glob.glob("/dev/cec[0-9]*"):
+            subprocess.run(["setfacl", "-x", f"u:{user}", dev], capture_output=True, timeout=10)
+    if on:
+        subprocess.run(sysctl + ["daemon-reload"], capture_output=True, timeout=20)
+        r = subprocess.run(sysctl + ["enable", "--now", "cecd.service"], capture_output=True, text=True, timeout=30)
+        return "cecd started" if r.returncode == 0 else "cecd did not start: " + (r.stderr.strip()[-200:] or "?")
+    return "cecd stopped"
 
 
 # TV makers' names for HDMI-CEC and where its control setting usually is (often off by default: the TV then answers CEC
@@ -815,8 +855,8 @@ def cec_on_input(n, take_input=True):
         _cecd(n, "call", "Wake"); time.sleep(2)
     if take_input:
         ok, pa = _cecd(n, "get-property", "PhysicalAddress")
-        if ok and len(pa.split()) == 2:
-            _cecd(n, "call", "SetActiveSource", *pa.split())
+        if ok and len(pa.split()) == 2:   # cecd takes it as "i" (its property reads back as "q": passed as is, the call failed)
+            _cecd(n, "call", "SetActiveSource", "i", pa.split()[1])
     return ("was " + pw if pw else "power state unknown") + (", woken" if pw != "on" else "") + (", our input" if take_input else "")
 
 
@@ -910,7 +950,8 @@ def main(argv):
     if cmd in ("tvset",) and len(want) == 2 and want[0] in ("cec_remote", "off_at_detach") and want[1] in ("on", "off"):
         d = _settings(); d[want[0]] = want[1] == "on"
         os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
-        print(f"{want[0]} {want[1]}"); return 0
+        extra = cecd_bundled(want[1] == "on") if want[0] == "cec_remote" and os.getuid() == 0 else ""
+        print(f"{want[0]} {want[1]}" + (f" ({extra})" if extra else "")); return 0
     if cmd == "tvkey" and want in (["up"], ["down"], ["mute"], ["on"], ["off"], ["input"]):
         print(tvkey(want[0])); return 0
     if cmd == "tvoff":

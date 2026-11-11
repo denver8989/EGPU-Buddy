@@ -71,6 +71,15 @@ jobs:
               sudo chown -R "$(id -u):$(id -g)" prebuilt
             else echo "::warning::the Bazzite QML runner build failed; this release ships $(cat prebuilt/bazzite-qml-runner/BUILD-ID 2>/dev/null || echo none)"; fi
           fi
+          # Valve's CEC service (cecd, linux-cec) for systems without it: built when its recipe changed, else carried forward
+          CWANT="$(sha256sum packaging/cecd/build.sh | cut -c1-16)"
+          if [ "$(cat prebuilt/cecd/BUILD-ID 2>/dev/null)" != "$CWANT" ]; then
+            mkdir -p /tmp/cecd
+            if docker run --rm -v "$PWD/packaging/cecd":/b:ro -v /tmp/cecd:/out rust:1-bookworm bash /b/build.sh /out; then
+              sudo rm -rf prebuilt/cecd; sudo cp -a /tmp/cecd prebuilt/cecd; echo "$CWANT" | sudo tee prebuilt/cecd/BUILD-ID >/dev/null
+              sudo chown -R "$(id -u):$(id -g)" prebuilt
+            else echo "::warning::the cecd build failed; this release ships $(cat prebuilt/cecd/BUILT-FROM 2>/dev/null || echo none)"; fi
+          fi
 
       - name: Build
         run: ./build-release.sh
