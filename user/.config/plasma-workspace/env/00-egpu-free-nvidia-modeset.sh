@@ -236,8 +236,13 @@ _egpu_stage_desktop_kwin() {
   _hh_pcard=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"${EGPU_PANEL_CONNECTOR:-eDP-1}" 2>/dev/null | head -1)"); _hh_pcard=${_hh_pcard%%-*}
   igpu_pci=${IGPU_PCI:-$(_egpu_panel_pci || _egpu_detect_amd_gpu_bdf)}
   igpu_card=$(_egpu_card_for_pci "$igpu_pci" || true)
-  # (the NVIDIA reference path only: Bazzite and the ROG Ally / XG Mobile route their desktops their own way, unchanged)
-  if [ "$_egpu_bz" = 0 ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ ! -e /var/lib/nvegpu/xg-mobile-seen ] &&
+  # (the NVIDIA reference path; Bazzite routes its desktop its own way, unchanged. ROG Ally / XG Mobile: only the glasses
+  # case, a screen on the handheld's USB-C picked, so the desktop runs on the eGPU as Game Mode passthrough does; before,
+  # the desktop fell to "KWin default" on the Ally's GPU (ROG Xbox Ally X + XG Mobile 2025 + XREAL, report 4D5H3B).
+  # Its own handheld screen keeps the Ally's own desktop routing, unchanged.)
+  local _hh_ally=0
+  { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && _hh_ally=1
+  if [ "$_egpu_bz" = 0 ] && { [ "$_hh_ally" = 0 ] || case "$_hh_pref" in eDP-*|"") false ;; *) true ;; esac; } &&
      [ -n "$_hh_pref" ] && [ -n "$igpu_card" ] && [ -n "$_hh_pcard" ] &&
      { case "$_hh_pref" in eDP-*) true ;; *) [ "$(cat "/sys/class/drm/$_hh_pcard-$_hh_pref/status" 2>/dev/null)" = connected ] ;; esac; }; then
     case "$_hh_pref" in
@@ -265,7 +270,7 @@ _egpu_stage_desktop_kwin() {
     export VK_DRIVER_FILES="$_egpu_nv_icd" VK_ICD_FILENAMES="$_egpu_nv_icd"
     export PROTON_ENABLE_NVAPI=1 DXVK_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0
     [ -n "${XDG_RUNTIME_DIR:-}" ] && printf '%s\n' "$_hh_pref" > "$XDG_RUNTIME_DIR/egpu-desktop-handheld" 2>/dev/null
-    _egpu_emlog "Plasma pre-compositor: screen picked = $_hh_pref (handheld) -> KWin on the handheld GPU only ($igpu_card), games on the eGPU (Vulkan $_egpu_nv_icd)"
+    _egpu_emlog "Plasma pre-compositor: screen picked = $_hh_pref (handheld) -> KWIN_DRM_DEVICES=$KWIN_DRM_DEVICES, games on the eGPU (Vulkan $_egpu_nv_icd)"
     return 0
   fi
   [ -n "${XDG_RUNTIME_DIR:-}" ] && rm -f "$XDG_RUNTIME_DIR/egpu-desktop-handheld"
