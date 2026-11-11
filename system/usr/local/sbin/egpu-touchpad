@@ -1214,6 +1214,8 @@ def picture_on(keep=False):
             # KDE drives the handheld's chip (desktop on XR glasses, with or without an eGPU): KDE shows the picture as an
             # overlay. The VR-flag lease route needs an EDID override, and with one this panel stays black for anything
             # but KDE (the leased picture was there and never seen, 2026-11-11)
+            if not kde_route():   # only with the glasses on the handheld's chip; otherwise the panel is the desktop's
+                say_once("touchpad picture: KDE drives the handheld screen and no glasses are on it, not shown"); return False
             return picture_kde_on(c, dev, bl)
         if held.startswith("gamescope") and gm_keeps(c):   # Game Mode gave the screen back to the picture
             try:
