@@ -317,7 +317,7 @@ def action(p):
         os.makedirs(os.path.dirname(LOOK_FILE), exist_ok=True); open(LOOK_FILE, "w").write(v + "\n"); return {"ok": True, "out": "Look: " + v, "silent": True}
     if a == "tv-option":   # "TV remote (CEC)" / "Turn the TV off at Safe Detach" (opt-in, every setup, as in the plugin)
         k = str((p or {}).get("key", ""))
-        if k not in ("cec_remote", "off_at_detach", "nvidia_dp_cec"): return {"ok": False, "error": "unknown setting"}
+        if k not in ("cec_remote", "off_at_detach", "nvidia_dp_cec", "no_wake_tv"): return {"ok": False, "error": "unknown setting"}
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvset", k, "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "touchpad-option":   # speed / invert / drag (the plugin's same settings)
         k, v = str((p or {}).get("key")), str((p or {}).get("value"))

@@ -628,6 +628,28 @@ def _steamos():
         os.path.exists("/usr/lib/systemd/user/cecd.service") or (os.path.exists(CECD_BUNDLED) and os.path.exists(CECD_ON))
 
 
+def cecd_no_wake(on):
+    """"Don't turn the TV on when the device wakes": Valve's CEC service (SteamOS's or ours) wakes the TV on every resume
+    from sleep (its wake_tv setting), so also when a phone starting Remote Play or another stream wakes the device
+    (report from a Legion Go S + Fire TV). A drop-in in the user's cecd config that sorts last turns it off; cecd reloads."""
+    pw = pwd.getpwuid(1000)
+    f = os.path.join(pw.pw_dir, ".config/cecd/config.d/zz-egpu-buddy.toml")
+    if on:
+        os.makedirs(os.path.dirname(f), exist_ok=True)
+        open(f, "w").write("# EGPU Buddy: \"Don't turn the TV on when the device wakes\" (off in the app removes this file)\nwake_tv = false\n")
+        for d in (os.path.dirname(os.path.dirname(f)), os.path.dirname(f), f):
+            try: os.chown(d, pw.pw_uid, pw.pw_gid)
+            except OSError: pass
+    elif os.path.exists(f):
+        os.remove(f)
+    sc = ["systemctl", "--user", "try-reload-or-restart", "cecd.service"]
+    if os.getuid() == 0:
+        sc[2:2] = ["-M", f"{pw.pw_name}@"]
+    try: subprocess.run(sc, capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired): pass
+    return ""
+
+
 def cecd_bundled(on):
     """Root, on "TV remote (CEC)": with our bundled cecd, grant the CEC devices and the input device (uinput: the TV
     remote's keys) to the logged-in user and start cecd as their user service; off: stopped and both taken back."""
@@ -981,10 +1003,12 @@ def main(argv):
         elif os.path.exists(NVCEC):
             os.remove(NVCEC)
         print(f"nvidia_dp_cec {want[1]}"); return 0
-    if cmd in ("tvset",) and len(want) == 2 and want[0] in ("cec_remote", "off_at_detach") and want[1] in ("on", "off"):
+    if cmd in ("tvset",) and len(want) == 2 and want[0] in ("cec_remote", "off_at_detach", "no_wake_tv") and want[1] in ("on", "off"):
         d = _settings(); d[want[0]] = want[1] == "on"
         os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
         extra = cecd_bundled(want[1] == "on") if want[0] == "cec_remote" and os.getuid() == 0 else ""
+        if want[0] == "no_wake_tv":
+            extra = cecd_no_wake(want[1] == "on")
         print(f"{want[0]} {want[1]}" + (f" ({extra})" if extra else "")); return 0
     if cmd == "tvkey" and want in (["up"], ["down"], ["mute"], ["on"], ["off"], ["input"]):
         print(tvkey(want[0])); return 0
@@ -992,7 +1016,7 @@ def main(argv):
         print(tvoff()); return 0
     if cmd == "tvremote":   # what the plugin shows: which routes work right now
         d = _settings()
-        print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")),
+        print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")), "no_wake_tv": bool(d.get("no_wake_tv")),
                           "cec_here": _cec_any() and egpu_cec() is not None, "nv_cec": nv_cec_state(),
                           "cec_hint": cec_hint_here()})); return 0
     take_input = "--input" in want
