@@ -413,11 +413,26 @@ def _reference_path():
     return subprocess.run(["/usr/local/sbin/egpu-detect", "--device"], capture_output=True, text=True).stdout.strip() != "rog-ally"
 
 
+def _ally_glasses(conn):
+    """ROG Ally / XG Mobile (not Bazzite, not the AMD / Intel install): CONN is a screen on the Ally's own USB-C (XR glasses).
+    Its desktop then runs on the eGPU with the Ally's GPU carrying the picture (plasma env script), as on the reference
+    path, so the picked-screen rule and best mode apply to it too (report 4D5H3B: desktop on the Ally's GPU before)."""
+    rd = lambda f: open(f).read() if os.path.exists(f) else ""
+    if conn.startswith("eDP") or not conn or "bazzite" in rd("/etc/os-release").lower():
+        return False
+    if rd("/etc/nv-egpu-buddy/gpu-vendor").strip() == "amd" or rd("/etc/nv-egpu-buddy/track").strip() == "nv-gpu-buddy":
+        return False
+    if not (os.path.exists("/var/lib/nvegpu/xg-mobile-seen") or subprocess.run(
+            ["/usr/local/sbin/egpu-detect", "--device"], capture_output=True, text=True).stdout.strip() == "rog-ally"):
+        return False
+    return any(glob.glob(os.path.dirname(n) + "/" + os.path.basename(n).split("-")[0] + "-eDP-*") for n in glob.glob(f"/sys/class/drm/card*-{conn}"))
+
+
 def best(conn):
     """Desktop (KWin): a USB-C screen on the handheld (XR glasses, a portable monitor) to its highest resolution, then its
     highest refresh, not just the mode it marks preferred. Never an output of the eGPU: a live mode change there left an
     NVIDIA monitor black. NVIDIA reference path only."""
-    if conn.startswith("eDP") or not _reference_path():
+    if conn.startswith("eDP") or not (_reference_path() or _ally_glasses(conn)):
         return "left as is"
     for node in glob.glob(f"/sys/class/drm/card*-{conn}"):
         drv = os.path.basename(os.path.realpath(os.path.dirname(node) + "/device/driver"))
@@ -444,7 +459,7 @@ def only(conn):
     if conn not in names:
         return f"{conn} is not a screen KWin drives"
     on, off = [f"output.{conn}.enable", f"output.{conn}.priority.1"], [f"output.{n}.disable" for n in names if n != conn]
-    if _reference_path() and off:
+    if (_reference_path() or _ally_glasses(conn)) and off:
         # NVIDIA reference path: one KWin change that turned the monitor on AND the TV off (DP-7 5120x1440@144 HDR,
         # HDMI-A-1 off; RTX 5060 Ti, 2026-11-10) hit "Flip event timeout on head 0" in nvidia-drm and the monitor stayed
         # black until its cable was replugged. The picked screen on first, the others off once it is up: two smaller changes.
@@ -486,8 +501,10 @@ def watch():
     # the screen picked in the plugin / desktop app (NVIDIA reference path: the file exists only there): once per
     # desktop login that screen alone shows an image, as Game Mode does. KWin can still be starting: wait for it.
     try:
-        pick = open("/var/lib/nvegpu/game-screen").read().strip() if _reference_path() else ""
+        pick = open("/var/lib/nvegpu/game-screen").read().strip()
     except OSError:
+        pick = ""
+    if pick and not (_reference_path() or _ally_glasses(pick)):   # ROG Ally / XG Mobile: the glasses case only
         pick = ""
     for _ in range(12 if pick else 0):
         if os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") == 0 or pick in _kwin_outputs():
