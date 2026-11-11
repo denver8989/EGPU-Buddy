@@ -13,6 +13,21 @@
 set -u
 LOG=/var/log/egpu-shutdown.log
 log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>/dev/null; sync -d "$LOG" 2>/dev/null || true; }
+PO=/var/lib/nvegpu/poweroff-guarded
+# --boot (the unit's start, before the login screen): a power-off that hung and was restarted by the guard below is
+# finished now. Only when the marker is fresh (< 150 s: hang 60 s + 10 s + boot) and the kernel left a crash record
+# newer than it, or cannot keep one (then the age alone decides).
+if [ "${1:-}" = --boot ]; then
+  [ -e "$PO" ] || exit 0
+  age=$(( $(date +%s) - $(stat -c %Y "$PO") )); new=$(find /sys/fs/pstore /var/lib/systemd/pstore -type f -newer "$PO" 2>/dev/null | head -1)
+  bk=$(cat /sys/module/pstore/parameters/backend 2>/dev/null)
+  rm -f "$PO"
+  if [ "$age" -ge 0 ] && [ "$age" -lt 150 ] && { [ -n "$new" ] || [ -z "$bk" ] || [ "$bk" = "(null)" ]; }; then
+    log "the power-off before this boot hung and restarted (${age}s ago${new:+, crash record $new}): powering off now"
+    systemctl --no-block poweroff
+  fi
+  exit 0
+fi
 
 # Only on a real power-off / reboot / halt. A plain `systemctl stop` or a reinstall must never detach the eGPU.
 going_down(){
@@ -27,10 +42,12 @@ going_down || exit 0
 # Go S + RX 9070 XT + Trebleet, reports NQ7KNJ, AP3WSW; reboots without a detach were clean). Kernel stuck in its own
 # device shutdown, out of reach of any log. So: a task blocked for 60 s panics, the panic writes the kernel log to pstore
 # (the next report shows it) and restarts the machine 10 s later instead of hanging. A power-off that hangs this way
-# restarts instead of powering off.
+# restarts, and that boot powers off again before the login screen (--boot).
 if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ -e /run/nvegpu/detached-this-boot ]; then
   sysctl -q -w kernel.hung_task_timeout_secs=60 kernel.hung_task_panic=1 kernel.panic=10 2>/dev/null
   log "AMD, Safe Detach this boot: a hang in the kernel's shutdown now panics (log to pstore) and restarts"
+  # a power-off: remembered, so the boot after a guard restart powers off again at once (--boot)
+  systemctl list-jobs --no-legend 2>/dev/null | grep -q 'poweroff\.target' && { mkdir -p "${PO%/*}"; : > "$PO"; sync; }
 fi
 lspci -Dn 2>/dev/null | grep -qE ' 0300: 10de:' || exit 0
 

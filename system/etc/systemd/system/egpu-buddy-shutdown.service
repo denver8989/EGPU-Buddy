@@ -16,7 +16,8 @@ ConditionPathExists=/usr/local/sbin/egpu-shutdown-teardown
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/true
+# start: finishes a power-off that the AMD shutdown-hang guard turned into a restart (egpu-shutdown-teardown)
+ExecStart=/usr/local/sbin/egpu-shutdown-teardown --boot
 ExecStop=/usr/local/sbin/egpu-shutdown-teardown
 # backstop: shutdown never waits on the teardown for longer than this
 TimeoutStopSec=60
