@@ -707,16 +707,21 @@ def edid_vr(raw):
 
 
 def edid_apply(conn_dir, dev, data):
-    """Put an EDID override on the panel (data None: back to its real EDID) and make the kernel and KDE read it."""
+    """Put an EDID override on the panel and show it to the kernel and KDE as unplugged, then plugged in again: KDE
+    checks "VR display" only when a screen connects, and amdgpu reads an override only on a forced connect. Going
+    back uses the panel's own EDID, saved before, as the override: a screen that was lent out is dark and cannot be
+    read again until it is lit (a reboot drops the override)."""
     name = os.path.basename(conn_dir).split("-", 1)[1]
     dbg = f"/sys/kernel/debug/dri/{os.path.basename(dev)}/{name}"
-    open(dbg + "/edid_override", "wb").write(data if data else b"reset")
-    open(conn_dir + "/status", "w").write("on")       # amdgpu reads an override only when the connector is forced
-    time.sleep(0.5)
-    if not data:
-        open(conn_dir + "/status", "w").write("detect")
-    if os.path.exists(dbg + "/trigger_hotplug"):
-        open(dbg + "/trigger_hotplug", "w").write("1")
+    def hotplug():
+        if os.path.exists(dbg + "/trigger_hotplug"):
+            open(dbg + "/trigger_hotplug", "w").write("1")
+        time.sleep(1)
+    open(conn_dir + "/status", "w").write("off"); hotplug()
+    open(dbg + "/edid_override", "wb").write(data)
+    open(conn_dir + "/status", "w").write("on"); hotplug()
+    if open(conn_dir + "/edid", "rb").read() != data:
+        raise OSError("the kernel did not take the handheld screen's EDID")
 
 
 class Wayland:
@@ -774,12 +779,19 @@ class Wayland:
                 handle(obj, op, body)
 
 
-def lease_screen(drm_dev, conn_name, uid=1000):
-    """Lease conn_name from KDE: returns (wayland, lease fd, connector id) or raises OSError."""
-    rt = f"/run/user/{uid}"
-    sock = next((f for f in sorted(glob.glob(rt + "/wayland-[0-9]")) if os.path.exists(f + ".lock")), None)
-    if not sock:
-        raise OSError("no KDE session socket")
+def lease_screen(drm_dev, conn_name):
+    """Lease conn_name from the KDE session that drives drm_dev: (wayland, lease fd, connector id), or OSError."""
+    err = OSError("no KDE session socket")
+    for sock in sorted(glob.glob("/run/user/*/wayland-[0-9]")):
+        if os.path.exists(sock + ".lock"):
+            try:
+                return lease_from(sock, drm_dev, conn_name)
+            except OSError as e:
+                err = e
+    raise err
+
+
+def lease_from(sock, drm_dev, conn_name):
     wl = Wayland(sock)
     reg = wl.new("wl_registry"); wl.send(1, 1, reg)
     devs = []
@@ -878,7 +890,7 @@ def picture_lease_on(c, dev, bl):
     if len(raw) < 128:
         return False
     gm = False
-    json.dump({"bl": bl, "gm": gm, "lease": True, "conn": c, "dev": dev}, open(PIC, "w"))
+    json.dump({"bl": bl, "gm": gm, "lease": True, "conn": c, "dev": dev, "edid": raw.hex()}, open(PIC, "w"))
     try:
         edid_apply(c, dev, edid_vr(raw))
         conn = os.path.basename(c).split("-", 1)[1]
@@ -988,8 +1000,8 @@ def picture_off():
             pass
         LEASE.clear()
         try:
-            edid_apply(d["conn"], d["dev"], None)
-        except (OSError, KeyError) as e:
+            edid_apply(d["conn"], d["dev"], bytes.fromhex(d["edid"]))
+        except (OSError, KeyError, ValueError) as e:
             log("touchpad picture: could not give the screen back:", e)
     for b, v in d.get("bl", {}).items():
         try:   # never back to 0: KDE's power manager sets 0 on a screen it switched off, and 0 would leave it black later
