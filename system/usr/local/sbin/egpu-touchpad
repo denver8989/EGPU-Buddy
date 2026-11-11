@@ -52,7 +52,8 @@ UI_DEV_SETUP, UI_ABS_SETUP, UI_DEV_CREATE, UI_DEV_DESTROY = 0x405C5503, 0x401C55
 EVENT = struct.Struct("llHHi")   # struct input_event on 64-bit
 ON = "/var/lib/nvegpu/touchpad.json"
 NAME = os.environ.get("EGPU_TOUCHPAD_NAME", "EGPU Buddy touchpad (handheld screen)")   # tests use another name
-TAP_MS, TAP_MOVE = 220, 0.03       # a tap: shorter than this, moving less than this share of the touchpad
+TAP_MS, TAP_MOVE = 280, 0.03       # a tap: shorter than this, moving less than this share of the touchpad (a big glass
+                                   # screen is tapped more slowly than a laptop touchpad: 220 ms missed real taps)
 
 
 def log(*a):
@@ -355,9 +356,9 @@ class Pad:
             started = n == 1 and self.peak == 1 and not getattr(self, "was", 0)
             if started and self.tdrag == "locked":
                 self.tdrag = "relock"
-            elif started and now - self.last_tap < 0.3:
+            elif started and now - self.last_tap < 0.45:   # 0.3 s missed real double taps on the glass
                 self.tdrag, self.tdrag_t0 = "armed", now
-            if self.tdrag == "armed" and n == 1 and (now - self.tdrag_t0 > 0.18 or self.tap.moved > TAP_MOVE):
+            if self.tdrag == "armed" and n == 1 and (now - self.tdrag_t0 > 0.18 or self.tap.moved > TAP_MOVE / 4):   # grab on the first real move, not 3 % in
                 self.tdrag = "held"; self.tap.reset()
             if n >= 2 and self.tdrag in ("held", "relock", "locked"):
                 self.tdrag = None
