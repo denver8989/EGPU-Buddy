@@ -1,3 +1,20 @@
+0.7.267 — gamescope survives system updates; touchpad keeps its screen on; XR glasses desktop fixes.
+
+**CachyOS, NVIDIA eGPU**
+- New: a system update to gamescope no longer drops EGPU Buddy's changes. They are built into the new version automatically.
+- Fixed: a CEC driver rebuild could be reported as failed when it had worked.
+
+**Touchpad options** (only when switched on)
+- New: double tap to drag uses the system's own tapping; slower taps count.
+- Fixed: with "Keep the screen on for touch", the picture flashed and went dark at Game Mode start.
+- Fixed: the touchscreen stayed a touchpad after Game Mode fell back to the handheld screen.
+- Fixed: Game Mode start could crash the touchpad.
+
+**XR glasses / screens**
+- Fixed: the desktop on glasses crashed KWin on some setups.
+- Fixed: waking with the desktop on a handheld screen lost screens and focus.
+- Fixed: the desktop app window was taller than 1080p glasses.
+
 0.7.266 — AMD: the desktop stays on the TV; TV off at Safe Detach fixed.
 
 **AMD / Intel eGPU** (AMD / Intel install only; NVIDIA unchanged)
