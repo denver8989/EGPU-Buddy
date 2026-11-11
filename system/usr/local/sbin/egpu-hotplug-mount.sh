@@ -885,6 +885,7 @@ if pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1; then
   if tr '\0' '\n' </proc/"$(pgrep -n -x 'gamescope(-wl)?')"/environ 2>/dev/null | grep -qx 'NV_EGPU_GAMESCOPE_HANDHELD_GPU=1'; then
     log "Game Mode already renders on the eGPU (on ${_oc:-the handheld screen}) - nothing to switch"; exit 0
   fi
+  _pf=$(/usr/local/sbin/egpu-pick-fix 2>/dev/null); [ -n "$_pf" ] && log "$_pf"   # NVIDIA renamed the picked screen's connector
   log "eGPU ready + Game Mode -> gamescope switch onto the eGPU$([ "$boost" = 1 ] && echo ' (handheld screen)')"; sleep 2
   # handheld screen: the session puts the sound on the handheld itself; on a monitor, sound follows and the monitor is
   # asked to wake (DDC/CI or CEC; a plugged-in monitor in standby otherwise only wakes from the signal)
@@ -895,6 +896,7 @@ fi
 # Only a running desktop session may pin the autologin to the desktop (the NVIDIA-only re-login must come back to
 # it). At boot, before any session exists, the boot policy (egpu-conditional-session: Game Mode) decides. 2026-09-16.
 pgrep -U 1000 -x kwin_wayland >/dev/null 2>&1 && set_autologin_plasma
+_pf=$(/usr/local/sbin/egpu-pick-fix 2>/dev/null); [ -n "$_pf" ] && log "$_pf"   # NVIDIA renamed the picked screen's connector
 # The handheld's screen picked (Game Mode plugin / desktop app): the desktop stays on the handheld's GPU (the plasma env script
 # routes it there) and only needs a re-login when its games are not on the eGPU yet (a session started without the eGPU has
 # Vulkan pinned to the handheld GPU). Never the NVIDIA-only re-login and never the monitor takeover.

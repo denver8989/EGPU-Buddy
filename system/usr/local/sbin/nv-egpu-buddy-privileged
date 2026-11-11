@@ -610,6 +610,7 @@ json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json "$_tp_k" "$_tp_v"
     _gs_ok=0; for _gs in /sys/class/drm/card[0-9]*-"$1"/status; do [ "$(cat "$_gs" 2>/dev/null)" = connected ] && _gs_ok=1; done
     [ "$_gs_ok" = 1 ] || die "set-game-screen: $1 is not a connected screen" 2
     mkdir -p /var/lib/nvegpu; printf '%s\n' "$1" > /var/lib/nvegpu/game-screen; chmod 644 /var/lib/nvegpu/game-screen
+    /usr/local/sbin/egpu-pick-fix save 2>/dev/null   # its fingerprint: the pick follows the screen if NVIDIA renames it
     printf 'screen: %s\n' "$1"
     ;;
   session-fallback)

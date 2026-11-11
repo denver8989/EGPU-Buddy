@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# egpu-pick-fix [save] — keep the picked screen (/var/lib/nvegpu/game-screen, a connector name) pointing at the same
+# physical screen. NVIDIA renamed the connectors after an eGPU replug (ultrawide DP-8 -> DP-9, TV DP-9 -> DP-10,
+# 2026-11-11): the pick then named nothing (or another screen) and the desktop came up on the TV with an overlapping
+# layout. "save" (after a pick) records the screen's EDID fingerprint; without it (at attach) a pick whose connector is
+# gone is moved to the connected connector with that fingerprint. Root only.
+P=/var/lib/nvegpu/game-screen; F=/var/lib/nvegpu/game-screen.edid
+fp(){ local e; e=$(ls -d /sys/class/drm/card*-"$1" 2>/dev/null | head -1); [ -n "$e" ] && [ "$(cat "$e/status" 2>/dev/null)" = connected ] &&
+  head -c 128 "$e/edid" 2>/dev/null | sha256sum | cut -c1-16; }
+pick=$(cat "$P" 2>/dev/null); [ -n "$pick" ] || exit 0
+case "$pick" in eDP-*) exit 0 ;; esac
+if [ "${1:-}" = save ]; then f=$(fp "$pick"); [ -n "$f" ] && echo "$f" > "$F"; exit 0; fi
+want=$(cat "$F" 2>/dev/null)
+if [ -n "$(fp "$pick")" ]; then [ -n "$want" ] || fp "$pick" > "$F"; exit 0; fi   # still there (first time: remember it)
+[ -n "$want" ] || exit 0
+for e in /sys/class/drm/card*-*; do
+  c=${e##*/}; c=${c#card*-}
+  [ "$c" != "$pick" ] && [ "$(fp "$c")" = "$want" ] && { printf '%s\n' "$c" > "$P"; chmod 644 "$P"; echo "picked screen $pick is now $c"; exit 0; }
+done
