@@ -779,6 +779,22 @@ class Wayland:
                 handle(obj, op, body)
 
 
+def kde_screen_off(conn_dir):
+    """The screen given back to KDE was dark before the touchpad took it (the touchpad only runs then): KDE would switch
+    it on from an older saved layout, so switch it off again in every running KDE session (as its user)."""
+    name = os.path.basename(conn_dir).split("-", 1)[1]
+    for sock in sorted(glob.glob("/run/user/*/wayland-[0-9]")):
+        if not os.path.exists(sock + ".lock"):
+            continue
+        uid = os.stat(sock).st_uid; rt = os.path.dirname(sock)
+        env = ["env", f"XDG_RUNTIME_DIR={rt}", f"WAYLAND_DISPLAY={os.path.basename(sock)}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={rt}/bus"]
+        run = ["setpriv", f"--reuid={uid}", f"--regid={uid}", "--init-groups", *env, "kscreen-doctor"]
+        for _ in range(10):   # KDE takes a moment to list it again
+            if name in subprocess.run(run + ["-o"], capture_output=True, text=True, timeout=10).stdout:
+                subprocess.run(run + [f"output.{name}.disable"], capture_output=True, timeout=10); break
+            time.sleep(0.5)
+
+
 def lease_screen(drm_dev, conn_name):
     """Lease conn_name from the KDE session that drives drm_dev: (wayland, lease fd, connector id), or OSError."""
     err = OSError("no KDE session socket")
@@ -1020,6 +1036,7 @@ def picture_off():
         LEASE.clear()
         try:
             edid_apply(d["conn"], d["dev"], bytes.fromhex(d["edid"]))
+            kde_screen_off(d["conn"])
         except (OSError, KeyError, ValueError) as e:
             log("touchpad picture: could not give the screen back:", e)
     for b, v in d.get("bl", {}).items():
