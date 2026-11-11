@@ -167,6 +167,26 @@ _egpu_stage_desktop_kwin() {
     _egpu_emlog "Plasma pre-compositor: egpu-noauto is set; leaving KWin default"
     return 0
   fi
+  # AMD / Intel install: an eGPU with a screen on it (Game Mode was on it): the desktop starts there too, as the plug-in
+  # path does (egpu-generic: eGPU first, the handheld's GPU kept so the panel can be switched off; the screen watcher makes
+  # that screen the only one). Before, Game Mode -> Desktop left KWin on its defaults: the desktop came up on the handheld
+  # and the TV stayed on, black (Legion Go S + RX 9070 XT, report LUJVV7).
+  if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
+    local _a_pp _a_dev _a_card _a_ic
+    _a_pp=$(_egpu_panel_pci || true)
+    for _a_dev in /sys/bus/pci/devices/*; do
+      [ "${_a_dev##*/}" = "$_a_pp" ] && continue
+      case "$(cat "$_a_dev/vendor" 2>/dev/null)" in 0x1002|0x8086) ;; *) continue ;; esac
+      case "$(cat "$_a_dev/class" 2>/dev/null)" in 0x030000|0x038000) ;; *) continue ;; esac
+      [ -n "$(_egpu_connected_outputs_for_pci "${_a_dev##*/}")" ] || continue
+      _a_card=$(_egpu_card_for_pci "${_a_dev##*/}" || true); _a_ic=$(_egpu_card_for_pci "$_a_pp" || true)
+      if [ -n "$_a_card" ] && [ -n "$_a_ic" ]; then
+        export KWIN_DRM_DEVICES="$_a_card:$_a_ic" DRI_PRIME="pci-$(printf '%s' "${_a_dev##*/}" | tr ':.' '__')!"
+        _egpu_emlog "Plasma pre-compositor: AMD / Intel eGPU ${_a_dev##*/} has a screen -> KWIN_DRM_DEVICES=$KWIN_DRM_DEVICES"
+        return 0
+      fi
+    done
+  fi
   if [ ! -r "${_egpu_nv_icd%%:*}" ] || [ ! -r /usr/share/glvnd/egl_vendor.d/10_nvidia.json ]; then
     _egpu_emlog "Plasma pre-compositor: NVIDIA userspace files missing; leaving KWin default"
     return 0

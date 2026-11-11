@@ -362,6 +362,9 @@ mkdir -p $USER_HOME/.local/state/nv-egpu-buddy && chown $USER_NAME: $USER_HOME/.
 systemctl start egpu-decky-guard.service >/dev/null 2>&1 || true
 # the flight recorder (read-only timeline for support reports): restart so an update's new version runs now
 systemctl restart egpu-flight-recorder.service >/dev/null 2>&1 || true
+# the touchpad options (only if switched on, so running): an update's new version runs now, not after the next boot
+# (Legion Go S report LUJVV7: the touchpad kept the version from before the update and its new report answer never came)
+systemctl try-restart egpu-touchpad.service egpu-legion-pad.service >/dev/null 2>&1 || true
 # the shutdown teardown only acts in its ExecStop: start it now so it already covers the next power-off (no reboot needed)
 systemctl start egpu-buddy-shutdown.service >/dev/null 2>&1 || true
 # hardware check: undo what an earlier version got wrong on this machine (e.g. a ROG Ally set up with Legion Go 2 addresses)

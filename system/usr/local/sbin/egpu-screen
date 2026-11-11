@@ -431,6 +431,25 @@ def _ally_glasses(conn):
     return any(glob.glob(os.path.dirname(n) + "/" + os.path.basename(n).split("-")[0] + "-eDP-*") for n in glob.glob(f"/sys/class/drm/card*-{conn}"))
 
 
+def _amd_pick():
+    """AMD / Intel install, desktop: the eGPU's connected screen (the desktop started on that eGPU, plasma env script), so
+    it alone shows the desktop as it did Game Mode (report LUJVV7: Game Mode -> Desktop came up on the handheld, TV black)."""
+    if not os.path.exists("/etc/nv-egpu-buddy/gpu-vendor") or open("/etc/nv-egpu-buddy/gpu-vendor").read().strip() != "amd":
+        return ""
+    panel = {os.path.realpath(n + "/device") for n in (os.path.dirname(e) for e in glob.glob("/sys/class/drm/card*-eDP-*/status"))}
+    for node in sorted(glob.glob("/sys/class/drm/card*-*")):
+        card = os.path.realpath(node + "/device")
+        conn = re.sub(r"^card\d+-", "", os.path.basename(node))
+        try:
+            if card in panel or conn.startswith(("eDP", "Writeback")) or open(node + "/status").read().strip() != "connected":
+                continue
+            if open(card + "/device/vendor").read().strip() in ("0x1002", "0x8086"):
+                return conn
+        except OSError:
+            pass
+    return ""
+
+
 def best(conn):
     """Desktop (KWin): a USB-C screen on the handheld (XR glasses, a portable monitor) to its highest resolution, then its
     highest refresh, not just the mode it marks preferred. Never an output of the eGPU: a live mode change there left an
@@ -509,6 +528,7 @@ def watch():
         pick = ""
     if pick and not (_reference_path() or _ally_glasses(pick)):   # ROG Ally / XG Mobile: the glasses case only
         pick = ""
+    pick = pick or _amd_pick()
     for _ in range(12 if pick else 0):
         if os.system("pgrep -x 'gamescope(-wl)?' >/dev/null") == 0 or pick in _kwin_outputs():
             break
