@@ -882,6 +882,18 @@ else
     else
       log "touchpad picture: gamescope keeps $PANEL once another screen comes ($_gk)"
     fi
+    # the sound follows the glasses (this route only; the eGPU route has its own): plugged in -> their audio, unplugged ->
+    # the handheld's speakers. Checked every 3 s while this session runs.
+    (
+      _was=""
+      while sleep 3 && kill -0 $$ 2>/dev/null; do
+        _now=$(for _s in /sys/class/drm/"$_pc"-*/status; do case "$_s" in *"-$PANEL/"*|*Writeback*) continue ;; esac
+          [ "$(cat "$_s" 2>/dev/null)" = connected ] && { _n=${_s%/status}; echo "${_n##*/$_pc-}"; break; }; done)
+        [ "$_now" = "$_was" ] && continue
+        _was=$_now; sleep 2   # the glasses' sound card appears a moment after their screen
+        [ -x "$HOME/.local/bin/egpu-audio.sh" ] && log "audio (${_now:-$PANEL}): $("$HOME/.local/bin/egpu-audio.sh" local "${_now:-$PANEL}" 2>&1 | tr '\n' ' ')"
+      done
+    ) &
     unset _pc
   fi
   unset _gk
