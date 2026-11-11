@@ -599,7 +599,7 @@ json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json "$_tp_k" "$_tp_v"
     [ -f "$_rb_s/install.sh" ] || die "rebuild-driver: the installed release is missing ($_rb_s)" 2
     systemctl is-active -q egpu-driver-rebuild.service 2>/dev/null && { echo "already running"; exit 0; }
     mkdir -p /run/nvegpu; echo '{"state":"running"}' > /run/nvegpu/driver-rebuild.json
-    systemd-run --quiet --collect --unit=egpu-driver-rebuild /bin/bash -c "cd '$_rb_s' && env EGPU_TARGET_USER='$_rb_u' HOME='$_rb_h' EGPU_AUTO_YES=1 EGPU_COMPONENTS=driver EGPU_DRIVER_FORCE=1 bash install.sh > /var/log/egpu-driver-rebuild.log 2>&1; rc=\$?; if [ \$rc = 0 ] && ! grep -qi 'warning:.*driver' /var/log/egpu-driver-rebuild.log; then s=done; else s=failed; fi; printf '{\"state\":\"%s\",\"rc\":%s}\n' \$s \$rc > /run/nvegpu/driver-rebuild.json"
+    systemd-run --quiet --collect --unit=egpu-driver-rebuild /bin/bash -c "cd '$_rb_s' && env EGPU_TARGET_USER='$_rb_u' HOME='$_rb_h' EGPU_AUTO_YES=1 EGPU_COMPONENTS=driver EGPU_DRIVER_FORCE=1 bash install.sh > /var/log/egpu-driver-rebuild.log 2>&1; rc=\$?; if [ \$rc = 0 ] && ! grep -qi '^warning:.*driver' /var/log/egpu-driver-rebuild.log; then s=done; else s=failed; fi; printf '{\"state\":\"%s\",\"rc\":%s}\n' \$s \$rc > /run/nvegpu/driver-rebuild.json"
     echo "driver rebuild started"
     ;;
   set-game-screen)
