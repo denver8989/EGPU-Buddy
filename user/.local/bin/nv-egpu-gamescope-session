@@ -867,6 +867,24 @@ elif [ "$detach_mode" = 0 ] && generic_egpu_ready; then
 else
   clear_egpu_env
   export OUTPUT_CONNECTOR="*,${PANEL}"
+  rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-keep-connector"   # left by a gamescope that ended while it kept a screen
+  # "Keep the screen on for touch" (touchpad option) without an eGPU: XR glasses on the handheld's USB-C get Game Mode and
+  # the panel keeps the touchpad picture (our gamescope, GAMESCOPE_KEEP_CONNECTOR: the panel is Game Mode's while it is the
+  # only screen, given back when the glasses come). Option off, or without our build: the stock route, unchanged.
+  _gk=/home/deck/.local/gamescope-gbm/usr/bin/gamescope
+  if [ "$detach_mode" != 1 ] && grep -qs '"keep_screen": true' /var/lib/nvegpu/touchpad.json && grep -qs '"enabled": true' /var/lib/nvegpu/touchpad.json &&
+     [ -x "$_gk" ] && ! ldd "$_gk" 2>/dev/null | grep -q 'not found' && grep -qa GAMESCOPE_KEEP_CONNECTOR "$_gk"; then
+    export NV_EGPU_BUDDY_GAMESCOPE_BIN="$_gk" GAMESCOPE_KEEP_CONNECTOR="$PANEL"
+    export PATH="$SHIM_DIR:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin"   # the shim starts the gamescope named above
+    _pc=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"$PANEL" 2>/dev/null | head -1)"); _pc=${_pc%%-*}
+    if grep -qsx connected $(ls /sys/class/drm/"$_pc"-*/status 2>/dev/null | grep -v -- "-$PANEL/") /dev/null; then   # glasses on already
+      log "touchpad picture for Game Mode: $(sudo -n /usr/local/sbin/nv-egpu-buddy-privileged touchpad picture-gamemode 2>&1 | tail -1); gamescope keeps $PANEL"
+    else
+      log "touchpad picture: gamescope keeps $PANEL once another screen comes ($_gk)"
+    fi
+    unset _pc
+  fi
+  unset _gk
   if [ "$detach_mode" = 1 ]; then
     # pin gamescope + Vulkan/EGL to the built-in AMD card so nothing in this session holds the eGPU nodes
     _amd=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"$PANEL" 2>/dev/null | head -1)"); _amd=${_amd%%-*}; [ -n "$_amd" ] && _amd=/dev/dri/$_amd

@@ -104,9 +104,12 @@ def gm_keeps(c):
     name = os.path.basename(c).split("-", 1)[1]
     for f in glob.glob("/run/user/*/egpu-keep-connector"):
         try:
-            if open(f).read().strip() == name and game_mode():
+            conn, pid = open(f).read().split()[:2]
+            # the pid: a marker left by a gamescope that was killed (cable yank, timeout) is ignored (2026-11-11: a
+            # stock gamescope had switched the screen off and the touchpad believed it was given back)
+            if conn == name and open(f"/proc/{int(pid)}/comm").read().startswith("gamescope"):
                 return True
-        except OSError:
+        except (OSError, ValueError):
             pass
     return False
 
@@ -1013,7 +1016,7 @@ def picture_mode():
         gm = game_mode()
         if d.get("keep"):
             # Game Mode (still starting) keeps the screen as it is: our gamescope says so with its marker file
-            if time.time() - os.path.getmtime(PIC) < 30 or (gm and glob.glob("/run/user/*/egpu-keep-connector")):
+            if time.time() - os.path.getmtime(PIC) < 30 or (gm and any(gm_keeps(c) for c in glob.glob("/sys/class/drm/card*-eDP-*"))):
                 return
             if not gm:
                 log("touchpad picture: Game Mode ended, the desktop takes the screen"); picture_off(); return
@@ -1190,7 +1193,8 @@ def run():
                     _gm[0] = 0.0; picture_on(keep=True)
                     want = want or os.path.exists(PIC)
             if want and not os.path.exists(PIC) and time.monotonic() - tried > 15 and not (
-                    _said[0].endswith("driven by Game Mode, not shown") and game_mode() and not glob.glob("/run/user/*/egpu-keep-connector")):
+                    _said[0].endswith("driven by Game Mode, not shown") and game_mode() and
+                    not any(gm_keeps(c) for c in glob.glob("/sys/class/drm/card*-eDP-*"))):
                 # retried every 15 s: Game Mode -> Desktop (or glasses unplugged) can free or lend the screen later. Not
                 # while Game Mode keeps the chip: that never changes until it ends, and each try scans every process
                 tried = time.monotonic(); picture_on()
