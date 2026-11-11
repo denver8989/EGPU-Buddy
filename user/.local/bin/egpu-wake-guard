@@ -66,6 +66,12 @@ class Guard:
         # screen; the TV rule and the display settings turn screens off).
         # ponytail: one stuck screen next to a working one is not recovered; needs the compositor's intended outputs.
         if all(output_off(c) for c in cons):
+            # the desktop on a screen of the handheld's own GPU (its panel, or XR glasses on its USB-C, picked in the app):
+            # the eGPU's screens are off on purpose there too. A VT round-trip took the desktop's screens away and a game
+            # lost focus (Legion Go 2 + XREAL, 2026-11-11)
+            if open(f"{RUN}/egpu-desktop-handheld").read().strip() if os.path.exists(f"{RUN}/egpu-desktop-handheld") else "":
+                if subprocess.run(["pgrep", "-x", "kwin_wayland"], stdout=subprocess.DEVNULL).returncode == 0:
+                    self.off_since = None; self.first_input_off = None; return
             if self.off_since is None: self.off_since = now; self.first_input_off = None
             # first user input seen while the output is off: the compositor should turn it on within a moment
             if self.last_input > self.off_since and self.first_input_off is None: self.first_input_off = self.last_input
