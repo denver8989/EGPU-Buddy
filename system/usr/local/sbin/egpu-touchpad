@@ -197,7 +197,7 @@ class Pad:
         if self.gm:
             node = uinput_node(self.ui)
             try:
-                self.gp = GmPointer(node, NAME) if node else None
+                self.gp = GmPointer(node, NAME, tap=not self.three) if node else None
             except OSError as e:
                 log("Game Mode pointer:", e)
         fcntl.ioctl(self.src, EVIOCGRAB, 1)
@@ -215,13 +215,17 @@ class Pad:
         cfg = settings()
         self.three, self.invert = cfg.get("drag", "three") != "tap", bool(cfg.get("invert_scroll"))
         self.tdrag, self.last_tap, self.anchor = None, -1.0, None
-        # KDE turns libinput's own tap-to-click on for touchpads; taps are clicks here already (also in Game Mode),
-        # so switch KDE's off for this touchpad or every tap clicks twice
+        # Three-finger drag: taps are clicks made here (also in Game Mode), so KDE's own tap-to-click goes off for this
+        # touchpad or every tap clicks twice. Double tap to drag: libinput's own tapping does it all (tap = click, two
+        # fingers = right click, tap + touch again and move = drag, lift = drop), as on the controller's touchpad,
+        # which the owner found far better than the gesture code here (2026-11-11). No drag lock.
+        native = not self.three
         for d in glob.glob("/sys/class/input/event*/device/name"):
             if open(d).read().strip() == NAME:
                 ev = d.split("/")[4]
-                for prop in ("tapToClick", "tapAndDrag"):
-                    self.kde("set-property", "org.kde.KWin", f"/org/kde/KWin/InputDevice/{ev}", "org.kde.KWin.InputDevice", prop, "b", "false", delay=2)
+                for prop, val in (("tapToClick", native), ("tapAndDrag", native), ("tapDragLock", False)):
+                    self.kde("set-property", "org.kde.KWin", f"/org/kde/KWin/InputDevice/{ev}", "org.kde.KWin.InputDevice", prop, "b",
+                             "true" if val else "false", delay=2)
         log(f"touchpad on: {name} (rotation {self.rot}, speed {sp}, {'three-finger drag' if self.three else 'double tap to drag'}"
             f"{', inverted scroll' if self.invert else ''})")
 
@@ -352,7 +356,9 @@ class Pad:
         # double tap to drag (when three-finger drag is off): tap, touch again and hold or move: the button is held; lifting
         # keeps it held (locked), the next tap lets go
         click = self.tap.up_all(now) if n == 0 and not self.drag and not self.swipe else None
-        if not self.three:
+        if not self.three:   # double tap to drag: libinput taps (KDE / GmPointer); nothing is clicked here
+            click = None
+        if False:   # ponytail: the old double-tap-drag state machine, off since libinput does it; delete once confirmed
             started = n == 1 and self.peak == 1 and not getattr(self, "was", 0)
             if started and self.tdrag == "locked":
                 self.tdrag = "relock"
@@ -1340,24 +1346,10 @@ def selftest():
     f.on_desktop = False; f.cuts.clear(); f.frame(four(0, 0), 6.5); f.frame(four(0, -300), 6.6); f.frame({}, 6.7)
     assert f.cuts == [] and f.out == {}, "Game Mode: four fingers do nothing"
     f.on_desktop = True
-    # double tap to drag, with three-finger drag off
-    f.three, f.held = False, set()
-    f.frame({0: (100, 100, 40)}, 7.0); f.frame({}, 7.05)                     # tap: a click
-    f.frame({0: (100, 100, 41)}, 7.15); f.frame({0: (100, 100, 41)}, 7.4)   # touch again and hold
-    assert f.tdrag == "held" and BTN_LEFT in f.held, "double tap and hold: button held"
-    f.frame({0: (300, 100, 41)}, 7.5); f.frame({}, 7.6)
-    assert f.tdrag == "locked" and BTN_LEFT in f.held, "lifting keeps it held (locked)"
-    f.frame({0: (300, 100, 42)}, 7.8); f.frame({0: (400, 100, 42)}, 8.3); f.frame({}, 8.4)
-    assert f.tdrag == "locked" and BTN_LEFT in f.held, "the finger back within 0.35 s keeps dragging"
-    f.slots = {}; f.last_ev = 8.4; f.watchdog(8.6); assert f.tdrag == "locked" and BTN_LEFT in f.held, "still held 0.2 s after lifting"
-    f.watchdog(8.8); assert f.tdrag is None and BTN_LEFT not in f.held, "lifting ends the drag after 0.35 s"
-    f.frame({0: (100, 100, 46)}, 9.5); f.frame({}, 9.55); f.frame({0: (100, 100, 47)}, 9.65); f.frame({0: (100, 100, 47)}, 9.9)
-    f.frame({0: (300, 100, 47)}, 10.0); f.frame({}, 10.1)
-    assert f.tdrag == "locked" and BTN_LEFT in f.held, "another double-tap drag" 
-    f.log.clear(); f.frame({0: (400, 100, 43)}, 9.0); f.frame({}, 9.05)
-    assert f.tdrag is None and BTN_LEFT not in f.held and (EV_KEY, BTN_LEFT, 1) not in f.log, "a tap lets go, no extra click"
-    f.frame({0: (100, 100, 44)}, 10.0); f.frame({}, 10.05); f.log.clear(); f.frame({0: (100, 100, 45)}, 10.15); f.frame({}, 10.2)
-    assert f.tdrag is None and f.log.count((EV_KEY, BTN_LEFT, 1)) == 1, "a quick double tap is a double click"
+    # double tap to drag (three-finger drag off): libinput taps, so no click is made here
+    f.three, f.held = False, set(); f.log.clear()
+    f.frame({0: (100, 100, 40)}, 7.0); f.frame({}, 7.05); f.frame({0: (100, 100, 41)}, 7.15); f.frame({0: (300, 100, 41)}, 7.4); f.frame({}, 7.5)
+    assert (EV_KEY, BTN_LEFT, 1) not in f.log and BTN_LEFT not in f.held, "double tap mode: taps left to libinput"
     f.frame(pts, 11.0); f.frame(pts, 11.2); assert not f.drag, "three-finger drag off"
     f.frame({}, 11.3)
     # inverted scroll: two fingers mirrored through where they landed, distance kept
