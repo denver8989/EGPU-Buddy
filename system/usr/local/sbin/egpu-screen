@@ -26,7 +26,7 @@ Optional third route, the "TV control tricks" extra (off by default): an LG webO
 network - read its input, wake it (wake-on-LAN), switch it to our HDMI. Used before CEC/DDC when set up.
 A screen that answers none reads "unknown" and is treated as in use - never hidden on a guess.
 """
-import base64, concurrent.futures, fcntl, glob, json, os, pwd, re, socket, ssl, struct, subprocess, sys, time
+import base64, concurrent.futures, fcntl, glob, json, os, pwd, re, shutil, socket, ssl, struct, subprocess, sys, time
 
 I2C_SLAVE = 0x0703
 STORE = "/var/lib/nvegpu/screen-inputs.json"  # EDID -> input code seen while in use
@@ -622,6 +622,11 @@ def _steamos():
         any(os.path.exists(f) for f in ("/usr/lib/systemd/user/cecd.service", "/etc/systemd/user/cecd.service"))
 
 
+def _cec_any():
+    """A way to talk CEC: SteamOS's cecd, else cec-ctl (v4l-utils) on the adapter directly."""
+    return _steamos() or bool(shutil.which("cec-ctl"))
+
+
 def egpu_cec():
     """N of /dev/cecN for the TV the eGPU feeds: the eGPU's own CEC (AMD / Intel: DP-CEC on its connector or a
     CEC-capable adapter on it), else a USB-CEC adapter; never one of the handheld's own GPU."""
@@ -641,8 +646,52 @@ def egpu_cec():
     return None
 
 
+def _cec_ctl(n, *a, timeout=6):
+    try:
+        r = subprocess.run(["cec-ctl", "-d", f"/dev/cec{n}", *a], capture_output=True, text=True, timeout=timeout)
+        return r.returncode == 0, r.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+
+
+def _cec_direct(n, args):
+    """Without cecd (CachyOS and other systems without SteamOS's CEC service): the same calls straight on /dev/cecN with
+    cec-ctl, as a playback device, answering in busctl's format so the callers stay the same."""
+    ok, st = _cec_ctl(n)
+    if ok and re.search(r"Logical Address Mask\s*:\s*0x0000", st):
+        ok, st = _cec_ctl(n, "--playback", "--osd-name", "EGPU Buddy")
+    m = re.search(r"Physical Address\s*:\s*(\d+)\.(\d+)\.(\d+)\.(\d+)", st)
+    pa = (int(m[1]) << 12 | int(m[2]) << 8 | int(m[3]) << 4 | int(m[4])) if m else None
+    op, name = args[0], (args[1] if len(args) > 1 else "")
+    if op == "get-property":
+        if name == "PhysicalAddress":
+            return (pa is not None), (f"q {pa}" if pa is not None else "")
+        if name == "AudioLogicalAddress":
+            return True, "y 0"   # the TV (it passes volume on to an audio system itself)
+        return False, ""
+    a = args[2:]
+    if name == "Standby":
+        return _cec_ctl(n, "-t", a[1] if len(a) > 1 else "0", "--standby")[0], ""
+    if name == "Wake":
+        return _cec_ctl(n, "-t", "0", "--image-view-on")[0], ""
+    if name == "SetActiveSource" and len(a) == 2:
+        v = int(a[1]); return _cec_ctl(n, "--active-source", f"phys-addr={v >> 12 & 15}.{v >> 8 & 15}.{v >> 4 & 15}.{v & 15}")[0], ""
+    if name in ("VolumeUp", "VolumeDown", "Mute"):
+        la = a[1] if len(a) > 1 else "0"; ui = {"VolumeUp": "volume-up", "VolumeDown": "volume-down", "Mute": "mute"}[name]
+        ok = _cec_ctl(n, "-t", la, "--user-control-pressed", f"ui-cmd={ui}")[0]
+        _cec_ctl(n, "-t", la, "--user-control-released"); return ok, ""
+    if name == "SendReceiveRawMessage":   # only the power-status question is asked this way
+        ok, out = _cec_ctl(n, "-t", "0", "--give-device-power-status")
+        m = re.search(r"pwr-state:\s*[a-z -]*\(0x0(\d)\)", out)
+        return (ok and m is not None), (f"ay 2 144 {m[1]}" if m else "")
+    return False, ""
+
+
 def _cecd(n, *args, timeout=6):
-    """busctl --user against cecd's device CecN, as the session user (cecd runs in the user's session)."""
+    """busctl --user against cecd's device CecN, as the session user (cecd runs in the user's session). Without cecd:
+    the same calls through cec-ctl (_cec_direct)."""
+    if not _steamos():
+        return _cec_direct(n, args)
     env = {"PATH": "/usr/bin:/bin", "XDG_RUNTIME_DIR": "/run/user/1000", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus"}
     cmd = ["busctl", "--user", *args[:1], CECD, f"/com/steampowered/CecDaemon1/Devices/Cec{n}", CECD + ".CecDevice1", *args[1:]]
     if os.getuid() == 0:
@@ -678,13 +727,16 @@ def nv_cec_state():
         rb = ""
     par = "/sys/module/nvidia_drm/parameters/dp_cec"
     sup = os.path.exists(par) or "dp_cec:" in subprocess.run(["modinfo", "-p", "nvidia_drm"], capture_output=True, text=True).stdout
-    loaded = os.path.exists(par) and open(par).read().strip() in ("Y", "1")
+    try:
+        loaded = os.path.exists(par) and open(par).read().strip() in ("Y", "1")
+    except OSError:   # root-only on some kernels (the app runs as the user and its TV section crashed): a CEC adapter
+        loaded = any("/cec" in os.path.realpath(c) for c in glob.glob("/sys/bus/cec/devices/cec*"))   # of the NVIDIA card says it
     return {"nvidia": True, "supported": sup, "on": os.path.exists(NVCEC), "loaded": loaded, "rebuild": rb}
 
 
 def remote_routes():
     d, out = _settings(), []
-    if d.get("cec_remote") and _steamos() and egpu_cec() is not None:
+    if d.get("cec_remote") and _cec_any() and egpu_cec() is not None:
         out.append("cec")
     if _lg_tv():
         out.append("lg")
@@ -785,7 +837,7 @@ def tvoff():
     routes = remote_routes()
     # CEC whenever the eGPU's screen has it: it used to need "TV remote (CEC)" on as well, so with only this option on the
     # TV was never told (Legion Go S + RX 9070 XT + Fire TV, report LUJVV7: "TV not reached")
-    n = egpu_cec() if _steamos() else None
+    n = egpu_cec() if _cec_any() else None
     if n is not None and _cecd(n, "call", "Standby", "y", "0")[0]:
         return "TV standby (CEC)"
     if "lg" in routes:
@@ -821,7 +873,7 @@ def main(argv):
     if cmd == "tvremote":   # what the plugin shows: which routes work right now
         d = _settings()
         print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")),
-                          "cec_here": _steamos() and egpu_cec() is not None, "nv_cec": nv_cec_state()})); return 0
+                          "cec_here": _cec_any() and egpu_cec() is not None, "nv_cec": nv_cec_state()})); return 0
     take_input = "--input" in want
     want = [w for w in want if w != "--input"]
     found = [s for s in screens() if not want or s[0] in want]
