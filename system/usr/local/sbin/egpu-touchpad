@@ -1046,6 +1046,12 @@ def picture_kde_on(c, dev, bl):
     if not run or not qml or not os.path.exists(QML_PICTURE):
         say_once("touchpad picture: KDE's overlay is not available here, not shown"); return False
     try:
+        # an EDID override left on the panel (the old VR-flag route) keeps it black even for KDE: the kernel reads the
+        # panel itself again (it is lit by KDE or the console then, 2026-11-11)
+        dbg = f"/sys/kernel/debug/dri/{os.path.basename(dev)}/{name}"
+        if os.path.exists(dbg + "/edid_override") and open(dbg + "/edid_override", "rb").read(1):
+            open(dbg + "/edid_override", "w").write("reset"); open(dbg + "/trigger_hotplug", "w").write("1"); time.sleep(2)
+            log("touchpad picture: an old EDID override on the handheld screen was cleared")
         outs = kde_outputs(run)
         others = [o for o, v in outs.items() if o != name and v[0]]
         if not others:
