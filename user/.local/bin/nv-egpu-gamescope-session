@@ -1008,6 +1008,18 @@ if [ -e /run/nvegpu/diag ]; then export PROTON_LOG=1 VK_LOADER_DEBUG=error,warn 
     case "${OUTPUT_CONNECTOR%%,*}" in eDP-*) ;; *) sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-off >/dev/null 2>&1 &&
       log "handheld panel off (Game Mode is on ${OUTPUT_CONNECTOR%%,*})" ;; esac
     [ -x "$HOME/.local/bin/egpu-audio.sh" ] && log "audio: $("$HOME/.local/bin/egpu-audio.sh" local "${OUTPUT_CONNECTOR%%,*}" 2>&1 | tr '\n' ' ')"
+    # the sound follows the glasses while Game Mode runs: unplugged -> the handheld's speakers (the audio system fell
+    # back to its saved default, the eGPU's HDMI), plugged in again -> the glasses' own audio
+    _usbc=${OUTPUT_CONNECTOR%%,*}
+    case "$_usbc" in eDP-*|"") exit 0 ;; esac
+    _was=connected
+    while sleep 3 && kill -0 $$ 2>/dev/null; do
+      _now=$(cat /sys/class/drm/card*-"$_usbc"/status 2>/dev/null | head -1)
+      [ "$_now" = "$_was" ] && continue
+      _was=$_now; sleep 2   # the glasses' sound card appears a moment after their screen
+      [ "$_now" = connected ] && _to=$_usbc || _to=eDP-1
+      [ -x "$HOME/.local/bin/egpu-audio.sh" ] && log "audio ($_usbc $_now): $("$HOME/.local/bin/egpu-audio.sh" local "$_to" 2>&1 | tr '\n' ' ')"
+    done
     exit 0
   fi
   case "${OUTPUT_CONNECTOR:-}" in ""|"*"|eDP-1|eDP-1,*|"*",*) exit 0 ;; esac

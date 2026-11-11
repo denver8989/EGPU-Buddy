@@ -1012,9 +1012,13 @@ def picture_mode():
         d = json.load(open(PIC))
         gm = game_mode()
         if d.get("keep"):
-            if gm or time.time() - os.path.getmtime(PIC) < 30:   # Game Mode (still starting) keeps the screen as it is
+            # Game Mode (still starting) keeps the screen as it is: our gamescope says so with its marker file
+            if time.time() - os.path.getmtime(PIC) < 30 or (gm and glob.glob("/run/user/*/egpu-keep-connector")):
                 return
-            log("touchpad picture: Game Mode ended, the desktop takes the screen"); picture_off(); return
+            if not gm:
+                log("touchpad picture: Game Mode ended, the desktop takes the screen"); picture_off(); return
+            # another Game Mode (moved to an eGPU screen) leaves the chip free: an ordinary picture from here on
+            d["keep"] = False; json.dump(d, open(PIC, "w"))
         if "fb" in d and any(chip_shared(c) for c in glob.glob("/sys/class/drm/card*-eDP-*")):
             log("touchpad picture: another screen joined the handheld's chip (XR glasses?), picture off")
             picture_off(); return
