@@ -1886,6 +1886,8 @@ def _system_report():
     ps = sorted(glob.glob("/var/lib/systemd/pstore/*/dmesg*") + glob.glob("/var/lib/systemd/pstore/dmesg*"), key=os.path.getmtime)
     if ps:
         L += ["", f"## Kernel crash log (pstore, newest of {len(ps)}: {ps[-1]}, last 120 lines)"] + [l[:240] for l in _read(ps[-1]).splitlines()[-120:]]
+    else:
+        L += ["", f"## Kernel crash log (pstore): none · backend {_read('/sys/module/pstore/parameters/backend').strip() or '-'} · efi_pstore disabled {_read('/sys/module/efi_pstore/parameters/pstore_disable').strip() or '-'}"]
     return L
 
 

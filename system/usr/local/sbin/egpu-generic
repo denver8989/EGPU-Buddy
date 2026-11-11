@@ -457,6 +457,7 @@ detach)
     log "removing ${fn##*/} ($(basename "$(readlink -f "$fn/driver" 2>/dev/null)"))"; sync; echo 1 > "$fn/remove" 2>/dev/null; done
   rm -f $MARK $MOVED
   if egpu_find >/dev/null; then status FAILED "The eGPU did not leave the bus. Do not unplug; reboot first."; log "remove failed"; exit 6; fi
+  : > /run/nvegpu/detached-this-boot   # egpu-shutdown-teardown: the reboot after this hung (report AP3WSW)
   log "eGPU $bdf removed"; status SAFE_COMPLETE "Safe to unplug the cable."
   ;;
 surprise)
