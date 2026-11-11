@@ -98,6 +98,25 @@ def panel_size_mm():
     return None
 
 
+_took = [None]   # gm_took_panel: looked up once per glasses-gone moment (card_held scans every process)
+
+
+def gm_took_panel(c):
+    """Picture for Game Mode on XR glasses up, the glasses gone, and gamescope holds the handheld's chip: Game Mode now
+    shows on the handheld screen (gamescope takes the kept screen when it is its only one left)."""
+    if chip_shared(c):
+        _took[0] = None; return False
+    if _took[0] is None:
+        try:
+            gm = json.load(open(PIC)).get("gm")
+        except (OSError, ValueError):
+            gm = False
+        _took[0] = bool(gm) and card_held("/dev/dri/" + os.path.basename(c.rsplit("-eDP-", 1)[0])).startswith("gamescope")
+        if _took[0]:
+            log("touchpad picture: Game Mode took the handheld screen (the other screen on its chip is gone)")
+    return _took[0]
+
+
 def screen_state():
     """(built-in screen dark, another screen showing a picture) from the kernel's own view: no compositor needed."""
     dark, other = True, False
@@ -109,7 +128,10 @@ def screen_state():
         lit = rd("enabled") == "enabled" and rd("dpms") == "On"
         if conn.startswith("eDP"):
             if os.path.exists(PIC):   # lit only by our touchpad picture
+                if gm_took_panel(c):   # Game Mode moved onto it (XR glasses unplugged): lit, the touchpad stops
+                    dark = False
                 continue
+            _took[0] = None
             # dark = no picture or the backlight really at 0. Not bl_power: amdgpu ignores it, so it stays "off" from an
             # earlier panel-off while the panel is lit again (Game Mode fell back to the panel and the touchpad kept the
             # touchscreen, 2026-11-11)
