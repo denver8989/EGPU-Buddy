@@ -22,7 +22,7 @@ to the touch) and in the "touchpad off" line. No position, count or time of any 
 
 Keep the screen on for touch (setting keep_screen): for touchscreens that stop sensing while their screen is off. With
 an eGPU, gamescope and the desktop (KWIN_DRM_DEVICES) drive only the eGPU, so the handheld's own graphics leave its panel
-to the kernel's framebuffer: one still dark touchpad picture is put there once at about 3 % backlight, and nothing is redrawn after
+to the kernel's framebuffer: one still dark touchpad picture is put there once at 10 % backlight, and nothing is redrawn after
 that (no rendering, nothing on the eGPU). The screen counts as dark for the touchpad while it shows the picture.
 Turned off (backlight put back) when the touchpad goes off or the option is switched off. When a compositor drives the
 handheld's chip itself (no eGPU, e.g. XR glasses on the handheld), nothing is shown.
@@ -922,7 +922,7 @@ def picture_lease_on(c, dev, bl):
         LEASE.update(wl=wl, fd=fd, keep=drm_show(fd, cid, True))
         for b in bl:
             mx = int(open(b + "/max_brightness").read())
-            open(b + "/brightness", "w").write(str(max(1, mx * 3 // 100)))
+            _bl_lit(b, mx)
         log("touchpad picture on (handed over by the desktop)"); _said[0] = ""
         return True
     except (OSError, ValueError, struct.error) as e:
@@ -941,6 +941,16 @@ def chip_shared(c):
             except OSError:
                 pass
     return False
+
+
+def _bl_lit(b, mx):
+    """Picture backlight: power on (a panel-off leaves bl_power at 4) and 10 %. 3 % was ~0.2 % of real light on the
+    Legion Go 2 panel (raw backlight, non-linear): the picture was there but the screen looked off (2026-11-11)."""
+    try:
+        open(b + "/bl_power", "w").write("0")
+    except OSError:
+        pass
+    open(b + "/brightness", "w").write(str(max(1, mx // 10)))
 
 
 def picture_draw(fb, desk):
@@ -1031,7 +1041,7 @@ def picture_on(keep=False):
             picture_draw(fb, not gm)
             for b in bl:
                 mx = int(open(b + "/max_brightness").read())
-                open(b + "/brightness", "w").write(str(max(1, mx * 3 // 100)))
+                _bl_lit(b, mx)
             open(fb + "/blank", "w").write("0")
             time.sleep(0.5)
             if open(c + "/dpms").read().strip() != "On":
@@ -1045,8 +1055,8 @@ def picture_on(keep=False):
                 log("touchpad picture: the handheld screen is in use, not shown"); picture_off(); return False
             time.sleep(2)   # a panel-off already running (Game Mode start) can write 0 over our level: light it again
             for b in bl:
-                if open(b + "/brightness").read().strip() == "0":
-                    open(b + "/brightness", "w").write(str(max(1, int(open(b + "/max_brightness").read()) * 3 // 100)))
+                if open(b + "/brightness").read().strip() == "0" or open(b + "/bl_power").read().strip() != "0":
+                    _bl_lit(b, int(open(b + "/max_brightness").read()))
             log("touchpad picture on" + (" (Game Mode leaves it: GAMESCOPE_KEEP_CONNECTOR)" if keep else "")); _said[0] = ""
             return True
         except (OSError, ValueError) as e:
