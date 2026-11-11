@@ -282,7 +282,8 @@ _egpu_stage_desktop_kwin() {
           # crashes compositing the glasses (RenderDevice::deviceId, "Couldn't find any render device for card1";
           # Legion Go 2 + XREAL on its USB-C, 2026-11-11)
           export KWIN_RENDER_NODES="$(_egpu_render_for_card "$egpu_card"):$(_egpu_render_for_card "$igpu_card")"
-          export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+          # and both EGL libraries: with NVIDIA's alone KWin could not open the handheld GPU at all
+          export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/50_mesa.json
           export __GLX_VENDOR_LIBRARY_NAME=nvidia DXVK_HDR=0
         else
           export KWIN_DRM_DEVICES="$igpu_card"
