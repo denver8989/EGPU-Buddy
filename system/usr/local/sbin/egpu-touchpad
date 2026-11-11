@@ -745,6 +745,7 @@ def run():
                         log("could not take the touchscreen:", e); time.sleep(5)
             elif pad is not None and (not active or pad.gm != game_mode()):   # off, or Game Mode <-> desktop
                 pad.close(); pad = None
+                _gm[0] = 0.0   # look again now: a stale "Game Mode" lit the picture for 2 s while the desktop started
             if pad:
                 deadline = time.monotonic() + 1
                 while time.monotonic() < deadline:

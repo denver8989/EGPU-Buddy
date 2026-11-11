@@ -143,7 +143,7 @@ def usb4():
 def touchpad():
     try: d = json.load(open("/var/lib/nvegpu/touchpad.json"))
     except (OSError, ValueError): d = {}
-    return {"enabled": bool(d.get("enabled")), "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap"}
+    return {"enabled": bool(d.get("enabled")), "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap", "keep_screen": bool(d.get("keep_screen"))}
 def tv_remote():
     """TV controls / TV off at Safe Detach (opt-in; egpu-screen, the plugin's reading): every setup, as in the plugin."""
     try: return json.loads(sh(["/usr/local/sbin/egpu-screen", "tvremote"], 20)[1])
@@ -312,7 +312,7 @@ def action(p):
         rc, o, e = sh(["sudo", "-n", "/usr/local/sbin/egpu-screen", "tvset", k, "on" if (p or {}).get("value") else "off"], 15); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "touchpad-option":   # speed / invert / drag (the plugin's same settings)
         k, v = str((p or {}).get("key")), str((p or {}).get("value"))
-        if k not in ("speed", "invert", "drag"): return {"ok": False, "out": "unknown touchpad option"}
+        if k not in ("speed", "invert", "drag", "keepscreen"): return {"ok": False, "out": "unknown touchpad option"}
         rc, o, e = sh(["sudo", "-n", PRIV, "touchpad", k, v], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "touchpad":   # "Handheld screen as touchpad" (opt-in, every setup)
         rc, o, e = sh(["sudo", "-n", PRIV, "touchpad", "on" if (p or {}).get("value") else "off"], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
