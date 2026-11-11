@@ -6,6 +6,11 @@
 # the sound services of each logged-in user are restarted, which closes it. Sound moves to another output anyway.
 dev=/sys/bus/pci/devices/${1#pci-}
 case "$1" in pci-*) ;; *) exit 0 ;; esac
+# Safe Detach stops the sound services itself and removes the card on purpose: leave it alone (same checks as
+# egpu-surprise-recover)
+[ -n "$(ls /run/user/*/nv-egpu-buddy/detach-handoff-active 2>/dev/null)" ] && exit 0
+pgrep -f '/usr/local/sbin/egpu-(safe|gamemode|desktop)-detach' >/dev/null && exit 0
+[ -e /run/nvegpu/gm-detach-pending ] && exit 0
 for _ in 1 2 3; do sleep 1; [ -e "$dev" ] || exit 0; done
 for u in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $2}'); do
   [ "$(id -u "$u" 2>/dev/null || echo 0)" -ge 1000 ] || continue
