@@ -24,4 +24,5 @@ meson setup build . --buildtype=release -Dprefix="$PREFIX" -Dpipewire=disabled -
 ninja -C build >/dev/null
 ninja -C build install >/dev/null 2>&1 || meson install -C build --skip-subprojects >/dev/null
 "$PREFIX/bin/gamescope" --version 2>&1 | grep -o 'gamescope version [^ ]*'
-echo "$VER" > "$PREFIX/../BUILT-FROM"
+# version + our changes: a new EGPU Buddy gamescope change rebuilds the same gamescope version too
+echo "$VER+$(sha256sum "$HERE/valve/egpu.bundle" | cut -c1-12)" > "$PREFIX/../BUILT-FROM"

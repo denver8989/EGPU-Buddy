@@ -471,7 +471,8 @@ elif want gamescope; then
   CYV=""; command -v pacman >/dev/null && ! command -v steamos-readonly >/dev/null && [ "$IS_BAZZITE" != 1 ] && [ "$GPU_VENDOR" != amd ] &&
     CYV=$(pacman -Q gamescope 2>/dev/null | awk '{print $2}' | sed 's/^[0-9]*://; s/-[^-]*$//')
   CYG="$USER_HOME/.local/gamescope-gbm"
-  if [ -n "$CYV" ] && [ "$(cat "$CYG/BUILT-FROM" 2>/dev/null)" = "$CYV" ] && [ -x "$CYG/usr/bin/gamescope" ] && ! ldd "$CYG/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
+  CYW="$CYV+$(sha256sum "$ROOT/packaging/gamescope-gbm/valve/egpu.bundle" 2>/dev/null | cut -c1-12)"   # as build-system.sh writes it
+  if [ -n "$CYV" ] && [ "$(cat "$CYG/BUILT-FROM" 2>/dev/null)" = "$CYW" ] && [ -x "$CYG/usr/bin/gamescope" ] && ! ldd "$CYG/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
     say "== keeping EGPU Buddy's gamescope built into gamescope $CYV"
   elif [ -n "$CYV" ] && [ -x "$CYG/usr/bin/gamescope" ] && ! ldd "$CYG/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
     say "== EGPU Buddy's gamescope is not built for gamescope $CYV yet: built in the background after this install"

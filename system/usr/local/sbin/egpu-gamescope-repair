@@ -41,7 +41,8 @@ CYTRIES=/var/lib/nvegpu/gamescope-system-tries   # line 1 the gamescope version,
 CYCANNOT=/var/lib/nvegpu/gamescope-system-cannot # the version our changes do not apply to
 cy_ver(){ pacman -Q gamescope 2>/dev/null | awk '{print $2}' | sed 's/^[0-9]*://; s/-[^-]*$//'; }
 cy_built(){ cat "$UH/.local/gamescope-gbm/BUILT-FROM" 2>/dev/null; }
-cy_tries(){ if [ "$(sed -n 1p "$CYTRIES" 2>/dev/null)" = "$(cy_ver)" ]; then sed -n 2p "$CYTRIES"; else echo 0; fi; }
+cy_want(){ echo "$(cy_ver)+$(sha256sum "$(dirname "$BUILD")/valve/egpu.bundle" 2>/dev/null | cut -c1-12)"; }   # version + our changes (as build-system.sh writes it)
+cy_tries(){ if [ "$(sed -n 1p "$CYTRIES" 2>/dev/null)" = "$(cy_want)" ]; then sed -n 2p "$CYTRIES"; else echo 0; fi; }
 tell(){ # what the guard detected / does, to the user: Game Mode toast (the plugin shows it) and a desktop notification
   python3 -c 'import json,sys; p=sys.argv[1]
 try: d=json.load(open(p))
@@ -73,13 +74,14 @@ reason(){
     [ -z "$bf" ] || [ "$bf" = "$nf" ] || { echo "Bazzite is now on $nf (ours was built on $bf)"; return 0; }
   elif [ "$CY" = 1 ]; then                                            # CachyOS: built into the installed version
     local v; v=$(cy_ver); [ -n "$v" ] && [ -f "$BUILD" ] || return 1
-    [ "$(cat "$CYCANNOT" 2>/dev/null)" = "$v" ] && return 1           # our changes do not apply to it: wait for a new one
+    [ "$(cat "$CYCANNOT" 2>/dev/null)" = "$(cy_want)" ] && return 1           # our changes do not apply to it: wait for a new one
     [ "$(cy_tries)" -ge 3 ] 2>/dev/null && return 1                   # tried 3 times for this version
     for t in git meson ninja cc cmake glslangValidator; do command -v $t >/dev/null 2>&1 || { echo "cannot build: $t missing (pacman -S --needed base-devel git meson ninja cmake glslang)" >&2; return 1; }; done
-    [ "$(cy_built)" = "$v" ] && [ -x "$PRIV" ] && ! ldd "$PRIV" 2>/dev/null | grep -q 'not found' &&
+    [ "$(cy_built)" = "$(cy_want)" ] && [ -x "$PRIV" ] && ! ldd "$PRIV" 2>/dev/null | grep -q 'not found' &&
       ! case "$(cat "$BAD" 2>/dev/null)" in "$(os_id) "*) true ;; *) false ;; esac && return 1
     local b; b=$(cy_built)
-    if [ "$b" = "$v" ]; then echo "EGPU Buddy's gamescope for $v does not run any more"; else echo "a system update installed gamescope $v (EGPU Buddy's was built into ${b:-an older version})"; fi
+    if [ "$b" = "$(cy_want)" ]; then echo "EGPU Buddy's gamescope for $v does not run any more"
+    elif [ "${b%%+*}" = "$v" ]; then echo "this EGPU Buddy update changes its gamescope for $v"; else echo "a system update installed gamescope $v (EGPU Buddy's was built into ${b:-an older version})"; fi
     return 0
   else
   command -v steamos-readonly >/dev/null 2>&1 || return 1            # SteamOS only; other systems build it with the installer
@@ -200,7 +202,7 @@ for _ in $(seq 1 40); do curl -sI -o /dev/null --max-time 8 "$NETCHK" 2>/dev/nul
 if [ "$BZ" = 1 ]; then   # Bazzite: count the try BEFORE building (a hang or a failure is retried once, never in a loop)
   n=$(bz_tries); printf '%s\n%s\n' "$OS" "$(( ${n:-0} + 1 ))" > "$BZTRIES"
 elif [ "$CY" = 1 ]; then # CachyOS: counted per gamescope version (3 tries), before building
-  n=$(cy_tries); printf '%s\n%s\n' "$(cy_ver)" "$(( ${n:-0} + 1 ))" > "$CYTRIES"
+  n=$(cy_tries); printf '%s\n%s\n' "$(cy_want)" "$(( ${n:-0} + 1 ))" > "$CYTRIES"
 else
 echo "$OS" > "$DONE"    # recorded BEFORE building: a build that hangs or fails is not retried in a loop on this OS build
 fi
@@ -234,7 +236,7 @@ cy_build(){ # CachyOS: built as the user into ~/.local/gamescope-egpu-<version>,
   rm -rf "${D:?}"; runuser -u "$u" -- mkdir -p "$D" "$UH/.cache/egpu-buddy"
   runuser -u "$u" -- env HOME="$UH" GAMESCOPE_SRC="$S" nice -n 10 bash "$B/build-system.sh" "$v" "$D/usr"; rc=$?
   rm -rf "${B:?}" "${S:?}"
-  if [ "$rc" = 3 ]; then echo "$v" > "$CYCANNOT"; rm -rf "${D:?}"; return 3; fi
+  if [ "$rc" = 3 ]; then cy_want > "$CYCANNOT"; rm -rf "${D:?}"; return 3; fi
   [ "$rc" = 0 ] && [ -x "$D/usr/bin/gamescope" ] && ! ldd "$D/usr/bin/gamescope" 2>/dev/null | grep -q 'not found' || { rm -rf "${D:?}"; return 1; }
   runuser -u "$u" -- mkdir -p "$G"
   # the build being replaced: a folder (the shipped one) is kept as usr.previous; an older link just goes
