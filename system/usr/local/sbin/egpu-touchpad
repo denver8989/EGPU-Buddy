@@ -42,7 +42,7 @@ TOOLS = {1: BTN_TOOL_FINGER, 2: BTN_TOOL_DOUBLETAP, 3: BTN_TOOL_TRIPLETAP, 4: BT
 INPUT_PROP_POINTER, INPUT_PROP_DIRECT = 0, 1
 EVIOCGRAB = 0x40044590
 PIC = "/run/egpu-touchpad-picture"   # while the Game Mode touchpad picture is up: its framebuffer and the backlight to put back
-ART = "/usr/local/share/egpu-buddy/touchpad-%dx%d.gray.gz"   # 8-bit grey, drawn for 1920x1200 and 1920x1080
+ART = "/usr/local/share/egpu-buddy/touchpad-%dx%d%s.gray.gz"   # 8-bit grey, 1920x1200 / 1920x1080; "-desktop": + desktop gestures
 REACHED = "/run/egpu-touchpad-reached"   # "yes" once any touch arrived since the touchpad came on (support report)
 UI_SET_EVBIT, UI_SET_KEYBIT, UI_SET_ABSBIT, UI_SET_PROPBIT = 0x40045564, 0x40045565, 0x40045567, 0x4004556E
 UI_SET_RELBIT, EV_REL, REL_X, REL_Y, REL_HWHEEL, REL_WHEEL, REL_WHEEL_HI_RES, REL_HWHEEL_HI_RES = 0x40045566, 2, 0, 1, 6, 8, 11, 12
@@ -633,7 +633,7 @@ def game_mode():
     return _gm[1]
 
 
-def picture_art(w, h):
+def picture_art(w, h, desk=False):
     """The touchpad picture as w*h grey bytes: the drawing for that size (turned for a portrait panel), else the closest
     one centred on black. ponytail: two drawn sizes; other panels get the nearer one cropped/padded, draw more if needed."""
     import gzip
@@ -641,7 +641,7 @@ def picture_art(w, h):
     port = h > w
     lw, lh = (h, w) if port else (w, h)
     aw, ah = min(sizes, key=lambda z: abs(z[0] / z[1] - lw / lh))
-    g = gzip.open(ART % (aw, ah)).read()
+    g = gzip.open(ART % (aw, ah, "-desktop" if desk else "")).read()
     if (aw, ah) != (lw, lh):   # centre on a black canvas of the panel's size
         out = bytearray(lw * lh); ox, oy = (lw - aw) // 2, (lh - ah) // 2
         for y in range(max(0, -oy), min(ah, lh - oy)):
@@ -666,6 +666,28 @@ def card_held(node):
     return False
 
 
+def picture_draw(fb, desk):
+    """Write the picture (the desktop one lists the desktop's four- and five-finger gestures too) to the framebuffer."""
+    w, h = map(int, open(fb + "/virtual_size").read().split(","))
+    stride = int(open(fb + "/stride").read()) if os.path.exists(fb + "/stride") else w * 4
+    g = picture_art(w, h, desk)
+    px = bytearray(len(g) * 4); px[0::4] = g; px[1::4] = g; px[2::4] = g
+    with open("/dev/" + os.path.basename(fb), "r+b") as f:
+        for y in range(h):
+            f.seek(y * stride); f.write(px[y * w * 4:(y + 1) * w * 4])
+
+
+def picture_mode():
+    """Game Mode <-> desktop while the picture is up: redraw it for the new mode (the screen stays on)."""
+    try:
+        d = json.load(open(PIC))
+        gm = game_mode()
+        if d.get("gm") != gm:
+            picture_draw(d["fb"], not gm); d["gm"] = gm; json.dump(d, open(PIC, "w"))
+    except (OSError, ValueError, KeyError):
+        pass
+
+
 def picture_on():
     """Light the handheld panel with the touchpad picture through its framebuffer. Only works while nothing else drives
     that graphics chip (Game Mode with gamescope on another card); otherwise it is undone at once."""
@@ -678,18 +700,13 @@ def picture_on():
         if card_held(node):   # the desktop or gamescope drives this chip (no eGPU): it shows nothing of ours
             log("touchpad picture: the handheld screen is driven by the desktop or Game Mode, not shown"); return False
         try:
-            w, h = map(int, open(fb + "/virtual_size").read().split(","))
-            stride = int(open(fb + "/stride").read()) if os.path.exists(fb + "/stride") else w * 4
             if int(open(fb + "/bits_per_pixel").read()) != 32:
                 continue
-            g = picture_art(w, h)
-            px = bytearray(len(g) * 4); px[0::4] = g; px[1::4] = g; px[2::4] = g
             bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*")
                   if os.path.realpath(b).startswith(dev)} or {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*")}
-            json.dump({"fb": fb, "bl": bl}, open(PIC, "w"))
-            with open("/dev/" + os.path.basename(fb), "r+b") as f:
-                for y in range(h):
-                    f.seek(y * stride); f.write(px[y * w * 4:(y + 1) * w * 4])
+            gm = game_mode()
+            json.dump({"fb": fb, "bl": bl, "gm": gm}, open(PIC, "w"))
+            picture_draw(fb, not gm)
             for b in bl:
                 mx = int(open(b + "/max_brightness").read())
                 open(b + "/brightness", "w").write(str(max(1, mx * 3 // 100)))
@@ -717,9 +734,10 @@ def picture_off():
     except (OSError, ValueError):
         return
     for b, v in d.get("bl", {}).items():
-        try:
-            open(b + "/brightness", "w").write(v)
-        except OSError:
+        try:   # never back to 0: KDE's power manager sets 0 on a screen it switched off, and 0 would leave it black later
+            mx = int(open(b + "/max_brightness").read())
+            open(b + "/brightness", "w").write(str(max(int(v), mx // 10)))
+        except (OSError, ValueError):
             pass
     try:
         open(d["fb"] + "/blank", "w").write("4")
@@ -758,6 +776,8 @@ def run():
                 tried = True; picture_on()   # once per touchpad session: no retry loop if the screen is in use
             elif not want and os.path.exists(PIC):
                 picture_off()
+            elif want and os.path.exists(PIC):
+                picture_mode()
             if not active:
                 tried = False
             if active and pad is None:
