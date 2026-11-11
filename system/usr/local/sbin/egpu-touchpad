@@ -829,7 +829,10 @@ def kde_screen_off(conn_dir):
         try:
             for _ in range(10):   # KDE takes a moment to list it again
                 if name in subprocess.run(run + ["-o"], capture_output=True, text=True, timeout=3).stdout:
-                    subprocess.run(run + [f"output.{name}.disable"], capture_output=True, timeout=3); break
+                    # off only while another screen shows the desktop: with the glasses gone dark (taken off, asleep)
+                    # it stays on, or there is no screen at all (2026-11-11)
+                    act = "disable" if screen_state()[1] else "enable"
+                    subprocess.run(run + [f"output.{name}.{act}"], capture_output=True, timeout=3); break
                 time.sleep(0.5)
         except subprocess.TimeoutExpired:
             pass
