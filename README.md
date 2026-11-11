@@ -203,6 +203,8 @@ This builds on other people's work. Full details, with links and licenses: [CRED
   AMD/Intel eGPUs.
 - **xXJSONDeruloXx ([cec-mote](https://github.com/xXJSONDeruloXx/cec-mote)):** the approach of the TV remote over
   HDMI-CEC (volume, mute, TV on / off through SteamOS's CEC service).
+- **Valve, Vicki Pfau ([linux-cec / cecd](https://github.com/xXJSONDeruloXx/linux-cec), LGPL-2.1-or-later):** Valve's CEC
+  service, bundled unmodified on systems that don't ship it (CachyOS, Bazzite) for "TV remote (CEC)".
 - **Valve** (gamescope, Proton), **dxvk-nvapi**, **Decky Loader**, **CachyOS**, **Bazzite** and **NVIDIA**.
 
 If your work is used here and isn't credited, open an issue and it will be fixed.

@@ -143,8 +143,13 @@ say where it came from.
   and the support report. Each was written separately for this project.
 - [xXJSONDeruloXx/cec-mote](https://github.com/xXJSONDeruloXx/cec-mote) (BSD-3-Clause, Kurt Himebauch) — a Decky
   plugin that sends TV volume / mute / standby through SteamOS's own CEC service (cecd). The optional "TV remote (CEC)"
-  and the CEC route of "Turn the TV off at Safe Detach" (Extras) follow its approach: the same cecd D-Bus calls, never
-  the CEC adapter directly. Written separately for this project; no code copied.
+  and the CEC route of "Turn the TV off at Safe Detach" (Extras) follow its approach: the same cecd D-Bus calls (on
+  systems without cecd, the same commands go to the CEC adapter through cec-ctl). Written separately for this project;
+  no code copied.
+- [linux-cec / cecd](https://github.com/xXJSONDeruloXx/linux-cec) (LGPL-2.1-or-later, Vicki Pfau / Valve; a copy of
+  Valve's SteamOS CEC service) — on systems that don't ship it (CachyOS, Bazzite), EGPU Buddy's release carries cecd
+  built unmodified from that repository at the "cecd 0.3.0" tag (commit 361be30; recipe: packaging/cecd/build.sh) with
+  its license. It runs only while "TV remote (CEC)" is on.
 - [djanice1980/eGPU-Blackwell-Stability](https://github.com/djanice1980/eGPU-Blackwell-Stability) — Blackwell eGPU on a
   Strix Halo host (Flow Z13) with apnex's driver patches; it uses the card for render offload only and does not drive a
   display from it, which is why it never meets the display-path problems solved here.
