@@ -1145,8 +1145,12 @@ def picture_off():
             pass
     try:
         if "fb" in d:
+            # wiped first: the kernel shows this buffer again on any screen of the chip nothing else drives (the XR
+            # glasses showed the old picture after Game Mode moved to the eGPU; a hotplug flashed it on the panel)
+            with open("/dev/" + os.path.basename(d["fb"]), "r+b") as f:
+                f.write(bytes(int(open(d["fb"] + "/stride").read()) * int(open(d["fb"] + "/virtual_size").read().split(",")[1])))
             open(d["fb"] + "/blank", "w").write("4")
-    except OSError:
+    except (OSError, ValueError):
         pass
     try:
         os.remove(PIC)
