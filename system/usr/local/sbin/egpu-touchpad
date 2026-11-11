@@ -410,7 +410,9 @@ class Pad:
         """A button may never stay held without fingers moving: a held drag lets go after 3 s with no touchscreen event, a
         double-tap lock (no finger on the glass) after 5 s. Fingers still down are then ignored until all are lifted."""
         idle = now - self.last_ev
-        if (self.drag or self.tdrag in ("held", "relock")) and idle > 3 or self.tdrag == "locked" and idle > 5:
+        # double tap to drag: lifting ends the drag after 0.35 s unless the finger comes back to carry on (a drag that
+        # stayed held until the next tap, up to 5 s, kept selecting and dragging with every move: owner, 2026-11-11)
+        if (self.drag or self.tdrag in ("held", "relock")) and idle > 3 or self.tdrag == "locked" and idle > 0.35:
             self.drag, self.tdrag = False, None
             self.frame({}, now)
             self.wait_clear = bool(self.slots)
@@ -1345,8 +1347,13 @@ def selftest():
     assert f.tdrag == "held" and BTN_LEFT in f.held, "double tap and hold: button held"
     f.frame({0: (300, 100, 41)}, 7.5); f.frame({}, 7.6)
     assert f.tdrag == "locked" and BTN_LEFT in f.held, "lifting keeps it held (locked)"
-    f.frame({0: (300, 100, 42)}, 8.0); f.frame({0: (400, 100, 42)}, 8.3); f.frame({}, 8.4)
-    assert f.tdrag == "locked" and BTN_LEFT in f.held, "moving again keeps dragging"
+    f.frame({0: (300, 100, 42)}, 7.8); f.frame({0: (400, 100, 42)}, 8.3); f.frame({}, 8.4)
+    assert f.tdrag == "locked" and BTN_LEFT in f.held, "the finger back within 0.35 s keeps dragging"
+    f.slots = {}; f.last_ev = 8.4; f.watchdog(8.6); assert f.tdrag == "locked" and BTN_LEFT in f.held, "still held 0.2 s after lifting"
+    f.watchdog(8.8); assert f.tdrag is None and BTN_LEFT not in f.held, "lifting ends the drag after 0.35 s"
+    f.frame({0: (100, 100, 46)}, 9.5); f.frame({}, 9.55); f.frame({0: (100, 100, 47)}, 9.65); f.frame({0: (100, 100, 47)}, 9.9)
+    f.frame({0: (300, 100, 47)}, 10.0); f.frame({}, 10.1)
+    assert f.tdrag == "locked" and BTN_LEFT in f.held, "another double-tap drag" 
     f.log.clear(); f.frame({0: (400, 100, 43)}, 9.0); f.frame({}, 9.05)
     assert f.tdrag is None and BTN_LEFT not in f.held and (EV_KEY, BTN_LEFT, 1) not in f.log, "a tap lets go, no extra click"
     f.frame({0: (100, 100, 44)}, 10.0); f.frame({}, 10.05); f.log.clear(); f.frame({0: (100, 100, 45)}, 10.15); f.frame({}, 10.2)
