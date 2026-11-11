@@ -1,3 +1,14 @@
+0.7.266 — AMD: the desktop stays on the TV; TV off at Safe Detach fixed.
+
+**AMD / Intel eGPU** (AMD / Intel install only; NVIDIA unchanged)
+- Fixed: Game Mode on the TV, then Desktop: the desktop came up on the handheld and the TV stayed on, black. It now starts on the eGPU's screen.
+
+**TV extras** (only when "Turn the TV off at Safe Detach" is on)
+- Fixed: the TV was only told to switch off when "TV remote (CEC)" was on too.
+
+**Touchpad options** (only when switched on)
+- Fixed: after an update the touchpad kept running the old version until a restart.
+
 0.7.265 — XR glasses on the desktop with the ROG Ally / XG Mobile; touchpad picture without an eGPU.
 
 **ROG Ally / XG Mobile** (glasses on the Ally's USB-C picked as the screen; every other machine unchanged)
