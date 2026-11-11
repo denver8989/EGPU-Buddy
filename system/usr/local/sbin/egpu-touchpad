@@ -1165,6 +1165,23 @@ def pic_starting():
         return False
 
 
+def override_clear(c, dev, fb):
+    """An EDID override left on the handheld screen (the eGPU desktop's VR-flag route puts the panel's own EDID back as
+    one, the screen being dark then) kept the framebuffer route dark: picture "on", panel black (2026-11-11). Cleared
+    while the framebuffer lights the screen, so the kernel reads the panel itself again, then lit once more."""
+    name = os.path.basename(c).split("-", 1)[1]
+    dbg = f"/sys/kernel/debug/dri/{os.path.basename(dev)}/{name}"
+    try:
+        if not os.path.exists(dbg + "/edid_override") or not open(dbg + "/edid_override", "rb").read(1):
+            return
+        open(dbg + "/edid_override", "w").write("reset")
+        open(dbg + "/trigger_hotplug", "w").write("1"); time.sleep(1)
+        open(fb + "/blank", "w").write("4"); time.sleep(0.5); open(fb + "/blank", "w").write("0"); time.sleep(0.5)
+        log("touchpad picture: an old EDID override on the handheld screen was cleared")
+    except OSError as e:
+        log("touchpad picture: could not clear the old EDID override:", e)
+
+
 def picture_on(keep=False):
     """Light the handheld panel with the touchpad picture through its framebuffer. Only works while nothing else drives
     that graphics chip (Game Mode with gamescope on another card); otherwise it is undone at once."""
@@ -1210,6 +1227,7 @@ def picture_on(keep=False):
                 _bl_lit(b, mx)
             open(fb + "/blank", "w").write("0")
             time.sleep(0.5)
+            override_clear(c, dev, fb)
             if open(c + "/dpms").read().strip() != "On":
                 # the framebuffer only switches the screen back on, it does not set it up again after something else
                 # (KDE, gamescope, a hotplug) changed it: a hotplug signal on the handheld screen makes the kernel do that
