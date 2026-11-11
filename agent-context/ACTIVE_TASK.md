@@ -196,3 +196,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 ## 2026-11-12 — 0.7.270 RELEASED: cecd retry gated to gpu-vendor=amd (owner: fix is for Ming/AMD configs); 0.7.269 notes edited (AMD wording, NV GPU Buddy line removed).
 
 ## 2026-11-12 — 0.7.271 RELEASED: AMD post-Safe-Detach shutdown hang guard (hung_task_panic 60s, panic=10, pstore) + power-off finished at next boot (--boot, marker <150s). Ming AP3WSW: TV-off fixed by 0.7.270; awaiting report after reboot test.
+
+## 2026-11-12 — 0.7.272 RELEASED: egpu-notify (Safe Detach toast/notification) + "Don't turn the TV on when the device wakes" (cecd wake_tv=false drop-in ~/.config/cecd/config.d/zz-egpu-buddy.toml, shown under TV remote when on). Ming: tv-power-on.service is his own/other tool.
