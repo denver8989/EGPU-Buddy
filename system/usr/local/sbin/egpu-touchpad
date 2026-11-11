@@ -1043,6 +1043,10 @@ def picture_on(keep=False):
                 time.sleep(1)
             if open(c + "/dpms").read().strip() != "On":
                 log("touchpad picture: the handheld screen is in use, not shown"); picture_off(); return False
+            time.sleep(2)   # a panel-off already running (Game Mode start) can write 0 over our level: light it again
+            for b in bl:
+                if open(b + "/brightness").read().strip() == "0":
+                    open(b + "/brightness", "w").write(str(max(1, int(open(b + "/max_brightness").read()) * 3 // 100)))
             log("touchpad picture on" + (" (Game Mode leaves it: GAMESCOPE_KEEP_CONNECTOR)" if keep else "")); _said[0] = ""
             return True
         except (OSError, ValueError) as e:
