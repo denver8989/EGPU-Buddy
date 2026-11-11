@@ -754,7 +754,10 @@ def tvoff():
     if not _settings().get("off_at_detach"):
         return "off at detach: not enabled"
     routes = remote_routes()
-    if "cec" in routes and _cecd(egpu_cec(), "call", "Standby", "y", "0")[0]:
+    # CEC whenever the eGPU's screen has it: it used to need "TV remote (CEC)" on as well, so with only this option on the
+    # TV was never told (Legion Go S + RX 9070 XT + Fire TV, report LUJVV7: "TV not reached")
+    n = egpu_cec() if _steamos() else None
+    if n is not None and _cecd(n, "call", "Standby", "y", "0")[0]:
         return "TV standby (CEC)"
     if "lg" in routes:
         tv = _lg_tv()
