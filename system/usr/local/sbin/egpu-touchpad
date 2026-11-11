@@ -358,25 +358,6 @@ class Pad:
         click = self.tap.up_all(now) if n == 0 and not self.drag and not self.swipe else None
         if not self.three:   # double tap to drag: libinput taps (KDE / GmPointer); nothing is clicked here
             click = None
-        if False:   # ponytail: the old double-tap-drag state machine, off since libinput does it; delete once confirmed
-            started = n == 1 and self.peak == 1 and not getattr(self, "was", 0)
-            if started and self.tdrag == "locked":
-                self.tdrag = "relock"
-            elif started and now - self.last_tap < 0.45:   # 0.3 s missed real double taps on the glass
-                self.tdrag, self.tdrag_t0 = "armed", now
-            if self.tdrag == "armed" and n == 1 and (now - self.tdrag_t0 > 0.18 or self.tap.moved > TAP_MOVE / 4):   # grab on the first real move, not 3 % in
-                self.tdrag = "held"; self.tap.reset()
-            if n >= 2 and self.tdrag in ("held", "relock", "locked"):
-                self.tdrag = None
-            if n == 0:
-                if self.tdrag == "held" or (self.tdrag == "relock" and not click):
-                    self.tdrag = "locked"
-                elif self.tdrag == "relock":
-                    self.tdrag, click = None, None   # the tap that lets go clicks nothing more
-                elif self.tdrag == "armed":
-                    self.tdrag = None
-            if click == BTN_LEFT:
-                self.last_tap = now
         self.was = n
         if any(s in self.out and self.out[s][0] != t[0] for s, t in target.items()):
             # a slot changes touch (drag start, inverted scroll): end every touch in a frame of its own first. A new
