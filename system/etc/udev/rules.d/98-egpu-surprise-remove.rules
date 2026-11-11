@@ -1,2 +1,4 @@
 # NVIDIA eGPU VGA function vanished from the PCI bus (cable yank / link loss) -> recovery
 ACTION=="remove", SUBSYSTEM=="pci", ENV{PCI_ID}=="10DE:*", ENV{PCI_CLASS}=="30000", RUN+="/usr/bin/systemd-run --no-block /usr/local/sbin/egpu-surprise-recover"
+# the eGPU's NVIDIA sound card removed: make sure no sound service keeps it open (the GPU's removal waits for that)
+ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", ENV{ID_VENDOR_ID}=="0x10de", RUN+="/usr/bin/systemd-run --no-block /usr/local/sbin/egpu-audio-release $env{ID_PATH}"

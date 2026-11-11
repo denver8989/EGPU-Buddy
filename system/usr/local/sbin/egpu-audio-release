@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# egpu-audio-release <ID_PATH of a removed NVIDIA sound card, e.g. pci-0000:03:00.1> — started by udev
+# (98-egpu-surprise-remove.rules). The kernel frees a removed sound card only when every program has closed it, and the
+# eGPU's removal waits for that. WirePlumber / PipeWire sometimes notice the card is gone but keep its control device open
+# (2026-11-11 cable yank: Game Mode stayed on the dead eGPU until they were restarted by hand). Still there after 3 s:
+# the sound services of each logged-in user are restarted, which closes it. Sound moves to another output anyway.
+dev=/sys/bus/pci/devices/${1#pci-}
+case "$1" in pci-*) ;; *) exit 0 ;; esac
+for _ in 1 2 3; do sleep 1; [ -e "$dev" ] || exit 0; done
+for u in $(loginctl list-users --no-legend 2>/dev/null | awk '{print $2}'); do
+  [ "$(id -u "$u" 2>/dev/null || echo 0)" -ge 1000 ] || continue
+  systemctl --user -M "$u@" restart wireplumber pipewire pipewire-pulse 2>/dev/null &&
+    logger -t egpu-audio-release "eGPU sound card $1 still held after its removal: restarted the sound services of $u"
+done
