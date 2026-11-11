@@ -110,8 +110,12 @@ def screen_state():
         if conn.startswith("eDP"):
             if os.path.exists(PIC):   # lit only by our touchpad picture
                 continue
-            bl = [open(p).read().strip() for p in glob.glob("/sys/class/backlight/*/bl_power")]
-            dark = not lit or (bool(bl) and all(v != "0" for v in bl))
+            # dark = no picture or the backlight really at 0. Not bl_power: amdgpu ignores it, so it stays "off" from an
+            # earlier panel-off while the panel is lit again (Game Mode fell back to the panel and the touchpad kept the
+            # touchscreen, 2026-11-11)
+            bl = [(open(b + "/actual_brightness").read().strip() if os.path.exists(b + "/actual_brightness") else open(b + "/brightness").read().strip())
+                  for b in glob.glob("/sys/class/backlight/*")]
+            dark = not lit or (bool(bl) and all(v == "0" for v in bl))
         elif lit:
             other = True
     return dark, other
