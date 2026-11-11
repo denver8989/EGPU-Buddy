@@ -654,16 +654,251 @@ def picture_art(w, h, desk=False):
 
 
 def card_held(node):
-    """A compositor (KDE, gamescope) has this graphics card open. Looked up only when the picture is about to go on."""
+    """The compositor (kwin_wayland, gamescope...) that has this graphics card open, or "". Looked up only when the
+    picture is about to go on."""
     for p in glob.glob("/proc/[0-9]*"):
         try:
-            if not open(p + "/comm").read().startswith(("kwin_wayland", "gamescope")):
+            comm = open(p + "/comm").read().strip()
+            if not comm.startswith(("kwin_wayland", "gamescope")):
                 continue
             if any(os.readlink(f) == node for f in glob.glob(p + "/fd/*")):
+                return comm
+        except OSError:
+            pass
+    return ""
+
+
+def vr_running():
+    """SteamVR or another VR runtime: the handheld screen is then never marked as a VR display."""
+    for c in glob.glob("/proc/[0-9]*/comm"):
+        try:
+            if open(c).read().strip() in ("vrserver", "vrcompositor", "vrmonitor", "monado-service", "wivrn-server", "alvr_dashboard"):
                 return True
         except OSError:
             pass
     return False
+
+
+# --- No eGPU, desktop (KDE drives the handheld's chip, e.g. XR glasses on its USB-C) ---------------------------------
+# The panel's EDID gets one flag, DisplayID 2.0 "primary use: head-mounted VR" (maker and model unchanged, so SteamVR
+# never takes it for a headset). The kernel then marks it non-desktop: KDE leaves it out of the desktop altogether (no
+# pointer, windows, panels or wallpaper) and offers it for lease (wp_drm_lease_v1, the VR headset hand-off). We lease it,
+# show the picture once and hold it. Undone (real EDID back, KDE takes the screen again) when the picture goes off, at
+# service stop (ExecStopPost) and at the next start; the override itself is gone at reboot. Never while SteamVR runs.
+LEASE = {}
+
+
+def edid_vr(raw):
+    """The EDID with the DisplayID 2.0 primary use set to head-mounted VR; everything else unchanged."""
+    b = bytearray(raw)
+    for x in range(128, len(b), 128):
+        if b[x] == 0x70 and b[x + 1] == 0x20:   # DisplayID 2.0 extension: flip the primary use, fix its checksums
+            n = b[x + 2]
+            b[x + 3] = 0x07
+            b[x + 5 + n] = (-sum(b[x + 1:x + 5 + n])) & 0xff
+            b[x + 127] = (-sum(b[x:x + 127])) & 0xff
+            return bytes(b)
+    ext = bytearray(128); ext[0] = 0x70   # none: add one (with one empty vendor block, so the kernel reads the section)
+    sec = bytearray([0x20, 6, 0x07, 0, 0x7E, 0, 3, 0, 0, 0])
+    ext[1:1 + len(sec)] = sec; ext[1 + len(sec)] = (-sum(sec)) & 0xff
+    ext[127] = (-sum(ext[:127])) & 0xff
+    b[126] += 1; b[127] = (-sum(b[:127])) & 0xff
+    return bytes(b) + bytes(ext)
+
+
+def edid_apply(conn_dir, dev, data):
+    """Put an EDID override on the panel (data None: back to its real EDID) and make the kernel and KDE read it."""
+    name = os.path.basename(conn_dir).split("-", 1)[1]
+    dbg = f"/sys/kernel/debug/dri/{os.path.basename(dev)}/{name}"
+    open(dbg + "/edid_override", "wb").write(data if data else b"reset")
+    open(conn_dir + "/status", "w").write("on")       # amdgpu reads an override only when the connector is forced
+    time.sleep(0.5)
+    if not data:
+        open(conn_dir + "/status", "w").write("detect")
+    if os.path.exists(dbg + "/trigger_hotplug"):
+        open(dbg + "/trigger_hotplug", "w").write("1")
+
+
+class Wayland:
+    """Just enough of the Wayland wire protocol for wp_drm_lease_device_v1 (KDE's own socket, as the user)."""
+    def __init__(self, path):
+        import socket
+        self.s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.s.connect(path); self.s.settimeout(3)
+        self.next, self.buf, self.fds, self.types = 2, b"", [], {1: "wl_display"}
+
+    def new(self, typ):
+        i = self.next; self.next += 1; self.types[i] = typ; return i
+
+    def send(self, obj, op, *args, fds=()):
+        import socket, array
+        body = b""
+        for a in args:
+            if isinstance(a, str):
+                e = a.encode() + b"\0"; body += struct.pack("<I", len(e)) + e + b"\0" * (-len(e) % 4)
+            else:
+                body += struct.pack("<I", a)
+        msg = struct.pack("<II", obj, ((8 + len(body)) << 16) | op) + body
+        anc = [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", fds))] if fds else []
+        self.s.sendmsg([msg], anc)
+
+    def events(self):
+        import socket, array
+        data, anc, _, _ = self.s.recvmsg(65536, socket.CMSG_SPACE(16 * 4))
+        if not data:
+            raise OSError("KDE closed the connection")
+        for lvl, typ, d in anc:
+            if lvl == socket.SOL_SOCKET and typ == socket.SCM_RIGHTS:
+                a = array.array("i"); a.frombytes(d[:len(d) - len(d) % 4]); self.fds += list(a)
+        self.buf += data
+        while len(self.buf) >= 8:
+            obj, so = struct.unpack("<II", self.buf[:8]); size, op = so >> 16, so & 0xffff
+            if len(self.buf) < size:
+                break
+            body, self.buf = self.buf[8:size], self.buf[size:]
+            yield obj, op, body
+
+    @staticmethod
+    def string(body, off=0):
+        n = struct.unpack_from("<I", body, off)[0]
+        return body[off + 4:off + 3 + n].decode(errors="replace"), off + 4 + n + (-n % 4)
+
+    def roundtrip(self, handle):
+        cb = self.new("wl_callback"); self.send(1, 0, cb)   # wl_display.sync
+        while True:
+            for obj, op, body in self.events():
+                if obj == 1 and op == 0:   # wl_display.error
+                    raise OSError("KDE refused: " + self.string(body, 8)[0])
+                if obj == cb:
+                    return
+                handle(obj, op, body)
+
+
+def lease_screen(drm_dev, conn_name, uid=1000):
+    """Lease conn_name from KDE: returns (wayland, lease fd, connector id) or raises OSError."""
+    rt = f"/run/user/{uid}"
+    sock = next((f for f in sorted(glob.glob(rt + "/wayland-[0-9]")) if os.path.exists(f + ".lock")), None)
+    if not sock:
+        raise OSError("no KDE session socket")
+    wl = Wayland(sock)
+    reg = wl.new("wl_registry"); wl.send(1, 1, reg)
+    devs = []
+    def on_global(obj, op, body):
+        if obj == reg and op == 0:
+            name = struct.unpack_from("<I", body)[0]; iface, _ = Wayland.string(body, 4)
+            if iface == "wp_drm_lease_device_v1":
+                devs.append(name)
+    wl.roundtrip(on_global)
+    found = {}
+    for name in devs:
+        d = wl.new("dev"); wl.send(reg, 0, name, "wp_drm_lease_device_v1", 1, d)
+        info = {"fd": None, "conns": {}}
+        def on_dev(obj, op, body, d=d, info=info):
+            if obj == d and op == 0:
+                info["fd"] = wl.fds.pop(0)
+            elif obj == d and op == 1:
+                c = struct.unpack_from("<I", body)[0]; wl.types[c] = "conn"; info["conns"][c] = {}
+            elif wl.types.get(obj) == "conn" and obj in info["conns"]:
+                if op == 0:
+                    info["conns"][obj]["name"] = Wayland.string(body)[0]
+                elif op == 2:
+                    info["conns"][obj]["id"] = struct.unpack_from("<I", body)[0]
+        wl.roundtrip(on_dev); wl.roundtrip(on_dev)
+        if info["fd"] is not None:
+            st = os.fstat(info["fd"])
+            same = os.path.realpath(f"/sys/dev/char/{os.major(st.st_rdev)}:{os.minor(st.st_rdev)}/device") == drm_dev
+            os.close(info["fd"])
+            for c, v in info["conns"].items():
+                if same and v.get("name") == conn_name:
+                    found = {"dev": d, "conn": c, "id": v.get("id")}
+    if not found:
+        raise OSError("KDE does not offer the handheld screen")
+    req = wl.new("req"); wl.send(found["dev"], 0, req)
+    wl.send(req, 0, found["conn"])
+    lease = wl.new("lease"); wl.send(req, 1, lease)
+    got = {}
+    def on_lease(obj, op, body):
+        if obj == lease and op == 0:
+            got["fd"] = wl.fds.pop(0)
+        elif obj == lease and op == 1:
+            got["finished"] = True
+    for _ in range(20):
+        wl.roundtrip(on_lease)
+        if got:
+            break
+        time.sleep(0.1)
+    if "fd" not in got:
+        raise OSError("KDE did not hand the screen over")
+    return wl, got["fd"], found["id"]
+
+
+def drm_show(fd, conn_id, desk):
+    """Mode-set the leased screen once with the picture in a plain (dumb) buffer. Returns what must stay alive."""
+    import mmap
+    def io(req, buf):
+        fcntl.ioctl(fd, req, buf); return buf
+    res = io(0xC04064A0, bytearray(64))                       # MODE_GETRESOURCES: counts
+    ncrtc = struct.unpack_from("<I", res, 36)[0]
+    crtcs = bytearray(4 * max(ncrtc, 1))
+    import ctypes
+    cb = (ctypes.c_char * len(crtcs)).from_buffer(crtcs)
+    res = bytearray(64); struct.pack_into("<Q", res, 8, ctypes.addressof(cb)); struct.pack_into("<I", res, 36, ncrtc)
+    io(0xC04064A0, res)
+    crtc = struct.unpack_from("<I", crtcs)[0]
+    gc = bytearray(80); struct.pack_into("<I", gc, 48, conn_id); io(0xC05064A7, gc)   # MODE_GETCONNECTOR: counts
+    nm = struct.unpack_from("<I", gc, 32)[0]
+    modes = bytearray(68 * max(nm, 1)); mb = (ctypes.c_char * len(modes)).from_buffer(modes)
+    gc = bytearray(80); struct.pack_into("<Q", gc, 8, ctypes.addressof(mb)); struct.pack_into("<I", gc, 32, nm)
+    struct.pack_into("<I", gc, 48, conn_id); io(0xC05064A7, gc)
+    pick = next((i for i in range(nm) if struct.unpack_from("<I", modes, i * 68 + 32)[0] & 8), 0)   # preferred mode
+    mode = bytes(modes[pick * 68:(pick + 1) * 68])
+    w, h = struct.unpack_from("<HH", mode, 4)[0], struct.unpack_from("<H", mode, 14)[0]
+    cd = bytearray(32); struct.pack_into("<IIII", cd, 0, h, w, 32, 0); io(0xC02064B2, cd)   # MODE_CREATE_DUMB
+    handle, pitch, size = struct.unpack_from("<IIQ", cd, 16)
+    md = bytearray(16); struct.pack_into("<I", md, 0, handle); io(0xC01064B3, md)       # MODE_MAP_DUMB
+    m = mmap.mmap(fd, size, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE, offset=struct.unpack_from("<Q", md, 8)[0])
+    g = picture_art(w, h, desk)
+    px = bytearray(w * 4)
+    for y in range(h):
+        row = g[y * w:(y + 1) * w]; px[0::4] = row; px[1::4] = row; px[2::4] = row
+        m[y * pitch:y * pitch + w * 4] = px
+    af = bytearray(28); struct.pack_into("<7I", af, 0, 0, w, h, pitch, 32, 24, handle); io(0xC01C64AE, af)   # MODE_ADDFB
+    fb_id = struct.unpack_from("<I", af)[0]
+    conns = (ctypes.c_uint32 * 1)(conn_id)
+    sc = bytearray(104); struct.pack_into("<QIIIIIII", sc, 0, ctypes.addressof(conns), 1, crtc, fb_id, 0, 0, 0, 1)
+    sc[36:104] = mode; io(0xC06864A2, sc)                    # MODE_SETCRTC
+    return [m, conns, cb, mb]
+
+
+def picture_lease_on(c, dev, bl):
+    """No eGPU, desktop: the VR flag, the lease and the picture (see LEASE above)."""
+    if vr_running():
+        log("touchpad picture: a VR runtime is running, not shown"); return False
+    raw = open(c + "/edid", "rb").read()
+    if len(raw) < 128:
+        return False
+    gm = False
+    json.dump({"bl": bl, "gm": gm, "lease": True, "conn": c, "dev": dev}, open(PIC, "w"))
+    try:
+        edid_apply(c, dev, edid_vr(raw))
+        conn = os.path.basename(c).split("-", 1)[1]
+        for _ in range(20):   # KDE takes a moment to see the change and offer the screen
+            time.sleep(0.25)
+            try:
+                wl, fd, cid = lease_screen(dev, conn)
+                break
+            except OSError as e:
+                err = e
+        else:
+            raise err
+        LEASE.update(wl=wl, fd=fd, keep=drm_show(fd, cid, True))
+        for b in bl:
+            mx = int(open(b + "/max_brightness").read())
+            open(b + "/brightness", "w").write(str(max(1, mx * 3 // 100)))
+        log("touchpad picture on (handed over by the desktop)")
+        return True
+    except (OSError, ValueError, struct.error) as e:
+        log("touchpad picture: could not show it:", e); picture_off(); return False
 
 
 def picture_draw(fb, desk):
@@ -682,6 +917,10 @@ def picture_mode():
     try:
         d = json.load(open(PIC))
         gm = game_mode()
+        if d.get("lease"):
+            if gm or vr_running():   # the desktop left (its lease ended) or SteamVR started: give the screen back
+                picture_off()
+            return
         if d.get("gm") != gm:
             picture_draw(d["fb"], not gm); d["gm"] = gm; json.dump(d, open(PIC, "w"))
     except (OSError, ValueError, KeyError):
@@ -697,8 +936,12 @@ def picture_on():
         if not fb:
             continue
         node = "/dev/dri/" + os.path.basename(c.rsplit("-eDP-", 1)[0])
-        if card_held(node):   # the desktop or gamescope drives this chip (no eGPU): it shows nothing of ours
-            log("touchpad picture: the handheld screen is driven by the desktop or Game Mode, not shown"); return False
+        held = card_held(node)
+        if held.startswith("kwin") and not game_mode():   # no eGPU, desktop: KDE hands the screen over
+            bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
+            return picture_lease_on(c, dev, bl)
+        if held:   # gamescope drives this chip (no eGPU, Game Mode): it cannot lend a screen
+            log("touchpad picture: the handheld screen is driven by Game Mode, not shown"); return False
         try:
             if int(open(fb + "/bits_per_pixel").read()) != 32:
                 continue
@@ -733,6 +976,21 @@ def picture_off():
         d = json.load(open(PIC))
     except (OSError, ValueError):
         return
+    if d.get("lease"):   # give the screen back to KDE: close the lease, then the real EDID
+        for k in ("fd",):
+            try:
+                os.close(LEASE.get(k, -1))
+            except OSError:
+                pass
+        try:
+            LEASE.get("wl") and LEASE["wl"].s.close()
+        except OSError:
+            pass
+        LEASE.clear()
+        try:
+            edid_apply(d["conn"], d["dev"], None)
+        except (OSError, KeyError) as e:
+            log("touchpad picture: could not give the screen back:", e)
     for b, v in d.get("bl", {}).items():
         try:   # never back to 0: KDE's power manager sets 0 on a screen it switched off, and 0 would leave it black later
             mx = int(open(b + "/max_brightness").read())
@@ -740,8 +998,9 @@ def picture_off():
         except (OSError, ValueError):
             pass
     try:
-        open(d["fb"] + "/blank", "w").write("4")
-    except (OSError, KeyError):
+        if "fb" in d:
+            open(d["fb"] + "/blank", "w").write("4")
+    except OSError:
         pass
     try:
         os.remove(PIC)
@@ -1057,8 +1316,20 @@ def selftest():
     assert not f.mt["bugs"], f"multi-touch protocol bug: {f.mt['bugs'][:3]}"
     assert rotate(0, 0, 90, (0, 1000), (0, 2000)) == (0, 1000) and rotate(1000, 2000, 90, (0, 1000), (0, 2000)) == (2000, 0)
     assert rotate(5, 7, 0, (0, 9), (0, 9)) == (5, 7) and rotate(0, 0, 180, (0, 9), (0, 9)) == (9, 9)
+    # the VR flag: only the DisplayID primary use (and its checksums) changes; a panel without DisplayID 2.0 gets one
+    base = bytearray(128); base[0:8] = b"\x00\xff\xff\xff\xff\xff\xff\x00"; base[127] = (-sum(base[:127])) & 0xff
+    ext = bytearray(128); ext[0:4] = b"\x70\x20\x04\x02"; ext[5:9] = b"\x7e\x00\x01\x00"; ext[9] = (-sum(ext[1:9])) & 0xff
+    ext[127] = (-sum(ext[:127])) & 0xff
+    raw = bytes(base) + bytes(ext); vr = edid_vr(raw)
+    assert len(vr) == len(raw) and vr[131] == 7 and [i for i in range(len(raw)) if raw[i] != vr[i]] == [131, 137]
+    assert all(sum(vr[i:i + 128]) % 256 == 0 for i in (0, 128)) and sum(vr[129:138]) % 256 == 0
+    vr2 = edid_vr(bytes(base))
+    assert len(vr2) == 256 and vr2[126] == 1 and vr2[131] == 7 and all(sum(vr2[i:i + 128]) % 256 == 0 for i in (0, 128))
     print("selftest ok")
 
 
 if __name__ == "__main__":
-    selftest() if sys.argv[1:] == ["selftest"] else legion() if sys.argv[1:] == ["legion"] else run()
+    if sys.argv[1:] == ["cleanup"]:   # ExecStopPost: whatever happened to the touchpad, the screen goes back
+        picture_off()
+    else:
+        selftest() if sys.argv[1:] == ["selftest"] else legion() if sys.argv[1:] == ["legion"] else run()

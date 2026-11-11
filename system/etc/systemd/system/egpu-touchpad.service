@@ -11,6 +11,8 @@ RestartSec=3
 # dies) ignores the stop signal and exits only after releasing. Keep the default KillMode=control-group: "mixed" would
 # kill the guardian the moment the touchpad exits (a device removed with its button down leaves KDE holding the press).
 TimeoutStopSec=5
+# whatever happened to the touchpad: the handheld screen goes back (real EDID, backlight)
+ExecStopPost=/usr/bin/python3 /usr/local/sbin/egpu-touchpad cleanup
 
 [Install]
 WantedBy=multi-user.target
