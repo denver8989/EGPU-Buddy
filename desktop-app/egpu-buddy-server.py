@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """EGPU Buddy desktop app backend: serves the page and a small JSON API over the shipped helpers.
 No LACT, no other project. Runs as the user; privileged steps go through sudo -n (sudoers rule shipped)."""
-import os, re, json, subprocess, http.server, time
+import glob, os, re, json, subprocess, http.server, time
 HERE = os.path.dirname(os.path.abspath(__file__)); PORT = 8772
 UID = os.getuid(); RUN = f"/run/user/{UID}/nv-egpu-buddy"
 PRIV = "/usr/local/sbin/nv-egpu-buddy-privileged"
@@ -144,6 +144,15 @@ def touchpad():
     try: d = json.load(open("/var/lib/nvegpu/touchpad.json"))
     except (OSError, ValueError): d = {}
     return {"enabled": bool(d.get("enabled")), "speed": float(d.get("speed", 2.0)), "invert": bool(d.get("invert_scroll")), "three": d.get("drag", "three") != "tap", "keep_screen": bool(d.get("keep_screen"))}
+def legion_pad():
+    """Legion Go 2 controller touchpad in Game Mode (opt-in): offered only while a Legion Go 2 controller is connected."""
+    found = False
+    for u in glob.glob("/sys/class/hidraw/hidraw*/device/uevent"):
+        try: t = open(u).read()
+        except OSError: continue
+        found = found or (re.search(r"17EF:000061E[BCDE]", t) is not None and "hid-lenovo-go" in t)
+    on = sh(["systemctl", "is-enabled", "egpu-legion-pad.service"], 5)[1].strip() == "enabled"
+    return {"available": found or on, "enabled": on}
 def tv_remote():
     """TV controls / TV off at Safe Detach (opt-in; egpu-screen, the plugin's reading): every setup, as in the plugin."""
     try: return json.loads(sh(["/usr/local/sbin/egpu-screen", "tvremote"], 20)[1])
@@ -151,7 +160,7 @@ def tv_remote():
 def extras():
     net = jread(SCREEN_NET) or {}
     tv = {"enabled": bool(net.get("enabled")), "paired": [f'{t["ip"]} on {t["input"].replace("_", " ")}' for t in (net.get("tvs") or {}).values()]}
-    if not extras_on(): return {"tv_any": tv, "tvr": tv_remote(), "touchpad": touchpad()}   # the TV card only (the rest stays in the plugin there)
+    if not extras_on(): return {"tv_any": tv, "tvr": tv_remote(), "touchpad": touchpad(), "legion_pad": legion_pad()}   # the TV card only (the rest stays in the plugin there)
     d = plugin_settings(); fix = {}
     if os.path.exists(STEAM_FIX):
         try: fix = json.loads(sh([STEAM_FIX, "status"], 10)[1])
@@ -160,7 +169,7 @@ def extras():
     return {"auto_update": bool(d.get("auto_update", False)), "game_res": bool(d.get("game_res_native", True)),
             "steam_fix": {"available": bool(fix.get("available")), "enabled": bool(fix.get("enabled"))},
             "usb4_on": on, "usb4": usb4() if on else {},
-            "tv": tv, "tv_any": tv, "tvr": tv_remote(), "touchpad": touchpad()}
+            "tv": tv, "tv_any": tv, "tvr": tv_remote(), "touchpad": touchpad(), "legion_pad": legion_pad()}
 
 def status():
     _, l, _ = sh(["lspci", "-Dn"]); bdf = next((x.split()[0] for x in l.splitlines() if " 0300: 10de:" in x), ""); vendor = "nvidia" if bdf else ""
@@ -314,6 +323,8 @@ def action(p):
         k, v = str((p or {}).get("key")), str((p or {}).get("value"))
         if k not in ("speed", "invert", "drag", "keepscreen"): return {"ok": False, "out": "unknown touchpad option"}
         rc, o, e = sh(["sudo", "-n", PRIV, "touchpad", k, v], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
+    if a == "legion-pad":   # "Legion Go 2 controller touchpad in Game Mode" (opt-in, Legion Go 2 controller only)
+        rc, o, e = sh(["sudo", "-n", PRIV, "legionpad", "on" if (p or {}).get("value") else "off"], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "touchpad":   # "Handheld screen as touchpad" (opt-in, every setup)
         rc, o, e = sh(["sudo", "-n", PRIV, "touchpad", "on" if (p or {}).get("value") else "off"], 20); return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "rebuild-driver":   # NVIDIA CEC on a driver built before the CEC patch: build the patched driver again

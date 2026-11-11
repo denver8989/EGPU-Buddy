@@ -530,6 +530,15 @@ ApplicationWindow {
                                 text: "For touchscreens that stop working while their screen is off. In Game Mode, instead of switching it off, the handheld screen shows a dark touchpad picture at the lowest brightness. On LCD screens the backlight still glows a little in the dark; OLED screens stay black." }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; font.pixelSize: 12
                                 text: "While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, three-finger drag or double tap to drag. Game Mode and the desktop. Desktop only: four fingers up or down show the window previews, a long swipe left or right switches desktop, five fingers spread out show the desktop and pinched in bring the windows back." } }
+                    // Legion Go 2 controller touchpad in Game Mode (opt-in): only while a Legion Go 2 controller is connected
+                    Card { id: cLegion; show: !!(win.ex.legion_pad || {}).available
+                        RowLayout { spacing: 8
+                            Head { text: "Legion Go 2 controller" }
+                            Badge { text: "testing · off by default"; lit: false } }
+                        Switch { Layout.fillWidth: true; text: "Controller touchpad in Game Mode"; checked: !!(win.ex.legion_pad || {}).enabled
+                                 onToggled: { win.act("legion-pad", { value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; font.pixelSize: 12
+                                text: "In Game Mode the controller's right touchpad moves the pointer as it does on the desktop, with tap to click. Steam receives the touchpad but moves no pointer with it in Game Mode; this moves the pointer itself. The desktop is unchanged." } }
                     // TV extras (opt-in, off by default): every setup, as in the Game Mode plugin
                     Card { id: cTV; show: !!win.ex.tv_any
                         RowLayout { spacing: 8
