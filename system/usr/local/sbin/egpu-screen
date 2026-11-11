@@ -622,6 +622,47 @@ def _steamos():
         any(os.path.exists(f) for f in ("/usr/lib/systemd/user/cecd.service", "/etc/systemd/user/cecd.service"))
 
 
+# TV makers' names for HDMI-CEC and where its control setting usually is (often off by default: the TV then answers CEC
+# questions but ignores power, input and volume commands; LG OLED77B3 with SIMPLINK off, 2026-11-11). Key: the EDID
+# maker code. Menus differ by model and year: a starting point, not a promise.
+CEC_HINT = {
+    "GSM": "LG: turn on SIMPLINK (HDMI-CEC) under Settings > General > Devices > HDMI Settings",
+    "SAM": "Samsung: turn on Anynet+ (HDMI-CEC) under Settings > General > External Device Manager",
+    "SEC": "Samsung: turn on Anynet+ (HDMI-CEC) under Settings > General > External Device Manager",
+    "SNY": "Sony: turn on BRAVIA Sync / Control for HDMI under Settings > Channels & Inputs > HDMI settings",
+    "PHL": "Philips: turn on EasyLink (HDMI-CEC) under Settings > General",
+    "MEI": "Panasonic: turn on VIERA Link / HDMI Control under Menu > Setup",
+    "SHP": "Sharp: turn on Aquos Link (HDMI-CEC) in the TV's settings",
+    "TSB": "Toshiba: turn on CE-Link / Regza Link (HDMI-CEC) under Settings > Other settings",
+    "TCL": "TCL: turn on T-Link or Control other devices (CEC) in the TV's settings",
+    "HEC": "Hisense: turn on HDMI-CEC / Control other devices (CEC) under Settings > System or Inputs",
+    "VIZ": "Vizio: turn on CEC under Settings > System > CEC",
+}
+
+
+def cec_hint(conn):
+    """The hint for the TV on CONN (empty if unknown): its maker from the EDID."""
+    for f in glob.glob(f"/sys/class/drm/card*-{conn}/edid"):
+        try:
+            e = open(f, "rb").read(10)
+            v = e[8] << 8 | e[9]
+            pnp = "".join(chr(64 + (v >> sh & 31)) for sh in (10, 5, 0))
+            return CEC_HINT.get(pnp, "Turn on HDMI-CEC in the TV's settings (its maker may call it something else)")
+        except (OSError, IndexError):
+            pass
+    return ""
+
+
+def cec_hint_here():
+    """The hint for the TV on the eGPU's CEC adapter (its connector is the adapter's parent DRM connector)."""
+    n = egpu_cec()
+    if n is None:
+        return ""
+    ok, st = _cec_ctl(n) if shutil.which("cec-ctl") else (False, "")
+    m = re.search(r"Adapter Name\s*:\s*(\S+)", st)
+    return cec_hint(m[1]) if m else ""
+
+
 def _cec_any():
     """A way to talk CEC: SteamOS's cecd, else cec-ctl (v4l-utils) on the adapter directly."""
     return _steamos() or bool(shutil.which("cec-ctl"))
@@ -877,7 +918,8 @@ def main(argv):
     if cmd == "tvremote":   # what the plugin shows: which routes work right now
         d = _settings()
         print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")),
-                          "cec_here": _cec_any() and egpu_cec() is not None, "nv_cec": nv_cec_state()})); return 0
+                          "cec_here": _cec_any() and egpu_cec() is not None, "nv_cec": nv_cec_state(),
+                          "cec_hint": cec_hint_here()})); return 0
     take_input = "--input" in want
     want = [w for w in want if w != "--input"]
     found = [s for s in screens() if not want or s[0] in want]
