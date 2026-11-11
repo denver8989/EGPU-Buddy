@@ -32,6 +32,8 @@ egpu_mounted() {
 
 case "$want" in
   off)
+    # "Keep the screen on for touch" (touchpad option): the panel shows the touchpad picture on purpose; leave it
+    if [ -e /run/egpu-touchpad-picture ]; then echo "eDP-1 left on: it shows the touchpad picture (Keep the screen on for touch)"; exit 0; fi
     if [ "${EGPU_PANEL_FORCE:-0}" != 1 ] && ! egpu_mounted; then
       echo "refusing to turn the built-in panel off: no eGPU is mounted to take over (set EGPU_PANEL_FORCE=1 to override)" >&2
       exit 3

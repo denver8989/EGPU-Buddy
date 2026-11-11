@@ -913,6 +913,20 @@ def picture_lease_on(c, dev, bl):
         log("touchpad picture: could not show it:", e); picture_off(); return False
 
 
+def chip_shared(c):
+    """Another screen (XR glasses, a USB-C monitor) is connected to the handheld screen's chip. The framebuffer lights
+    every screen of its chip, so the picture would show on the glasses too: it stays off then."""
+    base = c.rsplit("-eDP-", 1)[0]
+    for n in glob.glob(base + "-*"):
+        if n != c and not os.path.basename(n).split("-", 1)[1].startswith("Writeback"):
+            try:
+                if open(n + "/status").read().strip() == "connected":
+                    return True
+            except OSError:
+                pass
+    return False
+
+
 def picture_draw(fb, desk):
     """Write the picture (the desktop one lists the desktop's four- and five-finger gestures too) to the framebuffer."""
     w, h = map(int, open(fb + "/virtual_size").read().split(","))
@@ -929,6 +943,9 @@ def picture_mode():
     try:
         d = json.load(open(PIC))
         gm = game_mode()
+        if "fb" in d and any(chip_shared(c) for c in glob.glob("/sys/class/drm/card*-eDP-*")):
+            log("touchpad picture: another screen joined the handheld's chip (XR glasses?), picture off")
+            picture_off(); return
         if d.get("lease"):
             if gm or vr_running():   # the desktop left (its lease ended) or SteamVR started: give the screen back
                 picture_off()
@@ -949,6 +966,8 @@ def picture_on():
             continue
         node = "/dev/dri/" + os.path.basename(c.rsplit("-eDP-", 1)[0])
         held = card_held(node)
+        if not held and chip_shared(c):
+            log("touchpad picture: another screen is on the handheld's chip (XR glasses?), not shown"); return False
         if held.startswith("kwin") and not game_mode():   # no eGPU, desktop: KDE hands the screen over
             bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
             return picture_lease_on(c, dev, bl)
