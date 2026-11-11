@@ -737,7 +737,16 @@ def _cec_ctl(n, *a, timeout=6):
 
 def _cec_direct(n, args):
     """Without cecd (CachyOS and other systems without SteamOS's CEC service): the same calls straight on /dev/cecN with
-    cec-ctl, as a playback device, answering in busctl's format so the callers stay the same."""
+    cec-ctl, as a playback device, answering in busctl's format so the callers stay the same. The adapter is set up for
+    the call and released right after (_cec_direct_call): an idle adapter is what makes a cable pull or Safe Detach safe
+    (a configured one is disabled over the dying link when the GPU goes: the AMD crash, report 22HUT6)."""
+    try:
+        return _cec_direct_call(n, args)
+    finally:
+        _cec_ctl(n, "--clear")
+
+
+def _cec_direct_call(n, args):
     ok, st = _cec_ctl(n)
     if ok and re.search(r"Logical Address Mask\s*:\s*0x0000", st):
         ok, st = _cec_ctl(n, "--playback", "--osd-name", "EGPU Buddy")

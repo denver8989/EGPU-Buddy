@@ -371,7 +371,7 @@ detach)
   # make its nodes root-only for the move; open fds are unaffected, chmod also masks the seat ACL. Restored on failure.
   nodes="/dev/dri/$card /dev/dri/$(render_of "$card")"; modes=""
   for n in $nodes; do modes="$modes $n:$(stat -c %a "$n" 2>/dev/null)"; chmod 000 "$n" 2>/dev/null; done
-  trap 'as_deck systemctl --user start wireplumber >/dev/null 2>&1; rm -f $PENDING $DMODE; for m in $modes; do [ -e "${m%%:*}" ] && chmod "${m##*:}" "${m%%:*}" 2>/dev/null; done' EXIT
+  trap '/usr/local/sbin/egpu-cec-release --restore >/dev/null 2>&1; as_deck systemctl --user start wireplumber >/dev/null 2>&1; rm -f $PENDING $DMODE; for m in $modes; do [ -e "${m%%:*}" ] && chmod "${m##*:}" "${m%%:*}" 2>/dev/null; done' EXIT
   if game_mode; then
     rm -f /run/user/1000/nv-egpu-buddy-gamescope-starts; G0=$(pgrep -n -x 'gamescope(-wl)?'); as_deck systemctl --user restart gamescope-session.target >/dev/null 2>&1 &
     for _ in $(seq 1 45); do sleep 2; g=$(pgrep -n -x 'gamescope(-wl)?'); [ -n "$g" ] && [ "$g" != "$G0" ] && break; done
@@ -383,6 +383,8 @@ detach)
   # before its CEC adapter is released below. Sent before the move, the TV was woken again at once (likely cause: Steam
   # wakes the TV over CEC when Game Mode starts; Legion Go S + RX 9070 XT + Fire TV, report TXZRSC). NVIDIA already did so.
   grep -qs '"off_at_detach": true' /var/lib/nvegpu/screen-net.json && { log "TV: $(timeout 12 /usr/local/sbin/egpu-screen tvoff 2>&1 | tail -1)"; } || true
+  # CEC out of the way on every dock (it was the Titan Ridge branch only): cecd stopped and held, the eGPU's adapters idle
+  /usr/local/sbin/egpu-cec-release "$bdf" 2>&1 | while IFS= read -r l; do log "$l"; done
   status DO_NOT_UNPLUG "Releasing the eGPU. Do not unplug yet."
   # The eGPU's HDMI/DP sound card: PipeWire keeps it open and the PCI remove then hangs for good in snd_card_free (Legion
   # Go S + RX 9070 XT report HYQAYL: stuck on "Releasing the eGPU"). Same release as the NVIDIA Game Mode detach: its

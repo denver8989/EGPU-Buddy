@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# egpu-cec-release <eGPU PCI address> | --restore — CEC must never take part in a Safe Detach. A CEC adapter of the eGPU
+# that is still configured when the GPU goes is disabled over the dying DisplayPort link; on AMD that crashed the kernel
+# (amdgpu_dm_connector_destroy -> cec_unregister_adapter -> AUX write, reports 22HUT6 / 6XXRQJ / BS5BEC). So, before the
+# GPU is unbound: Valve's CEC service (cecd: SteamOS's, or the one EGPU Buddy bundles) is stopped and blocked from being
+# started on demand (Steam asks it over D-Bus) for the rest of the detach, every program on the eGPU's CEC adapters is
+# closed and their logical addresses cleared, so the adapter is idle. --restore (after the detach) lifts the block and
+# starts cecd again if it was running. Root only. Prints one line per step (the callers log it).
+set -u
+U=$(id -nu 1000 2>/dev/null); MARK=/run/nvegpu/cecd-was-active; HOLD=/run/nvegpu/cec-hold
+# the hold: cecd does not start while $HOLD exists (also when Steam asks for it over D-Bus). A drop-in, because a runtime
+# mask loses to a unit file in /etc/systemd/user (where EGPU Buddy puts the bundled cecd's)
+DROPIN=/etc/systemd/user/cecd.service.d/egpu-buddy-hold.conf
+uctl(){ [ -n "$U" ] && systemctl --user -M "$U@" "$@" >/dev/null 2>&1; }
+if [ "${1:-}" = --restore ]; then
+  rm -f "$HOLD"
+  [ -e "$MARK" ] && { uctl start cecd.service; rm -f "$MARK"; echo "cecd allowed and started again"; } || echo "cecd allowed again"
+  exit 0
+fi
+bdf=${1:?eGPU PCI address}
+mkdir -p /run/nvegpu
+uctl is-active cecd.service && : > "$MARK"
+if [ ! -e "$DROPIN" ]; then
+  mkdir -p "${DROPIN%/*}"; printf '%s\n' "# EGPU Buddy: no start during a Safe Detach (egpu-cec-release)" "[Unit]" "ConditionPathExists=!$HOLD" > "$DROPIN"
+  uctl daemon-reload
+fi
+: > "$HOLD"; uctl stop cecd.service; echo "cecd stopped and held for the detach"
+found=0
+for c in /sys/bus/cec/devices/cec*; do   # cec is a bus: /sys/bus/cec/devices/cecN -> <parent device>/cecN
+  [ -e "$c" ] || continue; p=$(readlink -f "$c")
+  case "$p" in */$bdf|*/$bdf/*) ;; *) continue ;; esac
+  found=1; d=/dev/${c##*/}; fuser -k "$d" >/dev/null 2>&1; sleep 0.5
+  python3 -c 'import fcntl,os,sys; f=os.open(sys.argv[1],os.O_RDWR); fcntl.ioctl(f,0xc05c6104,bytearray(92))' "$d" 2>/dev/null   # CEC_ADAP_S_LOG_ADDRS: none
+  echo "CEC ${c##*/} released (rc $?)"
+done
+[ "$found" = 1 ] || echo "no CEC adapter on the eGPU"
