@@ -669,6 +669,7 @@ if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && [ -z 
   export PROTON_ENABLE_NVAPI=1
   export NV_EGPU_GAMESCOPE_HANDHELD_GPU=1   # the shim keeps gamescope itself on the handheld GPU
   sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1 || true
+  rm -f "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-keep-connector"   # left by a gamescope that ended while it kept a screen
   # "Keep the screen on for touch" (touchpad option) with XR glasses on the handheld's USB-C: gamescope drives the glasses
   # from the handheld's GPU and switched every other screen of it off, the touchpad picture on the panel too. Our own
   # gamescope (GAMESCOPE_KEEP_CONNECTOR, built into the installed version by egpu-gamescope-repair) leaves the panel as

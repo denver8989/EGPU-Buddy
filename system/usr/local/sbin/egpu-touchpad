@@ -98,6 +98,19 @@ def panel_size_mm():
     return None
 
 
+def gm_keeps(c):
+    """Game Mode leaves this screen to the touchpad picture again (glasses plugged back in): our gamescope writes the
+    screen's name to $XDG_RUNTIME_DIR/egpu-keep-connector while it does."""
+    name = os.path.basename(c).split("-", 1)[1]
+    for f in glob.glob("/run/user/*/egpu-keep-connector"):
+        try:
+            if open(f).read().strip() == name and game_mode():
+                return True
+        except OSError:
+            pass
+    return False
+
+
 _took = [None]   # gm_took_panel: looked up once per glasses-gone moment (card_held scans every process)
 
 
@@ -132,6 +145,8 @@ def screen_state():
                     dark = False
                 continue
             _took[0] = None
+            if gm_keeps(c):   # shows the picture's framebuffer, not Game Mode
+                continue
             # dark = no picture or the backlight really at 0. Not bl_power: amdgpu ignores it, so it stays "off" from an
             # earlier panel-off while the panel is lit again (Game Mode fell back to the panel and the touchpad kept the
             # touchscreen, 2026-11-11)
@@ -1051,6 +1066,17 @@ def picture_on(keep=False):
         if held.startswith("kwin") and not game_mode():   # no eGPU, desktop: KDE hands the screen over
             bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
             return picture_lease_on(c, dev, bl)
+        if held.startswith("gamescope") and gm_keeps(c):   # Game Mode gave the screen back to the picture
+            try:
+                bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
+                json.dump({"fb": fb, "bl": bl, "gm": True, "keep": True}, open(PIC, "w"))
+                picture_draw(fb, False)
+                for b in bl:
+                    _bl_lit(b, int(open(b + "/max_brightness").read()))
+                log("touchpad picture on (Game Mode gave the handheld screen back)"); _said[0] = ""
+                return True
+            except (OSError, ValueError) as e:
+                log("touchpad picture: could not show it:", e); picture_off(); return False
         if held:   # gamescope drives this chip (no eGPU, Game Mode): it cannot lend a screen
             say_once("touchpad picture: the handheld screen is driven by Game Mode, not shown"); return False
         try:
@@ -1156,7 +1182,7 @@ def run():
                     _gm[0] = 0.0; picture_on(keep=True)
                     want = want or os.path.exists(PIC)
             if want and not os.path.exists(PIC) and time.monotonic() - tried > 15 and not (
-                    _said[0].endswith("driven by Game Mode, not shown") and game_mode()):
+                    _said[0].endswith("driven by Game Mode, not shown") and game_mode() and not glob.glob("/run/user/*/egpu-keep-connector")):
                 # retried every 15 s: Game Mode -> Desktop (or glasses unplugged) can free or lend the screen later. Not
                 # while Game Mode keeps the chip: that never changes until it ends, and each try scans every process
                 tried = time.monotonic(); picture_on()
