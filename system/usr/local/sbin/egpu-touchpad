@@ -31,7 +31,7 @@ Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270, "speed": 2.0}. 
 rotate: for a touchscreen mounted rotated relative to how the screen is used (default: 0, or 90 when the digitizer is
 portrait and the screen landscape).
 """
-import fcntl, glob, json, math, os, select, struct, subprocess, sys, time
+import fcntl, glob, json, math, os, re, select, struct, subprocess, sys, time
 
 EV_SYN, EV_KEY, EV_ABS = 0, 1, 3
 SYN_REPORT, SYN_DROPPED = 0, 3
@@ -981,6 +981,77 @@ def picture_lease_on(c, dev, bl):
         log("touchpad picture: could not show it:", e); picture_off(); return False
 
 
+KDE = {}   # the overlay process while KDE shows the picture (picture_kde_on)
+QML_PICTURE = "/usr/local/lib/egpu-buddy/touchpad-picture.qml"
+PGM = "/run/egpu-touchpad-picture.pgm"
+
+
+def kde_session():
+    """The running KDE session as (command prefix to run as its user, its wayland socket name), or None."""
+    for sock in sorted(glob.glob("/run/user/*/wayland-[0-9]")):
+        if not os.path.exists(sock + ".lock"):
+            continue
+        uid = os.stat(sock).st_uid; rt = os.path.dirname(sock)
+        env = ["env", f"XDG_RUNTIME_DIR={rt}", f"WAYLAND_DISPLAY={os.path.basename(sock)}", "QT_QPA_PLATFORM=wayland",
+               f"DBUS_SESSION_BUS_ADDRESS=unix:path={rt}/bus"]
+        return ["setpriv", f"--reuid={uid}", f"--regid={uid}", "--init-groups", *env]
+    return None
+
+
+def kde_outputs(run):
+    """kscreen-doctor's outputs: {name: (enabled, x, y, w, h)}."""
+    out, cur = {}, None
+    txt = subprocess.run(run + ["kscreen-doctor", "-o"], capture_output=True, text=True, timeout=5).stdout
+    for line in re.sub(r"\x1b\[[0-9;]*m", "", txt).splitlines():
+        m = re.match(r"Output: \d+ (\S+)", line)
+        if m:
+            cur = m.group(1); out[cur] = [False, 0, 0, 0, 0]; continue
+        if cur and line.strip() == "enabled":
+            out[cur][0] = True
+        g = re.search(r"Geometry: (-?\d+),(-?\d+) (\d+)x(\d+)", line)
+        if cur and g:
+            out[cur][1:] = [int(v) for v in g.groups()]
+    return out
+
+
+def picture_kde_on(c, dev, bl):
+    """No eGPU, desktop on another screen of the handheld's chip (XR glasses): KDE keeps driving the handheld screen and
+    shows the picture there as a full-screen overlay (touchpad-picture.qml). The screen is placed apart from the others
+    (a gap: the pointer and windows cannot reach it) and the other screen gets the taskbar. No EDID change, no lease:
+    those left KDE without any screen when the glasses went dark (2026-11-11)."""
+    name = os.path.basename(c).split("-", 1)[1]
+    run = kde_session()
+    qml = next((q for q in ("/usr/bin/qml6", "/usr/bin/qml-qt6", "/usr/lib/qt6/bin/qml") if os.access(q, os.X_OK)), None)
+    if not run or not qml or not os.path.exists(QML_PICTURE):
+        say_once("touchpad picture: KDE's overlay is not available here, not shown"); return False
+    try:
+        outs = kde_outputs(run)
+        others = [o for o, v in outs.items() if o != name and v[0]]
+        if not others:
+            return False
+        try:
+            w, h = map(int, open(c + "/modes").readline().split("x"))
+        except (OSError, ValueError):
+            w, h = 1920, 1200
+        with open(PGM, "wb") as f:
+            f.write(b"P5\n%d %d\n255\n" % (w, h) + bytes(picture_art(w, h, True)))
+        os.chmod(PGM, 0o644)
+        right = max(outs[o][1] + outs[o][3] for o in others)
+        subprocess.run(run + ["kscreen-doctor", f"output.{name}.enable", f"output.{name}.position.{right + 400},0",
+                              f"output.{others[0]}.priority.1"], capture_output=True, timeout=8)
+        json.dump({"bl": bl, "gm": False, "kde": True, "conn": c}, open(PIC, "w"))
+        KDE["proc"] = subprocess.Popen(run + [qml, QML_PICTURE, "--", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(2)
+        if KDE["proc"].poll() is not None:
+            raise OSError("the overlay ended at once")
+        for b in bl:
+            _bl_lit(b, int(open(b + "/max_brightness").read()))
+        log("touchpad picture on (KDE shows it on the handheld screen)"); _said[0] = ""
+        return True
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        log("touchpad picture: could not show it:", e); picture_off(); return False
+
+
 def chip_shared(c):
     """Another screen (XR glasses, a USB-C monitor) is connected to the handheld screen's chip. The framebuffer lights
     every screen of its chip, so the picture would show on the glasses too: it stays off then."""
@@ -1037,6 +1108,10 @@ def picture_mode():
         if "fb" in d and any(chip_shared(c) for c in glob.glob("/sys/class/drm/card*-eDP-*")):
             log("touchpad picture: another screen joined the handheld's chip (XR glasses?), picture off")
             picture_off(); return
+        if d.get("kde"):
+            if gm or not KDE.get("proc") or KDE["proc"].poll() is not None:   # desktop ended / overlay gone
+                picture_off()
+            return
         if d.get("lease") and LEASE.get("wl"):
             r, _, _ = select.select([LEASE["wl"].s], [], [], 0)
             if r and not LEASE["wl"].s.recv(4096, socket_peek()):   # KDE quit (desktop -> Game Mode): give the screen back now
@@ -1084,7 +1159,7 @@ def picture_on(keep=False):
             say_once("touchpad picture: another screen is on the handheld's chip (XR glasses?), not shown"); return False
         if held.startswith("kwin") and not game_mode():   # no eGPU, desktop: KDE hands the screen over
             bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
-            return picture_lease_on(c, dev, bl)
+            return picture_kde_on(c, dev, bl)
         if held.startswith("gamescope") and gm_keeps(c):   # Game Mode gave the screen back to the picture
             try:
                 bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
@@ -1136,6 +1211,15 @@ def picture_off():
         d = json.load(open(PIC))
     except (OSError, ValueError):
         return
+    if d.get("kde"):   # end the overlay; KDE keeps the screen (off while another screen is lit, see kde_screen_off)
+        p = KDE.pop("proc", None)
+        if p and p.poll() is None:
+            p.terminate()
+            try:
+                p.wait(3)
+            except subprocess.TimeoutExpired:
+                p.kill()
+        kde_screen_off(d["conn"])
     if d.get("lease"):   # give the screen back to KDE: close the lease, then the real EDID
         for k in ("fd",):
             try:
