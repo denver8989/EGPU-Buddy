@@ -20,11 +20,12 @@ One exception, for device compatibility (some touchscreens stop sensing while th
 "did any touch reach the touchscreen while the touchpad was on", in REACHED (dated to when the touchpad came on, not
 to the touch) and in the "touchpad off" line. No position, count or time of any touch.
 
-Keep the screen on for touch (setting keep_screen, Game Mode only): for touchscreens that stop sensing while their screen
-is off. gamescope drives only the screen it shows on, so the handheld's own graphics leave its panel to the kernel's
-framebuffer: one still dark touchpad picture is put there once at about 3 % backlight, and nothing is redrawn after
+Keep the screen on for touch (setting keep_screen): for touchscreens that stop sensing while their screen is off. With
+an eGPU, gamescope and the desktop (KWIN_DRM_DEVICES) drive only the eGPU, so the handheld's own graphics leave its panel
+to the kernel's framebuffer: one still dark touchpad picture is put there once at about 3 % backlight, and nothing is redrawn after
 that (no rendering, nothing on the eGPU). The screen counts as dark for the touchpad while it shows the picture.
-Turned off (backlight put back) when the touchpad goes off, the desktop starts or the option is switched off.
+Turned off (backlight put back) when the touchpad goes off or the option is switched off. When a compositor drives the
+handheld's chip itself (no eGPU, e.g. XR glasses on the handheld), nothing is shown.
 
 Settings: /var/lib/nvegpu/touchpad.json {"rotate": 0|90|180|270, "speed": 2.0}. speed: pointer speed (1 = the true size).
 rotate: for a touchscreen mounted rotated relative to how the screen is used (default: 0, or 90 when the digitizer is
@@ -652,6 +653,19 @@ def picture_art(w, h):
     return g
 
 
+def card_held(node):
+    """A compositor (KDE, gamescope) has this graphics card open. Looked up only when the picture is about to go on."""
+    for p in glob.glob("/proc/[0-9]*"):
+        try:
+            if not open(p + "/comm").read().startswith(("kwin_wayland", "gamescope")):
+                continue
+            if any(os.readlink(f) == node for f in glob.glob(p + "/fd/*")):
+                return True
+        except OSError:
+            pass
+    return False
+
+
 def picture_on():
     """Light the handheld panel with the touchpad picture through its framebuffer. Only works while nothing else drives
     that graphics chip (Game Mode with gamescope on another card); otherwise it is undone at once."""
@@ -660,6 +674,9 @@ def picture_on():
         fb = next((f for f in glob.glob("/sys/class/graphics/fb[0-9]*") if os.path.realpath(f + "/device") == dev), None)
         if not fb:
             continue
+        node = "/dev/dri/" + os.path.basename(c.rsplit("-eDP-", 1)[0])
+        if card_held(node):   # the desktop or gamescope drives this chip (no eGPU): it shows nothing of ours
+            log("touchpad picture: the handheld screen is driven by the desktop or Game Mode, not shown"); return False
         try:
             w, h = map(int, open(fb + "/virtual_size").read().split(","))
             stride = int(open(fb + "/stride").read()) if os.path.exists(fb + "/stride") else w * 4
@@ -678,6 +695,13 @@ def picture_on():
                 open(b + "/brightness", "w").write(str(max(1, mx * 3 // 100)))
             open(fb + "/blank", "w").write("0")
             time.sleep(0.5)
+            if open(c + "/dpms").read().strip() != "On":
+                # the framebuffer only switches the screen back on, it does not set it up again after something else
+                # (KDE, gamescope, a hotplug) changed it: a hotplug signal on the handheld screen makes the kernel do that
+                hp = f"/sys/kernel/debug/dri/{os.path.basename(dev)}/{os.path.basename(c).split('-', 1)[1]}/trigger_hotplug"
+                if os.path.exists(hp):
+                    open(hp, "w").write("1")
+                time.sleep(1)
             if open(c + "/dpms").read().strip() != "On":
                 log("touchpad picture: the handheld screen is in use, not shown"); picture_off(); return False
             log("touchpad picture on")
@@ -729,7 +753,7 @@ def run():
         while True:
             dark, other = screen_state()
             active = dark and other
-            want = bool(active and settings().get("keep_screen") and game_mode())
+            want = bool(active and settings().get("keep_screen"))
             if want and not os.path.exists(PIC) and not tried:
                 tried = True; picture_on()   # once per touchpad session: no retry loop if the screen is in use
             elif not want and os.path.exists(PIC):
