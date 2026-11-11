@@ -365,8 +365,6 @@ detach)
   trap 'rm -f $PENDING $DMODE' EXIT
   date +%s > $PENDING; as_deck touch $DMODE; status DETACHING "Moving the session to the handheld screen. Do not unplug."
   log "start: $bdf ($card)"
-  # "Turn the TV off at Safe Detach" (TV extras, opt-in, off by default): standby while the TV can still be reached
-  grep -qs '"off_at_detach": true' /var/lib/nvegpu/screen-net.json && { log "TV: $(timeout 12 /usr/local/sbin/egpu-screen tvoff 2>&1 | tail -1)"; } || true
   clear_boot_vga; user_env_igpu
   # The restarted session must not open the eGPU again. Mesa enumerates (and keeps open) every AMD/Intel render node no
   # matter which device is selected (Legion Go S + RX 9070 XT report: new gamescope and steam on the eGPU -> abort), so
@@ -381,6 +379,10 @@ detach)
     K0=$(pgrep -U 1000 -x kwin_wayland | head -1); pin_plasma; logout_plasma
     for _ in $(seq 1 45); do sleep 2; k=$(pgrep -U 1000 -x kwin_wayland | head -1); [ -n "$k" ] && [ "$k" != "$K0" ] && break; done
   fi
+  # "Turn the TV off at Safe Detach" (TV extras, opt-in, off by default): standby once the session has left the TV and
+  # before its CEC adapter is released below. Sent before the move, the TV was woken again at once: Steam wakes the TV
+  # over CEC when Game Mode starts (Legion Go S + RX 9070 XT + Fire TV, report TXZRSC). The NVIDIA route already did this.
+  grep -qs '"off_at_detach": true' /var/lib/nvegpu/screen-net.json && { log "TV: $(timeout 12 /usr/local/sbin/egpu-screen tvoff 2>&1 | tail -1)"; } || true
   status DO_NOT_UNPLUG "Releasing the eGPU. Do not unplug yet."
   # The eGPU's HDMI/DP sound card: PipeWire keeps it open and the PCI remove then hangs for good in snd_card_free (Legion
   # Go S + RX 9070 XT report HYQAYL: stuck on "Releasing the eGPU"). Same release as the NVIDIA Game Mode detach: its
