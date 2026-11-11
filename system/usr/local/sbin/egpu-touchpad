@@ -938,6 +938,15 @@ def drm_show(fd, conn_id, desk):
     conns = (ctypes.c_uint32 * 1)(conn_id)
     sc = bytearray(104); struct.pack_into("<QIIIIIII", sc, 0, ctypes.addressof(conns), 1, crtc, fb_id, 0, 0, 0, 1)
     sc[36:104] = mode; io(0xC06864A2, sc)                    # MODE_SETCRTC
+    # tell the driver the picture changed (MODE_DIRTYFB, whole buffer): an OLED panel with self refresh otherwise kept
+    # showing its last (dark) frame (Legion Go 2, 2026-11-11); then set it once more after the panel woke up
+    for _ in range(2):
+        time.sleep(0.5)
+        try:
+            io(0xC01864B1, bytearray(struct.pack("<IIIIQ", fb_id, 0, 0, 0, 0)))
+        except OSError:
+            pass
+    io(0xC06864A2, sc)
     return [m, conns, cb, mb]
 
 
