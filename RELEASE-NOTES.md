@@ -1,3 +1,9 @@
+0.7.272 — Safe Detach tells you when to unplug; TV wake toggle.
+
+- New: Safe Detach shows "Safe to unplug the eGPU." as a Game Mode pop-up or a desktop notification (and a failure too), no need to open the app.
+- New: "Don't turn the TV on when the device wakes" under TV remote (CEC): stops the TV coming on when a phone starts Remote Play or another stream. Off by default.
+- NV GPU Buddy: the TV wake toggle.
+
 0.7.271 — AMD / Intel eGPU: no more stuck restart after a Safe Detach.
 
 - Fixed: AMD / Intel eGPU: a restart or power-off after a Safe Detach could hang at the logo. It now finishes by itself within about a minute (a power-off may briefly show the logo again, then switches off).
