@@ -1035,6 +1035,59 @@ def kde_outputs(run):
     return out
 
 
+MASTER = {}   # picture_master_on: the card fd we drive the handheld screen with, and what must stay alive
+
+
+def card_held_other(c):
+    """A compositor opened the handheld screen's card (besides us): looked up at most every 10 s."""
+    if time.monotonic() - MASTER.get("checked", 0) < 10:
+        return False
+    MASTER["checked"] = time.monotonic()
+    return bool(card_held("/dev/dri/" + os.path.basename(c.rsplit("-eDP-", 1)[0])))
+
+
+def picture_master_on(c, dev, node):
+    """The handheld screen alone lit with the picture, by the touchpad as the chip's display master: every other screen
+    of the chip (the XR glasses) off. For as long as nothing else drives the chip; the screen goes back when it ends."""
+    bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
+    try:
+        fd = os.open(node, os.O_RDWR | os.O_CLOEXEC)
+    except OSError as e:
+        say_once(f"touchpad picture: cannot open {node}: {e}"); return False
+    try:
+        fcntl.ioctl(fd, 0x641E)   # DRM_IOCTL_SET_MASTER
+        conn_id = int(open(c + "/connector_id").read())
+        res = bytearray(64); fcntl.ioctl(fd, 0xC04064A0, res)   # MODE_GETRESOURCES: counts
+        n = struct.unpack_from("<I", res, 36)[0]
+        import ctypes
+        ids = (ctypes.c_uint32 * max(n, 1))()
+        res = bytearray(64); struct.pack_into("<Q", res, 8, ctypes.addressof(ids)); struct.pack_into("<I", res, 36, n)
+        fcntl.ioctl(fd, 0xC04064A0, res)
+        for crtc in list(ids)[1:n]:   # drm_show takes the first CRTC: the others off (the glasses)
+            sc = bytearray(104); struct.pack_into("<QIIIIIII", sc, 0, 0, 0, crtc, 0, 0, 0, 0, 0)
+            try:
+                fcntl.ioctl(fd, 0xC06864A2, sc)
+            except OSError:
+                pass
+        json.dump({"bl": bl, "gm": game_mode(), "master": True, "conn": c}, open(PIC, "w"))
+        MASTER.update(fd=fd, keep=drm_show(fd, conn_id, not game_mode()))
+        for b in bl:
+            _bl_lit(b, int(open(b + "/max_brightness").read()))
+        # master only for the setup: the screens keep what was set, and Game Mode or KDE starting on the chip can take
+        # it at once (held, their start would fail); our picture stays alive with this fd
+        fcntl.ioctl(fd, 0x641F)   # DRM_IOCTL_DROP_MASTER
+        log("touchpad picture on (the touchpad drives the handheld screen; the other screens of its chip are off)"); _said[0] = ""
+        return True
+    except (OSError, ValueError, struct.error) as e:
+        log("touchpad picture: could not show it:", e)
+        os.close(fd); MASTER.clear()
+        try:
+            os.remove(PIC)
+        except OSError:
+            pass
+        return False
+
+
 def kde_windows(run, name=None, to=None):
     """While the picture covers the handheld screen, no window stays there: the ones on it and every one that opens or
     moves there go to the main screen (EGPU Buddy's window was hidden under the picture, 2026-11-11). A KWin script
@@ -1171,6 +1224,11 @@ def picture_mode():
             if gm or not KDE.get("proc") or KDE["proc"].poll() is not None:   # desktop ended / overlay gone
                 picture_off()
             return
+        if d.get("master"):
+            # the glasses left (the framebuffer route then), or a compositor is starting on the chip: let it go
+            if not any(chip_shared(e) for e in glob.glob("/sys/class/drm/card*-eDP-*")) or card_held_other(d["conn"]):
+                picture_off()
+            return
         if d.get("lease") and LEASE.get("wl"):
             r, _, _ = select.select([LEASE["wl"].s], [], [], 0)
             if r and not LEASE["wl"].s.recv(4096, socket_peek()):   # KDE quit (desktop -> Game Mode): give the screen back now
@@ -1232,7 +1290,9 @@ def picture_on(keep=False):
         if keep:   # Game Mode starts next and leaves this screen as it is (our gamescope, GAMESCOPE_KEEP_CONNECTOR)
             held = ""
         elif not held and chip_shared(c):
-            say_once("touchpad picture: another screen is on the handheld's chip (XR glasses?), not shown"); return False
+            # XR glasses on the handheld's chip, nothing driving it (Game Mode / the desktop on the eGPU): the touchpad
+            # drives the chip itself, the panel alone (the framebuffer would light the glasses too)
+            return picture_master_on(c, dev, node)
         if held.startswith("kwin") and not game_mode():   # no eGPU, desktop: KDE hands the screen over
             bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
             # KDE drives the handheld's chip (desktop on XR glasses, with or without an eGPU): KDE shows the picture as an
@@ -1274,7 +1334,10 @@ def picture_on(keep=False):
                 hp = f"/sys/kernel/debug/dri/{os.path.basename(dev)}/{os.path.basename(c).split('-', 1)[1]}/trigger_hotplug"
                 if os.path.exists(hp):
                     open(hp, "w").write("1")
-                time.sleep(1)
+                for _ in range(8):   # it took 2 s to light (2026-11-11): up to 4 s
+                    time.sleep(0.5)
+                    if open(c + "/dpms").read().strip() == "On":
+                        break
             if open(c + "/dpms").read().strip() != "On":
                 log("touchpad picture: the handheld screen is in use, not shown"); picture_off(); return False
             time.sleep(2)   # a panel-off already running (Game Mode start) can write 0 over our level: light it again
@@ -1293,6 +1356,8 @@ def picture_off():
         d = json.load(open(PIC))
     except (OSError, ValueError):
         return
+    if d.get("master") and MASTER.get("fd") is not None:   # the picture goes with our fd (not master any more)
+        os.close(MASTER["fd"]); MASTER.clear()
     if d.get("kde"):   # end the overlay; the handheld screen stays a desktop screen (as Game Mode moves to it)
         p = KDE.pop("proc", None)
         if p and p.poll() is None:
@@ -1372,6 +1437,8 @@ def run():
                     os.remove(PIC_REQ)
                 except OSError:
                     pass
+                if os.path.exists(PIC) and '"master": true' in open(PIC).read():
+                    picture_off()   # our own drive of the screen ends with us: the framebuffer picture, which gamescope keeps
                 if settings().get("keep_screen") and not os.path.exists(PIC):
                     _gm[0] = 0.0; picture_on(keep=True)
                     want = want or os.path.exists(PIC)
