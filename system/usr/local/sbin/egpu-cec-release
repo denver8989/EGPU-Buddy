@@ -17,6 +17,37 @@ if [ "${1:-}" = --restore ]; then
   [ -e "$MARK" ] && { uctl start cecd.service; rm -f "$MARK"; echo "cecd allowed and started again"; } || echo "cecd allowed again"
   exit 0
 fi
+if [ "${1:-}" = --yank ]; then
+  # A cable pull (udev, at the dock's disconnect or the eGPU's sound card leaving): no warning, so as fast as possible,
+  # while the GPU driver's structures still exist (on AMD they are freed before the connector, whose CEC teardown then
+  # crashed; a CEC message over the dead link now just fails). Every CEC adapter on a PCI GPU other than the handheld's
+  # own (USB-CEC adapters are left alone). Nothing to do when a Safe Detach already released CEC (the hold is there).
+  [ -e "$HOLD" ] && exit 0
+  hh=$(readlink -f "$(ls -d /sys/class/drm/card[0-9]*-eDP-* 2>/dev/null | head -1)/../device" 2>/dev/null)
+  set --
+  for c in /sys/bus/cec/devices/cec*; do
+    [ -e "$c" ] || continue; p=$(readlink -f "$c")
+    case "$p" in */usb*) continue ;; esac
+    [ -n "$hh" ] && case "$p" in "$hh"/*) continue ;; esac
+    set -- "$@" "/dev/${c##*/}"
+  done
+  [ "$#" -gt 0 ] || exit 0
+  mkdir -p /run/nvegpu; : > "$HOLD"
+  pgrep -x cecd >/dev/null && : > "$MARK"
+  pkill -KILL -x cecd 2>/dev/null; fuser -k -KILL "$@" >/dev/null 2>&1
+  python3 -c 'import fcntl,os,sys
+for d in sys.argv[1:]:
+    try:
+        f=os.open(d,os.O_RDWR|os.O_NONBLOCK); fcntl.ioctl(f,0xc05c6104,bytearray(92)); os.close(f)
+    except OSError: pass' "$@"
+  logger -t egpu-cec-release "cable pull: CEC released on $*"
+  if [ ! -e "$DROPIN" ]; then   # the hold rule, after the urgent part (nothing restarts cecd before then: no Restart=)
+    mkdir -p "${DROPIN%/*}"; printf '%s\n' "# EGPU Buddy: no start during a Safe Detach (egpu-cec-release)" "[Unit]" "ConditionPathExists=!$HOLD" > "$DROPIN"
+    uctl daemon-reload
+  fi
+  systemd-run --no-block --on-active=60 --collect /usr/local/sbin/egpu-cec-release --restore >/dev/null 2>&1   # cecd back later
+  exit 0
+fi
 bdf=${1:?eGPU PCI address}
 mkdir -p /run/nvegpu
 uctl is-active cecd.service && : > "$MARK"

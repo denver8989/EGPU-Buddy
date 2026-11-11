@@ -2,3 +2,8 @@
 ACTION=="remove", SUBSYSTEM=="pci", ENV{PCI_ID}=="10DE:*", ENV{PCI_CLASS}=="30000", RUN+="/usr/bin/systemd-run --no-block /usr/local/sbin/egpu-surprise-recover"
 # the eGPU's NVIDIA sound card removed: make sure no sound service keeps it open (the GPU's removal waits for that)
 ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", ENV{ID_VENDOR_ID}=="0x10de", RUN+="/usr/bin/systemd-run --no-block /usr/local/sbin/egpu-audio-release $env{ID_PATH}"
+# a cable pull: the eGPU's CEC adapters idle at once, before the GPU driver tears its connectors down (on AMD a still
+# configured adapter crashed the kernel there). The dock leaving and the eGPU's sound card leaving come first; run directly
+# (no systemd-run delay). Nothing happens after a Safe Detach (CEC already released) or without such an adapter.
+ACTION=="remove", SUBSYSTEM=="thunderbolt", ENV{DEVTYPE}=="thunderbolt_device", RUN+="/usr/local/sbin/egpu-cec-release --yank"
+ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", ENV{ID_VENDOR_ID}=="0x1002|0x8086|0x10de", RUN+="/usr/local/sbin/egpu-cec-release --yank"
