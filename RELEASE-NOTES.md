@@ -1,3 +1,33 @@
+0.7.268 — TV over CEC on every system; touchpad picture with XR glasses; Game Mode exits cleanly; cable pull fixes.
+
+**TV over CEC** (only when the TV extras are switched on)
+- New: CEC works without SteamOS's CEC service (CachyOS, Bazzite): TV on, off, our input, volume.
+- New: Valve's CEC service is bundled where missing; with "TV remote (CEC)" on, the TV remote drives Game Mode.
+- New: the app names your TV's own CEC setting (SIMPLINK, Anynet+, BRAVIA Sync...) and where to turn it on.
+- New: a paired LG TV is used first for volume, mute and off; CEC after it.
+- Fixed: switching the TV to our input over Valve's CEC service never worked.
+- Fixed: the CEC options were missing from the desktop app.
+- Fixed: CEC is kept idle and released before Safe Detach and at a cable pull (the AMD crash).
+- Fixed: AMD: "Turn the TV off at Safe Detach" turned the TV off and it woke again.
+
+**Touchpad options** (only when switched on)
+- New: "Keep the screen on for touch" with XR glasses, in Game Mode and on the desktop, with or without an eGPU.
+- Fixed: the touchpad picture was too dark to see, or stayed black after the screen had been lent out.
+- Fixed: windows and the pointer no longer end up hidden under the touchpad picture.
+
+**Game Mode and screens**
+- Fixed: Game Mode crashed or hung on exit (CachyOS NVIDIA).
+- Fixed: the sound now follows XR glasses being plugged in and out.
+- Fixed: unplugging picked XR glasses on the desktop leaves the handheld screen as the desktop.
+- Fixed: a picked screen is kept when NVIDIA renames its connector after a replug.
+
+**Cable pull** (NVIDIA eGPU)
+- Fixed: the desktop stayed black after a cable pull.
+- Fixed: Game Mode stayed on the unplugged eGPU when the sound system held its HDMI audio.
+
+**Install**
+- Fixed: a false "patched driver not installed" warning.
+
 0.7.267 — gamescope survives system updates; touchpad keeps its screen on; XR glasses desktop fixes.
 
 **CachyOS, NVIDIA eGPU**
