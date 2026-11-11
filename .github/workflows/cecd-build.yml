@@ -1,0 +1,21 @@
+# Test build of Valve's CEC service (cecd) for systems without it (the same step the release runs), nothing published.
+# Actions tab -> "cecd build" -> Run workflow. The result is attached to the run as an artifact.
+name: cecd build
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build in Debian 12 (rust:1-bookworm)
+        run: |
+          mkdir -p /tmp/cecd
+          docker run --rm -v "$PWD/packaging/cecd":/b:ro -v /tmp/cecd:/out rust:1-bookworm bash /b/build.sh /out
+          sudo chown -R "$(id -u):$(id -g)" /tmp/cecd; ls -lR /tmp/cecd | head -30
+          objdump -T /tmp/cecd/usr/bin/cecd | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1
+          tar -C /tmp/cecd -czf /tmp/cecd.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cecd
+          path: /tmp/cecd.tar.gz
