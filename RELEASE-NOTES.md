@@ -1,3 +1,8 @@
+0.7.271 — AMD / Intel eGPU: no more stuck restart after a Safe Detach.
+
+- Fixed: AMD / Intel eGPU: a restart or power-off after a Safe Detach could hang at the logo. It now finishes by itself within about a minute (a power-off may briefly show the logo again, then switches off).
+- Support report: shows whether a kernel crash log can be kept on this device.
+
 0.7.270 — the 0.7.269 TV fix only on AMD / Intel eGPU installs.
 
 - Changed: the CEC service restart from 0.7.269 now runs only on AMD / Intel eGPU installs; NVIDIA installs are as before.
