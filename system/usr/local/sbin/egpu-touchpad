@@ -1159,7 +1159,9 @@ def picture_on(keep=False):
             say_once("touchpad picture: another screen is on the handheld's chip (XR glasses?), not shown"); return False
         if held.startswith("kwin") and not game_mode():   # no eGPU, desktop: KDE hands the screen over
             bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
-            return picture_kde_on(c, dev, bl)
+            # without an eGPU only (the iGPU route): with one attached its own route stays as it was
+            no_egpu = subprocess.run(["/usr/local/sbin/egpu-detect"], capture_output=True).returncode != 0
+            return picture_kde_on(c, dev, bl) if no_egpu else picture_lease_on(c, dev, bl)
         if held.startswith("gamescope") and gm_keeps(c):   # Game Mode gave the screen back to the picture
             try:
                 bl = {b: open(b + "/brightness").read().strip() for b in glob.glob("/sys/class/backlight/*") if os.path.realpath(b).startswith(dev)}
