@@ -197,7 +197,7 @@ class Pad:
         if self.gm:
             node = uinput_node(self.ui)
             try:
-                self.gp = GmPointer(node, NAME, tap=not self.three) if node else None
+                self.gp = GmPointer(node, NAME, tap=settings().get("drag", "three") == "tap") if node else None   # read here: self.three is set further down
             except OSError as e:
                 log("Game Mode pointer:", e)
         fcntl.ioctl(self.src, EVIOCGRAB, 1)
