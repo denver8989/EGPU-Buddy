@@ -9,6 +9,7 @@
 - Fixed: the CEC options were missing from the desktop app.
 - Fixed: CEC is kept idle and released before Safe Detach and at a cable pull (the AMD crash).
 - Fixed: AMD: "Turn the TV off at Safe Detach" turned the TV off and it woke again.
+- NV GPU Buddy: the TV over CEC changes above (CEC without SteamOS's service, your TV's setting named, LG first, CEC options in the desktop app).
 
 **Touchpad options** (only when switched on)
 - New: "Keep the screen on for touch" with XR glasses, in Game Mode and on the desktop, with or without an eGPU.
