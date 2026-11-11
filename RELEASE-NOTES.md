@@ -1,3 +1,9 @@
+0.7.269 — TV off at Safe Detach works every time.
+
+**TV over CEC** (only when the TV extras are switched on)
+- Fixed: "Turn the TV off at Safe Detach" only worked at the first detach after a restart (SteamOS CEC service).
+- NV GPU Buddy: the same fix.
+
 0.7.268 — TV over CEC on every system; touchpad picture with XR glasses; Game Mode exits cleanly; cable pull fixes.
 
 **TV over CEC** (only when the TV extras are switched on)
