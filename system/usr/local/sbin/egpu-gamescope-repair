@@ -26,6 +26,31 @@ if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then
 fi
 # the gamescope version Bazzite ships right now (its Open Gaming Collective tag, e.g. 3.16.31-ogc2) and the one ours was
 # built from: the fix is always built INTO the version Bazzite has, so a different one means "rebuild"
+# CachyOS (and other pacman systems that are not SteamOS / Bazzite), NVIDIA install: EGPU Buddy's gamescope is built
+# INTO THE GAMESCOPE THE SYSTEM HAS (packaging/gamescope-gbm/build-system.sh: Valve's source at the installed version +
+# our commits, three-way merged), so a system update that brings a new gamescope gets our changes again. Up to 3 tries
+# per gamescope version; "our changes do not apply" (exit 3) stops until the next version. The user is told what was
+# detected and what happens (Game Mode toast + desktop notification). Game Mode keeps working all the while: the last
+# good build of ours, else the system gamescope.
+CY=0
+if [ "$BZ" = 0 ] && ! command -v steamos-readonly >/dev/null 2>&1 && command -v pacman >/dev/null 2>&1 &&
+   [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" != nv-gpu-buddy ]; then
+  CY=1; BUILD=$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/build-system.sh
+fi
+CYTRIES=/var/lib/nvegpu/gamescope-system-tries   # line 1 the gamescope version, line 2 the builds tried for it
+CYCANNOT=/var/lib/nvegpu/gamescope-system-cannot # the version our changes do not apply to
+cy_ver(){ pacman -Q gamescope 2>/dev/null | awk '{print $2}' | sed 's/^[0-9]*://; s/-[^-]*$//'; }
+cy_built(){ cat "$UH/.local/gamescope-gbm/BUILT-FROM" 2>/dev/null; }
+cy_tries(){ if [ "$(sed -n 1p "$CYTRIES" 2>/dev/null)" = "$(cy_ver)" ]; then sed -n 2p "$CYTRIES"; else echo 0; fi; }
+tell(){ # what the guard detected / does, to the user: Game Mode toast (the plugin shows it) and a desktop notification
+  python3 -c 'import json,sys; p=sys.argv[1]
+try: d=json.load(open(p))
+except Exception: d={}
+d["notice"]=sys.argv[2]; json.dump(d,open(p,"w"))' "$UH/.config/egpu-buddy/plugin.json" "$1" 2>/dev/null; chown "$(stat -c %U "$UH")": "$UH/.config/egpu-buddy/plugin.json" 2>/dev/null
+  # the desktop's notification (5 s at most, in the background: in Game Mode nothing answers and it waited for ever)
+  ( timeout 5 runuser -u "$(stat -c %U "$UH")" -- env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(stat -c %u "$UH")/bus \
+    notify-send -a "EGPU Buddy" -i video-display "EGPU Buddy" "$1" >/dev/null 2>&1 & ) || true
+  log "told the user: $1"; }
 bz_tag(){ /usr/bin/gamescope --version 2>&1 | grep -oE 'gamescope version [^ ]+' | head -1 | awk '{print $3}' | sed 's/+$//'; }
 bz_built_from(){ cat /usr/local/lib/egpu-buddy/gamescope-gbm/BUILT-FROM 2>/dev/null; }
 OS=$(os_id)
@@ -46,6 +71,16 @@ reason(){
     # the same gamescope version on a new Fedora base (Bazzite 44 -> 45) runs ours on libraries it was not built against
     local bf nf; bf=$(cut -d' ' -f1 /usr/local/lib/egpu-buddy/gamescope-gbm/BUILD-ID 2>/dev/null); nf="fedora-$( . /etc/os-release 2>/dev/null; printf '%s' "${VERSION_ID:-}")"
     [ -z "$bf" ] || [ "$bf" = "$nf" ] || { echo "Bazzite is now on $nf (ours was built on $bf)"; return 0; }
+  elif [ "$CY" = 1 ]; then                                            # CachyOS: built into the installed version
+    local v; v=$(cy_ver); [ -n "$v" ] && [ -f "$BUILD" ] || return 1
+    [ "$(cat "$CYCANNOT" 2>/dev/null)" = "$v" ] && return 1           # our changes do not apply to it: wait for a new one
+    [ "$(cy_tries)" -ge 3 ] 2>/dev/null && return 1                   # tried 3 times for this version
+    for t in git meson ninja cc cmake glslangValidator; do command -v $t >/dev/null 2>&1 || { echo "cannot build: $t missing (pacman -S --needed base-devel git meson ninja cmake glslang)" >&2; return 1; }; done
+    [ "$(cy_built)" = "$v" ] && [ -x "$PRIV" ] && ! ldd "$PRIV" 2>/dev/null | grep -q 'not found' &&
+      ! case "$(cat "$BAD" 2>/dev/null)" in "$(os_id) "*) true ;; *) false ;; esac && return 1
+    local b; b=$(cy_built)
+    if [ "$b" = "$v" ]; then echo "EGPU Buddy's gamescope for $v does not run any more"; else echo "a system update installed gamescope $v (EGPU Buddy's was built into ${b:-an older version})"; fi
+    return 0
   else
   command -v steamos-readonly >/dev/null 2>&1 || return 1            # SteamOS only; other systems build it with the installer
   [ -x "$BR/usr/bin/makepkg" ] && [ -f "$BUILD" ] || return 1         # no build root / payload: nothing this can do
@@ -151,19 +186,21 @@ fi
 r=$(reason) || { log "nothing to repair"; exit 0; }
 log "=== GBM-scanout gamescope: $r (OS $OS) ==="
 
-# never build over a binary that is running
-for g in $(pgrep -x 'gamescope(-wl)?'); do
+# never build over a binary that is running (CachyOS: a new folder and a link switch, the running one is not touched)
+[ "$CY" = 1 ] || for g in $(pgrep -x 'gamescope(-wl)?'); do
   [ "$(readlink -f /proc/$g/exe 2>/dev/null)" = "$(readlink -f "$PRIV" 2>/dev/null)" ] && { log "the private build is running; nothing to repair"; exit 0; }
 done
 # the driver build / re-pack use the same build root (pacman lock): wait for them
 for _ in $(seq 1 240); do
   systemctl is-active --quiet egpu-buddy-driver-build.service egpu-buddy-driver-repack.service || break; sleep 30
 done
-NETCHK=https://steamdeck-packages.steamos.cloud/; [ "$BZ" = 1 ] && NETCHK=https://github.com/   # where the build fetches from
+NETCHK=https://steamdeck-packages.steamos.cloud/; { [ "$BZ" = 1 ] || [ "$CY" = 1 ]; } && NETCHK=https://github.com/   # where the build fetches from
 for _ in $(seq 1 40); do curl -sI -o /dev/null --max-time 8 "$NETCHK" 2>/dev/null && break; sleep 30; done
 
 if [ "$BZ" = 1 ]; then   # Bazzite: count the try BEFORE building (a hang or a failure is retried once, never in a loop)
   n=$(bz_tries); printf '%s\n%s\n' "$OS" "$(( ${n:-0} + 1 ))" > "$BZTRIES"
+elif [ "$CY" = 1 ]; then # CachyOS: counted per gamescope version (3 tries), before building
+  n=$(cy_tries); printf '%s\n%s\n' "$(cy_ver)" "$(( ${n:-0} + 1 ))" > "$CYTRIES"
 else
 echo "$OS" > "$DONE"    # recorded BEFORE building: a build that hangs or fails is not retried in a loop on this OS build
 fi
@@ -189,11 +226,39 @@ bz_build(){ # Bazzite: build in fedora:<this Bazzite's Fedora version>, then swa
   [ -d "$D/usr" ] && mv "$D/usr" "$D/usr.old"; mv "$D/usr.new" "$D/usr"; cp "$T/BUILT-FROM" "$T/BUILD-ID" "$D/" 2>/dev/null
   rm -rf "${D:?}/usr.old" "${T:?}"
   command -v restorecon >/dev/null && restorecon -R "$D" 2>/dev/null; rm -f "$BAD"; return 0; }
-if [ "$BZ" = 1 ]; then bz_build >> "$LOG" 2>&1; brc=$?; else bash "$BUILD" "$(stat -c %U "$UH")" >> "$LOG" 2>&1; brc=$?; fi
+cy_build(){ # CachyOS: built as the user into ~/.local/gamescope-egpu-<version>, then ~/.local/gamescope-gbm/usr points at
+            # it (a link switch: a running gamescope keeps its own files). The build it replaces stays as the fallback.
+  local v u D G rc; v=$(cy_ver); u=$(stat -c %U "$UH"); D="$UH/.local/gamescope-egpu-$v"; G="$UH/.local/gamescope-gbm"
+  local S="$UH/.cache/egpu-buddy/gamescope-src"
+  local B=/var/lib/nvegpu/gamescope-build-src; rm -rf "${B:?}"; cp -a "$(dirname "$BUILD")" "$B" && chown -R "$u": "$B" || return 1
+  rm -rf "${D:?}"; runuser -u "$u" -- mkdir -p "$D" "$UH/.cache/egpu-buddy"
+  runuser -u "$u" -- env HOME="$UH" GAMESCOPE_SRC="$S" nice -n 10 bash "$B/build-system.sh" "$v" "$D/usr"; rc=$?
+  rm -rf "${B:?}" "${S:?}"
+  if [ "$rc" = 3 ]; then echo "$v" > "$CYCANNOT"; rm -rf "${D:?}"; return 3; fi
+  [ "$rc" = 0 ] && [ -x "$D/usr/bin/gamescope" ] && ! ldd "$D/usr/bin/gamescope" 2>/dev/null | grep -q 'not found' || { rm -rf "${D:?}"; return 1; }
+  runuser -u "$u" -- mkdir -p "$G"
+  # the build being replaced: a folder (the shipped one) is kept as usr.previous; an older link just goes
+  if [ -d "$G/usr" ] && [ ! -L "$G/usr" ]; then rm -rf "${G:?}/usr.previous"; mv "$G/usr" "$G/usr.previous"; fi
+  ln -sfn "$D/usr" "$G/usr.new" && mv -T "$G/usr.new" "$G/usr" && cp "$D/BUILT-FROM" "$G/BUILT-FROM" && chown -h "$u": "$G/usr" "$G/BUILT-FROM"
+  for o in "$UH"/.local/gamescope-egpu-*; do [ "$o" = "$D" ] || rm -rf "${o:?}"; done   # one build of ours at a time
+  rm -f "$BAD"; return 0; }
+if [ "$BZ" = 1 ]; then bz_build >> "$LOG" 2>&1; brc=$?
+elif [ "$CY" = 1 ]; then
+  tell "$r. Building EGPU Buddy's gamescope for it in the background (about 5-10 minutes, try $(cy_tries) of 3). Game Mode keeps working meanwhile."
+  cy_build >> "$LOG" 2>&1; brc=$?
+  case $brc in
+    0) tell "EGPU Buddy's gamescope is ready for gamescope $(cy_ver) (NVIDIA picture fix, touchpad picture with XR glasses). Game Mode uses it from its next start." ;;
+    3) tell "EGPU Buddy's changes do not fit gamescope $(cy_ver) yet. Game Mode keeps using $( [ -x "$PRIV" ] && echo "the previous EGPU Buddy gamescope" || echo "the system gamescope") until an EGPU Buddy update." ;;
+    *) tell "Building EGPU Buddy's gamescope for $(cy_ver) failed (try $(cy_tries) of 3$( [ "$(cy_tries)" -lt 3 ] && echo ", it tries again at the next start or update")). Game Mode keeps working with $( [ -x "$PRIV" ] && echo "the previous EGPU Buddy gamescope" || echo "the system gamescope"). Log: $LOG" ;;
+  esac
+  [ "$brc" = 0 ] || exit 0
+else bash "$BUILD" "$(stat -c %U "$UH")" >> "$LOG" 2>&1; brc=$?; fi
 if [ "$brc" != 0 ]; then
   log "rebuild failed: Game Mode keeps using Valve's gamescope on this OS build (NVIDIA picture corruption above ~2560 px)"; exit 0
 fi
 rm -f "$BAD"; log "rebuilt: $("$PRIV" --version 2>&1 | grep -o 'gamescope version [^ ]*' | head -1)"
+# CachyOS: no Game Mode reload (the owner's rule: no Game Mode restart for an update); the next start uses it
+[ "$CY" = 1 ] && exit 0
 
 # reload Game Mode onto it - only when Game Mode is on the eGPU and fell back to Valve's gamescope, and no game runs
 for _ in $(seq 1 720); do

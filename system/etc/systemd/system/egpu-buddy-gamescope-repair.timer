@@ -1,0 +1,9 @@
+[Unit]
+Description=SteamOS EGPU Buddy: after start-up, check that EGPU Buddy's gamescope matches the installed gamescope (CachyOS: build it if not)
+
+[Timer]
+OnBootSec=4min
+Unit=egpu-buddy-gamescope-repair.service
+
+[Install]
+WantedBy=timers.target

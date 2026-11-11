@@ -16,7 +16,17 @@ tell(){ # <message>: log, plugin notice, desktop notification for every graphica
   for b in /run/user/*/bus; do u=$(stat -c %U "$b") || continue
     runuser -u "$u" -- env DBUS_SESSION_BUS_ADDRESS="unix:path=$b" notify-send -a "EGPU Buddy" "EGPU Buddy" "$1" >/dev/null 2>&1 &
   done; }
-if [ "${1:-}" != --repair ]; then
+# CachyOS NVIDIA install: EGPU Buddy's gamescope is built into the installed gamescope version by egpu-gamescope-repair
+# (a new gamescope from this update, or a library update that broke ours): started in the background, it tells the user
+# what it found and does. The old in-place rebuild below would write the pinned old build into it, so it is skipped here.
+_cy=0; ! command -v steamos-readonly >/dev/null 2>&1 && ! grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release &&
+  [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" != nv-gpu-buddy ] && _cy=1
+if [ "${1:-}" != --repair ] && [ "$_cy" = 1 ]; then
+  if r=$(/usr/local/sbin/egpu-gamescope-repair --needed 2>/dev/null); then
+    log "$r: starting the EGPU Buddy gamescope build in the background"
+    systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 || true
+  fi
+elif [ "${1:-}" != --repair ]; then
 for home in $(getent passwd | awk -F: '$3>=1000 && $3<60000 {print $6}'); do
   gs="$home/.local/gamescope-gbm/usr/bin/gamescope"; [ -x "$gs" ] || continue
   if ldd "$gs" 2>/dev/null | grep -q 'not found'; then

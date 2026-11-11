@@ -1489,9 +1489,13 @@ def _support_report():
     exe = os.path.realpath(f"/proc/{gpid}/exe") if gpid else ""
     lines += ["", "## Game Mode gamescope",
               f"GBM-scanout build: {'installed' if os.access(priv, os.X_OK) else 'not installed'}"
+              + (f" (built into gamescope {_read(os.path.dirname(os.path.dirname(os.path.dirname(priv))) + '/BUILT-FROM').strip()})" if _read(os.path.dirname(os.path.dirname(os.path.dirname(priv))) + '/BUILT-FROM').strip() else "")
               + (f" · marked as crashing: {_read(USER_HOME + '/.local/state/nv-egpu-buddy/gamescope-bad')}" if os.path.exists(USER_HOME + "/.local/state/nv-egpu-buddy/gamescope-bad") else ""),
               f"running: {exe or '(none)'}" + (" (GBM-scanout build)" if exe and exe == os.path.realpath(priv) else "")]
     lines += _fix_verdict(gpid, exe, priv)
+    gl = [l for l in _read("/var/log/egpu-gamescope-repair.log").splitlines() if l.strip()][-6:]
+    if gl:   # what the gamescope guard last detected and did (rebuilds after OS updates)
+        lines += ["gamescope guard (last 6):"] + ["    " + l[:200] for l in gl]
     # the size Game Mode really runs at (-W/-H = output, -w/-h = Steam's canvas) and Steam's own UI scale for the external
     # screen: a UI drawn too large or with black bars (ultrawide reports) shows here as a small canvas or a high scale
     if gpid:

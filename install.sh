@@ -356,6 +356,8 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 for u in egpu-mount egpu-boot-enumerate egpu-conditional-session egpu-buddy-selfheal egpu-buddy-resume egpu-buddy-shutdown egpu-driver-trial-boot egpu-decky-guard egpu-flight-recorder; do [ -f /etc/systemd/system/\$u.service ] && systemctl enable \$u.service >/dev/null; done
 # watches for the session shim marking the GBM-scanout gamescope as crashing on this OS build (a .path unit, not a .service)
 [ -f /etc/systemd/system/egpu-buddy-gamescope-repair.path ] && systemctl enable --now egpu-buddy-gamescope-repair.path >/dev/null 2>&1 || true
+# CachyOS NVIDIA install: EGPU Buddy's gamescope is built into the installed gamescope version (egpu-gamescope-repair), checked after start-up
+[ -f /etc/systemd/system/egpu-buddy-gamescope-repair.timer ] && ! command -v steamos-readonly >/dev/null 2>&1 && [ '$IS_BAZZITE' != 1 ] && [ \"\$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)\" != amd ] && systemctl enable egpu-buddy-gamescope-repair.timer >/dev/null 2>&1 || true
 [ -f /etc/systemd/system/egpu-driver-prebuild.timer ] && { command -v steamos-readonly >/dev/null 2>&1 || [ '$IS_BAZZITE' = 1 ]; } && systemctl enable --now egpu-driver-prebuild.timer >/dev/null 2>&1 || true
 # the session shim (runs as the user) writes its crash mark here, so the folder must be the user's (an older deploy left it root's)
 mkdir -p $USER_HOME/.local/state/nv-egpu-buddy && chown $USER_NAME: $USER_HOME/.local/state $USER_HOME/.local/state/nv-egpu-buddy 2>/dev/null || true
@@ -463,7 +465,18 @@ if want gamescope && [ "$IS_BAZZITE" = 1 ]; then
   done
 elif want gamescope; then
   PRE=${EGPU_PREBUILT_GAMESCOPE:-$ROOT/prebuilt/gamescope-gbm}
-  if [ "$AS_ROOT" = 0 ] && command -v meson >/dev/null && command -v ninja >/dev/null && command -v cc >/dev/null && command -v cmake >/dev/null; then
+  # CachyOS NVIDIA install: EGPU Buddy's gamescope built into the installed gamescope version is kept as it is (an update
+  # never overwrites it with the shipped older build); a missing or outdated one is built by egpu-gamescope-repair in the
+  # background after this install, which tells the user what it does. The shipped build only fills in until then.
+  CYV=""; command -v pacman >/dev/null && ! command -v steamos-readonly >/dev/null && [ "$IS_BAZZITE" != 1 ] && [ "$GPU_VENDOR" != amd ] &&
+    CYV=$(pacman -Q gamescope 2>/dev/null | awk '{print $2}' | sed 's/^[0-9]*://; s/-[^-]*$//')
+  CYG="$USER_HOME/.local/gamescope-gbm"
+  if [ -n "$CYV" ] && [ "$(cat "$CYG/BUILT-FROM" 2>/dev/null)" = "$CYV" ] && [ -x "$CYG/usr/bin/gamescope" ] && ! ldd "$CYG/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
+    say "== keeping EGPU Buddy's gamescope built into gamescope $CYV"
+  elif [ -n "$CYV" ] && [ -x "$CYG/usr/bin/gamescope" ] && ! ldd "$CYG/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then
+    say "== EGPU Buddy's gamescope is not built for gamescope $CYV yet: built in the background after this install"
+    CY_BUILD=1
+  elif [ "$AS_ROOT" = 0 ] && [ -z "$CYV" ] && command -v meson >/dev/null && command -v ninja >/dev/null && command -v cc >/dev/null && command -v cmake >/dev/null; then
     say "== building GBM-scanout gamescope from source (a few minutes)"
     HOME="$USER_HOME" "$ROOT/packaging/gamescope-gbm/build.sh" || echo "build failed; the session shim falls back to /usr/bin/gamescope"
   else
@@ -476,12 +489,15 @@ elif want gamescope; then
       say "== installing the prebuilt GBM-scanout gamescope that runs on this system ($(basename "$PICK"))"
       # atomic swap: a running gamescope keeps the old binary busy (ETXTBSY), so never copy over it in place
       G="$USER_HOME/.local/gamescope-gbm"; umkdir "$G"; rm -rf "$G/usr.new" "$G/usr.old"; cp -a "$PICK/usr" "$G/usr.new"
-      [ -d "$G/usr" ] && mv "$G/usr" "$G/usr.old"; mv "$G/usr.new" "$G/usr"; rm -rf "$G/usr.old"; uown "$G"
+      { [ -d "$G/usr" ] || [ -L "$G/usr" ]; } && mv -T "$G/usr" "$G/usr.old"; mv "$G/usr.new" "$G/usr"; rm -rf "$G/usr.old" "$G/BUILT-FROM"; uown "$G"
+      [ -n "$CYV" ] && CY_BUILD=1   # CachyOS: the shipped build fills in until ours is built into the installed version
     else
       say "== no shipped gamescope build runs on this system; it is built on the device after the driver step"
       NEED_GAMESCOPE_BUILD=1
+      [ -n "$CYV" ] && CY_BUILD=1
     fi
   fi
+  [ "${CY_BUILD:-0}" = 1 ] && { sudo systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 || true; }
   # handheld passthrough (opt-in option): the display-GPU side, PyroWave + libxpw. Installed when a shipped build runs
   # here (every library resolves); without it the option says it is not available. Never built on the device.
   for X in "$ROOT"/prebuilt/xpw*; do

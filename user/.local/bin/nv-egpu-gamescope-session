@@ -669,6 +669,17 @@ if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && [ -z 
   export PROTON_ENABLE_NVAPI=1
   export NV_EGPU_GAMESCOPE_HANDHELD_GPU=1   # the shim keeps gamescope itself on the handheld GPU
   sudo -n /usr/local/sbin/nv-egpu-buddy-privileged panel-on >/dev/null 2>&1 || true
+  # "Keep the screen on for touch" (touchpad option) with XR glasses on the handheld's USB-C: gamescope drives the glasses
+  # from the handheld's GPU and switched every other screen of it off, the touchpad picture on the panel too. Our own
+  # gamescope (GAMESCOPE_KEEP_CONNECTOR, built into the installed version by egpu-gamescope-repair) leaves the panel as
+  # it is: the touchpad lights its picture first. Without that build, or the option off: the stock route, unchanged.
+  _gk=/home/deck/.local/gamescope-gbm/usr/bin/gamescope
+  if [ "$hh" != "$PANEL" ] && grep -qs '"keep_screen": true' /var/lib/nvegpu/touchpad.json && grep -qs '"enabled": true' /var/lib/nvegpu/touchpad.json &&
+     [ -x "$_gk" ] && ! ldd "$_gk" 2>/dev/null | grep -q 'not found' && grep -qa GAMESCOPE_KEEP_CONNECTOR "$_gk"; then
+    export NV_EGPU_BUDDY_GAMESCOPE_BIN="$_gk" GAMESCOPE_KEEP_CONNECTOR="$PANEL"
+    log "touchpad picture for Game Mode on $hh: $(sudo -n /usr/local/sbin/nv-egpu-buddy-privileged touchpad picture-gamemode 2>&1 | tail -1); gamescope keeps $PANEL ($_gk)"
+  fi
+  unset _gk
   log "handheld screen: Game Mode on $hh, games rendered on the eGPU ($( handheld_chosen && echo chosen in the plugin || echo no monitor on the eGPU ))"
 elif [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && { [ -n "$outputs" ] || [ -n "$xgpu_target" ]; } && bar1_note && [ -r /usr/share/vulkan/icd.d/nvidia_icd.json ]; then
   clear_session_env

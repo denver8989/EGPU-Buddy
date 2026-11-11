@@ -575,7 +575,12 @@ elif k=="keepscreen": d["keep_screen"]=v=="on"
 else: d["drag"]=v
 json.dump(d,open(p,"w"))' /var/lib/nvegpu/touchpad.json "$_tp_k" "$_tp_v"
         systemctl try-restart egpu-touchpad.service >/dev/null 2>&1 || true; echo "touchpad $_tp_k $_tp_v" ;;
-      *) die "touchpad takes on, off, speed, invert, drag or keepscreen" 2 ;;
+      picture-gamemode)   # Game Mode on XR glasses starts next with GAMESCOPE_KEEP_CONNECTOR: the picture first (up to 4 s)
+        systemctl is-active --quiet egpu-touchpad.service || { echo "touchpad not running"; exit 0; }
+        : > /run/egpu-touchpad-picture-request
+        for _ in $(seq 1 20); do [ -e /run/egpu-touchpad-picture ] && { echo "touchpad picture on"; exit 0; }; sleep 0.2; done
+        echo "touchpad picture not shown" ;;
+      *) die "touchpad takes on, off, speed, invert, drag, keepscreen or picture-gamemode" 2 ;;
     esac
     ;;
   legionpad)
