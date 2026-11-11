@@ -845,8 +845,9 @@ def kde_screen_off(conn_dir):
                 if name in subprocess.run(run + ["-o"], capture_output=True, text=True, timeout=3).stdout:
                     # off only while another screen shows the desktop: with the glasses gone dark (taken off, asleep)
                     # it stays on, or there is no screen at all (2026-11-11)
-                    act = "disable" if screen_state()[1] else "enable"
-                    subprocess.run(run + [f"output.{name}.{act}"], capture_output=True, timeout=3); break
+                    # KDE's own view of the other screens (sysfs says "off" while KDE's screen sleep is on)
+                    act = "disable" if any(v[0] for o, v in kde_outputs(run[:-1]).items() if o != name) else "enable"
+                    subprocess.run(run + [f"output.{name}.mirror.none", f"output.{name}.{act}"], capture_output=True, timeout=5); break
                 time.sleep(0.5)
         except subprocess.TimeoutExpired:
             pass
@@ -1030,8 +1031,8 @@ def kde_outputs(run):
 
 def picture_kde_on(c, dev, bl):
     """No eGPU, desktop on another screen of the handheld's chip (XR glasses): KDE keeps driving the handheld screen and
-    shows the picture there as a full-screen overlay (touchpad-picture.qml). The screen is placed apart from the others
-    (a gap: the pointer and windows cannot reach it) and the other screen gets the taskbar. No EDID change, no lease:
+    shows the picture there as a full-screen overlay (touchpad-picture.qml). The screen mirrors the other one (no area
+    of its own: the pointer and windows cannot reach it) and the other screen gets the taskbar. No EDID change, no lease:
     those left KDE without any screen when the glasses went dark (2026-11-11)."""
     name = os.path.basename(c).split("-", 1)[1]
     run = kde_session()
@@ -1050,8 +1051,9 @@ def picture_kde_on(c, dev, bl):
         with open(PGM, "wb") as f:
             f.write(b"P5\n%d %d\n255\n" % (w, h) + bytes(picture_art(w, h, True)))
         os.chmod(PGM, 0o644)
-        right = max(outs[o][1] + outs[o][3] for o in others)
-        subprocess.run(run + ["kscreen-doctor", f"output.{name}.enable", f"output.{name}.position.{right + 400},0",
+        # a mirror of the other screen: no desktop area of its own, so the pointer and windows stay on the glasses (with a
+        # gap beside them the pointer got trapped on the handheld screen, under the picture)
+        subprocess.run(run + ["kscreen-doctor", f"output.{name}.enable", f"output.{name}.mirror.{others[0]}",
                               f"output.{others[0]}.priority.1"], capture_output=True, timeout=8)
         json.dump({"bl": bl, "gm": False, "kde": True, "conn": c}, open(PIC, "w"))
         KDE["proc"] = subprocess.Popen(run + [qml, QML_PICTURE, "--", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

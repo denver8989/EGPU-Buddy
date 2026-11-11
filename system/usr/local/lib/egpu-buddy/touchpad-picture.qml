@@ -28,7 +28,7 @@ Window {
     function place() {
         const t = target()
         if (!t) { if (visible) visible = false; return }
-        if (visible && screen === t) return
+        if (visible && screen && screen.name === want) return   // by name: the objects never compared equal (it flickered)
         visible = false
         screen = t; width = t.width; height = t.height
         visible = true
