@@ -242,7 +242,8 @@ _egpu_stage_desktop_kwin() {
   # Its own handheld screen keeps the Ally's own desktop routing, unchanged.)
   local _hh_ally=0
   { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && _hh_ally=1
-  if [ "$_egpu_bz" = 0 ] && { [ "$_hh_ally" = 0 ] || case "$_hh_pref" in eDP-*|"") false ;; *) true ;; esac; } &&
+  # the Ally glasses case: Wayland desktops only (SteamOS's X11 desktop is the Ally's own, on its own GPU)
+  if [ "$_egpu_bz" = 0 ] && { [ "$_hh_ally" = 0 ] || { [ "${XDG_SESSION_TYPE:-wayland}" != x11 ] && case "$_hh_pref" in eDP-*|"") false ;; *) true ;; esac; }; } &&
      [ -n "$_hh_pref" ] && [ -n "$igpu_card" ] && [ -n "$_hh_pcard" ] &&
      { case "$_hh_pref" in eDP-*) true ;; *) [ "$(cat "/sys/class/drm/$_hh_pcard-$_hh_pref/status" 2>/dev/null)" = connected ] ;; esac; }; then
     case "$_hh_pref" in
