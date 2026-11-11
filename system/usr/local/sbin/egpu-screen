@@ -617,6 +617,7 @@ def _settings():
 
 
 CECD_BUNDLED = "/usr/local/lib/egpu-buddy/cecd/cecd"   # Valve's cecd, installed by EGPU Buddy where the system has none
+CECD_ERR = ""                                          # cecd's last error (for the log)
 CECD_ON = "/var/lib/nvegpu/cecd-on"                    # ...and switched on with "TV remote (CEC)" (tvset)
 
 
@@ -780,17 +781,34 @@ def _cec_direct_call(n, args):
 def _cecd(n, *args, timeout=6):
     """busctl --user against cecd's device CecN, as the session user (cecd runs in the user's session). Without cecd:
     the same calls through cec-ctl (_cec_direct)."""
+    global CECD_ERR
     if not _steamos():
         return _cec_direct(n, args)
     env = {"PATH": "/usr/bin:/bin", "XDG_RUNTIME_DIR": "/run/user/1000", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus"}
     cmd = ["busctl", "--user", *args[:1], CECD, f"/com/steampowered/CecDaemon1/Devices/Cec{n}", CECD + ".CecDevice1", *args[1:]]
     if os.getuid() == 0:
         cmd = ["runuser", "-u", pwd.getpwuid(1000).pw_name, "--", "env", *[f"{k}={v}" for k, v in env.items()], *cmd]
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
-        return r.returncode == 0, r.stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        return False, ""
+    for again in (True, False):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+        except (OSError, subprocess.TimeoutExpired):
+            return False, ""
+        if r.returncode == 0:
+            return True, r.stdout.strip()
+        CECD_ERR = (r.stderr.strip().splitlines() or [""])[-1][:120]
+        # cecd started while the eGPU was away (after a Safe Detach) does not always take the adapter of the eGPU plugged
+        # in again: no device object, "TV not reached" at the next detach (Legion Go S + RX 9070, report NQ7KNJ). One
+        # restart makes it look again. Never while a detach holds CEC.
+        if not again or os.path.exists("/run/nvegpu/cec-hold"):
+            break
+        sc = ["systemctl", "--user", "restart", "cecd.service"]
+        if os.getuid() == 0:
+            sc[2:2] = ["-M", f"{pwd.getpwuid(1000).pw_name}@"]
+        try:
+            subprocess.run(sc, capture_output=True, timeout=10, env=env); time.sleep(2)
+        except (OSError, subprocess.TimeoutExpired):
+            break
+    return False, ""
 
 
 def _lg_tv():
@@ -938,7 +956,7 @@ def tvoff():
     n = egpu_cec() if _cec_any() else None
     if n is not None and _cecd(n, "call", "Standby", "y", "0")[0]:
         return "TV standby (CEC)"
-    return "TV not reached"
+    return "TV not reached" + (f" (cecd: {CECD_ERR})" if CECD_ERR else "")
 
 
 def main(argv):
