@@ -1,8 +1,11 @@
+0.7.270 — the 0.7.269 TV fix only on AMD / Intel eGPU installs.
+
+- Changed: the CEC service restart from 0.7.269 now runs only on AMD / Intel eGPU installs; NVIDIA installs are as before.
+
 0.7.269 — TV off at Safe Detach works every time.
 
 **TV over CEC** (only when the TV extras are switched on)
-- Fixed: "Turn the TV off at Safe Detach" only worked at the first detach after a restart (SteamOS CEC service).
-- NV GPU Buddy: TV control over the CEC service recovers when the service lost the TV.
+- Fixed: AMD / Intel eGPU: "Turn the TV off at Safe Detach" only worked at the first detach after a restart (SteamOS CEC service).
 
 0.7.268 — TV over CEC on every system; touchpad picture with XR glasses; Game Mode exits cleanly; cable pull fixes.
 
