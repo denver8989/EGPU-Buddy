@@ -651,7 +651,7 @@ def guardian(ui):
     os._exit(0)
 
 
-_gm = [0.0, False]
+_gm = [0.0, False, False]   # (looked up at, Game Mode, KDE running)
 
 
 def game_mode():
@@ -664,8 +664,22 @@ def game_mode():
             comms.add(open(c).read().strip())
         except OSError:
             pass
-    _gm[:] = time.monotonic(), any(c.startswith("gamescope") for c in comms) and "kwin_wayland" not in comms
+    _gm[:] = time.monotonic(), any(c.startswith("gamescope") for c in comms) and "kwin_wayland" not in comms, "kwin_wayland" in comms
     return _gm[1]
+
+
+_noegpu = [0.0, False]
+
+
+def kde_route():
+    """The iGPU desktop route (no eGPU, KDE running, XR glasses on the handheld's chip, option on): the picture is wanted
+    while the glasses are plugged in, whatever is lit. KDE drives the handheld screen here, and its screen sleep (both
+    screens off) is not the glasses leaving (2026-11-11: the picture was taken down and never came back)."""
+    if not settings().get("keep_screen") or game_mode() or not _gm[2]:
+        return False
+    if time.monotonic() - _noegpu[0] > 10:
+        _noegpu[:] = time.monotonic(), subprocess.run(["/usr/local/sbin/egpu-detect"], capture_output=True).returncode != 0
+    return _noegpu[1] and any(chip_shared(c) for c in glob.glob("/sys/class/drm/card*-eDP-*"))
 
 
 def picture_art(w, h, desk=False):
@@ -1280,7 +1294,7 @@ def run():
     try:
         while True:
             dark, other = screen_state()
-            active = dark and other
+            active = (dark and other) or kde_route()
             want = bool(active and settings().get("keep_screen"))
             if os.path.exists(PIC_REQ):   # the Game Mode session asks for the picture before gamescope takes the chip
                 try:

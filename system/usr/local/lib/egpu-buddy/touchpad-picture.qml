@@ -21,6 +21,7 @@ Window {
     LayerShell.Window.exclusionZone: -1
     LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
     LayerShell.Window.wantsToBeOnActiveScreen: false
+    LayerShell.Window.screenConfiguration: LayerShell.Window.ScreenFromQWindow   // this window's screen, not the active one
     Image { anchors.fill: parent; source: "file:///run/egpu-touchpad-picture.pgm"; cache: false; fillMode: Image.Stretch; smooth: false }
     Component.onCompleted: visible = true
 }
