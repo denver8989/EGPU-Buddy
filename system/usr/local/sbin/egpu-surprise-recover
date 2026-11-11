@@ -142,6 +142,19 @@ fi
 # GAME MODE: hide the NVIDIA userspace right now, before the auto-relaunched session's Steam can open the dead card
 [ "$GM" = 1 ] && /usr/local/sbin/egpu-safe-detach --prep >/dev/null 2>&1
 # 2. wait for the session to come back on the iGPU (KWin exit -> autologin relaunch), up to 90s  [desktop only]
+# KDE restarts its compositor by itself after the GPU loss (kwin_wayland_wrapper), with the session's old environment: on
+# the eGPU alone (KWIN_DRM_DEVICES=card0, a picked eGPU screen) it then had no display chip at all, everything black,
+# and no new login came to pick up the iGPU environment (2026-11-11). A compositor whose display chips are all gone
+# ends its session (a normal logout): the automatic login starts it again on the iGPU.
+if [ "$GM" = 0 ]; then
+  sleep 3
+  k=$(pgrep -U 1000 -x kwin_wayland | head -1)
+  devs=$([ -n "$k" ] && tr '\0' '\n' </proc/$k/environ 2>/dev/null | sed -n 's/^KWIN_DRM_DEVICES=//p')
+  if [ -n "$devs" ] && ! for d in ${devs//:/ }; do [ -e "$d" ] && echo y; done | grep -q y; then
+    log "kwin=$k on $devs only (gone): logging the desktop out so it starts again on the iGPU"
+    runuser -u deck -- env $RUNENV qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout >/dev/null 2>&1
+  fi
+fi
 [ "$GM" = 0 ] && \
 for _ in $(seq 1 90); do
   k=$(pgrep -U 1000 -x kwin_wayland | head -1)
