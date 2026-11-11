@@ -192,3 +192,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 - 2026-11-11 19:30: RELEASED 0.7.268 (fbfd837, run 43003727992, owner asked). cecd built in release (prebuilt/cecd with LICENSE). Installed here via egpu-buddy-update: rc 0, 'Valve's CEC service bundled', gamescope kept (fingerprint matched), patched-driver message now correct, cecd active (remote on). Pending tests: Ming AMD yank with CEC (risky, warn), NVIDIA Safe Detach with cecd, TV remote keys, eGPU Game Mode sound-follow, desktop-yank logout.
 
 ## 2026-11-12 03:50 — 0.7.269 RELEASED (run 43081168046) + installed here: egpu-screen _cecd restarts cecd once when its call fails (no hold) — Ming NQ7KNJ "TV not reached" at 2nd Safe Detach. Ming reboot hang after detach still open: asked for Esc photo at logo + reboot without CEC adapter.
+
+## 2026-11-12 — 0.7.270 RELEASED: cecd retry gated to gpu-vendor=amd (owner: fix is for Ming/AMD configs); 0.7.269 notes edited (AMD wording, NV GPU Buddy line removed).
