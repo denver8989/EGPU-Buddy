@@ -278,7 +278,10 @@ _egpu_stage_desktop_kwin() {
         # get the eGPU's frames). Picking an eGPU screen again starts the eGPU-only desktop (full speed, eDP console lifeboat).
         if [ -n "${egpu_card:-}" ]; then
           export KWIN_DRM_DEVICES="$egpu_card:$igpu_card"
-          export KWIN_RENDER_NODES="$(_egpu_render_for_card "$egpu_card")"
+          # both GPUs' render nodes, the eGPU's first: KWin 6.8 needs one for every GPU it drives a screen on, or it
+          # crashes compositing the glasses (RenderDevice::deviceId, "Couldn't find any render device for card1";
+          # Legion Go 2 + XREAL on its USB-C, 2026-11-11)
+          export KWIN_RENDER_NODES="$(_egpu_render_for_card "$egpu_card"):$(_egpu_render_for_card "$igpu_card")"
           export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
           export __GLX_VENDOR_LIBRARY_NAME=nvidia DXVK_HDR=0
         else
