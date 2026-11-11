@@ -1092,8 +1092,10 @@ def run():
             dark, other = screen_state()
             active = dark and other
             want = bool(active and settings().get("keep_screen"))
-            if want and not os.path.exists(PIC) and time.monotonic() - tried > 15:
-                # retried every 15 s: Game Mode -> Desktop (or glasses unplugged) can free or lend the screen later
+            if want and not os.path.exists(PIC) and time.monotonic() - tried > 15 and not (
+                    _said[0].endswith("driven by Game Mode, not shown") and game_mode()):
+                # retried every 15 s: Game Mode -> Desktop (or glasses unplugged) can free or lend the screen later. Not
+                # while Game Mode keeps the chip: that never changes until it ends, and each try scans every process
                 tried = time.monotonic(); picture_on()
             elif not want and os.path.exists(PIC):
                 picture_off()
