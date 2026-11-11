@@ -1029,34 +1029,10 @@ def kde_outputs(run):
     return out
 
 
-def pointer_to(fx, fy):
-    """Put the desktop's pointer at (fx, fy) of the whole desktop area (0..1): a short-lived absolute pointer device
-    (as a tablet or a virtual machine's mouse), which KDE maps to the whole desktop."""
-    ui = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
-    try:
-        fcntl.ioctl(ui, UI_SET_EVBIT, EV_KEY); fcntl.ioctl(ui, UI_SET_EVBIT, EV_ABS); fcntl.ioctl(ui, UI_SET_EVBIT, EV_SYN)
-        fcntl.ioctl(ui, UI_SET_KEYBIT, 0x110)   # BTN_LEFT: an absolute pointer, not a touchscreen
-        for code in (0, 1):   # ABS_X, ABS_Y
-            fcntl.ioctl(ui, UI_SET_ABSBIT, code)
-            fcntl.ioctl(ui, UI_ABS_SETUP, struct.pack("Hxx6i", code, 0, 0, 65535, 0, 0, 0))
-        fcntl.ioctl(ui, UI_DEV_SETUP, struct.pack("4H80sI", 0x06, 0x1209, 0x7447, 1, b"EGPU Buddy pointer placement", 0))
-        fcntl.ioctl(ui, UI_DEV_CREATE)
-        time.sleep(1.0)   # KDE adds the device
-        for code, f in ((0, fx), (1, fy)):
-            os.write(ui, EVENT.pack(0, 0, EV_ABS, code, int(max(0.0, min(1.0, f)) * 65535)))
-        os.write(ui, EVENT.pack(0, 0, EV_SYN, 0, 0))
-        time.sleep(0.3)
-        fcntl.ioctl(ui, UI_DEV_DESTROY)
-    except OSError as e:
-        log("touchpad picture: could not move the pointer:", e)
-    finally:
-        os.close(ui)
-
-
 def picture_kde_on(c, dev, bl):
     """No eGPU, desktop on another screen of the handheld's chip (XR glasses): KDE keeps driving the handheld screen and
-    shows the picture there as a full-screen overlay (touchpad-picture.qml). The screen mirrors the other one (no area
-    of its own: the pointer and windows cannot reach it) and the other screen gets the taskbar. No EDID change, no lease:
+    shows the picture there as a full-screen overlay (touchpad-picture.qml). It is an ordinary desktop screen beside the
+    glasses, which keep the taskbar. No EDID change, no lease:
     those left KDE without any screen when the glasses went dark (2026-11-11)."""
     name = os.path.basename(c).split("-", 1)[1]
     run = kde_session()
@@ -1075,11 +1051,11 @@ def picture_kde_on(c, dev, bl):
         with open(PGM, "wb") as f:
             f.write(b"P5\n%d %d\n255\n" % (w, h) + bytes(picture_art(w, h, True)))
         os.chmod(PGM, 0o644)
-        # the glasses at the top left, a gap, then the handheld screen: the pointer and windows cannot cross the gap. KDE
-        # does not draw the overlay on a mirrored screen, so it stays a screen of its own.
-        o = others[0]; ow, oh = outs[o][3], outs[o][4]
+        # an ordinary desktop screen right beside the glasses (the pointer goes there and back as on any second screen; a
+        # gap trapped it there); the glasses keep the taskbar. KDE does not draw the overlay on a mirror.
+        o = others[0]
         subprocess.run(run + ["kscreen-doctor", f"output.{o}.position.0,0", f"output.{name}.mirror.none", f"output.{name}.enable",
-                              f"output.{name}.position.{ow + 400},0", f"output.{o}.priority.1"], capture_output=True, timeout=8)
+                              f"output.{name}.position.{outs[o][3]},0", f"output.{o}.priority.1"], capture_output=True, timeout=8)
         json.dump({"bl": bl, "gm": False, "kde": True, "conn": c}, open(PIC, "w"))
         KDE["proc"] = subprocess.Popen(run + [qml, QML_PICTURE, "--", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(2)
@@ -1087,9 +1063,6 @@ def picture_kde_on(c, dev, bl):
             raise OSError("the overlay ended at once")
         for b in bl:
             _bl_lit(b, int(open(b + "/max_brightness").read()))
-        # the pointer onto the glasses once: if it was on the handheld screen it is stuck there under the picture
-        e = kde_outputs(run).get(name, [0, ow + 400, 0, 1280, 800])
-        pointer_to((ow / 2) / (e[1] + e[3]), (oh / 2) / max(oh, e[2] + e[4]))
         log("touchpad picture on (KDE shows it on the handheld screen)"); _said[0] = ""
         return True
     except (OSError, ValueError, subprocess.TimeoutExpired) as e:
