@@ -6,7 +6,10 @@
 # wait for the panel session, then run the root helper's teardown-only path (audio unbind, unload, PCI-remove).
 set -u; U=1000; RUNENV="XDG_RUNTIME_DIR=/run/user/$U DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$U/bus"
 ST=/run/nvegpu; mkdir -p $ST; LOG=/var/log/egpu-gamemode.log; log(){ printf '%s detach: %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; echo "$*"; }
-status(){ printf '{"state":"%s","message":"%s"}\n' "$1" "$2" > $ST/gm-status.json; }
+status(){ printf '{"state":"%s","message":"%s"}\n' "$1" "$2" > $ST/gm-status.json;
+  # the result as a toast / notification too, so nobody has to open the app to see it is safe to unplug
+  case "$1:$2" in "SAFE_COMPLETE:No eGPU attached.") ;; SAFE_COMPLETE:*) /usr/local/sbin/egpu-notify "Safe to unplug the eGPU." ;;
+    FAILED:*) /usr/local/sbin/egpu-notify "Safe Detach failed: $2" ;; esac; }
 MARK=/run/user/$U/egpu-detach-mode; HELPER=/usr/local/sbin/egpu-safe-detach
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 as_deck(){ runuser -u deck -- env $RUNENV "$@"; }

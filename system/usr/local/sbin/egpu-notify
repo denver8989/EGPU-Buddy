@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# egpu-notify "text" — root: tell the user without them opening the app. Game Mode running: a toast (the plugin shows
+# /run/nvegpu/notice within 5 s); otherwise a desktop notification in the user's session.
+set -u; t=${1:?text}
+if pgrep -x gamescope >/dev/null || pgrep -x gamescope-wl >/dev/null; then
+  mkdir -p /run/nvegpu; printf '%s\n' "$t" > /run/nvegpu/notice
+else
+  u=$(id -nu 1000 2>/dev/null) || exit 0
+  ( timeout 5 runuser -u "$u" -- env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+    notify-send -u critical -a "EGPU Buddy" -i video-display "EGPU Buddy" "$t" >/dev/null 2>&1 & ) || true
+fi
