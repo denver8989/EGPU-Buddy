@@ -15,15 +15,20 @@ ApplicationWindow {
     // Shown from onCompleted, after the domain is cleared: the window's Wayland app id is then the runner's name, which the
     // launcher sets to "egpu-buddy" (= egpu-buddy.desktop), so the taskbar shows the app's icon and name, not "qml".
     visible: false
-    // opens sized to the screen: up to 1600 x 1100, never smaller than the old 1060 x 660 (--size WxH: test hook)
+    // opens sized to ITS screen: up to 1600 x 1100 on a big one, smaller on a small one (never past 90 % of it); fitted
+    // again when it moves to another screen. It used the whole desktop area (every screen, switched-off ones too), so on
+    // 1080p XR glasses beside a switched-off 1440p monitor it opened taller than the glasses. (--size WxH: test hook)
     readonly property var forcedSize: Qt.application.arguments.indexOf("--size") >= 0 ? Qt.application.arguments[Qt.application.arguments.indexOf("--size") + 1].split("x").map(Number) : null
+    function fitScreen(force) {
+        if (forcedSize || !(Screen.width > 0)) return
+        var w = Math.min(1600, Math.round(Screen.width * 0.9)), h = Math.min(1100, Math.round(Screen.height * 0.88))
+        if (force || width > w || height > h) { width = Math.max(minimumWidth, w); height = Math.max(minimumHeight, h) }
+    }
+    onScreenChanged: fitScreen(false)
     Component.onCompleted: {
         Qt.application.domain = ""
         if (forcedSize) { width = forcedSize[0]; height = forcedSize[1] }
-        else if (Screen.desktopAvailableWidth > 0) {
-            width = Math.max(1060, Math.min(1600, Math.round(Screen.desktopAvailableWidth * 0.9)))
-            height = Math.max(660, Math.min(1100, Math.round(Screen.desktopAvailableHeight * 0.9)))
-        }
+        else fitScreen(true)
         exPlace()
         if (!startHidden) show()
     }
