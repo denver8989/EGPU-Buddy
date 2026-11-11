@@ -1,3 +1,12 @@
+0.7.264 — Keep the screen on for touch: also on the desktop.
+
+**Handheld screen as touchpad** (only when the option is on)
+- "Keep the screen on for touch" now works on the desktop too (with an eGPU), and is in the desktop app. On the desktop the picture also lists the desktop gestures. The handheld screen never becomes part of the desktop.
+- Fixed: the picture flashed on for 2 s when switching to the desktop.
+
+**Legion Go 2** (shown only with a Legion Go 2 controller)
+- The controller touchpad option is in the desktop app too.
+
 0.7.263 — Touchpad: feels like the desktop in Game Mode; keep the screen on for touch; Legion Go 2 controller touchpad.
 
 **Handheld screen as touchpad** (only when the option is on)
