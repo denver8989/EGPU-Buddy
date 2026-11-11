@@ -1267,7 +1267,7 @@ def picture_off():
         d = json.load(open(PIC))
     except (OSError, ValueError):
         return
-    if d.get("kde"):   # end the overlay; KDE keeps the screen (off while another screen is lit, see kde_screen_off)
+    if d.get("kde"):   # end the overlay; the handheld screen stays a desktop screen (as Game Mode moves to it)
         p = KDE.pop("proc", None)
         if p and p.poll() is None:
             p.terminate()
@@ -1275,7 +1275,6 @@ def picture_off():
                 p.wait(3)
             except subprocess.TimeoutExpired:
                 p.kill()
-        kde_screen_off(d["conn"])
     if d.get("lease"):   # give the screen back to KDE: close the lease, then the real EDID
         for k in ("fd",):
             try:
@@ -1334,7 +1333,10 @@ def run():
     try:
         while True:
             dark, other = screen_state()
-            active = (dark and other) or kde_route()
+            kr = kde_route()
+            active = (dark and other) or kr
+            if not kr and os.path.exists(PIC) and '"kde": true' in open(PIC).read():
+                active = False   # the glasses left: the handheld screen is the desktop's again, as in Game Mode
             want = bool(active and settings().get("keep_screen"))
             if os.path.exists(PIC_REQ):   # the Game Mode session asks for the picture before gamescope takes the chip
                 try:
