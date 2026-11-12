@@ -1,3 +1,8 @@
+0.7.279 — NVIDIA settings: Advanced Tinkering (lab).
+
+- New: NVIDIA settings > Advanced Tinkering (lab), off by default: a report of what the card supports, and experiments you switch on yourself: DLSS newest model, DLSS newest files from NVIDIA, Smooth Motion (RTX 40 / 50), Reflex for Vulkan games. Games only; no driver, Proton or game file is changed; your normal NVIDIA settings always win. (NVIDIA installs only; AMD / Intel unchanged.)
+- NV GPU Buddy: Advanced Tinkering too.
+
 0.7.278 — AMD / Intel eGPU: restart no longer hangs after a stream or Safe Detach.
 
 - Fixed: AMD / Intel eGPU: a restart could hang on the boot logo after a Steam Link stream or a Safe Detach. The eGPU's CEC adapter is now released before every shutdown, and a restart that still gets stuck finishes by itself within about a minute.
