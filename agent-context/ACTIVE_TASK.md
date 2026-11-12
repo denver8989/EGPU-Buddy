@@ -208,3 +208,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 ## 2026-11-12 — 0.7.276 RELEASED: reverted 0.7.275 wake CRTC/fb-blank change (Ming: boot to GM with TV Legion logo, handheld on, desktop 3 min, report empty); egpu-report fallback (next main.py, then basic report w/ journal). Awaiting Ming report.
 
 ## 2026-11-12 — 0.7.277 RELEASED: ROOT CAUSE of Ming boot hang = egpu-stream-cec (0.7.274): stale "Starting" log line held cecd from boot + blocking `systemctl start cecd` in EXIT trap deadlocked gamescope-session restart (PartOf graphical-session) 90 s. Fixed: only streams newer than service start, all --no-block. Also version picker (PICKER_SINCE 0.7.277). 0.7.275 wake change was NOT the cause (still reverted).
+
+## 2026-11-12 — 0.7.278 RELEASED: AMD shutdown releases eGPU CEC (egpu-cec-release --yank) + hang guard armed on every AMD shutdown (V2ZU2F: hang after stream, no detach; hypothesis = cecd restarted in session). Asked Ming: stream+restart, and cecd restart+restart.
