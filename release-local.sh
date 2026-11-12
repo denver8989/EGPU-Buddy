@@ -11,7 +11,7 @@ git fetch -q origin; [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)
 VER=$(cat VERSION); NAME="SteamOS-EGPU-Buddy-$VER"
 [ "${1:-}" = --check ] || ! gh release view "v$VER" >/dev/null 2>&1 || { echo "v$VER is already released"; exit 1; }
 python3 release-notes-for.py "$VER" RELEASE-NOTES.md >/dev/null
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d); trap 'rm -rf "$T"; git checkout -q -- decky-plugin/egpu-buddy' EXIT   # build-release.sh stamps the version into the plugin sources
 PREV=$(gh release view --json tagName --jq .tagName); echo "prebuilt from $PREV"
 gh release download "$PREV" --pattern 'SteamOS-EGPU-Buddy-*.tar.gz' --dir "$T"
 tar -xzf "$T"/SteamOS-EGPU-Buddy-*.tar.gz -C "$T"; rm -rf prebuilt; cp -a "$T"/SteamOS-EGPU-Buddy-*/prebuilt .
