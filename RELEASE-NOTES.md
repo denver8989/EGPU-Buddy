@@ -1,3 +1,8 @@
+0.7.282 — AMD / Intel eGPU: handheld screen stays off after a wake; Driver Lab trial.
+
+- Fixed: AMD / Intel eGPU: the handheld screen lit up again a second after waking while Game Mode was on the TV. (AMD / Intel install only; NVIDIA unchanged.)
+- New: Driver Lab: a driver trial of the driver in use with test patches, with automatic return to the normal build (CachyOS NVIDIA installs only).
+
 0.7.281 — Advanced Tinkering: optional per-game experiments.
 
 - New: NVIDIA settings > Advanced Tinkering: "Per game (optional)" gives one game its own experiments on top of the all-games ones. Off by default: everything applies to all games. (NVIDIA installs only; AMD / Intel unchanged.)
