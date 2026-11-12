@@ -1,3 +1,9 @@
+0.7.274 — keep the TV off during Steam Link and Moonlight streams.
+
+- New: "Keep the TV off during Steam Link and Moonlight streams" under TV remote (CEC) > CEC advanced: a Home press sent from the phone no longer turns the TV on. Off by default.
+- Changed: the TV wake options are folded under "CEC advanced".
+- NV GPU Buddy: the same TV options.
+
 0.7.273 — TV off at power-off; handheld screen stays off after a wake.
 
 - New: "Turn the TV off at power-off" in the TV options (not on a restart). Off by default.
