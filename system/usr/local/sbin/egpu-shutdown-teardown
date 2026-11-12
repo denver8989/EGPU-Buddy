@@ -36,6 +36,10 @@ going_down(){
 }
 [ -e /etc/nv-egpu-buddy/skip-shutdown-teardown ] && { log "skip flag present — eGPU left to the kernel"; exit 0; }
 going_down || exit 0
+# "Turn the TV off at power-off" (TV options, off by default): power-off and halt only, a restart leaves the TV on
+if grep -qs '"off_at_poweroff": true' /var/lib/nvegpu/screen-net.json && systemctl list-jobs --no-legend 2>/dev/null | grep -qE '(poweroff|halt)\.target'; then
+  log "TV: $(timeout 15 /usr/local/sbin/egpu-screen tvoff --poweroff 2>&1 | tail -1)"
+fi
 # an ASUS XG Mobile is told the host is going away, as G-Helper does at shutdown (does nothing without one)
 [ -x /usr/local/sbin/egpu-xgm ] && timeout 5 /usr/local/sbin/egpu-xgm notify-shutdown >/dev/null 2>&1
 # AMD / Intel install, after a Safe Detach this boot: the reboot hung at the logo after the journal had stopped (Legion

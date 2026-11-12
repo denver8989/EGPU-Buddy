@@ -319,6 +319,12 @@ resume)
   g=$(pgrep -n -x 'gamescope(-wl)?') || exit 0
   oc=$(tr '\0' '\n' </proc/$g/environ 2>/dev/null | sed -n 's/^OUTPUT_CONNECTOR=//p'); case "${oc%%,*}" in ""|"*"|eDP-*) exit 0 ;; esac
   /usr/local/sbin/egpu-panel off >/dev/null 2>&1 && log "resume: handheld panel off again (Game Mode on ${oc%%,*})"
+  # ...and kept off: Steam restores the screen brightness a few seconds after a wake, which lit the panel again while
+  # Game Mode was on the TV (Legion Go S + RX 9070 XT, report UK8NJW). 30 s, a brightness above 0 is taken back.
+  ( exec 9>&-; for _ in $(seq 30); do sleep 1; [ -e /run/egpu-touchpad-picture ] && exit 0
+      for b in /sys/class/backlight/*/brightness; do [ "$(cat "$b" 2>/dev/null)" -gt 0 ] 2>/dev/null || continue
+        /usr/local/sbin/egpu-panel off >/dev/null 2>&1; log "resume: the panel was lit again after the wake: off"; break; done
+    done ) >/dev/null 2>&1 &
   ;;
 presleep)
   # Right before sleep: the AMD eGPU back to the driver's own power management (automatic level, link not held, default
