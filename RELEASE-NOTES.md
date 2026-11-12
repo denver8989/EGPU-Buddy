@@ -1,3 +1,7 @@
+0.7.278 — AMD / Intel eGPU: restart no longer hangs after a stream or Safe Detach.
+
+- Fixed: AMD / Intel eGPU: a restart could hang on the boot logo after a Steam Link stream or a Safe Detach. The eGPU's CEC adapter is now released before every shutdown, and a restart that still gets stuck finishes by itself within about a minute.
+
 0.7.277 — fix for Game Mode hanging on the boot logo; install another version.
 
 - Fixed: with "Keep the TV off during Steam Link and Moonlight streams" on, Game Mode could hang on the boot logo when the eGPU was connected or attached, and switching to the desktop took minutes.
