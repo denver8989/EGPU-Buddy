@@ -1,3 +1,7 @@
+0.7.283 — AMD / Intel eGPU: shutdown diagnostics.
+
+- Changed: AMD / Intel eGPU: the support report now shows what a slow restart or shutdown waits on. (AMD / Intel install only; NVIDIA unchanged.)
+
 0.7.282 — AMD / Intel eGPU: handheld screen stays off after a wake; Driver Lab trial.
 
 - Fixed: AMD / Intel eGPU: the handheld screen lit up again a second after waking while Game Mode was on the TV. (AMD / Intel install only; NVIDIA unchanged.)
