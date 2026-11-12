@@ -210,3 +210,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 ## 2026-11-12 — 0.7.277 RELEASED: ROOT CAUSE of Ming boot hang = egpu-stream-cec (0.7.274): stale "Starting" log line held cecd from boot + blocking `systemctl start cecd` in EXIT trap deadlocked gamescope-session restart (PartOf graphical-session) 90 s. Fixed: only streams newer than service start, all --no-block. Also version picker (PICKER_SINCE 0.7.277). 0.7.275 wake change was NOT the cause (still reverted).
 
 ## 2026-11-12 — 0.7.278 RELEASED: AMD shutdown releases eGPU CEC (egpu-cec-release --yank) + hang guard armed on every AMD shutdown (V2ZU2F: hang after stream, no detach; hypothesis = cecd restarted in session). Asked Ming: stream+restart, and cecd restart+restart.
+
+## 2026-11-12 — 0.7.279 RELEASED: NVIDIA settings > Advanced Tinkering phase 1 (egpu-nv-lab, nvidia-lab.env via shim, 4 userspace switches, read-only report). Plan + corrections: agent-context/RESEARCH-NVIDIA-ADVANCED-TINKERING.md. Later phases (per-game, perf lab, display, Driver Lab) await owner approval.
