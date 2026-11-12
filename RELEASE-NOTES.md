@@ -1,3 +1,9 @@
+0.7.273 — TV off at power-off; handheld screen stays off after a wake.
+
+- New: "Turn the TV off at power-off" in the TV options (not on a restart). Off by default.
+- Fixed: AMD / Intel eGPU: the handheld screen lit up again after waking from sleep while Game Mode was on the TV.
+- NV GPU Buddy: "Turn the TV off at power-off".
+
 0.7.272 — Safe Detach tells you when to unplug; TV wake toggle.
 
 - New: Safe Detach shows "Safe to unplug the eGPU." as a Game Mode pop-up or a desktop notification (and a failure too), no need to open the app.
