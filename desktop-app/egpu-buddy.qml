@@ -104,6 +104,7 @@ ApplicationWindow {
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.pg === 2 && win.visible; onTriggered: win.loadEx() }
     Timer { interval: 15000; repeat: true; triggeredOnStart: true; running: win.pg === 0 && win.visible; onTriggered: win.loadEx() }   // TV controls on the Overview
     readonly property var tvr: win.ex.tvr || ({})
+    property bool cecAdv: false   // "CEC advanced" folded by default
     function gsLook(st) { return ({ active: ["#4caf50", "Active"], inactive: ["#f0b429", "Inactive"], overridden: ["#f0b429", "Inactive: the game's own setting"],
                                     default: ["#8b929a", "Default"], na: ["#8b929a", "Not used by this game"] })[st] || ["#8b929a", st] }
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.page === 1 && win.nvShow && win.visible
@@ -561,11 +562,12 @@ ApplicationWindow {
                         Switch { Layout.fillWidth: true; visible: !!win.tvr.cec_here || !!win.tvr.cec_remote; text: "TV remote (CEC)"; checked: !!win.tvr.cec_remote; onToggled: { win.act("tv-option", { key: "cec_remote", value: checked }); win.loadEx() } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!win.tvr.cec_here || !!win.tvr.cec_remote; font.pixelSize: 12
                                 text: "Volume, mute and TV on / off over CEC (SteamOS's CEC service, or the adapter directly): an AMD card's HDMI or CEC-capable adapter, or a USB-CEC adapter in the TV's cable (any eGPU, NVIDIA too). Based on cec-mote by xXJSONDeruloXx." }
-                        Switch { Layout.fillWidth: true; visible: !!win.tvr.cec_remote || !!win.tvr.no_wake_tv; text: "Don't turn the TV on when the device wakes"; checked: !!win.tvr.no_wake_tv; onToggled: { win.act("tv-option", { key: "no_wake_tv", value: checked }); win.loadEx() } }
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!win.tvr.cec_remote || !!win.tvr.no_wake_tv; font.pixelSize: 12
+                        Button { text: (win.cecAdv ? "▾" : "▸") + " CEC advanced"; flat: true; Layout.alignment: Qt.AlignLeft; visible: !!win.tvr.cec_remote || !!win.tvr.no_wake_tv || !!win.tvr.stream_no_wake; onClicked: win.cecAdv = !win.cecAdv }
+                        Switch { Layout.fillWidth: true; visible: win.cecAdv && (!!win.tvr.cec_remote || !!win.tvr.no_wake_tv || !!win.tvr.stream_no_wake); text: "Don't turn the TV on when the device wakes"; checked: !!win.tvr.no_wake_tv; onToggled: { win.act("tv-option", { key: "no_wake_tv", value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: win.cecAdv && (!!win.tvr.cec_remote || !!win.tvr.no_wake_tv || !!win.tvr.stream_no_wake); font.pixelSize: 12
                                 text: "Off by default. Valve's CEC service turns the TV on every time the device wakes from sleep, also when a phone starting Remote Play or another stream wakes it. This stops that; choosing the TV for Game Mode and the TV remote still turn it on." }
-                        Switch { Layout.fillWidth: true; visible: !!win.tvr.cec_remote || !!win.tvr.stream_no_wake; text: "Keep the TV off during Steam Link and Moonlight streams"; checked: !!win.tvr.stream_no_wake; onToggled: { win.act("tv-option", { key: "stream_no_wake", value: checked }); win.loadEx() } }
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: !!win.tvr.cec_remote || !!win.tvr.stream_no_wake; font.pixelSize: 12
+                        Switch { Layout.fillWidth: true; visible: win.cecAdv && (!!win.tvr.cec_remote || !!win.tvr.no_wake_tv || !!win.tvr.stream_no_wake); text: "Keep the TV off during Steam Link and Moonlight streams"; checked: !!win.tvr.stream_no_wake; onToggled: { win.act("tv-option", { key: "stream_no_wake", value: checked }); win.loadEx() } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; visible: win.cecAdv && (!!win.tvr.cec_remote || !!win.tvr.no_wake_tv || !!win.tvr.stream_no_wake); font.pixelSize: 12
                                 text: "Off by default. A Home press sent from Steam Link or Moonlight wakes the TV like a press on the device. While a stream runs, Valve's CEC service is paused, so nothing turns the TV on; it comes back when the stream ends." }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.accent || win.subCol; visible: !!win.tvr.cec_here && !!win.tvr.cec_hint; font.pixelSize: 12
                                 text: "Your TV: " + (win.tvr.cec_hint || "") + ". Without it the TV answers but ignores TV on, input and volume over CEC." }
