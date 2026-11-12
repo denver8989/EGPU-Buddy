@@ -1,3 +1,8 @@
+0.7.280 — Advanced Tinkering: screens, Performance Lab, Driver Lab check.
+
+- New: NVIDIA settings > Advanced Tinkering (with it switched on): a read-only report of each screen (HDR, VRR range, colour depth); Performance Lab records the next game for 60 s (average FPS, 1% low, frame time, GPU load, clock, power, temperature) to compare runs; Driver Lab checks whether EGPU Buddy's driver patches carry over to a newer NVIDIA release (strict check, optional build), never installs anything. (NVIDIA installs only; AMD / Intel unchanged.)
+- NV GPU Buddy: Advanced Tinkering screens, Performance Lab and Driver Lab check.
+
 0.7.279 — NVIDIA settings: Advanced Tinkering (lab).
 
 - New: NVIDIA settings > Advanced Tinkering (lab), off by default: a report of what the card supports, and experiments you switch on yourself: DLSS newest model, DLSS newest files from NVIDIA, Smooth Motion (RTX 40 / 50), Reflex for Vulkan games. Games only; no driver, Proton or game file is changed; your normal NVIDIA settings always win. (NVIDIA installs only; AMD / Intel unchanged.)
