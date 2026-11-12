@@ -39,9 +39,10 @@ fi
 [ "${1:-}" = --check ] && { ./build-release.sh >/dev/null && ls -la dist/*"$VER"* && echo "check ok: build works, nothing published"; exit 0; }
 ./build-release.sh
 test -s "dist/$NAME.tar.gz"; test -s "dist/$NAME.run"
-unzip -l "dist/EGPU-Buddy-Decky-$VER.zip" | grep -q "payload/$NAME.tar.gz"
-unzip -l "dist/EGPU-Buddy-Decky-$VER.zip" | grep -q "EGPU-Buddy/dist/index.js"
-tar -tzf "dist/$NAME.tar.gz" | grep -q "prebuilt/gamescope-gbm/usr/bin/gamescope$"
+# listings to files first: `cmd | grep -q` fails under pipefail when grep stops early
+unzip -l "dist/EGPU-Buddy-Decky-$VER.zip" > "$T/zip.txt"; tar -tzf "dist/$NAME.tar.gz" > "$T/tar.txt"
+grep -q "payload/$NAME.tar.gz" "$T/zip.txt"; grep -q "EGPU-Buddy/dist/index.js" "$T/zip.txt"
+grep -q "prebuilt/gamescope-gbm/usr/bin/gamescope$" "$T/tar.txt"
 python3 release-notes-for.py "$VER" RELEASE-NOTES.md > "dist/NOTES-$VER.md"
 gh release create "v$VER" --target "$(git rev-parse HEAD)" \
   "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" dist/SHA256SUMS get-egpu-buddy.sh \
