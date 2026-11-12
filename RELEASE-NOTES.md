@@ -1,3 +1,9 @@
+0.7.276 — 0.7.275 wake change taken back; support report never comes back empty.
+
+- Changed: AMD / Intel eGPU: the 0.7.275 change to the handheld screen after a wake is taken back (reported start-up problems).
+- Fixed: "Save EGPU Buddy report" could say "saved" with no file. It now always saves one; if the full report fails, a basic one with the start-up logs.
+- NV GPU Buddy: the support report fix.
+
 0.7.275 — handheld screen stays off after a wake (AMD / Intel eGPU).
 
 - Fixed: AMD / Intel eGPU: the handheld screen (LCD backlight) came back on after waking from sleep while Game Mode was on the TV. Its output is now switched off again, not only dimmed.
