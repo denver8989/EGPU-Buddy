@@ -198,3 +198,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 ## 2026-11-12 — 0.7.271 RELEASED: AMD post-Safe-Detach shutdown hang guard (hung_task_panic 60s, panic=10, pstore) + power-off finished at next boot (--boot, marker <150s). Ming AP3WSW: TV-off fixed by 0.7.270; awaiting report after reboot test.
 
 ## 2026-11-12 — 0.7.272 RELEASED: egpu-notify (Safe Detach toast/notification) + "Don't turn the TV on when the device wakes" (cecd wake_tv=false drop-in ~/.config/cecd/config.d/zz-egpu-buddy.toml, shown under TV remote when on). Ming: tv-power-on.service is his own/other tool.
+
+## 2026-11-12 — 0.7.273 RELEASED: off_at_poweroff (egpu-screen tvoff --poweroff from egpu-shutdown-teardown, poweroff/halt only, direct cec-ctl), AMD resume 30 s backlight guard. Open: Steam Link Home wakes TV (Steam D-Bus Wake, all-or-nothing block offered); reboot hang guard left no pstore (ask Ming if self-restarted). System SSD cleanup: A1 images deleted, ESP backup moved to LegionGo-Backup/esp-backups.
