@@ -106,6 +106,9 @@ ApplicationWindow {
     readonly property var tvr: win.ex.tvr || ({})
     property var lab: null        // NVIDIA settings > Advanced Tinkering, loaded when opened (read-only until a switch is used)
     function loadLab() { call("GET", "/api/nvlab", null, function(r) { win.lab = r || { report: [], labs: [] } }) }
+    property var drv: null        // Driver Lab: versions + last check, loaded when opened
+    function labCmd(args, then) { call("POST", "/api/action", { action: "nvlab-cmd", args: args }, function(r) { if (then) then(r || {}) }) }
+    function loadDrv() { labCmd(["driver", "versions"], function(v) { labCmd(["driver", "status"], function(st) { win.drv = Object.assign({}, v.data || {}, st.data || {}) }) }) }
     property var vers: null       // "Install another version": {installed, versions} once opened
     property bool cecAdv: false   // "CEC advanced" folded by default
     function gsLook(st) { return ({ active: ["#4caf50", "Active"], inactive: ["#f0b429", "Inactive"], overridden: ["#f0b429", "Inactive: the game's own setting"],
@@ -503,6 +506,36 @@ ApplicationWindow {
                                      onToggled: win.call("POST", "/api/action", { action: "nvlab-set", key: modelData.key, value: checked }, function() { win.loadLab() }) }
                             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.7; font.pixelSize: 11
                                 text: (modelData.why_not ? "Not on this setup: " + modelData.why_not + ". " : "") + modelData.desc + " Applies at the next game launch." } } }
+                    Label { text: "Screens (read only)"; font.bold: true; visible: !!(win.lab || {}).master }
+                    Repeater { model: (win.lab || {}).master ? ((win.lab || {}).displays || []) : []
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; text: modelData } }
+                    Label { text: "Performance Lab"; font.bold: true; visible: !!(win.lab || {}).master }
+                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12; visible: !!(win.lab || {}).master
+                        text: "Records the next game you start for 60 s with MangoHud's log (no overlay): average FPS, 1% low, frame time, GPU load, clock, power, temperature. Change one thing, record again, compare." }
+                    RowLayout { spacing: 8; visible: !!(win.lab || {}).master
+                        Button { text: (((win.lab || {}).perf || {}).armed) ? "Cancel the recording" : "Record the next game (60 s)"
+                                 onClicked: win.labCmd(["perf", (((win.lab || {}).perf || {}).armed) ? "cancel" : "arm"], function() { win.loadLab() }) }
+                        Button { text: "Delete the recordings"; visible: ((((win.lab || {}).perf || {}).runs) || []).length > 0; onClicked: win.labCmd(["perf", "clear"], function() { win.loadLab() }) } }
+                    Repeater { model: (win.lab || {}).master ? ((((win.lab || {}).perf || {}).runs) || []) : []
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; textFormat: Text.StyledText
+                            text: "<b>" + modelData.game + "</b> · " + modelData.when + "<br>" + modelData.fps + " FPS avg · 1% low " + modelData.low1 + " · 99% frame time " + modelData.p99_ms + " ms"
+                                  + (modelData.gpu_load !== null ? " · GPU " + modelData.gpu_load + "% " + modelData.clock + " MHz " + modelData.power + " W " + modelData.temp + " °C" : "") } }
+                    Button { flat: true; visible: !!(win.lab || {}).master; text: (win.drv ? "▾" : "▸") + " Driver Lab"; onClicked: { if (win.drv) win.drv = null; else win.loadDrv() } }
+                    ColumnLayout { Layout.fillWidth: true; spacing: 6; visible: !!(win.lab || {}).master && !!win.drv
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12
+                            text: "Checks whether EGPU Buddy's driver patches (made for " + ((win.drv || {}).baseline || "?") + ") carry over to a newer NVIDIA release: strict apply, then a check of the code that runs when the eGPU is removed" + ((win.drv || {}).can_build ? ", optionally a build against this kernel" : "") + ". Nothing is installed; the files are deleted afterwards. A = ready to try, B = needs a review by hand, C = blocked." }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; visible: !((win.drv || {}).versions || []).length
+                            text: (win.drv || {}).error ? "Could not list NVIDIA releases: " + win.drv.error : "No NVIDIA release newer than " + ((win.drv || {}).baseline || "?") + " yet." }
+                        RowLayout { spacing: 8; visible: ((win.drv || {}).versions || []).length > 0
+                            ComboBox { id: drvBox; Layout.preferredWidth: 160; model: (win.drv || {}).versions || [] }
+                            Button { text: "Check"; enabled: (win.drv || {}).state !== "running"; onClicked: win.labCmd(["driver", "check", drvBox.currentText], function() { win.loadDrv() }) }
+                            Button { text: "Check and build"; visible: !!(win.drv || {}).can_build; enabled: (win.drv || {}).state !== "running"; onClicked: win.labCmd(["driver", "check", drvBox.currentText, "--build"], function() { win.loadDrv() }) } }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; visible: (win.drv || {}).state === "running"; text: "Checking " + (win.drv || {}).version + ": " + ((win.drv || {}).step || "") + "…" }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; visible: (win.drv || {}).state === "done" && !!(win.drv || {}).report; textFormat: Text.StyledText
+                            text: (win.drv && win.drv.report) ? "<b>" + win.drv.version + ": class " + win.drv.report.class + "</b> · " + win.drv.report.summary + (win.drv.report.audit || []).map(function(x) { return "<br>" + x.file + ": " + x.new.length + " new, " + x.gone.length + " gone" }).join("") : "" }
+                        RowLayout { spacing: 8
+                            Button { text: "Refresh"; visible: (win.drv || {}).state === "running"; onClicked: win.loadDrv() }
+                            Button { text: "Clear the Driver Lab"; visible: (win.drv || {}).state === "done"; onClicked: win.labCmd(["driver", "discard"], function() { win.loadDrv() }) } } }
                     Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !!(win.lab || {}).master
                         text: "Planned, not in this version: " + (((win.lab || {}).planned) || []).join(" · ") + "." } }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 2

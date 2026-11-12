@@ -34,6 +34,21 @@ Validation: switches → env file → stand-in game through the rebuilt shim, te
 overrides the lab; master off leaves games clean; AMD install refuses. Not yet tested: each switch's effect in a real
 game (needs owner / testers; all are labelled "needs testing").
 
+## Phase 2 (built 2026-11-12, owner approved: display reports, Performance Lab, Driver Lab design + dry-run)
+- Display reports (read-only, `egpu-nv-lab status` → displays): per connected screen from its EDID: name, preferred mode,
+  bit depth, refresh range / HDMI VRR range, HDR EOTFs + peak luminance, BT.2020. Checked on the owner's LG TV, X49 V, eDP.
+- Performance Lab (`egpu-nv-lab perf arm|cancel|clear`): arms MangoHud logging (`MANGOHUD=1`, no_display, 60 s, every
+  frame) for the next game launch through nvidia-lab.env; disarms itself once a log exists; summarises the last 10
+  logs (avg FPS, 1% low = 1000/p99 frame time, p99 ms, GPU load/clock/power/temp). Stand-in log tested; real game not yet.
+  Gamescope's stats FIFO was not used: Steam is its only reader.
+- Driver Lab (`egpu-driver-lab versions|check VER [--build]|status|discard`, user, ~/.cache/egpu-buddy/driver-lab):
+  newest recipe's PKGBUILD gives baseline + patch order; NVIDIA tarballs from download.nvidia.com (sha256 recorded);
+  strict `patch -F0`; audit = worker/timer/kthread/drm_dev_* call sites in every file the lifecycle patches (160/165/
+  166/167/180) touch, baseline-with-patches vs candidate-with-patches; optional `make modules` against the running
+  kernel (clang/lld picked from the kernel .config). Classes A/B/C, fail closed. Never installs; work tree deleted.
+  Verified: 620.70.06 → A, builds all 5 modules in 87 s on CachyOS 7.3; 615.78.08 → C (160 and 180 do not apply) and
+  the audit lists the 620 content-protection worker, the known port trap.
+
 ## Later phases: need owner approval before any code
 
 1. **Per-game experiments.** The shim knows `SteamAppId`, so a `nvidia-lab-<appid>.env` read before the global file is

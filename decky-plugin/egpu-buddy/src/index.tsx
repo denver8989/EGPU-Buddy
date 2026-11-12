@@ -152,7 +152,12 @@ type Upd = { needs_detach?: boolean; auto_update: boolean; available: string; st
 const getUpdate = callable<[], Upd>("get_update_status");
 const setAutoUpdate = callable<[boolean], Result>("set_auto_update");
 const checkUpdate = callable<[boolean], Result>("check_update");
-type NvLab = { master: boolean; report: string[]; labs: { key: string; label: string; desc: string; on: boolean; why_not: string }[]; planned: string[] };
+type PerfRun = { game: string; when: string; frames: number; fps: number; low1: number; p99_ms: number; gpu_load: number | null; clock: number | null; power: number | null; temp: number | null };
+type NvLab = { master: boolean; report: string[]; labs: { key: string; label: string; desc: string; on: boolean; why_not: string }[]; planned: string[];
+  displays?: string[]; perf?: { armed: boolean; runs: PerfRun[] } };
+type DrvLab = { baseline?: string; versions?: string[]; can_build?: boolean; error?: string; state?: string; step?: string; version?: string;
+  report?: { class: string; summary: string; patches: { patch: string; ok: boolean }[]; audit: { file: string; new: string[]; gone: string[] }[] } | null };
+const nvLabCmd = callable<[string[]], { ok: boolean; data?: any; message?: string }>("nv_lab_cmd");
 const getNvLab = callable<[], NvLab>("get_nv_lab");
 const setNvLab = callable<[string, boolean], Result>("set_nv_lab");
 const getVersions = callable<[], { installed: string; versions: string[]; error?: string }>("get_versions");
@@ -516,6 +521,9 @@ function Content() {
   const [trm, setTrm] = useState<TvRemote | null>(null);
   const [cecAdv, setCecAdv] = useState(false);
   const [lab, setLab] = useState<NvLab | null>(null);   // NVIDIA settings > Advanced Tinkering, loaded when opened
+  const [drv, setDrv] = useState<DrvLab | null>(null);   // Driver Lab: versions + last check, loaded when opened
+  const [drvPick, setDrvPick] = useState("");
+  const loadDrv = async () => { const v = await nvLabCmd(["driver", "versions"]), st = await nvLabCmd(["driver", "status"]); setDrv({ ...(v.data ?? {}), ...(st.data ?? {}) }); };
   const [vers, setVers] = useState<{ installed: string; versions: string[] } | null>(null);   // "Install another version"
   const [pickVer, setPickVer] = useState("");   // "CEC advanced" folded by default
   const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean; keep_screen?: boolean } | null>(null);
@@ -1128,7 +1136,33 @@ function Content() {
             {lab.master && lab.labs.map((x) => <PanelSectionRow key={x.key}><ToggleField label={x.label + " · needs testing"} checked={x.on} disabled={lock || (!!x.why_not && !x.on)}
               description={(x.why_not ? `Not on this setup: ${x.why_not}. ` : "") + x.desc + " Applies at the next game launch."}
               onChange={(v) => run(async () => { const r = await setNvLab(x.key, v); setLab(await getNvLab()); return r; })} /></PanelSectionRow>)}
-            {lab.master && <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.6 }}>Planned, not in this version: {lab.planned.join(" · ")}.</div></PanelSectionRow>}
+            {lab.master && <>
+              <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600 }}>Screens (read only)</div></PanelSectionRow>
+              {(lab.displays ?? []).map((d, i) => <PanelSectionRow key={"d" + i}><div style={{ fontSize: "12px" }}>{d}</div></PanelSectionRow>)}
+              <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600 }}>Performance Lab</div></PanelSectionRow>
+              <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Records the next game you start for 60 s with MangoHud's log (no overlay): average FPS, 1% low, frame time, GPU load, clock, power, temperature. Change one thing, record again, compare.</div></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["perf", lab.perf?.armed ? "cancel" : "arm"]); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })}>
+                {lab.perf?.armed ? "Cancel the recording" : "Record the next game (60 s)"}</ButtonItem></PanelSectionRow>
+              {(lab.perf?.runs ?? []).map((x, i) => <PanelSectionRow key={"p" + i}><div style={{ fontSize: "12px" }}><b>{x.game}</b> · {x.when}<br />
+                {x.fps} FPS avg · 1% low {x.low1} · 99% frame time {x.p99_ms} ms{x.gpu_load != null ? ` · GPU ${x.gpu_load}% ${x.clock ?? "?"} MHz ${x.power ?? "?"} W ${x.temp ?? "?"} °C` : ""}</div></PanelSectionRow>)}
+              {!!lab.perf?.runs?.length && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["perf", "clear"]); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })}>Delete the recordings</ButtonItem></PanelSectionRow>}
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={async () => { if (drv) setDrv(null); else await loadDrv(); }}>{drv ? "▾" : "▸"} Driver Lab</ButtonItem></PanelSectionRow>
+              {drv && <>
+                <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Checks whether EGPU Buddy's driver patches (made for {drv.baseline || "?"}) carry over to a newer NVIDIA release: strict apply, then a check of the code that runs when the eGPU is removed{drv.can_build ? ", optionally a build against this kernel" : ""}. Nothing is installed; the files are deleted afterwards. A = ready to try, B = needs a review by hand, C = blocked.</div></PanelSectionRow>
+                {drv.error && <PanelSectionRow><div style={{ fontSize: "12px" }}>Could not list NVIDIA releases: {drv.error}</div></PanelSectionRow>}
+                {!drv.error && !drv.versions?.length && <PanelSectionRow><div style={{ fontSize: "12px" }}>No NVIDIA release newer than {drv.baseline} yet.</div></PanelSectionRow>}
+                {!!drv.versions?.length && <>
+                  <PanelSectionRow><DropdownItem label="NVIDIA release" rgOptions={drv.versions.map((v) => ({ data: v, label: v }))} selectedOption={drvPick || drv.versions[0]} onChange={(o) => setDrvPick(String(o.data))} /></PanelSectionRow>
+                  <PanelSectionRow><ButtonItem layout="below" disabled={lock || drv.state === "running"} onClick={() => run(async () => { const r = await nvLabCmd(["driver", "check", drvPick || drv.versions![0]]); setTimeout(loadDrv, 2000); return { ok: r.ok, message: r.message ?? "" }; })}>Check (about 50 MB download)</ButtonItem></PanelSectionRow>
+                  {drv.can_build && <PanelSectionRow><ButtonItem layout="below" disabled={lock || drv.state === "running"} onClick={() => run(async () => { const r = await nvLabCmd(["driver", "check", drvPick || drv.versions![0], "--build"]); setTimeout(loadDrv, 2000); return { ok: r.ok, message: r.message ?? "" }; })}>Check and build (a few minutes, busy CPU)</ButtonItem></PanelSectionRow>}
+                </>}
+                {drv.state === "running" && <PanelSectionRow><div style={{ fontSize: "12px" }}>Checking {drv.version}: {drv.step}… <ButtonItem layout="below" onClick={loadDrv}>Refresh</ButtonItem></div></PanelSectionRow>}
+                {drv.state === "done" && drv.report && <PanelSectionRow><div style={{ fontSize: "12px" }}><b>{drv.version}: class {drv.report.class}</b> · {drv.report.summary}
+                  {drv.report.audit.map((x, i) => <div key={i} style={{ opacity: 0.8 }}>{x.file}: {x.new.length} new, {x.gone.length} gone</div>)}</div></PanelSectionRow>}
+                {drv.state === "done" && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["driver", "discard"]); await loadDrv(); return { ok: r.ok, message: r.message ?? "" }; })}>Clear the Driver Lab</ButtonItem></PanelSectionRow>}
+              </>}
+              <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.6 }}>Planned, not in this version: {lab.planned.join(" · ")}.</div></PanelSectionRow>
+            </>}
           </>}
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Not yet: FXAA, texture filtering quality, page flipping.</div></PanelSectionRow>
         </PanelSection>);

@@ -2597,6 +2597,20 @@ class Plugin:
         try: return json.loads(out)
         except ValueError: return {"master": False, "report": ["Advanced Tinkering is not installed yet (update EGPU Buddy)"], "labs": [], "planned": []}
 
+    async def nv_lab_cmd(self, args: list):
+        """Advanced Tinkering helpers as the user: perf arm|cancel|clear (egpu-nv-lab), driver versions|status|check|discard
+        (egpu-driver-lab). Only these verbs pass."""
+        if _installed_vendor() == "amd": return {"ok": False, "message": "Not on an AMD / Intel install."}
+        a = [str(x) for x in (args or [])]
+        ok = (a[:1] == ["perf"] and len(a) == 2 and a[1] in ("arm", "cancel", "clear")) or \
+             (a[:1] == ["driver"] and (a[1:] in (["versions"], ["status"], ["discard"]) or
+              (len(a) in (3, 4) and a[1] == "check" and re.fullmatch(r"\d+\.\d+(\.\d+)?", a[2]) and a[3:] in ([], ["--build"]))))
+        if not ok: return {"ok": False, "message": "Unknown action."}
+        tool = "/usr/local/sbin/egpu-driver-lab" if a[0] == "driver" else "/usr/local/sbin/egpu-nv-lab"
+        rc, out, err = _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], tool, *(a[1:] if a[0] == "driver" else a)], 60)
+        try: return {"ok": rc == 0, "data": json.loads(out)}
+        except ValueError: return {"ok": rc == 0, "message": (out or err).strip()}
+
     async def set_nv_lab(self, key: str, on: bool):
         if _installed_vendor() == "amd": return {"ok": False, "message": "Not on an AMD / Intel install."}
         if key != "master" and not re.fullmatch(r"[a-z_]+", key or ""): return {"ok": False, "message": "Unknown switch."}

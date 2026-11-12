@@ -412,6 +412,16 @@ def action(p):
         try: r = json.loads(o)
         except ValueError: r = {"ok": False, "message": e or o}
         return {"ok": bool(r.get("ok")), "out": r.get("message")}
+    if a == "nvlab-cmd":   # Advanced Tinkering helpers (same verbs as the plugin's nv_lab_cmd)
+        if read("/etc/nv-egpu-buddy/gpu-vendor") == "amd": return {"ok": False, "out": "not on an AMD / Intel install"}
+        x = [str(v) for v in ((p or {}).get("args") or [])]
+        ok = (x[:1] == ["perf"] and len(x) == 2 and x[1] in ("arm", "cancel", "clear")) or \
+             (x[:1] == ["driver"] and (x[1:] in (["versions"], ["status"], ["discard"]) or
+              (len(x) in (3, 4) and x[1] == "check" and re.fullmatch(r"\d+\.\d+(\.\d+)?", x[2]) and x[3:] in ([], ["--build"]))))
+        if not ok: return {"ok": False, "out": "unknown action"}
+        rc, o, e = sh(["/usr/local/sbin/egpu-driver-lab", *x[1:]] if x[0] == "driver" else ["/usr/local/sbin/egpu-nv-lab", *x], 60)
+        try: return {"ok": rc == 0, "data": json.loads(o), "silent": True}
+        except ValueError: return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "nvlab-set":   # Advanced Tinkering switch (master or one lab); runs as this user, writes only ~/.config/egpu-buddy
         if read("/etc/nv-egpu-buddy/gpu-vendor") == "amd": return {"ok": False, "out": "not on an AMD / Intel install"}
         k, on = str((p or {}).get("key", "")), "on" if (p or {}).get("value") else "off"

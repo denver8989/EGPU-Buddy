@@ -9,7 +9,7 @@ Runs as the user (never root: the plugin calls it through runuser). Everything h
 Sources (checked 2026-11-12): NVIDIA "DLSS / Smooth Motion / Reflex" (driver-installation-guide/615/gaming.html),
 dxvk-nvapi README (Vulkan Reflex layer), NVIDIA README "Smooth Motion" (575: RTX 50, 580.82: RTX 40).
 """
-import json, os, re, subprocess, sys
+import glob, json, os, re, subprocess, sys, time
 
 CFG = os.path.expanduser("~/.config/egpu-buddy")
 STATE = os.path.join(CFG, "nvidia-lab.json")
@@ -46,6 +46,89 @@ LAB = {
                   "Only does something where the layer is installed; newer DXVK-NVAPI (0.9.3) may not need it."),
 }
 
+def _edid(b):
+    """Read-only facts from a screen's EDID: name, colour depth, refresh range (VRR hint), HDR and wide colour."""
+    r = {}
+    if len(b) < 128 or b[:8] != bytes.fromhex("00ffffffffffff00"): return r
+    if b[20] & 0x80: r["bpc"] = {1: 6, 2: 8, 3: 10, 4: 12, 5: 14, 6: 16}.get((b[20] >> 4) & 7)
+    for i in range(54, 126, 18):
+        d = b[i:i + 18]
+        if d[:3] != b"\0\0\0": continue
+        if d[3] == 0xFC: r["name"] = d[5:18].split(b"\n")[0].decode("ascii", "replace").strip()
+        if d[3] == 0xFD: r["range"] = (d[5] + (255 if d[4] & 1 else 0), d[6] + (255 if d[4] & 2 else 0))
+    for e in range(128, len(b) - 127, 128):
+        x = b[e:e + 128]
+        if x[0] != 0x02: continue
+        i, end = 4, x[2]
+        while 4 <= i < end:
+            tag, ln = x[i] >> 5, x[i] & 31; blk = x[i + 1:i + 1 + ln]
+            if tag == 7 and blk:
+                if blk[0] == 6 and len(blk) > 1:   # HDR static metadata
+                    eo = blk[1]; r["hdr"] = [n for bit, n in ((4, "HDR10 (PQ)"), (8, "HLG")) if eo & bit]
+                    if len(blk) > 3 and blk[3]: r["peak_nits"] = round(50 * 2 ** (blk[3] / 32))
+                if blk[0] == 5 and len(blk) > 1 and blk[1] & 0xC0: r["bt2020"] = True
+            if tag == 3 and blk[:3] == bytes.fromhex("d85dc4") and len(blk) > 9:   # HDMI Forum VSDB: VRR range
+                lo, hi = blk[8] & 0x3F, ((blk[8] & 0xC0) << 2) | blk[9]
+                if lo and hi: r["hdmi_vrr"] = (lo, hi)
+            i += 1 + ln
+    return r
+
+def _displays():
+    out = []
+    for c in sorted(glob.glob("/sys/class/drm/card*-*")):
+        try:
+            if open(c + "/status").read().strip() != "connected": continue
+            e = _edid(open(c + "/edid", "rb").read())
+            modes = open(c + "/modes").read().split()
+        except OSError:
+            continue
+        conn = os.path.basename(c).split("-", 1)[1]
+        bits = [f"{conn}: {e.get('name', 'unknown')}", f"preferred mode {modes[0]}" if modes else ""]
+        if e.get("bpc"): bits.append(f"{e['bpc']}-bit colour")
+        v = e.get("hdmi_vrr") or e.get("range")
+        if v: bits.append(("VRR " if e.get("hdmi_vrr") else "refresh range ") + f"{v[0]}-{v[1]} Hz")
+        bits.append(("HDR: " + ", ".join(e["hdr"]) + (f", ~{e['peak_nits']} nits" if e.get("peak_nits") else "")) if e.get("hdr") else "no HDR")
+        if e.get("bt2020"): bits.append("wide colour (BT.2020)")
+        out.append(" · ".join(b for b in bits if b))
+    return out
+
+PERF = os.path.expanduser("~/.local/state/egpu-buddy/perf-lab")
+
+def _perf_lines(st):
+    a = st.get("perf_armed")
+    if not a: return []
+    return ["MANGOHUD=1", f"MANGOHUD_CONFIG=no_display,autostart_log=1,log_duration={a['secs']},log_interval=0,output_folder={PERF}"]
+
+def _summary(path):
+    """One recording (MangoHud CSV): average FPS, 1% low, 99th percentile frame time, GPU load / clock / power / temp."""
+    rows, cols = [], None
+    for line in open(path, errors="replace"):
+        f = line.strip().split(",")
+        if cols is None:
+            if f and f[0] == "fps": cols = f
+            continue
+        if len(f) == len(cols): rows.append(dict(zip(cols, f)))
+    num = lambda k: sorted(float(r[k]) for r in rows if r.get(k, "").replace(".", "", 1).isdigit())
+    ft, fps = num("frametime"), num("fps")
+    if not ft: return None
+    avg = lambda v: round(sum(v) / len(v), 1) if v else None
+    p99 = ft[min(len(ft) - 1, int(len(ft) * 0.99))]
+    return {"file": os.path.basename(path), "game": os.path.basename(path).rsplit("_", 2)[0],
+            "when": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(path))), "frames": len(ft),
+            "fps": round(1000 * len(ft) / sum(ft), 1), "low1": round(1000 / p99, 1), "p99_ms": round(p99, 1),
+            "gpu_load": avg(num("gpu_load")), "clock": avg(num("gpu_core_clock")), "power": avg(num("gpu_power")),
+            "temp": avg(num("gpu_temp"))}
+
+def _perf(st):
+    os.makedirs(PERF, exist_ok=True)
+    logs = sorted((p for p in glob.glob(PERF + "/*.csv") if not p.endswith("_summary.csv")), key=os.path.getmtime, reverse=True)
+    a = st.get("perf_armed")
+    if a and any(os.path.getmtime(p) > a["t"] for p in logs):   # recorded: one launch only, so disarm
+        st.pop("perf_armed", None); _write(st)
+    for old in logs[10:]: os.remove(old)
+    runs = [x for x in (_summary(p) for p in logs[:10]) if x]
+    return {"armed": bool(st.get("perf_armed")), "secs": (st.get("perf_armed") or {}).get("secs"), "runs": runs}
+
 def _gpu():
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=name,compute_cap,driver_version,pcie.link.gen.current,"
@@ -66,7 +149,7 @@ def _state():
 def _write(st):
     os.makedirs(CFG, exist_ok=True)
     json.dump(st, open(STATE, "w"))
-    lines = [l for k in st["on"] if k in LAB for l in LAB[k][1]] if st["master"] else []
+    lines = ([l for k in st["on"] if k in LAB for l in LAB[k][1]] + _perf_lines(st)) if st["master"] else []
     if lines:
         open(ENV, "w").write("# EGPU Buddy NVIDIA settings > Advanced Tinkering (egpu-nv-lab); master off removes it\n" + "\n".join(lines) + "\n")
     elif os.path.exists(ENV):
@@ -88,8 +171,9 @@ def status():
     labs = [{"key": k, "label": v[0], "desc": v[3], "on": k in st["on"], "why_not": v[2](cc, drv) if g else "no NVIDIA GPU right now"}
             for k, v in LAB.items()]
     return {"master": st["master"], "report": report, "labs": labs, "active": os.path.exists(ENV),
-            "planned": ["Per-game experiments", "Performance Lab (measured A/B tests)", "Display experiments (HDR / VRR reports)",
-                        "Driver Lab (patched driver trials, built and tested only from here)"]}
+            "displays": _displays(), "perf": _perf(st) if st["master"] else {"armed": False, "runs": []},
+            "planned": ["Per-game experiments", "Display overrides (HDR / VRR), with automatic undo",
+                        "Driver Lab trials (installing a checked candidate through the driver switch)"]}
 
 def main(a):
     try:   # AMD / Intel install: never (CLAUDE.md: AMD installs run no NVIDIA code)
@@ -105,6 +189,14 @@ def main(a):
         if not st["master"]: print("turn Advanced Tinkering on first"); return 1
         st["on"] = [k for k in st["on"] if k != a[1]] + ([a[1]] if a[2] == "on" else []); _write(st)
         print(f"{LAB[a[1]][0]}: {a[2]} (next game launch)"); return 0
+    if a[:1] == ["perf"] and len(a) == 2 and a[1] in ("arm", "cancel", "clear"):
+        if not st["master"]: print("turn Advanced Tinkering on first"); return 1
+        if a[1] == "arm": st["perf_armed"] = {"secs": 60, "t": time.time()}
+        else: st.pop("perf_armed", None)
+        if a[1] == "clear": [os.remove(p) for p in glob.glob(PERF + "/*.csv")]
+        _write(st)
+        print({"arm": "Recording armed: the next game you start is recorded for 60 s (no overlay)", "cancel": "Recording cancelled",
+               "clear": "Recordings deleted"}[a[1]]); return 0
     print(__doc__.strip().splitlines()[0]); return 2
 
 if __name__ == "__main__":

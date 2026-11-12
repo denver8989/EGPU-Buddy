@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""egpu-driver-lab versions | check VERSION [--build] | status | discard
+NVIDIA settings > Advanced Tinkering > Driver Lab (experimental, opt-in, NVIDIA installs only). NEVER installs anything.
+
+check: does EGPU Buddy's driver patch set carry over to another NVIDIA open-kernel-module release, without anyone
+re-reading the source?  In an isolated folder (~/.cache/egpu-buddy/driver-lab, removed afterwards; the report stays):
+  1. NVIDIA's source for the patch set's own version (the baseline) and for VERSION, from download.nvidia.com.
+  2. Strict apply: every patch in the recipe's order with `patch -F0` (no fuzz). A failed hunk blocks.
+  3. Lifecycle audit: in every file the lifecycle patches touch (160 hotplug, 165-167 removal, 180 CEC), workers,
+     timers, kthreads and DRM unplug/enter/exit calls are listed for the baseline and VERSION. Anything new or gone
+     needs a human (the 620 content-protection worker that the hotplug patch had to cancel is exactly this case).
+  4. --build: the patched tree is compiled against this machine's kernel headers (make modules); nothing is loaded.
+Result: A = applies exactly, nothing new in the lifecycle code (and builds, when built); B = applies, but the lifecycle
+code changed: review by hand; C = blocked (a patch does not apply, a file is gone, download or build failed).
+Even A is only a candidate: installing a driver stays with the existing driver switch (egpu-driver-trial).
+Runs as the user. The long part runs as a transient user service; `status` reads its progress.
+"""
+import glob, hashlib, json, os, re, shutil, subprocess, sys, tarfile, time, urllib.request
+
+HOME = os.path.expanduser("~")
+LAB = os.path.join(HOME, ".cache/egpu-buddy/driver-lab")
+STATE = os.path.join(HOME, ".local/state/egpu-buddy/driver-lab.json")
+REPO_DIRS = [os.path.join(HOME, ".local/share/steamos-egpu-buddy/packaging"), os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../../../packaging")]
+LIFECYCLE = ("160", "165", "166", "167", "180")
+PAT = re.compile(r"\b(INIT_WORK|INIT_DELAYED_WORK|kthread_run|kthread_create\w*|nv_kthread_q_\w+|timer_setup|"
+                 r"queue_(?:delayed_)?work|schedule_(?:delayed_)?work|mod_delayed_work|cancel_(?:delayed_)?work(?:_sync)?|"
+                 r"flush_(?:delayed_)?work|drm_dev_unplug|drm_dev_enter|drm_dev_exit|drm_kms_helper_poll_\w+)\s*\(([^;]*)")
+
+def save(**kw):
+    st = load(); st.update(kw, t=int(time.time())); os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    json.dump(st, open(STATE + ".tmp", "w")); os.replace(STATE + ".tmp", STATE)
+def load():
+    try: return json.load(open(STATE))
+    except (OSError, ValueError): return {}
+
+def recipe():
+    """The newest patch set (packaging/nvidia-open-egpu-<NNN>): its version, patch order and files."""
+    for base in REPO_DIRS:
+        dirs = sorted(glob.glob(os.path.join(base, "nvidia-open-egpu-[0-9]*")), key=lambda d: int(re.sub(r"\D", "", os.path.basename(d)) or 0))
+        if dirs:
+            d = dirs[-1]; pk = open(os.path.join(d, "PKGBUILD")).read()
+            ver = re.search(r"^pkgver=(\S+)", pk, re.M)[1]
+            order = re.findall(r'-i "\$\{srcdir\}/([^"]+\.patch)"', pk)
+            return d, ver, order
+    raise SystemExit("EGPU Buddy's driver recipes were not found (update EGPU Buddy)")
+
+def vt(v): return tuple(int(x) for x in re.findall(r"\d+", v))
+
+def versions():
+    _, base, _ = recipe()
+    req = urllib.request.Request("https://api.github.com/repos/NVIDIA/open-gpu-kernel-modules/tags?per_page=30", headers={"User-Agent": "EGPU-Buddy"})
+    tags = [t["name"] for t in json.load(urllib.request.urlopen(req, timeout=20)) if re.fullmatch(r"\d+\.\d+(\.\d+)?", t["name"])]
+    return {"baseline": base, "versions": sorted({t for t in tags if vt(t) > vt(base)}, key=vt, reverse=True)[:8],
+            "can_build": os.path.exists(f"/lib/modules/{os.uname().release}/build/Makefile") and bool(shutil.which("make"))}
+
+def fetch(ver, into):
+    name = f"NVIDIA-kernel-module-source-{ver}"
+    tx = os.path.join(LAB, name + ".tar.xz")
+    if not os.path.exists(tx):
+        urllib.request.urlretrieve(f"https://download.nvidia.com/XFree86/NVIDIA-kernel-module-source/{name}.tar.xz", tx + ".part")
+        os.replace(tx + ".part", tx)
+    sha = hashlib.sha256(open(tx, "rb").read()).hexdigest()
+    with tarfile.open(tx) as t: t.extractall(into, filter="data")
+    return os.path.join(into, name), sha
+
+def constructs(root, files):
+    out = {}
+    for f in files:
+        p = os.path.join(root, f)
+        if not os.path.exists(p): out[f] = None; continue
+        out[f] = sorted({m[1] + "(" + " ".join(m[2].split())[:80] for m in PAT.finditer(open(p, errors="replace").read())})
+    return out
+
+def worker(ver, build):
+    d, base, order = recipe()
+    rep = {"version": ver, "baseline": base, "patch_set": os.path.basename(d), "patches": [], "audit": [], "build": None}
+    save(state="running", version=ver, step="downloading NVIDIA's sources", report=None)
+    try:
+        shutil.rmtree(os.path.join(LAB, "work"), ignore_errors=True); os.makedirs(os.path.join(LAB, "work"))
+        cand, rep["sha256"] = fetch(ver, os.path.join(LAB, "work", "cand"))
+        basesrc, _ = fetch(base, os.path.join(LAB, "work", "base"))
+        save(step="applying the patches (strict, no fuzz)")
+        blocked = []
+        for p in order:
+            r = subprocess.run(["patch", "-d", cand, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", os.path.join(d, p)], capture_output=True, text=True)
+            off = len(re.findall(r"with offset", r.stdout))
+            rep["patches"].append({"patch": p, "ok": r.returncode == 0, "offset_hunks": off, "out": r.stdout[-600:] if r.returncode else ""})
+            if r.returncode: blocked.append(f"{p} does not apply")
+        save(step="auditing workers, timers and removal paths")
+        files = sorted({l[4:].split("\t")[0].strip().split("/", 1)[1] for p in order if p[:3] in LIFECYCLE
+                        for l in open(os.path.join(d, p), errors="replace") if l.startswith("+++ ")})
+        # baseline WITH the patches applied vs VERSION with the patches applied: what NVIDIA changed, not what we add
+        pb = os.path.join(LAB, "work", "base-patched"); shutil.copytree(basesrc, pb, symlinks=True)
+        for p in order: subprocess.run(["patch", "-d", pb, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", os.path.join(d, p)], capture_output=True)
+        b, c = constructs(pb, files), constructs(cand, files)
+        review = []
+        for f in files:
+            if c[f] is None: blocked.append(f"{f} is gone in {ver}"); continue
+            new, gone = sorted(set(c[f]) - set(b[f] or [])), sorted(set(b[f] or []) - set(c[f]))
+            if new or gone: review.append({"file": f, "new": new, "gone": gone})
+        rep["audit"] = review
+        if build and not blocked:
+            kb = f"/lib/modules/{os.uname().release}/build"
+            if not os.path.exists(kb + "/Makefile"):
+                rep["build"] = {"ok": False, "out": "no kernel headers for the running kernel"}; blocked.append("cannot build here (no kernel headers)")
+            else:
+                save(step="building the modules against this kernel (nothing is loaded)")
+                env = dict(os.environ)
+                cfg = open(kb + "/.config", errors="replace").read() if os.path.exists(kb + "/.config") else ""
+                if "CONFIG_CC_IS_CLANG=y" in cfg: env.update(CC="clang", LD="ld.lld" if "CONFIG_LD_IS_LLD=y" in cfg else "ld", LLVM="1")
+                r = subprocess.run(["make", f"-j{os.cpu_count() or 4}", "modules", f"SYSSRC={kb}"], cwd=cand, env=env, capture_output=True, text=True)
+                kos = sorted(os.path.basename(k) for k in glob.glob(os.path.join(cand, "kernel-open", "*.ko")))
+                rep["build"] = {"ok": r.returncode == 0, "modules": kos, "out": (r.stdout + r.stderr)[-1500:] if r.returncode else ""}
+                if r.returncode: blocked.append("the build failed")
+        rep["class"] = "C" if blocked else "B" if review else "A"
+        rep["blocked"] = blocked
+        rep["summary"] = {"A": "applies exactly; nothing new in the lifecycle code" + ("; builds" if rep["build"] else " (not built)"),
+                          "B": "applies, but the lifecycle code changed: needs a review by hand before any trial",
+                          "C": "blocked: " + "; ".join(blocked)}[rep["class"]]
+        save(state="done", step="", report=rep)
+    except Exception as ex:  # noqa: BLE001 (fail closed: any error is a blocked result)
+        rep.update({"class": "C", "blocked": [f"error: {ex}"], "summary": f"blocked: {ex}"})
+        save(state="done", step="", report=rep)
+    finally:
+        shutil.rmtree(os.path.join(LAB, "work"), ignore_errors=True)
+
+def main(a):
+    try:
+        if open("/etc/nv-egpu-buddy/gpu-vendor").read().strip() == "amd": print("not on an AMD / Intel install"); return 3
+    except OSError: pass
+    if os.getuid() == 0: print("run as the user, not root"); return 1
+    if a[:1] == ["versions"]:
+        try: print(json.dumps(versions()))
+        except Exception as ex: print(json.dumps({"baseline": "", "versions": [], "can_build": False, "error": f"{ex}"}))  # noqa: BLE001
+        return 0
+    if a[:1] == ["status"]:
+        print(json.dumps(load() or {"state": "idle"})); return 0
+    if a[:1] == ["discard"]:
+        shutil.rmtree(LAB, ignore_errors=True); os.path.exists(STATE) and os.remove(STATE); print("Driver Lab cleared"); return 0
+    if len(a) >= 2 and a[0] in ("check", "_worker") and re.fullmatch(r"\d+\.\d+(\.\d+)?", a[1]):
+        build = "--build" in a
+        if a[0] == "_worker":
+            os.makedirs(LAB, exist_ok=True); worker(a[1], build); return 0
+        if load().get("state") == "running": print("a check is already running"); return 1
+        save(state="running", version=a[1], step="starting", report=None)
+        cmd = [sys.executable, os.path.realpath(__file__), "_worker", a[1]] + (["--build"] if build else [])
+        try:
+            subprocess.run(["systemd-run", "--user", "--collect", "--quiet", "--unit", f"egpu-driver-lab-{int(time.time())}", "--nice=10", *cmd], check=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"Driver Lab: checking {a[1]} (nothing is installed)"); return 0
+    print(__doc__.strip().splitlines()[0]); return 2
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
