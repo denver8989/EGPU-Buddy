@@ -214,3 +214,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 ## 2026-11-12 — 0.7.279 RELEASED: NVIDIA settings > Advanced Tinkering phase 1 (egpu-nv-lab, nvidia-lab.env via shim, 4 userspace switches, read-only report). Plan + corrections: agent-context/RESEARCH-NVIDIA-ADVANCED-TINKERING.md. Later phases (per-game, perf lab, display, Driver Lab) await owner approval.
 
 ## 2026-11-12 — 0.7.280 RELEASED via release-local.sh (first non-Actions release): Advanced Tinkering phase 2 (screens, Performance Lab, Driver Lab dry-run). Item 11 closed. Next (needs OK): Driver Lab trial install via egpu-driver-trial, per-game, display overrides.
+
+## 2026-11-12 — 0.7.281 RELEASED (local): per-game lab behind optional switch (default all games). Display overrides: not built (black-screen risk). Driver Lab trial: deferred until NVIDIA > 620.70.06 exists; owner wants no per-game driver.
