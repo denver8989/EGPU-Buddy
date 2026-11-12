@@ -501,7 +501,9 @@ ApplicationWindow {
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; text: "• " + modelData } }
                     Switch { text: "Advanced Tinkering"; checked: !!(win.lab || {}).master
                              onToggled: win.call("POST", "/api/action", { action: "nvlab-set", key: "master", value: checked }, function() { win.loadLab() }) }
-                    RowLayout { spacing: 8; visible: !!(win.lab || {}).master
+                    Switch { id: perGameSw; visible: !!(win.lab || {}).master; text: "Per game (optional)"; checked: false
+                             onToggled: { if (!checked) { win.labScope = ""; scopeBox.currentIndex = 0 } } }
+                    RowLayout { spacing: 8; visible: !!(win.lab || {}).master && perGameSw.checked
                         Label { text: "Apply to" }
                         ComboBox { id: scopeBox; Layout.preferredWidth: 320
                             model: ["All games"].concat(((win.lab || {}).games || []).map(function(g) { return g[1] + ((((win.lab || {}).per_game || {})[g[0]] || []).length ? "  •" : "") }))

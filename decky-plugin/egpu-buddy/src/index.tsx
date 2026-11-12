@@ -523,6 +523,7 @@ function Content() {
   const [lab, setLab] = useState<NvLab | null>(null);   // NVIDIA settings > Advanced Tinkering, loaded when opened
   const [drv, setDrv] = useState<DrvLab | null>(null);   // Driver Lab: versions + last check, loaded when opened
   const [drvPick, setDrvPick] = useState("");
+  const [perGame, setPerGame] = useState(false);   // the per-game picker is shown only when asked for
   const [labScope, setLabScope] = useState("");   // "" = all games, else a Steam appid (per-game experiments)
   const loadDrv = async () => { const v = await nvLabCmd(["driver", "versions"]), st = await nvLabCmd(["driver", "status"]); setDrv({ ...(v.data ?? {}), ...(st.data ?? {}) }); };
   const [vers, setVers] = useState<{ installed: string; versions: string[] } | null>(null);   // "Install another version"
@@ -1134,7 +1135,9 @@ function Content() {
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Experiments, off by default, separate from the settings above (those always win). Games only; no driver, Proton or game file is changed. Turning this off removes every experiment.</div></PanelSectionRow>
             {lab.report.map((l, i) => <PanelSectionRow key={"r" + i}><div style={{ fontSize: "12px" }}>• {l}</div></PanelSectionRow>)}
             <PanelSectionRow><ToggleField label="Advanced Tinkering" checked={lab.master} disabled={lock} onChange={(v) => run(async () => { const r = await setNvLab("master", v); setLab(await getNvLab()); return r; })} /></PanelSectionRow>
-            {lab.master && <PanelSectionRow><DropdownItem label="Apply to" disabled={lock} selectedOption={labScope}
+            {lab.master && <PanelSectionRow><ToggleField label="Per game (optional)" description="Off: the switches below apply to every game. On: pick a game and give it switches of its own, on top of the all-games ones."
+              checked={labScope !== "" || perGame} onChange={(v) => { setPerGame(v); if (!v) setLabScope(""); }} /></PanelSectionRow>}
+            {lab.master && (perGame || labScope !== "") && <PanelSectionRow><DropdownItem label="Apply to" disabled={lock} selectedOption={labScope}
               rgOptions={[{ data: "", label: "All games" }, ...(lab.games ?? []).map(([id, name]) => ({ data: id, label: name + (lab.per_game?.[id]?.length ? " •" : "") }))]}
               onChange={(o) => setLabScope(String(o.data))} /></PanelSectionRow>}
             {lab.master && lab.labs.map((x) => { const on = labScope ? !!lab.per_game?.[labScope]?.includes(x.key) : x.on;
