@@ -47,7 +47,7 @@ for a in "${@:2}"; do case "$a" in --manual) manual=1 ;; --force) force=--force 
 SEEN=/var/lib/nvegpu/egpu-seen; DROPS=/var/lib/nvegpu/generic-drops; TB3N22=/var/lib/nvegpu/generic-tb3-navi22; SYSPCI=${EGPU_SYSPCI:-/sys/bus/pci/devices}; MARK=$ST/generic-attached; MOVED=$ST/generic-session-moved; PENDING=$ST/gm-detach-pending; DMODE=/run/user/$U/egpu-detach-mode
 # resume waits its turn (the dock re-announces itself on wake at the same moment); every other verb skips a duplicate
 # (keep-tuned runs for as long as the eGPU is attached: it never takes the lock, or every attach / detach would be skipped)
-[ "$verb" = keep-tuned ] || [ "$verb" = presleep ] || [ "$verb" = devcoredump ] || { exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ] || [ "$verb" = rebar ]; then flock -w 60 9; else flock -n 9; fi; } || { log "another instance running — skip"; exit 0; }
+[ "$verb" = keep-tuned ] || [ "$verb" = presleep ] || [ "$verb" = devcoredump ] || [ "$verb" = panel-watch ] || { exec 9>/run/egpu-generic.lock; if [ "$verb" = resume ] || [ "$verb" = rebar ]; then flock -w 60 9; else flock -n 9; fi; } || { log "another instance running — skip"; exit 0; }
 
 game_mode(){ pgrep -x 'gamescope(-wl)?' >/dev/null 2>&1 || as_deck systemctl --user is-active gamescope-session.target >/dev/null 2>&1; }
 igpu_card(){ basename "$(ls -d /sys/bus/pci/devices/"$(egpu_igpu_bdf)"/drm/card[0-9]* 2>/dev/null | head -1)"; }
@@ -321,10 +321,15 @@ resume)
   /usr/local/sbin/egpu-panel off >/dev/null 2>&1 && log "resume: handheld panel off again (Game Mode on ${oc%%,*})"
   # ...and kept off: Steam restores the screen brightness a few seconds after a wake, which lit the panel again while
   # Game Mode was on the TV (Legion Go S + RX 9070 XT, report UK8NJW). 30 s, a brightness above 0 is taken back.
-  ( exec 9>&-; for _ in $(seq 30); do sleep 1; [ -e /run/egpu-touchpad-picture ] && exit 0
-      for b in /sys/class/backlight/*/brightness; do [ "$(cat "$b" 2>/dev/null)" -gt 0 ] 2>/dev/null || continue
-        /usr/local/sbin/egpu-panel off >/dev/null 2>&1; log "resume: the panel was lit again after the wake: off"; break; done
-    done ) >/dev/null 2>&1 &
+  # Its own unit: a background loop here died with this oneshot resume service after ~6 s, before Steam relit the panel
+  # (report 2YZMGX: off for a second, then lit, and no "lit again" line ever logged).
+  systemd-run --no-block --collect --unit="egpu-panel-watch-$(date +%s)" "$0" panel-watch >/dev/null 2>&1 || true
+  ;;
+panel-watch)
+  exec 9>&-; for _ in $(seq 30); do sleep 1; [ -e /run/egpu-touchpad-picture ] && exit 0
+    for b in /sys/class/backlight/*/brightness; do [ "$(cat "$b" 2>/dev/null)" -gt 0 ] 2>/dev/null || continue
+      /usr/local/sbin/egpu-panel off >/dev/null 2>&1; log "resume: the panel was lit again after the wake: off"; break; done
+  done
   ;;
 presleep)
   # Right before sleep: the AMD eGPU back to the driver's own power management (automatic level, link not held, default
