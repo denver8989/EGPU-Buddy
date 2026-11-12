@@ -308,8 +308,7 @@ def action(p):
         v = str((p or {}).get("version", ""))
         if v not in versions()["versions"]: return {"ok": False, "error": "that version is not in the list"}
         if (jread("/run/nvegpu/update-status.json") or {}).get("state") == "running": return {"ok": True, "started": "update"}
-        again = ["--reinstall"] if v == read("/etc/nv-egpu-buddy/version") else []
-        subprocess.Popen(OWN_UNIT + ["--unit=egpu-buddy-update", "sudo", "-n", "/usr/local/sbin/egpu-buddy-update", v] + again, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        subprocess.Popen(OWN_UNIT + ["--unit=egpu-buddy-update", "sudo", "-n", "/usr/local/sbin/egpu-buddy-update", v], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return {"ok": True, "started": "update"}
     if a == "power-limit":
         w = int((p or {}).get("watts", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-power-limit" if s["vendor"] in ("", "nvidia") else "set-generic-power-cap", str(w)], 20); return {"ok": rc == 0, "out": o or e}
@@ -451,7 +450,8 @@ def versions():
         release_notes()   # fills the 10-min release cache
     except Exception:
         pass
-    return {"installed": read("/etc/nv-egpu-buddy/version"), "versions": [r["version"] for r in track_rels(_NOTES["rels"])[:5]]}
+    me = read("/etc/nv-egpu-buddy/version")   # from 0.7.277 on (the first with this option), installed one left out
+    return {"installed": me, "versions": [r["version"] for r in track_rels(_NOTES["rels"]) if r["version"] != me and vt(r["version"]) >= vt("0.7.277")][:5]}
 
 def release_notes():
     """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first;

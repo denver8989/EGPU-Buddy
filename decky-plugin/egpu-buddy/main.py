@@ -178,6 +178,13 @@ def _rels():
     return [r for r in _notes_cache["rels"] if NV_MARK in r["body"]] if _track() else _notes_cache["rels"]
 
 
+PICKER_SINCE = "0.7.277"   # the first release with "Install another version": an older one could not come back from itself
+def _other_versions():
+    """The last 5 releases other than the installed one, from PICKER_SINCE on (the list grows release by release)."""
+    me = _read(VERSION_FILE)
+    return [r["version"] for r in _rels() if r["version"] != me and _vt(r["version"]) >= _vt(PICKER_SINCE)][:5]
+
+
 def _release_notes(installed):
     """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first
     (the last 100 releases; the plugin shows them in a scrolling window);
@@ -2138,7 +2145,7 @@ class Plugin:
     async def get_versions(self):
         """"Install another version": the last 5 releases (NV GPU Buddy: its own), to go back to an earlier build."""
         try:
-            return {"installed": _read(VERSION_FILE), "versions": [r["version"] for r in _rels()[:5]]}
+            return {"installed": _read(VERSION_FILE), "versions": _other_versions()}
         except Exception as ex:  # noqa: BLE001
             return {"installed": _read(VERSION_FILE), "versions": [], "error": f"Could not reach GitHub: {ex}"}
 
@@ -2146,14 +2153,13 @@ class Plugin:
         """The chosen release, older ones included, through the same updater as the desktop app (egpu-buddy-update:
         checksum-verified, system files and plugin together; the NVIDIA driver is left alone)."""
         try:
-            ok = version in [r["version"] for r in _rels()[:5]]
+            ok = version in _other_versions()
         except Exception:  # noqa: BLE001
             ok = False
         if not ok: return {"ok": False, "message": "That version is not in the list."}
         if _game_running(): return {"ok": False, "message": "Close the running game first."}
         if _operation_in_progress(): return {"ok": False, "message": "Another operation is running; try again when it is done."}
-        cmd = ["/usr/local/sbin/egpu-buddy-update", version] + (["--reinstall"] if version == _read(VERSION_FILE) else [])
-        _spawn_root_job("version", cmd)
+        _spawn_root_job("version", ["/usr/local/sbin/egpu-buddy-update", version])
         return {"ok": True, "message": f"Installing {version}. The plugin reloads when it is done (a minute or two)."}
 
     async def check_update(self, install: bool = False):

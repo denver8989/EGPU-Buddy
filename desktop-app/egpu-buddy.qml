@@ -511,11 +511,11 @@ ApplicationWindow {
                         Button { flat: true; Layout.alignment: Qt.AlignLeft; text: (win.vers ? "▾" : "▸") + " Install another version"
                                  onClicked: { if (win.vers) win.vers = null; else win.call("GET", "/api/versions", null, function(r) { win.vers = r || { versions: [] } }) } }
                         RowLayout { spacing: 8; visible: !!win.vers && (win.vers.versions || []).length > 0
-                            ComboBox { id: verBox; Layout.fillWidth: true; model: ((win.vers || {}).versions || []).map(function(v) { return v + (v === win.vers.installed ? " (installed)" : "") }) }
+                            ComboBox { id: verBox; Layout.fillWidth: true; model: ((win.vers || {}).versions || []).slice() }
                             Button { text: "Install " + (((win.vers || {}).versions || [])[verBox.currentIndex] || "")
                                      onClicked: { var v = win.vers.versions[verBox.currentIndex]; updateDlg.open(); updateDlg.askedAt = Date.now() / 1000 - 2; win.act("install-version", { version: v }) } } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: win.subCol; font.pixelSize: 12; visible: !!win.vers
-                                text: (win.vers && !(win.vers.versions || []).length) ? "Could not load the releases from GitHub." : "Goes back to an earlier build (last 5 releases): system files and plugin. The NVIDIA driver is not changed." } }
+                                text: (win.vers && !(win.vers.versions || []).length) ? "No other versions yet: from this version on, each new release is added here (up to 5)." : "Another build (the last 5 releases from 0.7.277 on): system files and plugin. The NVIDIA driver is not changed." } }
                     Card { id: cExtras; show: !!win.ex.tv
                         RowLayout { spacing: 8
                             Head { text: "Extras" }

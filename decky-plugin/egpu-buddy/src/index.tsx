@@ -797,11 +797,11 @@ function Content() {
           <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => run(() => checkUpdate(false))}>Check for updates</ButtonItem></PanelSectionRow>
           {su?.installed_version && <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={async () => setVers(vers ? null : await getVersions())}>{vers ? "▾" : "▸"} Install another version</ButtonItem></PanelSectionRow>}
           {vers && (vers.versions.length ? <>
-            <PanelSectionRow><DropdownItem label="Version (last 5)" rgOptions={vers.versions.map((v) => ({ data: v, label: v + (v === vers.installed ? " (installed)" : "") }))} selectedOption={pickVer || vers.versions[0]} onChange={(o) => setPickVer(String(o.data))} /></PanelSectionRow>
+            <PanelSectionRow><DropdownItem label="Version (last 5)" rgOptions={vers.versions.map((v) => ({ data: v, label: v }))} selectedOption={pickVer || vers.versions[0]} onChange={(o) => setPickVer(String(o.data))} /></PanelSectionRow>
             <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { const v = pickVer || vers.versions[0];
               showModal(<ConfirmModal strTitle={`Install ${v}?`} strDescription={`EGPU Buddy ${v} replaces ${vers.installed}: system files and plugin. The NVIDIA driver is not changed. Takes a minute or two; the plugin reloads.`} strOKButtonText="Install" strCancelButtonText="Cancel"
                 onOK={() => run(() => installVersion(v))} />); }}>{`Install ${pickVer || vers.versions[0]}`}</ButtonItem></PanelSectionRow>
-          </> : <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{(vers as { error?: string }).error || "No releases found."}</div></PanelSectionRow>)}
+          </> : <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{(vers as { error?: string }).error || "No other versions yet: from this version on, each new release is added here (up to 5)."}</div></PanelSectionRow>)}
           {su?.installed_version && (
             <>
               <PanelSectionRow>

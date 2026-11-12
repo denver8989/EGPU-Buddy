@@ -16,7 +16,6 @@ ST=/run/nvegpu/update-status.json; mkdir -p /run/nvegpu
 FINAL=0; st(){ [ "$1" = running ] || FINAL=1; printf '{"state":"%s","pct":%s,"step":"%s","version":"%s","t":%s}\n' "$1" "$2" "${3//\"/}" "${VER:-}" "$(date +%s)" > "$ST.tmp"; chmod 644 "$ST.tmp"; mv "$ST.tmp" "$ST"; }
 trap 'rc=$?; [ "$FINAL" = 1 ] || st failed 100 "Update stopped (rc $rc). See /var/log/egpu-buddy-update.log."' EXIT
 cur=$(cat /etc/nv-egpu-buddy/version 2>/dev/null || echo none)
-[ "${2:-}" = --reinstall ] && EGPU_UPDATE_FORCE=1   # "Install another version" with the installed one picked (sudo keeps no env)
 # NV GPU Buddy track (experimental): only releases whose notes carry an "NV GPU Buddy:" line; eGPU installs: unchanged
 NVB=0; [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ] && NVB=1
 if [ "$NVB" = 1 ] && [ -z "${1:-}" ]; then
