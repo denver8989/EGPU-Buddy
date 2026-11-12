@@ -147,5 +147,8 @@ __attribute__((constructor)) static void egpu_nvt_init(void) {
   if (builtin) apply_env(home, "nv-gpu-buddy.env");
   apply_env(home, "nvidia-tweaks.env");
   apply_dxvk(home, "nvidia-tweaks.dxvk.conf");
+  /* NVIDIA settings > Advanced Tinkering (opt-in, egpu-nv-lab): exists only while the user has a lab switch on, and is
+   * read after the normal settings, so those always win. No file: nothing changes. */
+  apply_env(home, "nvidia-lab.env");
   errno = saved;
 }

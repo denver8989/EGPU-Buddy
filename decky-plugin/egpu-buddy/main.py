@@ -2590,6 +2590,20 @@ class Plugin:
         return {"ok": True, "message": ("Steam menu fix on." if enabled else "Steam menu fix off.") + " It applies when Game Mode restarts.",
                 "restart": _gamescope_running() and not _game_running()}
 
+    async def get_nv_lab(self):
+        """NVIDIA settings > Advanced Tinkering: read-only report + lab switches (egpu-nv-lab, run as the user)."""
+        if _installed_vendor() == "amd": return {"master": False, "report": [], "labs": [], "planned": []}
+        _, out, _ = _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], "/usr/local/sbin/egpu-nv-lab", "status"], 20)
+        try: return json.loads(out)
+        except ValueError: return {"master": False, "report": ["Advanced Tinkering is not installed yet (update EGPU Buddy)"], "labs": [], "planned": []}
+
+    async def set_nv_lab(self, key: str, on: bool):
+        if _installed_vendor() == "amd": return {"ok": False, "message": "Not on an AMD / Intel install."}
+        if key != "master" and not re.fullmatch(r"[a-z_]+", key or ""): return {"ok": False, "message": "Unknown switch."}
+        args = ["master", "on" if on else "off"] if key == "master" else ["set", key, "on" if on else "off"]
+        rc, out, err = _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], "/usr/local/sbin/egpu-nv-lab", *args], 20)
+        return {"ok": rc == 0, "message": (out or err).strip()}
+
     async def set_nvidia_settings(self, settings: dict):
         if _installed_vendor() == "amd":
             return {"ok": False, "message": "NVIDIA settings are for the NVIDIA install."}

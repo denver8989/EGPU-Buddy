@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""egpu-nv-lab status | master on|off | set KEY on|off  — NVIDIA settings > Advanced Tinkering (experimental, opt-in).
+
+Runs as the user (never root: the plugin calls it through runuser). Everything here is userspace and reversible:
+  * status: a read-only capability report (nvidia-smi only; no privileged or runtime action) and the lab switches.
+  * the switches write ~/.config/egpu-buddy/nvidia-lab.env, which EGPU Buddy's NVIDIA settings loader (egpu-nvt)
+    hands to each game AFTER the normal NVIDIA settings (a normal setting always wins). Master off removes the file:
+    games are then exactly as without the lab. No driver, Proton or game file is ever changed.
+Sources (checked 2026-11-12): NVIDIA "DLSS / Smooth Motion / Reflex" (driver-installation-guide/615/gaming.html),
+dxvk-nvapi README (Vulkan Reflex layer), NVIDIA README "Smooth Motion" (575: RTX 50, 580.82: RTX 40).
+"""
+import json, os, re, subprocess, sys
+
+CFG = os.path.expanduser("~/.config/egpu-buddy")
+STATE = os.path.join(CFG, "nvidia-lab.json")
+ENV = os.path.join(CFG, "nvidia-lab.env")
+
+# key: (label, env lines, needs(cc, driver) -> reason or "", description). Each starts OFF.
+def _need_ada(cc, drv):
+    if cc < 8.9: return "needs an RTX 40 or 50 card"
+    if cc >= 10 and drv < (575,): return "needs NVIDIA driver 575 or newer"
+    if cc < 10 and drv < (580, 82): return "needs NVIDIA driver 580.82 or newer"
+    return ""
+def _need_rtx(cc, drv): return "" if cc >= 7.5 else "needs an RTX card"
+def _need_615(cc, drv): return "" if drv >= (615,) else "needs NVIDIA driver 615 or newer"
+
+LAB = {
+    "dlss_latest": ("DLSS: newest model in every game",
+                    ["DXVK_NVAPI_DRS_NGX_DLSS_SR_OVERRIDE=on", "DXVK_NVAPI_DRS_NGX_DLSS_RR_OVERRIDE=on",
+                     "DXVK_NVAPI_DRS_NGX_DLSS_SR_OVERRIDE_RENDER_PRESET_SELECTION=render_preset_latest",
+                     "DXVK_NVAPI_DRS_NGX_DLSS_RR_OVERRIDE_RENDER_PRESET_SELECTION=render_preset_latest"],
+                    _need_rtx, "Proton games with DLSS use NVIDIA's newest Super Resolution and Ray Reconstruction preset "
+                    "instead of the one the game picks. Needs a recent Proton (its DXVK-NVAPI must know the preset)."),
+    "dlss_update": ("DLSS: newest DLSS files from NVIDIA",
+                    ["PROTON_ENABLE_NGX_UPDATER=1"], _need_rtx,
+                    "Proton downloads NVIDIA's current DLSS files and uses them instead of the ones the game shipped. "
+                    "The game's own files are not changed."),
+    "smooth_motion": ("Smooth Motion (driver frame generation)",
+                      ["NVPRESENT_ENABLE_SMOOTH_MOTION=1"], _need_ada,
+                      "The driver adds generated frames to games without DLSS Frame Generation (Vulkan, so Proton games "
+                      "too). Do not use it together with a game's own DLSS Frame Generation. Shown FPS includes "
+                      "generated frames; latency rises."),
+    "vk_reflex": ("Reflex for Vulkan games",
+                  ["DXVK_NVAPI_VKREFLEX=1"], _need_615,
+                  "Turns on DXVK-NVAPI's Reflex layer for Vulkan games in Proton (DirectX games have Reflex without it). "
+                  "Only does something where the layer is installed; newer DXVK-NVAPI (0.9.3) may not need it."),
+}
+
+def _gpu():
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=name,compute_cap,driver_version,pcie.link.gen.current,"
+                              "pcie.link.width.current,pcie.link.gen.max,pcie.link.width.max", "--format=csv,noheader"],
+                             capture_output=True, text=True, timeout=10).stdout.strip().splitlines()[0]
+        n, cc, drv, g, w, gm, wm = [x.strip() for x in out.split(",")]
+        return {"name": n, "cc": float(cc), "driver": drv, "link": f"PCIe {g}.0 x{w} (card max {gm}.0 x{wm})"}
+    except (OSError, IndexError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+def _arch(cc):
+    return {7.5: "Turing", 8.6: "Ampere", 8.7: "Ampere", 8.9: "Ada Lovelace", 12.0: "Blackwell"}.get(cc, f"compute {cc}")
+
+def _state():
+    try: return json.load(open(STATE))
+    except (OSError, ValueError): return {"master": False, "on": []}
+
+def _write(st):
+    os.makedirs(CFG, exist_ok=True)
+    json.dump(st, open(STATE, "w"))
+    lines = [l for k in st["on"] if k in LAB for l in LAB[k][1]] if st["master"] else []
+    if lines:
+        open(ENV, "w").write("# EGPU Buddy NVIDIA settings > Advanced Tinkering (egpu-nv-lab); master off removes it\n" + "\n".join(lines) + "\n")
+    elif os.path.exists(ENV):
+        os.remove(ENV)
+
+def status():
+    st, g = _state(), _gpu()
+    cc, drv = (g["cc"], tuple(int(x) for x in re.findall(r"\d+", g["driver"])[:2])) if g else (0.0, (0,))
+    report = []
+    if g:
+        report += [f"{g['name']} · {_arch(cc)} · driver {g['driver']}", g["link"],
+                   "DLSS Frame Generation in games: " + ("yes (the game's own)" if cc >= 8.9 else "not on this card"),
+                   "Reflex in DirectX games: through Proton's DXVK-NVAPI, no switch needed" if cc >= 7.5 else "Reflex: needs an RTX card"]
+        if 8.6 <= cc < 8.9:
+            report.append("RTX 30 frame generation (dlssg-open): not offered yet - a 3-commit proof of concept that patches "
+                          "Proton's files; kept for later testing")
+    else:
+        report.append("No NVIDIA GPU answering right now (eGPU unplugged or driver not loaded)")
+    labs = [{"key": k, "label": v[0], "desc": v[3], "on": k in st["on"], "why_not": v[2](cc, drv) if g else "no NVIDIA GPU right now"}
+            for k, v in LAB.items()]
+    return {"master": st["master"], "report": report, "labs": labs, "active": os.path.exists(ENV),
+            "planned": ["Per-game experiments", "Performance Lab (measured A/B tests)", "Display experiments (HDR / VRR reports)",
+                        "Driver Lab (patched driver trials, built and tested only from here)"]}
+
+def main(a):
+    try:   # AMD / Intel install: never (CLAUDE.md: AMD installs run no NVIDIA code)
+        if open("/etc/nv-egpu-buddy/gpu-vendor").read().strip() == "amd": print("not on an AMD / Intel install"); return 3
+    except OSError:
+        pass
+    st = _state()
+    if a[:1] == ["status"]:
+        print(json.dumps(status())); return 0
+    if len(a) == 2 and a[0] == "master" and a[1] in ("on", "off"):
+        st["master"] = a[1] == "on"; _write(st); print(f"Advanced Tinkering {a[1]}"); return 0
+    if len(a) == 3 and a[0] == "set" and a[1] in LAB and a[2] in ("on", "off"):
+        if not st["master"]: print("turn Advanced Tinkering on first"); return 1
+        st["on"] = [k for k in st["on"] if k != a[1]] + ([a[1]] if a[2] == "on" else []); _write(st)
+        print(f"{LAB[a[1]][0]}: {a[2]} (next game launch)"); return 0
+    print(__doc__.strip().splitlines()[0]); return 2
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

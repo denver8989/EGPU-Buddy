@@ -152,6 +152,9 @@ type Upd = { needs_detach?: boolean; auto_update: boolean; available: string; st
 const getUpdate = callable<[], Upd>("get_update_status");
 const setAutoUpdate = callable<[boolean], Result>("set_auto_update");
 const checkUpdate = callable<[boolean], Result>("check_update");
+type NvLab = { master: boolean; report: string[]; labs: { key: string; label: string; desc: string; on: boolean; why_not: string }[]; planned: string[] };
+const getNvLab = callable<[], NvLab>("get_nv_lab");
+const setNvLab = callable<[string, boolean], Result>("set_nv_lab");
 const getVersions = callable<[], { installed: string; versions: string[]; error?: string }>("get_versions");
 const installVersion = callable<[string], Result>("install_version");
 const updateDetached = callable<[string], Result>("update_detached");
@@ -192,7 +195,7 @@ const makeReport = callable<[], { code: string; file: string; url: string }>("ma
 const qrSvg = (text: string) => { const q = qrcode(0, "L"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); };
 const setTvControl = callable<[boolean], Result>("set_tv_control");
 // TV controls (volume / mute) and "Turn the TV off at Safe Detach" (opt-in): the eGPU's CEC adapter via SteamOS's cecd, or a paired LG TV
-type TvRemote = { routes: string[]; cec_remote: boolean; off_at_detach: boolean; no_wake_tv?: boolean; off_at_poweroff?: boolean; stream_no_wake?: boolean; cec_here: boolean; nv_cec?: { nvidia: boolean; supported: boolean; on: boolean; loaded: boolean; rebuild: string } };
+type TvRemote = { routes: string[]; cec_remote: boolean; off_at_detach: boolean; no_wake_tv?: boolean; off_at_poweroff?: boolean; stream_no_wake?: boolean; cec_hint?: string; cec_here: boolean; nv_cec?: { nvidia: boolean; supported: boolean; on: boolean; loaded: boolean; rebuild: string } };
 const getTvRemote = callable<[], TvRemote>("get_tv_remote");
 const setTvOption = callable<[string, boolean], Result>("set_tv_option");
 const tvKey = callable<[string], Result>("tv_key");
@@ -512,9 +515,10 @@ function Content() {
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
   const [trm, setTrm] = useState<TvRemote | null>(null);
   const [cecAdv, setCecAdv] = useState(false);
+  const [lab, setLab] = useState<NvLab | null>(null);   // NVIDIA settings > Advanced Tinkering, loaded when opened
   const [vers, setVers] = useState<{ installed: string; versions: string[] } | null>(null);   // "Install another version"
   const [pickVer, setPickVer] = useState("");   // "CEC advanced" folded by default
-  const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean } | null>(null);
+  const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean; keep_screen?: boolean } | null>(null);
   const [ad, setAd] = useState<Addons | null>(null);
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
@@ -1116,6 +1120,16 @@ function Content() {
           <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => saveNv({ ...(nv.defaults ?? {}) })}>Restore defaults</ButtonItem></PanelSectionRow>
           {nv.enabled && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvidiaOff(); setNv(await getNvidia()); setNvEdit(null); return r; })}>Turn off completely</ButtonItem></PanelSectionRow>}
           {!!nv.games?.length && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{nv.games.length} game(s) ship their own dxvk.conf; it is read after these settings, so its options win: {nv.games.map((g) => g.game + (g.overridden.length ? ` (own ${g.overridden.join(", ")})` : "")).join(" · ")}</div></PanelSectionRow>}
+          <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={async () => setLab(lab ? null : await getNvLab())}>{lab ? "▾" : "▸"} Advanced Tinkering (lab)</ButtonItem></PanelSectionRow>
+          {lab && <>
+            <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Experiments, off by default, separate from the settings above (those always win). Games only; no driver, Proton or game file is changed. Turning this off removes every experiment.</div></PanelSectionRow>
+            {lab.report.map((l, i) => <PanelSectionRow key={"r" + i}><div style={{ fontSize: "12px" }}>• {l}</div></PanelSectionRow>)}
+            <PanelSectionRow><ToggleField label="Advanced Tinkering" checked={lab.master} disabled={lock} onChange={(v) => run(async () => { const r = await setNvLab("master", v); setLab(await getNvLab()); return r; })} /></PanelSectionRow>
+            {lab.master && lab.labs.map((x) => <PanelSectionRow key={x.key}><ToggleField label={x.label + " · needs testing"} checked={x.on} disabled={lock || (!!x.why_not && !x.on)}
+              description={(x.why_not ? `Not on this setup: ${x.why_not}. ` : "") + x.desc + " Applies at the next game launch."}
+              onChange={(v) => run(async () => { const r = await setNvLab(x.key, v); setLab(await getNvLab()); return r; })} /></PanelSectionRow>)}
+            {lab.master && <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.6 }}>Planned, not in this version: {lab.planned.join(" · ")}.</div></PanelSectionRow>}
+          </>}
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Not yet: FXAA, texture filtering quality, page flipping.</div></PanelSectionRow>
         </PanelSection>);
       })()}

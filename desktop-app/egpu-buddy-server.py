@@ -412,6 +412,12 @@ def action(p):
         try: r = json.loads(o)
         except ValueError: r = {"ok": False, "message": e or o}
         return {"ok": bool(r.get("ok")), "out": r.get("message")}
+    if a == "nvlab-set":   # Advanced Tinkering switch (master or one lab); runs as this user, writes only ~/.config/egpu-buddy
+        if read("/etc/nv-egpu-buddy/gpu-vendor") == "amd": return {"ok": False, "out": "not on an AMD / Intel install"}
+        k, on = str((p or {}).get("key", "")), "on" if (p or {}).get("value") else "off"
+        if not re.fullmatch(r"[a-z_]+", k): return {"ok": False, "out": "unknown switch"}
+        rc, o, e = sh(["/usr/local/sbin/egpu-nv-lab"] + (["master", on] if k == "master" else ["set", k, on]), 20)
+        return {"ok": rc == 0, "out": o or e, "silent": rc == 0}
     if a == "nvidia-off":
         rc, o, e = sh([NVT, "off"], 20)
         try: r = json.loads(o)
@@ -491,6 +497,11 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p == "/api/notes": return self._json(release_notes())
         if p == "/api/versions": return self._json(versions())
         if p == "/api/nvidia": return self._json(nvidia_settings())
+        if p == "/api/nvlab":   # NVIDIA settings > Advanced Tinkering (egpu-nv-lab; NVIDIA installs only)
+            if read("/etc/nv-egpu-buddy/gpu-vendor") == "amd": return self._json({"master": False, "report": [], "labs": [], "planned": []})
+            rc, o, e = sh(["/usr/local/sbin/egpu-nv-lab", "status"], 20)
+            try: return self._json(json.loads(o))
+            except ValueError: return self._json({"master": False, "report": ["Advanced Tinkering is not installed yet (update EGPU Buddy)"], "labs": [], "planned": []})
         if p == "/api/nvidia-game":   # while a game runs: which saved setting it really received (read-only)
             try: return self._json(json.loads(sh([NVT, "game-status"], 20)[1]))
             except ValueError: return self._json({"running": False})

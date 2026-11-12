@@ -104,6 +104,8 @@ ApplicationWindow {
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.pg === 2 && win.visible; onTriggered: win.loadEx() }
     Timer { interval: 15000; repeat: true; triggeredOnStart: true; running: win.pg === 0 && win.visible; onTriggered: win.loadEx() }   // TV controls on the Overview
     readonly property var tvr: win.ex.tvr || ({})
+    property var lab: null        // NVIDIA settings > Advanced Tinkering, loaded when opened (read-only until a switch is used)
+    function loadLab() { call("GET", "/api/nvlab", null, function(r) { win.lab = r || { report: [], labs: [] } }) }
     property var vers: null       // "Install another version": {installed, versions} once opened
     property bool cecAdv: false   // "CEC advanced" folded by default
     function gsLook(st) { return ({ active: ["#4caf50", "Active"], inactive: ["#f0b429", "Inactive"], overridden: ["#f0b429", "Inactive: the game's own setting"],
@@ -487,6 +489,22 @@ ApplicationWindow {
                     textFormat: Text.StyledText }
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11
                     text: "* Experimental. Done with what Linux offers rather than NVIDIA's control panel: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options, and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and its own dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Turn off removes it from games completely. In Game Mode the plugin also has Steam's own live settings (frame limit, tearing, VRR, sharpness). Not available yet: FXAA, texture filtering quality, page flipping." } }
+                Button { flat: true; text: (win.lab ? "▾" : "▸") + " Advanced Tinkering (lab)"; onClicked: { if (win.lab) win.lab = null; else win.loadLab() } }
+                ColumnLayout { Layout.fillWidth: true; spacing: 6; visible: !!win.lab
+                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12
+                        text: "Experiments, off by default, separate from the settings above (those always win). Games only; no driver, Proton or game file is changed. Turning this off removes every experiment." }
+                    Repeater { model: (win.lab || {}).report || []
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; text: "• " + modelData } }
+                    Switch { text: "Advanced Tinkering"; checked: !!(win.lab || {}).master
+                             onToggled: win.call("POST", "/api/action", { action: "nvlab-set", key: "master", value: checked }, function() { win.loadLab() }) }
+                    Repeater { model: (win.lab || {}).master ? ((win.lab || {}).labs || []) : []
+                        ColumnLayout { Layout.fillWidth: true; spacing: 2
+                            Switch { text: modelData.label + "  ·  needs testing"; checked: modelData.on; enabled: !modelData.why_not || modelData.on
+                                     onToggled: win.call("POST", "/api/action", { action: "nvlab-set", key: modelData.key, value: checked }, function() { win.loadLab() }) }
+                            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.7; font.pixelSize: 11
+                                text: (modelData.why_not ? "Not on this setup: " + modelData.why_not + ". " : "") + modelData.desc + " Applies at the next game launch." } } }
+                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !!(win.lab || {}).master
+                        text: "Planned, not in this version: " + (((win.lab || {}).planned) || []).join(" · ") + "." } }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 2
                 // cards stack in columns (no hole under a short card): 1 column on a small window, 2, or 3 on a wide one
                 RowLayout { Layout.fillWidth: true; spacing: 14
