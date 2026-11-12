@@ -141,6 +141,7 @@ say where it came from.
   gamescope session script, this project wraps the distro's. Checked side by side: no shared code. Three of the later
   optional add-ons under Extras (testing) follow ideas seen there: the USB4 link row, TV control (Wake-on-LAN / ADB),
   and the support report. Each was written separately for this project.
+- [Twsts/steamos-cec-toolkit](https://github.com/Twsts/steamos-cec-toolkit) (MIT) — the idea of reading Steam's own `streaming_log.txt` to tell when a Remote Play stream runs; EGPU Buddy's "Keep the TV off during Steam Link and Moonlight streams" uses the same signal (no code copied).
 - [xXJSONDeruloXx/cec-mote](https://github.com/xXJSONDeruloXx/cec-mote) (BSD-3-Clause, Kurt Himebauch) — a Decky
   plugin that sends TV volume / mute / standby through SteamOS's own CEC service (cecd). The optional "TV remote (CEC)"
   and the CEC route of "Turn the TV off at Safe Detach" (Extras) follow its approach: the same cecd D-Bus calls (on

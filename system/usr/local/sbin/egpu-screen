@@ -650,6 +650,22 @@ def cecd_no_wake(on):
     return ""
 
 
+def stream_no_wake(on):
+    """"Keep the TV off during Steam Link and Moonlight streams": the user service egpu-stream-cec holds cecd while a
+    stream runs; off: the service stopped (it starts cecd again) and its cecd drop-in removed."""
+    pw = pwd.getpwuid(1000)
+    sc = ["systemctl", "--user"] + (["-M", f"{pw.pw_name}@"] if os.getuid() == 0 else [])
+    try:
+        subprocess.run(sc + (["enable", "--now"] if on else ["disable", "--now"]) + ["egpu-stream-cec.service"], capture_output=True, timeout=15)
+        if not on:
+            f = os.path.join(pw.pw_dir, ".config/systemd/user/cecd.service.d/egpu-buddy-stream.conf")
+            if os.path.exists(f):
+                os.remove(f); subprocess.run(sc + ["daemon-reload"], capture_output=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return ""
+
+
 def cecd_bundled(on):
     """Root, on "TV remote (CEC)": with our bundled cecd, grant the CEC devices and the input device (uinput: the TV
     remote's keys) to the logged-in user and start cecd as their user service; off: stopped and both taken back."""
@@ -1006,12 +1022,14 @@ def main(argv):
         elif os.path.exists(NVCEC):
             os.remove(NVCEC)
         print(f"nvidia_dp_cec {want[1]}"); return 0
-    if cmd in ("tvset",) and len(want) == 2 and want[0] in ("cec_remote", "off_at_detach", "no_wake_tv", "off_at_poweroff") and want[1] in ("on", "off"):
+    if cmd in ("tvset",) and len(want) == 2 and want[0] in ("cec_remote", "off_at_detach", "no_wake_tv", "off_at_poweroff", "stream_no_wake") and want[1] in ("on", "off"):
         d = _settings(); d[want[0]] = want[1] == "on"
         os.makedirs(os.path.dirname(NET), exist_ok=True); json.dump(d, open(NET, "w")); os.chmod(NET, 0o644)
         extra = cecd_bundled(want[1] == "on") if want[0] == "cec_remote" and os.getuid() == 0 else ""
         if want[0] == "no_wake_tv":
             extra = cecd_no_wake(want[1] == "on")
+        if want[0] == "stream_no_wake":
+            extra = stream_no_wake(want[1] == "on")
         print(f"{want[0]} {want[1]}" + (f" ({extra})" if extra else "")); return 0
     if cmd == "tvkey" and want in (["up"], ["down"], ["mute"], ["on"], ["off"], ["input"]):
         print(tvkey(want[0])); return 0
@@ -1019,7 +1037,7 @@ def main(argv):
         print(tvoff("off_at_poweroff" if want == ["--poweroff"] else "off_at_detach")); return 0
     if cmd == "tvremote":   # what the plugin shows: which routes work right now
         d = _settings()
-        print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")), "no_wake_tv": bool(d.get("no_wake_tv")), "off_at_poweroff": bool(d.get("off_at_poweroff")),
+        print(json.dumps({"routes": remote_routes(), "cec_remote": bool(d.get("cec_remote")), "off_at_detach": bool(d.get("off_at_detach")), "no_wake_tv": bool(d.get("no_wake_tv")), "off_at_poweroff": bool(d.get("off_at_poweroff")), "stream_no_wake": bool(d.get("stream_no_wake")),
                           "cec_here": _cec_any() and egpu_cec() is not None, "nv_cec": nv_cec_state(),
                           "cec_hint": cec_hint_here()})); return 0
     take_input = "--input" in want

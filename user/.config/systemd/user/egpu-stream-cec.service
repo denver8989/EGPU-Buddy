@@ -1,0 +1,13 @@
+[Unit]
+Description=SteamOS EGPU Buddy: keep the TV off during Steam Link and Moonlight streams
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/egpu-stream-cec
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

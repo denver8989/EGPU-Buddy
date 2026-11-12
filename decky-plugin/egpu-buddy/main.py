@@ -2384,7 +2384,7 @@ class Plugin:
             return {"routes": [], "cec_remote": False, "off_at_detach": False, "cec_here": False}
 
     async def set_tv_option(self, name: str, enabled: bool):
-        if name not in ("cec_remote", "off_at_detach", "nvidia_dp_cec", "no_wake_tv", "off_at_poweroff"):
+        if name not in ("cec_remote", "off_at_detach", "nvidia_dp_cec", "no_wake_tv", "off_at_poweroff", "stream_no_wake"):
             return {"ok": False, "message": "Unknown option."}
         _sh(["/usr/local/sbin/egpu-screen", "tvset", name, "on" if enabled else "off"], 10)
         if name == "nvidia_dp_cec":

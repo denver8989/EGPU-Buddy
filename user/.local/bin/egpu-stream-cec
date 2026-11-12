@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# SteamOS EGPU Buddy: "Keep the TV off during Steam Link and Moonlight streams" (TV options, off by default).
+# A Home press sent from Steam Link reaches Steam like a local one, and Steam asks Valve's CEC service (cecd) to wake
+# the TV. While a stream runs, cecd is stopped and held (it cannot be started on demand either), so nothing wakes the
+# TV; it is started again when the stream ends. Streams are read from the hosts' own logs, as steamos-cec-toolkit does
+# (MIT, github.com/Twsts/steamos-cec-toolkit): Steam's streaming_log.txt and Sunshine's / Apollo's log.
+# ponytail: re-reads the logs every 3 s (small files); an inotify watch if they ever grow large.
+set -u
+H=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/egpu-stream-hold
+D=$HOME/.config/systemd/user/cecd.service.d/egpu-buddy-stream.conf
+if [ ! -e "$D" ]; then
+  mkdir -p "${D%/*}"; printf '%s\n' "# SteamOS EGPU Buddy: no cecd during a Steam Link / Moonlight stream" "[Unit]" "ConditionPathExists=!$H" > "$D"
+  systemctl --user daemon-reload
+fi
+last(){ grep -a -h -o -E "$1" "${@:2}" 2>/dev/null | tail -1; }
+was=0; rm -f "$H"
+trap 'rm -f "$H"; [ "$was" = 1 ] && systemctl --user start cecd.service' EXIT
+while sleep 3; do
+  now=0
+  [[ $(last '>>> (Starting|Stopped) (desktop|game) stream' "$HOME/.local/share/Steam/logs/streaming_log.txt") == *Starting* ]] && now=1
+  [[ $(last 'CLIENT (CONNECTED|DISCONNECTED)' "$HOME"/.config/sunshine/sunshine.log "$HOME"/.config/apollo/*.log) == *" CONNECTED"* ]] && now=1
+  [ "$now" = "$was" ] && continue
+  if [ "$now" = 1 ]; then : > "$H"; systemctl --user stop cecd.service; logger -t egpu-stream-cec "stream started: TV wake held"
+  else rm -f "$H"; systemctl --user start cecd.service; logger -t egpu-stream-cec "stream ended: TV wake back"; fi
+  was=$now
+done
