@@ -57,6 +57,13 @@ if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
   log "AMD: the eGPU's CEC adapters released before the shutdown"
   sysctl -q -w kernel.hung_task_timeout_secs=60 kernel.hung_task_panic=1 kernel.panic=10 2>/dev/null
   log "AMD: a hang in the kernel's shutdown now panics (log to pstore) and restarts"
+  # Report JVJHES: after a Steam Link stream every restart waits ~2 min after the log stops, on every warm restart until
+  # a hard power-off. What is still running and holding a GPU now, and anything stuck in the kernel, is what the final
+  # shutdown waits on: logged here while the log can still be written.
+  log "AMD: still running: $(ps -eo comm= --ppid 2 -N 2>/dev/null | sort -u | tr '\n' ' ' | cut -c1-600)"
+  log "AMD: GPU users: $(timeout 5 fuser -v /dev/dri/* 2>&1 | awk 'NR>1{print $(NF)}' | sort -u | tr '\n' ' ')"
+  for pid in $(ps -eo pid=,stat= 2>/dev/null | awk '$2 ~ /^D/{print $1}'); do
+    log "AMD: stuck in the kernel: $pid $(cat /proc/$pid/comm 2>/dev/null): $(tr '\n' ' ' </proc/$pid/stack 2>/dev/null | cut -c1-400)"; done
   # a power-off after a Safe Detach (where the hang is known): remembered, so the boot after a guard restart powers off
   # again at once (--boot). Not on every power-off: without a crash store the age alone decides, and a quick power-on
   # after a normal power-off would switch the device off again.
