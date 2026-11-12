@@ -47,11 +47,20 @@ fi
 # device shutdown, out of reach of any log. So: a task blocked for 60 s panics, the panic writes the kernel log to pstore
 # (the next report shows it) and restarts the machine 10 s later instead of hanging. A power-off that hangs this way
 # restarts, and that boot powers off again before the login screen (--boot).
-if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ -e /run/nvegpu/detached-this-boot ]; then
+# 2026-11-12 (report V2ZU2F): the same hang without a Safe Detach, after a Steam Link stream. What every slow restart
+# had in common: Valve's CEC service restarted during the session (Safe Detach and the stream TV hold both do), leaving
+# the eGPU's CEC adapter configured. So on every AMD shutdown the eGPU's CEC adapters are released first (logical
+# addresses cleared, as Safe Detach and a cable pull do: an idle adapter is not touched by the driver's teardown), and
+# the guard is armed on every AMD shutdown, not only after a Safe Detach.
+if [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ]; then
+  rm -f /run/nvegpu/cec-hold; [ -x /usr/local/sbin/egpu-cec-release ] && timeout 10 /usr/local/sbin/egpu-cec-release --yank >/dev/null 2>&1
+  log "AMD: the eGPU's CEC adapters released before the shutdown"
   sysctl -q -w kernel.hung_task_timeout_secs=60 kernel.hung_task_panic=1 kernel.panic=10 2>/dev/null
-  log "AMD, Safe Detach this boot: a hang in the kernel's shutdown now panics (log to pstore) and restarts"
-  # a power-off: remembered, so the boot after a guard restart powers off again at once (--boot)
-  systemctl list-jobs --no-legend 2>/dev/null | grep -q 'poweroff\.target' && { mkdir -p "${PO%/*}"; : > "$PO"; sync; }
+  log "AMD: a hang in the kernel's shutdown now panics (log to pstore) and restarts"
+  # a power-off after a Safe Detach (where the hang is known): remembered, so the boot after a guard restart powers off
+  # again at once (--boot). Not on every power-off: without a crash store the age alone decides, and a quick power-on
+  # after a normal power-off would switch the device off again.
+  [ -e /run/nvegpu/detached-this-boot ] && systemctl list-jobs --no-legend 2>/dev/null | grep -q 'poweroff\.target' && { mkdir -p "${PO%/*}"; : > "$PO"; sync; }
 fi
 lspci -Dn 2>/dev/null | grep -qE ' 0300: 10de:' || exit 0
 
