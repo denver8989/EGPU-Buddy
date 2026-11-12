@@ -52,12 +52,7 @@ case "$want" in
       done
       [ -n "$id" ] && modetest $MT -w "$id":DPMS:3 >/dev/null 2>&1
     }
-    # EGPU_PANEL_CRTC_FORCE=1 (after a wake): the card is open but nobody drives the panel (the console relit it), so try
-    # anyway (the helper fails harmlessly if a compositor is DRM master) and blank the console's framebuffer on that card
-    if [ "${EGPU_PANEL_CRTC_FORCE:-0}" = 1 ]; then
-      for f in /sys/class/graphics/fb[0-9]*; do [ "$(readlink -f "$f/device")" = "$(readlink -f /sys/class/drm/$PC/device)" ] && echo 1 > "$f/blank" 2>/dev/null; done
-      crtc_off
-    elif [ "$OWNED" = 0 ]; then crtc_off
+    if [ "$OWNED" = 0 ]; then crtc_off
     else
       # Owned right now (e.g. for a moment after waking from sleep): the backlight below darkens it, but the console
       # stays on the panel underneath and lights up as soon as anything restores the brightness (Steam does after its
