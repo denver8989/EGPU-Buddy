@@ -2930,6 +2930,18 @@ class Plugin:
         _spawn_root_job("driver-trial", [TRIAL, "start-beta"])
         return {"ok": True, "message": "Trying beta driver 620: Safe Detach, then the build (10-20 minutes), then the eGPU is attached with it. If it does not come up, 615 comes back by itself. You can close this menu."}
 
+    async def driver_lab_trial(self, start: bool):
+        """Driver Lab (Advanced Tinkering): the driver in use rebuilt with any lab patches, tested with the same Safe Detach /
+        attach / health check / automatic return as a driver switch (start), or back to its normal build (not start).
+        CachyOS / Arch only for now."""
+        if _installed_vendor() == "amd": return {"ok": False, "message": "Not on an AMD / Intel install."}
+        if shutil.which("steamos-readonly"): return {"ok": False, "message": "Driver Lab trials are CachyOS / Arch only for now."}
+        why = _trial_block() if start else ("A driver change is running." if _trial()["running"] else "" if _gamescope_running() else "Start it from Game Mode.")
+        if why: return {"ok": False, "message": why}
+        _spawn_root_job("driver-trial", [TRIAL, "start-lab" if start else "revert-lab"])
+        return {"ok": True, "message": "Driver Lab trial: Safe Detach, then the driver is rebuilt (10-20 minutes) and attached with it; if it does not come up, the normal build comes back by itself. You can close this menu."
+                if start else "Returning to the normal driver build: Safe Detach, the cached normal build is put back, then the eGPU is attached again."}
+
     async def revert_driver_trial(self):
         """Back one step: 620 -> 615, or 615 -> 610."""
         if _trial()["running"]: return {"ok": False, "message": "A driver change is running; it goes back by itself if the new driver fails."}

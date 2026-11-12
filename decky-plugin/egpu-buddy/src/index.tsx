@@ -181,6 +181,7 @@ const getTrial = callable<[], Trial>("get_driver_trial");
 const startTrial = callable<[], Result>("start_driver_trial");
 const revertTrial = callable<[], Result>("revert_driver_trial");
 const startBetaTrial = callable<[], Result>("start_beta_trial");
+const driverLabTrial = callable<[boolean], Result>("driver_lab_trial");
 // ROG Ally / XG Mobile: menu events in the plugin log (the backend writes them only there; a no-op everywhere else)
 const uiEvent = callable<[string], boolean>("ui_event");
 const ui = (t: string) => { uiEvent(t).catch(() => {}); };
@@ -1168,6 +1169,12 @@ function Content() {
                 {drv.state === "done" && drv.report && <PanelSectionRow><div style={{ fontSize: "12px" }}><b>{drv.version}: class {drv.report.class}</b> · {drv.report.summary}
                   {drv.report.audit.map((x, i) => <div key={i} style={{ opacity: 0.8 }}>{x.file}: {x.new.length} new, {x.gone.length} gone</div>)}</div></PanelSectionRow>}
                 {drv.state === "done" && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["driver", "discard"]); await loadDrv(); return { ok: r.ok, message: r.message ?? "" }; })}>Clear the Driver Lab</ButtonItem></PanelSectionRow>}
+                {drv.can_build && <>
+                  <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Driver trial: the driver in use rebuilt with any lab patches (none yet = an identical rebuild, a rehearsal of the whole path), installed with the same Safe Detach, attach, health check and automatic return as a driver switch. About 10-20 minutes; the eGPU is detached meanwhile. It is never recorded as the driver to use: a reinstall brings the normal build.</div></PanelSectionRow>
+                  <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => showModal(<ConfirmModal strTitle="Start a Driver Lab trial?" strDescription="Safe Detach, rebuild of the driver in use (10-20 minutes), attach and health check. If the eGPU does not come up, the normal build is put back by itself, also after a restart. Close any game first."
+                    strOKButtonText="Start the trial" bDestructiveWarning onOK={() => run(() => driverLabTrial(true))} />)}>Start a driver trial</ButtonItem></PanelSectionRow>
+                  <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(() => driverLabTrial(false))}>Return to the normal driver build</ButtonItem></PanelSectionRow>
+                </>}
               </>}
               <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.6 }}>Planned, not in this version: {lab.planned.join(" · ")}.</div></PanelSectionRow>
             </>}

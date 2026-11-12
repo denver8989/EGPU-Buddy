@@ -124,6 +124,38 @@ def worker(ver, build):
     finally:
         shutil.rmtree(os.path.join(LAB, "work"), ignore_errors=True)
 
+def port_proof(old_dir, new_dir):
+    """Proof without a coding agent: port the OLD recipe's patches to the NEW recipe's NVIDIA version automatically, and
+    compare with the NEW recipe's hand port. Each old patch is applied as it is when it applies exactly (`patch -F0`,
+    line offsets allowed); only a patch that does not apply is taken from the hand port (what a human would supply after
+    the Driver Lab flags it). Then the auto tree and the all-hand tree are compared file by file."""
+    old = os.path.join(recipe()[0], "..", old_dir) if not os.path.isabs(old_dir) else old_dir
+    new = os.path.join(recipe()[0], "..", new_dir) if not os.path.isabs(new_dir) else new_dir
+    pk = lambda d: open(os.path.join(d, "PKGBUILD")).read()
+    ver = re.search(r"^pkgver=(\S+)", pk(new), re.M)[1]
+    order = re.findall(r'-i "\$\{srcdir\}/([^"]+\.patch)"', pk(new))
+    w = os.path.join(LAB, "proof"); shutil.rmtree(w, ignore_errors=True); os.makedirs(w)
+    try:
+        src, _ = fetch(ver, os.path.join(w, "src"))
+        auto, hand = os.path.join(w, "auto"), os.path.join(w, "hand")
+        shutil.copytree(src, auto, symlinks=True); shutil.copytree(src, hand, symlinks=True)
+        res = []
+        for p in order:
+            ap = lambda d, f: subprocess.run(["patch", "-d", d, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", f], capture_output=True, text=True)
+            subprocess.run(["patch", "-d", hand, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", os.path.join(new, p)], capture_output=True)
+            of = os.path.join(old, p)
+            if os.path.exists(of):
+                probe = os.path.join(w, "probe"); shutil.rmtree(probe, ignore_errors=True); shutil.copytree(auto, probe, symlinks=True)
+                r = ap(probe, of); shutil.rmtree(probe, ignore_errors=True)
+                if r.returncode == 0:
+                    ap(auto, of); res.append({"patch": p, "auto": True, "offsets": len(re.findall("with offset", r.stdout))}); continue
+            ap(auto, os.path.join(new, p)); res.append({"patch": p, "auto": False, "why": "not in the old set" if not os.path.exists(of) else "does not apply: flagged for a human"})
+        d = subprocess.run(["diff", "-rq", auto, hand], capture_output=True, text=True).stdout.strip().splitlines()
+        return {"from": os.path.basename(os.path.normpath(old)), "to": os.path.basename(os.path.normpath(new)), "version": ver,
+                "patches": res, "identical": not d, "differences": [x.replace(w + "/", "") for x in d][:30]}
+    finally:
+        shutil.rmtree(w, ignore_errors=True)
+
 def main(a):
     try:
         if open("/etc/nv-egpu-buddy/gpu-vendor").read().strip() == "amd": print("not on an AMD / Intel install"); return 3
@@ -133,6 +165,8 @@ def main(a):
         try: print(json.dumps(versions()))
         except Exception as ex: print(json.dumps({"baseline": "", "versions": [], "can_build": False, "error": f"{ex}"}))  # noqa: BLE001
         return 0
+    if len(a) == 3 and a[0] == "port-proof":   # e.g. port-proof nvidia-open-egpu-615 nvidia-open-egpu-620
+        os.makedirs(LAB, exist_ok=True); print(json.dumps(port_proof(a[1], a[2]))); return 0
     if a[:1] == ["status"]:
         print(json.dumps(load() or {"state": "idle"})); return 0
     if a[:1] == ["discard"]:

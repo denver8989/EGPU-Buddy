@@ -10,6 +10,10 @@
 #   egpu-driver-trial boot        (egpu-driver-trial-boot.service, before ANY eGPU bring-up) a trial that never reached
 #                                 "kept" means the machine restarted during it (hard reset, hang, power button): put the
 #                                 driver before it back (recorded in the state file as olddir)
+#   egpu-driver-trial start-lab   (Driver Lab, CachyOS / Arch) the driver in use rebuilt from a copy of its recipe plus any
+#                                 patches in /var/lib/nvegpu/driver-lab/patches, same version, package release 100; the same
+#                                 Safe Detach / attach / health check / automatic return; never recorded as the driver to use
+#   egpu-driver-trial revert-lab  back to the normal build of the driver in use (its cached package files, offline)
 #   egpu-driver-trial status
 #
 # Nothing here is new teardown or attach logic: it calls the same Safe Detach and Attach the plugin buttons use, and the
@@ -22,12 +26,13 @@ set -u
 STATE=/var/lib/nvegpu/driver-trial; SWITCH=/var/lib/nvegpu/driver-switch-615; LOG=/var/log/egpu-driver-trial.log; SEL=/etc/nv-egpu-buddy/driver-dir
 PAY=/home/deck/.local/share/steamos-egpu-buddy/packaging
 CUR=$(cat "$SEL" 2>/dev/null); CUR=${CUR:-nvidia-open-egpu}   # the driver this machine is on (absent = 610)
-pick(){ # <old dir> <new dir>: the driver to go back to, and the one to try
-  OLDN=$1; NEWN=$2; OLD=$PAY/$1; NEW=$PAY/$2
+pick(){ # <old dir> <new dir>: the driver to go back to, and the one to try (an absolute path: a Driver Lab recipe)
+  OLDN=$1; NEWN=$2; OLD=$PAY/$1; NEW=$PAY/$2; case "$2" in /*) NEW=$2 ;; esac
   TPV=$(sed -n 's/^pkgver=//p' "$NEW/PKGBUILD" 2>/dev/null); OPV=$(sed -n 's/^pkgver=//p' "$OLD/PKGBUILD" 2>/dev/null); }
 PERSIST=/home/deck/.local/share/steamos-egpu-buddy; U=$(stat -c %U "$PERSIST" 2>/dev/null || echo deck)
 DETACH=/usr/local/sbin/egpu-gamemode-detach; REATTACH=/usr/local/sbin/egpu-reattach
 PKGS="nvidia-utils lib32-nvidia-utils nvidia-open-egpu-dkms"
+LABREL_DEFAULT=100; LABREL=""   # Driver Lab builds: package release 100 (same driver version)
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 mkdir -p "$(dirname "$STATE")" /etc/nv-egpu-buddy
 log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; sync -d "$LOG" 2>/dev/null || true; }
@@ -103,7 +108,8 @@ restore_old(){   # put the driver before back ($OLD); offline on both systems
     local prev; prev=$(get prev); [ -n "$prev" ] || { log "no recorded $OPV package files"; return 1; }
     # shellcheck disable=SC2086
     pacman_u $prev || return 1
-    rm -f "$PERSIST"/pkgcache/*"$TPV"-*.pkg.tar.* 2>/dev/null   # the new driver's packages (about 500 MB); a new trial rebuilds them
+    if [ -n "$LABREL" ]; then rm -f "$PERSIST"/pkgcache/*"$TPV-$LABREL"-*.pkg.tar.* 2>/dev/null   # Driver Lab: same version; only its build goes
+    else rm -f "$PERSIST"/pkgcache/*"$TPV"-*.pkg.tar.* 2>/dev/null; fi   # the new driver's packages (about 500 MB); a new trial rebuilds them
   fi
   if [ "$OLDN" = nvidia-open-egpu ]; then rm -f "$SEL"; else echo "$OLDN" > "$SEL"; fi
   [ "$(modver)" = "$OPV" ] || { log "after the revert the installed module is '$(modver)', not $OPV"; return 1; }
@@ -135,8 +141,21 @@ case "${1:-status}" in
   revert) case "$CUR" in nvidia-open-egpu-620) pick nvidia-open-egpu-615 nvidia-open-egpu-620 ;;
                          *) pick nvidia-open-egpu nvidia-open-egpu-615 ;; esac ;;
   boot) o=$(get olddir); n=$(get newdir); pick "${o:-nvidia-open-egpu}" "${n:-nvidia-open-egpu-615}" ;;   # older state files: 610 -> 615
+  # Driver Lab (NVIDIA settings > Advanced Tinkering): the driver this machine is on, rebuilt from a copy of its recipe
+  # with any lab patches added, same version, its own package release (LABREL). CachyOS / Arch only for now.
+  start-lab) steamos && { echo "Driver Lab trials are CachyOS / Arch only for now"; exit 2; }
+    LD=/var/lib/nvegpu/driver-lab/recipe; rm -rf "$LD"; mkdir -p "${LD%/*}"; cp -a "$PAY/$CUR" "$LD"
+    for f in /var/lib/nvegpu/driver-lab/patches/*.patch; do [ -e "$f" ] || continue; cp "$f" "$LD/"
+      sed -i "s|^    # Substitute version placeholder in dkms.conf|    patch -d \"NVIDIA-kernel-module-source-\${pkgver}\" -Np1 -i \"\${srcdir}/$(basename "$f")\"\n&|" "$LD/PKGBUILD"
+      sed -i "s|^source=(|source=('$(basename "$f")'\n        |; s|^sha256sums=(|sha256sums=('SKIP'\n            |" "$LD/PKGBUILD"; done
+    sed -i "s/^pkgrel=.*/pkgrel=$LABREL_DEFAULT/" "$LD/PKGBUILD"; chown -R "$U" "$LD"
+    pick "$CUR" "$LD" ;;
+  revert-lab) o=$(get olddir); n=$(get newdir); case "$n" in /*) ;; *) echo "no Driver Lab trial to undo"; exit 0 ;; esac; pick "$o" "$n" ;;
   *) pick nvidia-open-egpu nvidia-open-egpu-615 ;;
 esac
+
+case "$NEWN" in /*) LABREL=$(sed -n 's/^pkgrel=//p' "$NEW/PKGBUILD" 2>/dev/null) ;; esac
+lab_installed(){ pacman -Q nvidia-open-egpu-dkms 2>/dev/null | grep -q -- "-$LABREL\$"; }
 
 case "${1:-status}" in
   status) cat "$STATE" 2>/dev/null || echo "state=none"; echo "installed=$(modver)"; exit 0 ;;
@@ -149,9 +168,10 @@ case "${1:-status}" in
       else put failed "The machine restarted while switching to driver $TPV and the previous driver could not be put back automatically. Details: $LOG"; fi ;;
     esac; exit 0 ;;
 
-  start|start-beta)
+  start|start-beta|start-lab)
     [ -n "$TPV" ] && [ -n "$OPV" ] || { echo "the driver files ($NEWN) are not installed"; exit 2; }
-    [ "$(modver)" = "$TPV" ] && [ "$(get state)" = kept ] && { echo "the driver $TPV is already in use"; exit 0; }
+    [ -z "$LABREL" ] && [ "$(modver)" = "$TPV" ] && [ "$(get state)" = kept ] && { echo "the driver $TPV is already in use"; exit 0; }
+    [ -n "$LABREL" ] && lab_installed && { echo "a Driver Lab build is already in use: return to the normal driver first"; exit 0; }
     gamescope >/dev/null || { echo "start it from Game Mode"; exit 2; }
     /usr/local/sbin/egpu-game-running && { echo "close the running game first"; exit 2; }
     gpu_on_bus || [ -d /sys/module/nvidia ] || { echo "connect the eGPU first: the trial attaches it to test the driver"; exit 2; }
@@ -172,19 +192,23 @@ case "${1:-status}" in
       fi
       put failed "Nothing was changed: Safe Detach did not finish."; attach >/dev/null 2>&1; exit 5
     fi
-    if ! install_new || [ "$(modver)" != "$TPV" ]; then
+    if ! install_new || [ "$(modver)" != "$TPV" ] || { [ -n "$LABREL" ] && ! lab_installed; }; then
       revert_and_attach "The driver $TPV did not build or install (installed module: '$(modver)')."; finish; exit 6; fi
     put attempting "Driver $TPV installed; attaching the eGPU with it."
     attach; if healthy "$TPV"; then
-      echo "$NEWN" > "$SEL"; put kept "Driver $TPV is running the eGPU. You can return to $OPV at any time in Setup & updates."; report; finish; exit 0; fi
+      if [ -n "$LABREL" ]; then   # a lab build is never the recorded driver: a reinstall or self-heal brings the normal one
+        put kept "Driver Lab build of $TPV is running the eGPU. Return to the normal driver in NVIDIA settings > Advanced Tinkering > Driver Lab."
+      else echo "$NEWN" > "$SEL"; put kept "Driver $TPV is running the eGPU. You can return to $OPV at any time in Setup & updates."; fi
+      report; finish; exit 0; fi
     report; revert_and_attach "The eGPU did not come up with the driver $TPV."; finish; exit 7 ;;
 
-  revert)
-    [ "$CUR" = nvidia-open-egpu ] && [ "$(modver)" = "$OPV" ] && { echo "already on driver $OPV"; exit 0; }
+  revert|revert-lab)
+    [ "$1" = revert-lab ] && ! lab_installed && { echo "not on a Driver Lab build"; exit 0; }
+    [ "$1" = revert ] && [ "$CUR" = nvidia-open-egpu ] && [ "$(modver)" = "$OPV" ] && { echo "already on driver $OPV"; exit 0; }
     gamescope >/dev/null || { echo "start it from Game Mode"; exit 2; }
     /usr/local/sbin/egpu-game-running && { echo "close the running game first"; exit 2; }
     sed -i '/^started=/d' "$STATE" 2>/dev/null; echo "started=$(date +%s)" >> "$STATE"   # a new operation: the plugin shows its result once
     revert_and_attach "Return to the previous driver requested."; finish; exit 0 ;;
 
-  *) echo "usage: egpu-driver-trial start|start-beta|revert|boot|status"; exit 1 ;;
+  *) echo "usage: egpu-driver-trial start|start-beta|start-lab|revert|revert-lab|boot|status"; exit 1 ;;
 esac

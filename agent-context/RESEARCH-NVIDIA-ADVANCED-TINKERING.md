@@ -63,6 +63,19 @@ game (needs owner / testers; all are labelled "needs testing").
   the first newer release appears, generating a candidate recipe dir outside the payload, and rehearse once on the
   reference machine with the owner present.
 
+## Phase 4 (built 2026-11-12, owner: "patch current driver for testing; prove driver update without AI")
+- Porting proof, `egpu-driver-lab port-proof nvidia-open-egpu-615 nvidia-open-egpu-620`: the 615 patch set applied to
+  NVIDIA's 620 source, each patch as it is where it applies strictly (-F0, offsets allowed), the hand-made 620 patch
+  only where it does not (= what a human supplies after the flag). Result: 7 of 10 automatic (110 120 130 140 166 167
+  170), 3 flagged (160 hotplug, 165, 180 CEC), and the resulting tree is IDENTICAL to the shipped hand port. 4 s.
+- Driver trial of the driver in use: `egpu-driver-trial start-lab` / `revert-lab` (CachyOS / Arch only for now). Copies
+  the current recipe to /var/lib/nvegpu/driver-lab/recipe, adds /var/lib/nvegpu/driver-lab/patches/*.patch to prepare(),
+  pkgrel 100, then the unchanged trial path (cached package files of the current build first, Safe Detach, build,
+  attach, health check, automatic and boot-time return). Never written to driver-dir. Only the lab build's package
+  files are removed on return (same version as the normal build). Recipe generation tested with makepkg (-o) and a
+  stand-in patch. NOT yet run on hardware: needs the owner present (detach + 10-20 min rebuild).
+- Plugin: Driver Lab > "Start a driver trial" (confirm) / "Return to the normal driver build" (Game Mode, CachyOS).
+
 ## Later phases: need owner approval before any code
 
 1. **Per-game experiments.** The shim knows `SteamAppId`, so a `nvidia-lab-<appid>.env` read before the global file is
