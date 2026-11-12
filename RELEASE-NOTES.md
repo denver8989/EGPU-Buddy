@@ -1,3 +1,9 @@
+0.7.277 — fix for Game Mode hanging on the boot logo; install another version.
+
+- Fixed: with "Keep the TV off during Steam Link and Moonlight streams" on, Game Mode could hang on the boot logo when the eGPU was connected or attached, and switching to the desktop took minutes.
+- New: "Install another version" in the update section (Game Mode and desktop): go back to an earlier build. Releases from this one on are listed, up to the last 5.
+- NV GPU Buddy: both.
+
 0.7.276 — 0.7.275 wake change taken back; support report never comes back empty.
 
 - Changed: AMD / Intel eGPU: the 0.7.275 change to the handheld screen after a wake is taken back (reported start-up problems).
