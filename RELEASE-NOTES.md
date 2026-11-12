@@ -1,3 +1,8 @@
+0.7.281 — Advanced Tinkering: optional per-game experiments.
+
+- New: NVIDIA settings > Advanced Tinkering: "Per game (optional)" gives one game its own experiments on top of the all-games ones. Off by default: everything applies to all games. (NVIDIA installs only; AMD / Intel unchanged.)
+- NV GPU Buddy: the same.
+
 0.7.280 — Advanced Tinkering: screens, Performance Lab, Driver Lab check.
 
 - New: NVIDIA settings > Advanced Tinkering (with it switched on): a read-only report of each screen (HDR, VRR range, colour depth); Performance Lab records the next game for 60 s (average FPS, 1% low, frame time, GPU load, clock, power, temperature) to compare runs; Driver Lab checks whether EGPU Buddy's driver patches carry over to a newer NVIDIA release (strict check, optional build), never installs anything. (NVIDIA installs only; AMD / Intel unchanged.)
