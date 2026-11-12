@@ -304,6 +304,13 @@ def action(p):
         if (jread("/run/nvegpu/update-status.json") or {}).get("state") == "running": return {"ok": True, "started": "update"}
         subprocess.Popen(OWN_UNIT + ["--unit=egpu-buddy-update", "sudo", "-n", "/usr/local/sbin/egpu-buddy-update"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         return {"ok": True, "started": "update"}
+    if a == "install-version":   # an earlier (or the installed) release, from the last 5; the same updater as "update"
+        v = str((p or {}).get("version", ""))
+        if v not in versions()["versions"]: return {"ok": False, "error": "that version is not in the list"}
+        if (jread("/run/nvegpu/update-status.json") or {}).get("state") == "running": return {"ok": True, "started": "update"}
+        again = ["--reinstall"] if v == read("/etc/nv-egpu-buddy/version") else []
+        subprocess.Popen(OWN_UNIT + ["--unit=egpu-buddy-update", "sudo", "-n", "/usr/local/sbin/egpu-buddy-update", v] + again, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return {"ok": True, "started": "update"}
     if a == "power-limit":
         w = int((p or {}).get("watts", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-power-limit" if s["vendor"] in ("", "nvidia") else "set-generic-power-cap", str(w)], 20); return {"ok": rc == 0, "out": o or e}
     if a == "clock-limit":   # laptop-class GPUs (ASUS XG Mobile): no power limit from the driver, a clock limit instead
@@ -438,6 +445,14 @@ def track_rels(rels):
     """NV GPU Buddy track: only the releases marked for it ("NV GPU Buddy:" in the notes); eGPU installs: every release."""
     return [r for r in rels if "NV GPU Buddy:" in r["body"]] if read("/etc/nv-egpu-buddy/track") == "nv-gpu-buddy" else rels
 
+def versions():
+    """"Install another version": the last 5 releases (NV GPU Buddy: its own) and the installed one."""
+    try:
+        release_notes()   # fills the 10-min release cache
+    except Exception:
+        pass
+    return {"installed": read("/etc/nv-egpu-buddy/version"), "versions": [r["version"] for r in track_rels(_NOTES["rels"])[:5]]}
+
 def release_notes():
     """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first;
     with nothing newer, the installed release's own notes. Each GitHub release carries only its own changes. Cached 10 min."""
@@ -474,6 +489,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             self.send_response(200 if b else 404); self.send_header("content-type", "image/webp"); self.send_header("content-length", str(len(b))); self.end_headers(); self.wfile.write(b); return
         if p == "/api/extras": return self._json(extras())
         if p == "/api/notes": return self._json(release_notes())
+        if p == "/api/versions": return self._json(versions())
         if p == "/api/nvidia": return self._json(nvidia_settings())
         if p == "/api/nvidia-game":   # while a game runs: which saved setting it really received (read-only)
             try: return self._json(json.loads(sh([NVT, "game-status"], 20)[1]))

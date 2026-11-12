@@ -168,16 +168,21 @@ def _save_settings(d):
     os.makedirs(os.path.dirname(SETTINGS), exist_ok=True); json.dump(d, open(SETTINGS, "w")); subprocess.run(["chown", "-R", USER, os.path.dirname(SETTINGS)], env=_clean_env())
 def _vt(v): return tuple(int(x) for x in re.findall(r"\d+", v or "0")[:3]) or (0,)
 _notes_cache = {"t": 0.0, "rels": []}
-def _release_notes(installed):
-    """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first
-    (the last 100 releases; the plugin shows them in a scrolling window);
-    with nothing newer, the installed release's own notes. Each GitHub release carries only its own changes. Cached 10 min."""
+def _rels():
+    """Every published release (cached 10 min), newest first; NV GPU Buddy: only the ones marked for it."""
     if time.time() - _notes_cache["t"] > 600:
         data = json.loads(_get(f"https://api.github.com/repos/{REPO}/releases?per_page=100", 20).decode())
         _notes_cache.update(t=time.time(), rels=[{"version": r.get("tag_name", "").lstrip("v"), "date": (r.get("published_at") or "")[:10],
                                                   "body": r.get("body") or "", "url": r.get("html_url", "")}
                                                  for r in data if not r.get("draft") and not r.get("prerelease")])
-    rels = [r for r in _notes_cache["rels"] if NV_MARK in r["body"]] if _track() else _notes_cache["rels"]   # NV GPU Buddy: its releases only
+    return [r for r in _notes_cache["rels"] if NV_MARK in r["body"]] if _track() else _notes_cache["rels"]
+
+
+def _release_notes(installed):
+    """The release notes from GitHub: every release newer than the installed one (what an update brings), newest first
+    (the last 100 releases; the plugin shows them in a scrolling window);
+    with nothing newer, the installed release's own notes. Each GitHub release carries only its own changes. Cached 10 min."""
+    rels = _rels()   # NV GPU Buddy: its releases only
     newer = [r for r in rels if _vt(r["version"]) > _vt(installed)]
     if newer:
         return {"title": f"What's new since {installed}" if installed else "Release notes", "notes": newer}
@@ -2129,6 +2134,27 @@ class Plugin:
         d = _settings(); d["continue_update"] = version; _save_settings(d)
         _update["state"] = f"updating the plugin to {version}"; _slog(f"updating the plugin to {version} in place (Decky installer)", 50)
         return {"url": base + name, "hash": want}
+
+    async def get_versions(self):
+        """"Install another version": the last 5 releases (NV GPU Buddy: its own), to go back to an earlier build."""
+        try:
+            return {"installed": _read(VERSION_FILE), "versions": [r["version"] for r in _rels()[:5]]}
+        except Exception as ex:  # noqa: BLE001
+            return {"installed": _read(VERSION_FILE), "versions": [], "error": f"Could not reach GitHub: {ex}"}
+
+    async def install_version(self, version: str):
+        """The chosen release, older ones included, through the same updater as the desktop app (egpu-buddy-update:
+        checksum-verified, system files and plugin together; the NVIDIA driver is left alone)."""
+        try:
+            ok = version in [r["version"] for r in _rels()[:5]]
+        except Exception:  # noqa: BLE001
+            ok = False
+        if not ok: return {"ok": False, "message": "That version is not in the list."}
+        if _game_running(): return {"ok": False, "message": "Close the running game first."}
+        if _operation_in_progress(): return {"ok": False, "message": "Another operation is running; try again when it is done."}
+        cmd = ["/usr/local/sbin/egpu-buddy-update", version] + (["--reinstall"] if version == _read(VERSION_FILE) else [])
+        _spawn_root_job("version", cmd)
+        return {"ok": True, "message": f"Installing {version}. The plugin reloads when it is done (a minute or two)."}
 
     async def check_update(self, install: bool = False):
         threading.Thread(target=_check_update, args=(bool(install), True), daemon=True).start(); return {"ok": True, "message": "checking"}

@@ -152,6 +152,8 @@ type Upd = { needs_detach?: boolean; auto_update: boolean; available: string; st
 const getUpdate = callable<[], Upd>("get_update_status");
 const setAutoUpdate = callable<[boolean], Result>("set_auto_update");
 const checkUpdate = callable<[boolean], Result>("check_update");
+const getVersions = callable<[], { installed: string; versions: string[]; error?: string }>("get_versions");
+const installVersion = callable<[string], Result>("install_version");
 const updateDetached = callable<[string], Result>("update_detached");
 const pluginUpdateInfo = callable<[string], { url?: string; hash?: string }>("plugin_update_info");
 // Update through Decky's own installer, as its plugin store does: the plugin is swapped in place and Steam keeps running.
@@ -509,7 +511,9 @@ function Content() {
   const [up, setUp] = useState<Upd | null>(null);
   const [tv, setTv] = useState<{ enabled: boolean; paired: string[] } | null>(null);
   const [trm, setTrm] = useState<TvRemote | null>(null);
-  const [cecAdv, setCecAdv] = useState(false);   // "CEC advanced" folded by default
+  const [cecAdv, setCecAdv] = useState(false);
+  const [vers, setVers] = useState<{ installed: string; versions: string[] } | null>(null);   // "Install another version"
+  const [pickVer, setPickVer] = useState("");   // "CEC advanced" folded by default
   const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean } | null>(null);
   const [ad, setAd] = useState<Addons | null>(null);
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
@@ -791,6 +795,13 @@ function Content() {
           {su?.busy === false && su?.rc === 0 && !su?.installed_version &&
             <PanelSectionRow><div style={{ fontSize: "12px", color: "#4caf50" }}>Uninstalled. The machine is back to how it was.</div></PanelSectionRow>}
           <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => run(() => checkUpdate(false))}>Check for updates</ButtonItem></PanelSectionRow>
+          {su?.installed_version && <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={async () => setVers(vers ? null : await getVersions())}>{vers ? "▾" : "▸"} Install another version</ButtonItem></PanelSectionRow>}
+          {vers && (vers.versions.length ? <>
+            <PanelSectionRow><DropdownItem label="Version (last 5)" rgOptions={vers.versions.map((v) => ({ data: v, label: v + (v === vers.installed ? " (installed)" : "") }))} selectedOption={pickVer || vers.versions[0]} onChange={(o) => setPickVer(String(o.data))} /></PanelSectionRow>
+            <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => { const v = pickVer || vers.versions[0];
+              showModal(<ConfirmModal strTitle={`Install ${v}?`} strDescription={`EGPU Buddy ${v} replaces ${vers.installed}: system files and plugin. The NVIDIA driver is not changed. Takes a minute or two; the plugin reloads.`} strOKButtonText="Install" strCancelButtonText="Cancel"
+                onOK={() => run(() => installVersion(v))} />); }}>{`Install ${pickVer || vers.versions[0]}`}</ButtonItem></PanelSectionRow>
+          </> : <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{(vers as { error?: string }).error || "No releases found."}</div></PanelSectionRow>)}
           {su?.installed_version && (
             <>
               <PanelSectionRow>
