@@ -1,3 +1,7 @@
+0.7.275 — handheld screen stays off after a wake (AMD / Intel eGPU).
+
+- Fixed: AMD / Intel eGPU: the handheld screen (LCD backlight) came back on after waking from sleep while Game Mode was on the TV. Its output is now switched off again, not only dimmed.
+
 0.7.274 — keep the TV off during Steam Link and Moonlight streams.
 
 - New: "Keep the TV off during Steam Link and Moonlight streams" under TV remote (CEC) > CEC advanced: a Home press sent from the phone no longer turns the TV on. Off by default.
