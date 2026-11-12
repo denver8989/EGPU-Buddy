@@ -212,3 +212,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 ## 2026-11-12 — 0.7.278 RELEASED: AMD shutdown releases eGPU CEC (egpu-cec-release --yank) + hang guard armed on every AMD shutdown (V2ZU2F: hang after stream, no detach; hypothesis = cecd restarted in session). Asked Ming: stream+restart, and cecd restart+restart.
 
 ## 2026-11-12 — 0.7.279 RELEASED: NVIDIA settings > Advanced Tinkering phase 1 (egpu-nv-lab, nvidia-lab.env via shim, 4 userspace switches, read-only report). Plan + corrections: agent-context/RESEARCH-NVIDIA-ADVANCED-TINKERING.md. Later phases (per-game, perf lab, display, Driver Lab) await owner approval.
+
+## 2026-11-12 — 0.7.280 RELEASED via release-local.sh (first non-Actions release): Advanced Tinkering phase 2 (screens, Performance Lab, Driver Lab dry-run). Item 11 closed. Next (needs OK): Driver Lab trial install via egpu-driver-trial, per-game, display overrides.
