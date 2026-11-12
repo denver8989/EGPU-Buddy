@@ -321,9 +321,16 @@ resume)
   /usr/local/sbin/egpu-panel off >/dev/null 2>&1 && log "resume: handheld panel off again (Game Mode on ${oc%%,*})"
   # ...and kept off: Steam restores the screen brightness a few seconds after a wake, which lit the panel again while
   # Game Mode was on the TV (Legion Go S + RX 9070 XT, report UK8NJW). 30 s, a brightness above 0 is taken back.
-  ( exec 9>&-; for _ in $(seq 30); do sleep 1; [ -e /run/egpu-touchpad-picture ] && exit 0
-      for b in /sys/class/backlight/*/brightness; do [ "$(cat "$b" 2>/dev/null)" -gt 0 ] 2>/dev/null || continue
-        /usr/local/sbin/egpu-panel off >/dev/null 2>&1; log "resume: the panel was lit again after the wake: off"; break; done
+  # 0.7.274 watched only the brightness, which stayed 0 while the panel was lit (report 9ENA2E): the console takes the
+  # panel back after a wake. So the panel's own power state (dpms) is watched too, and its CRTC switched off.
+  ( exec 9>&-; e=$(ls -d /sys/class/drm/card*-eDP-* 2>/dev/null | head -1)
+    t=0; for _ in $(seq 30); do sleep 1; [ -e /run/egpu-touchpad-picture ] && exit 0; [ "$t" -ge 3 ] && exit 0
+      lit=0; [ "$(cat "$e/dpms" 2>/dev/null)" = On ] && lit=1
+      for b in /sys/class/backlight/*/brightness; do [ "$(cat "$b" 2>/dev/null)" -gt 0 ] 2>/dev/null && lit=1; done
+      [ "$lit" = 1 ] || continue
+      log "resume: the panel was lit again after the wake (dpms $(cat "$e/dpms" 2>/dev/null), brightness $(cat /sys/class/backlight/*/brightness 2>/dev/null | head -1)): off"
+      EGPU_PANEL_CRTC_FORCE=1 /usr/local/sbin/egpu-panel off >/dev/null 2>&1; t=$((t+1))
+      log "resume: panel now dpms $(cat "$e/dpms" 2>/dev/null)"
     done ) >/dev/null 2>&1 &
   ;;
 presleep)
