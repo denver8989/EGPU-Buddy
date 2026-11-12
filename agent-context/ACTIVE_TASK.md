@@ -204,3 +204,5 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 ## 2026-11-12 — 0.7.274 RELEASED: stream_no_wake (user svc egpu-stream-cec holds cecd via ~/.config/systemd/user/cecd.service.d/egpu-buddy-stream.conf while streaming_log.txt / sunshine log says active; idea credit steamos-cec-toolkit MIT); CEC advanced fold. Real Steam Link stream untested.
 
 ## 2026-11-12 — 0.7.275 RELEASED: AMD resume watch uses eDP dpms + forced crtc_off + fb blank (EGPU_PANEL_CRTC_FORCE), max 3 tries, logs state. Ming 9ENA2E: stream TV hold works.
+
+## 2026-11-12 — 0.7.276 RELEASED: reverted 0.7.275 wake CRTC/fb-blank change (Ming: boot to GM with TV Legion logo, handheld on, desktop 3 min, report empty); egpu-report fallback (next main.py, then basic report w/ journal). Awaiting Ming report.
