@@ -2,10 +2,29 @@
 # egpu-report — save the EGPU Buddy support report (ONE file with everything) in the Desktop folder and print its path.
 # The same code as the plugin's "Save support report to Desktop" button: the plugin's own main.py, run outside Decky, so
 # it also works in Desktop Mode (the "Save EGPU Buddy report" icon runs egpu-buddy --report) and when Decky does not load.
+# Never silently: a main.py that saves nothing (empty or damaged file; report 2026-11-12 "report saved:" with no path)
+# falls through to the next copy, and at the end to a basic report written here (journal, versions, disk, the files).
 set -u
 [ "$(id -u)" = 0 ] || exec sudo -n "$0" "$@"
 U=$(getent passwd 1000 | cut -d: -f1); UH=$(getent passwd 1000 | cut -d: -f6)
-for m in "$UH/homebrew/plugins/EGPU-Buddy/main.py" "$UH/.local/share/steamos-egpu-buddy/decky-plugin/egpu-buddy/main.py"; do
-  [ -f "$m" ] && exec env EGPU_REPORT_USER="$U" python3 -I "$m"
+M1="$UH/homebrew/plugins/EGPU-Buddy/main.py"; M2="$UH/.local/share/steamos-egpu-buddy/decky-plugin/egpu-buddy/main.py"
+err=""
+for m in "$M1" "$M2"; do
+  [ -f "$m" ] || continue
+  p=$(timeout 120 env EGPU_REPORT_USER="$U" python3 -I "$m" 2>/tmp/egpu-report.err | tail -1)
+  [ -n "$p" ] && [ -f "$p" ] && { echo "$p"; exit 0; }
+  err="$err$m: no report ($(tail -3 /tmp/egpu-report.err 2>/dev/null | tr '\n' ' '))
+"
 done
-echo "the EGPU Buddy plugin files were not found (install or update EGPU Buddy first)" >&2; exit 2
+code=$(tr -dc 'A-HJ-NP-Z2-9' </dev/urandom | head -c 6); mkdir -p "$UH/Desktop"; f="$UH/Desktop/egpu-buddy-report-$code-basic.txt"
+{ echo "EGPU Buddy BASIC support report (the full report could not be made)"
+  echo; echo "## Why"; printf '%s' "$err"
+  echo; echo "## Versions"; echo "system $(cat /etc/nv-egpu-buddy/version 2>/dev/null)"; grep -E '^(PRETTY_NAME|BUILD_ID)=' /etc/os-release; uname -r
+  echo; echo "## The report's files"; ls -l "$M1" "$M2" 2>&1; for m in "$M1" "$M2"; do [ -f "$m" ] && echo "$m: $(wc -l <"$m") lines, ends: $(tail -c 120 "$m" | tr '\n' ' ')"; done
+  echo; echo "## Disk"; df -h / /home /var 2>&1
+  echo; echo "## GPUs"; lspci -nn 2>/dev/null | grep -E 'VGA|3D|Display'
+  echo; echo "## EGPU Buddy logs"; for l in /var/log/egpu-generic.log /var/log/egpu-shutdown.log /var/log/egpu-buddy-selfheal.log; do echo "--- $l"; tail -n 60 "$l" 2>/dev/null; done
+  echo; echo "## This boot (last 400 lines)"; journalctl -b --no-pager -o short-monotonic 2>/dev/null | tail -n 400
+  echo; echo "## Previous boot (last 150 lines)"; journalctl -b -1 --no-pager -o short-monotonic 2>/dev/null | tail -n 150
+} > "$f" 2>&1
+chown "$U" "$f"; echo "$f"
