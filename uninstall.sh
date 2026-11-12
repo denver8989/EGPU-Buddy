@@ -40,7 +40,8 @@ runtime_leftovers(){
     "$USER_HOME/.config/egpu-buddy/nvidia-tweaks.json" \
     "$USER_HOME/.config/egpu-buddy/nvidia-tweaks.applied.json" \
     "$USER_HOME/.config/egpu-buddy/nvidia-tweaks.env" \
-    "$USER_HOME/.config/egpu-buddy/nvidia-lab.env" "$USER_HOME/.config/egpu-buddy/nvidia-lab.json" \
+    "$USER_HOME/.config/egpu-buddy/nvidia-lab.env" "$USER_HOME/.config/egpu-buddy/nvidia-lab.json" "$USER_HOME"/.config/egpu-buddy/nvidia-lab-*.env \
+    "$USER_HOME/.local/state/egpu-buddy/perf-lab" "$USER_HOME/.local/state/egpu-buddy/driver-lab.json" "$USER_HOME/.cache/egpu-buddy/driver-lab" \
     "$USER_HOME/.config/egpu-buddy/nvidia-tweaks.dxvk.conf" \
     "$USER_HOME/.config/egpu-buddy/amd-tweaks.json" "$USER_HOME/.config/egpu-buddy/amd-tweaks.env" "$USER_HOME/.config/egpu-buddy/amd-tweaks.dxvk.conf" \
     "$USER_HOME/.config/egpu-buddy/steam-ui-fix" \

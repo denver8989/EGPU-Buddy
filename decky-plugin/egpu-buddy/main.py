@@ -2603,6 +2603,7 @@ class Plugin:
         if _installed_vendor() == "amd": return {"ok": False, "message": "Not on an AMD / Intel install."}
         a = [str(x) for x in (args or [])]
         ok = (a[:1] == ["perf"] and len(a) == 2 and a[1] in ("arm", "cancel", "clear")) or \
+             (a[:1] == ["game"] and len(a) == 4 and re.fullmatch(r"\d{1,20}", a[1]) and re.fullmatch(r"[a-z_]+", a[2]) and a[3] in ("on", "off")) or \
              (a[:1] == ["driver"] and (a[1:] in (["versions"], ["status"], ["discard"]) or
               (len(a) in (3, 4) and a[1] == "check" and re.fullmatch(r"\d+\.\d+(\.\d+)?", a[2]) and a[3:] in ([], ["--build"]))))
         if not ok: return {"ok": False, "message": "Unknown action."}

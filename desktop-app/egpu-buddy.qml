@@ -107,6 +107,7 @@ ApplicationWindow {
     property var lab: null        // NVIDIA settings > Advanced Tinkering, loaded when opened (read-only until a switch is used)
     function loadLab() { call("GET", "/api/nvlab", null, function(r) { win.lab = r || { report: [], labs: [] } }) }
     property var drv: null        // Driver Lab: versions + last check, loaded when opened
+    property string labScope: ""  // "" = all games, else a Steam appid (per-game experiments)
     function labCmd(args, then) { call("POST", "/api/action", { action: "nvlab-cmd", args: args }, function(r) { if (then) then(r || {}) }) }
     function loadDrv() { labCmd(["driver", "versions"], function(v) { labCmd(["driver", "status"], function(st) { win.drv = Object.assign({}, v.data || {}, st.data || {}) }) }) }
     property var vers: null       // "Install another version": {installed, versions} once opened
@@ -500,10 +501,17 @@ ApplicationWindow {
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; text: "• " + modelData } }
                     Switch { text: "Advanced Tinkering"; checked: !!(win.lab || {}).master
                              onToggled: win.call("POST", "/api/action", { action: "nvlab-set", key: "master", value: checked }, function() { win.loadLab() }) }
+                    RowLayout { spacing: 8; visible: !!(win.lab || {}).master
+                        Label { text: "Apply to" }
+                        ComboBox { id: scopeBox; Layout.preferredWidth: 320
+                            model: ["All games"].concat(((win.lab || {}).games || []).map(function(g) { return g[1] + ((((win.lab || {}).per_game || {})[g[0]] || []).length ? "  •" : "") }))
+                            onActivated: function(i) { win.labScope = i > 0 ? win.lab.games[i - 1][0] : "" } } }
                     Repeater { model: (win.lab || {}).master ? ((win.lab || {}).labs || []) : []
                         ColumnLayout { Layout.fillWidth: true; spacing: 2
-                            Switch { text: modelData.label + "  ·  needs testing"; checked: modelData.on; enabled: !modelData.why_not || modelData.on
-                                     onToggled: win.call("POST", "/api/action", { action: "nvlab-set", key: modelData.key, value: checked }, function() { win.loadLab() }) }
+                            readonly property bool isOn: win.labScope ? ((((win.lab || {}).per_game || {})[win.labScope] || []).indexOf(modelData.key) >= 0) : modelData.on
+                            Switch { text: modelData.label + "  ·  needs testing"; checked: parent.isOn; enabled: !modelData.why_not || parent.isOn
+                                     onToggled: { if (win.labScope) win.labCmd(["game", win.labScope, modelData.key, checked ? "on" : "off"], function() { win.loadLab() })
+                                                  else win.call("POST", "/api/action", { action: "nvlab-set", key: modelData.key, value: checked }, function() { win.loadLab() }) } }
                             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.7; font.pixelSize: 11
                                 text: (modelData.why_not ? "Not on this setup: " + modelData.why_not + ". " : "") + modelData.desc + " Applies at the next game launch." } } }
                     Label { text: "Screens (read only)"; font.bold: true; visible: !!(win.lab || {}).master }

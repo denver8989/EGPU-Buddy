@@ -149,11 +149,31 @@ def _state():
 def _write(st):
     os.makedirs(CFG, exist_ok=True)
     json.dump(st, open(STATE, "w"))
-    lines = ([l for k in st["on"] if k in LAB for l in LAB[k][1]] + _perf_lines(st)) if st["master"] else []
-    if lines:
-        open(ENV, "w").write("# EGPU Buddy NVIDIA settings > Advanced Tinkering (egpu-nv-lab); master off removes it\n" + "\n".join(lines) + "\n")
-    elif os.path.exists(ENV):
-        os.remove(ENV)
+    def put(path, keys, extra=()):
+        lines = ([l for k in keys if k in LAB for l in LAB[k][1]] + list(extra)) if st["master"] else []
+        if lines: open(path, "w").write("# EGPU Buddy NVIDIA settings > Advanced Tinkering (egpu-nv-lab); master off removes it\n" + "\n".join(lines) + "\n")
+        elif os.path.exists(path): os.remove(path)
+    put(ENV, st["on"], _perf_lines(st))
+    games = st.get("games", {})
+    for f in glob.glob(os.path.join(CFG, "nvidia-lab-*.env")):   # per game: nvidia-lab-<appid>.env (the shim reads it first)
+        if os.path.basename(f)[11:-4] not in games: os.remove(f)
+    for gid, g in games.items(): put(os.path.join(CFG, f"nvidia-lab-{gid}.env"), g.get("on", []))
+
+def _steam_games():
+    """Installed Steam games (appid, name) from every Steam library, tools and runtimes left out."""
+    roots, out = [os.path.expanduser("~/.local/share/Steam")], {}
+    try:
+        roots += re.findall(r'"path"\s+"([^"]+)"', open(os.path.expanduser("~/.local/share/Steam/steamapps/libraryfolders.vdf")).read())
+    except OSError:
+        pass
+    for r in dict.fromkeys(roots):
+        for m in glob.glob(os.path.join(r, "steamapps", "appmanifest_*.acf")):
+            try: t = open(m, errors="replace").read()
+            except OSError: continue
+            gid, name = re.search(r'"appid"\s+"(\d+)"', t), re.search(r'"name"\s+"([^"]+)"', t)
+            if gid and name and not re.search(r"Proton|Steam Linux Runtime|Steamworks|Redistributable|SteamVR", name[1]):
+                out[gid[1]] = name[1]
+    return sorted(out.items(), key=lambda x: x[1].lower())
 
 def status():
     st, g = _state(), _gpu()
@@ -171,8 +191,9 @@ def status():
     labs = [{"key": k, "label": v[0], "desc": v[3], "on": k in st["on"], "why_not": v[2](cc, drv) if g else "no NVIDIA GPU right now"}
             for k, v in LAB.items()]
     return {"master": st["master"], "report": report, "labs": labs, "active": os.path.exists(ENV),
-            "displays": _displays(), "perf": _perf(st) if st["master"] else {"armed": False, "runs": []},
-            "planned": ["Per-game experiments", "Display overrides (HDR / VRR), with automatic undo",
+            "displays": _displays(), "games": _steam_games() if st["master"] else [],
+            "per_game": {k: v.get("on", []) for k, v in st.get("games", {}).items()}, "perf": _perf(st) if st["master"] else {"armed": False, "runs": []},
+            "planned": ["Display overrides (HDR / VRR), with automatic undo",
                         "Driver Lab trials (installing a checked candidate through the driver switch)"]}
 
 def main(a):
@@ -189,6 +210,12 @@ def main(a):
         if not st["master"]: print("turn Advanced Tinkering on first"); return 1
         st["on"] = [k for k in st["on"] if k != a[1]] + ([a[1]] if a[2] == "on" else []); _write(st)
         print(f"{LAB[a[1]][0]}: {a[2]} (next game launch)"); return 0
+    if len(a) == 4 and a[0] == "game" and re.fullmatch(r"\d{1,20}", a[1]) and a[2] in LAB and a[3] in ("on", "off"):
+        if not st["master"]: print("turn Advanced Tinkering on first"); return 1
+        g = st.setdefault("games", {}).setdefault(a[1], {"on": []})
+        g["on"] = [k for k in g["on"] if k != a[2]] + ([a[2]] if a[3] == "on" else [])
+        if not g["on"]: st["games"].pop(a[1])
+        _write(st); print(f"{LAB[a[2]][0]}: {a[3]} for this game (next launch)"); return 0
     if a[:1] == ["perf"] and len(a) == 2 and a[1] in ("arm", "cancel", "clear"):
         if not st["master"]: print("turn Advanced Tinkering on first"); return 1
         if a[1] == "arm": st["perf_armed"] = {"secs": 60, "t": time.time()}

@@ -49,6 +49,20 @@ game (needs owner / testers; all are labelled "needs testing").
   Verified: 620.70.06 → A, builds all 5 modules in 87 s on CachyOS 7.3; 615.78.08 → C (160 and 180 do not apply) and
   the audit lists the 620 content-protection worker, the known port trap.
 
+## Phase 3 (built 2026-11-12): per-game experiments
+- Shim reads `nvidia-lab-<SteamAppId or SteamGameId>.env` before `nvidia-lab.env` (digits only). Per-game switches add
+  to the all-games ones. `egpu-nv-lab game APPID KEY on|off`; the game list comes from every Steam library's
+  appmanifests (tools/runtimes left out). Tested: a Cyberpunk-only switch reaches only that appid; master off removes
+  all lab files.
+- Display overrides: NOT built. Live HDR / mode changes on an active NVIDIA eGPU output black-screened the reference
+  machine (2026-06-16, needed a reboot); an automatic undo cannot run when the driver hangs. KDE and Steam already offer
+  HDR / VRR with their own confirm-and-revert. Owner to decide.
+- Driver Lab trial (install an A-class candidate): NOT built yet. Every part of `egpu-driver-trial` is version-pinned
+  (userspace recipes with NVIDIA's .run checksums, SteamOS sysext base dir, revert chain, `driver-dir` in the release
+  payload that self-heal reinstalls). No NVIDIA release newer than 620.70.06 exists to test with. Proposal: build it when
+  the first newer release appears, generating a candidate recipe dir outside the payload, and rehearse once on the
+  reference machine with the owner present.
+
 ## Later phases: need owner approval before any code
 
 1. **Per-game experiments.** The shim knows `SteamAppId`, so a `nvidia-lab-<appid>.env` read before the global file is

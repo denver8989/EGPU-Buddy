@@ -149,6 +149,13 @@ __attribute__((constructor)) static void egpu_nvt_init(void) {
   apply_dxvk(home, "nvidia-tweaks.dxvk.conf");
   /* NVIDIA settings > Advanced Tinkering (opt-in, egpu-nv-lab): exists only while the user has a lab switch on, and is
    * read after the normal settings, so those always win. No file: nothing changes. */
+  {   /* per-game experiments first (nvidia-lab-<appid>.env), so they add to the all-games ones */
+    const char *id = getenv("SteamAppId");
+    if (!id || !*id || !strcmp(id, "0")) id = getenv("SteamGameId");
+    if (id && *id && strlen(id) < 24 && strspn(id, "0123456789") == strlen(id)) {
+      char n[64]; snprintf(n, sizeof n, "nvidia-lab-%s.env", id); apply_env(home, n);
+    }
+  }
   apply_env(home, "nvidia-lab.env");
   errno = saved;
 }

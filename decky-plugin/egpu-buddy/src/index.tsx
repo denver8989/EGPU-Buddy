@@ -154,7 +154,7 @@ const setAutoUpdate = callable<[boolean], Result>("set_auto_update");
 const checkUpdate = callable<[boolean], Result>("check_update");
 type PerfRun = { game: string; when: string; frames: number; fps: number; low1: number; p99_ms: number; gpu_load: number | null; clock: number | null; power: number | null; temp: number | null };
 type NvLab = { master: boolean; report: string[]; labs: { key: string; label: string; desc: string; on: boolean; why_not: string }[]; planned: string[];
-  displays?: string[]; perf?: { armed: boolean; runs: PerfRun[] } };
+  displays?: string[]; perf?: { armed: boolean; runs: PerfRun[] }; games?: [string, string][]; per_game?: Record<string, string[]> };
 type DrvLab = { baseline?: string; versions?: string[]; can_build?: boolean; error?: string; state?: string; step?: string; version?: string;
   report?: { class: string; summary: string; patches: { patch: string; ok: boolean }[]; audit: { file: string; new: string[]; gone: string[] }[] } | null };
 const nvLabCmd = callable<[string[]], { ok: boolean; data?: any; message?: string }>("nv_lab_cmd");
@@ -523,6 +523,7 @@ function Content() {
   const [lab, setLab] = useState<NvLab | null>(null);   // NVIDIA settings > Advanced Tinkering, loaded when opened
   const [drv, setDrv] = useState<DrvLab | null>(null);   // Driver Lab: versions + last check, loaded when opened
   const [drvPick, setDrvPick] = useState("");
+  const [labScope, setLabScope] = useState("");   // "" = all games, else a Steam appid (per-game experiments)
   const loadDrv = async () => { const v = await nvLabCmd(["driver", "versions"]), st = await nvLabCmd(["driver", "status"]); setDrv({ ...(v.data ?? {}), ...(st.data ?? {}) }); };
   const [vers, setVers] = useState<{ installed: string; versions: string[] } | null>(null);   // "Install another version"
   const [pickVer, setPickVer] = useState("");   // "CEC advanced" folded by default
@@ -1133,9 +1134,13 @@ function Content() {
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Experiments, off by default, separate from the settings above (those always win). Games only; no driver, Proton or game file is changed. Turning this off removes every experiment.</div></PanelSectionRow>
             {lab.report.map((l, i) => <PanelSectionRow key={"r" + i}><div style={{ fontSize: "12px" }}>• {l}</div></PanelSectionRow>)}
             <PanelSectionRow><ToggleField label="Advanced Tinkering" checked={lab.master} disabled={lock} onChange={(v) => run(async () => { const r = await setNvLab("master", v); setLab(await getNvLab()); return r; })} /></PanelSectionRow>
-            {lab.master && lab.labs.map((x) => <PanelSectionRow key={x.key}><ToggleField label={x.label + " · needs testing"} checked={x.on} disabled={lock || (!!x.why_not && !x.on)}
-              description={(x.why_not ? `Not on this setup: ${x.why_not}. ` : "") + x.desc + " Applies at the next game launch."}
-              onChange={(v) => run(async () => { const r = await setNvLab(x.key, v); setLab(await getNvLab()); return r; })} /></PanelSectionRow>)}
+            {lab.master && <PanelSectionRow><DropdownItem label="Apply to" disabled={lock} selectedOption={labScope}
+              rgOptions={[{ data: "", label: "All games" }, ...(lab.games ?? []).map(([id, name]) => ({ data: id, label: name + (lab.per_game?.[id]?.length ? " •" : "") }))]}
+              onChange={(o) => setLabScope(String(o.data))} /></PanelSectionRow>}
+            {lab.master && lab.labs.map((x) => { const on = labScope ? !!lab.per_game?.[labScope]?.includes(x.key) : x.on;
+              return <PanelSectionRow key={x.key}><ToggleField label={x.label + " · needs testing"} checked={on} disabled={lock || (!!x.why_not && !on)}
+              description={(x.why_not ? `Not on this setup: ${x.why_not}. ` : "") + x.desc + (labScope ? " This game only, added to the all-games ones." : "") + " Applies at the next game launch."}
+              onChange={(v) => run(async () => { const r = labScope ? await nvLabCmd(["game", labScope, x.key, v ? "on" : "off"]) : await setNvLab(x.key, v); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })} /></PanelSectionRow>; })}
             {lab.master && <>
               <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600 }}>Screens (read only)</div></PanelSectionRow>
               {(lab.displays ?? []).map((d, i) => <PanelSectionRow key={"d" + i}><div style={{ fontSize: "12px" }}>{d}</div></PanelSectionRow>)}
