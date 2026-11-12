@@ -57,7 +57,7 @@ The setups below all work. A fix for one of them must not change what the others
   if the reports cannot answer it, add targeted logging for that scenario only and say so.
 - Do not reinvent: reuse what already works on another setup (e.g. the SDDM desktop detach made for the ROG Ally was
   reused on Bazzite) and adapt it inside the new scenario's gate.
-- Do not release when the owner says not to release. Releases go through `.github/workflows/release.yml` on master.
+- Do not release when the owner says not to release. Releases are published from master with `./release-local.sh` (same steps as `.github/workflows/release.yml`, no GitHub Actions: the owner's Actions minutes are limited, 2026-11-12). Do not start any workflow unless the owner asks; `./release-local.sh --check` builds without publishing.
 - Credit testers by their Discord names in README.md / TESTED.md / CREDITS.md when the owner asks.
 - Replies to the owner: short and plain. Messages for testers: a short Discord-ready paragraph.
 
