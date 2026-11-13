@@ -1,3 +1,10 @@
+0.7.285 — Performance Lab works in real games and says why the CPU limits.
+
+- Fixed: Performance Lab recordings stayed empty in real games; recording now starts 90 s after the game launches.
+- New: Performance Lab: a CPU limit now says how much FPS it costs and why (the handheld's power limit, a CPU at full speed, or heat / power profile).
+- Changed: from 0.7.289 on, downloads use only the EGPU-Buddy name.
+- NV GPU Buddy: the Performance Lab changes.
+
 0.7.284 — Driver Lab without AI, Performance Lab diagnosis, undervolt; builds named EGPU Buddy.
 
 - New: Driver Lab carries EGPU Buddy's driver patches to a new NVIDIA release with no AI and no person (exact, merged, or placed by a pre-written rule; anything else is flagged). "Replay the last driver update" proves it; an optional weekly check runs it on every new release and never installs. (NVIDIA installs only.)
