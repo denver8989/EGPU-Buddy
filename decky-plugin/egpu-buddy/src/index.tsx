@@ -152,7 +152,7 @@ type Upd = { needs_detach?: boolean; auto_update: boolean; available: string; st
 const getUpdate = callable<[], Upd>("get_update_status");
 const setAutoUpdate = callable<[boolean], Result>("set_auto_update");
 const checkUpdate = callable<[boolean], Result>("check_update");
-type PerfRun = { game: string; when: string; frames: number; fps: number; low1: number; p99_ms: number; gpu_load: number | null; clock: number | null; power: number | null; temp: number | null };
+type PerfRun = { game: string; when: string; frames: number; fps: number; low1: number; p99_ms: number; gpu_load: number | null; clock: number | null; power: number | null; temp: number | null ; measured?: boolean; findings?: { level: string; text: string; hint: string }[] };
 type NvLab = { master: boolean; report: string[]; labs: { key: string; label: string; desc: string; on: boolean; why_not: string }[]; planned: string[];
   displays?: string[]; perf?: { armed: boolean; runs: PerfRun[] }; games?: [string, string][]; per_game?: Record<string, string[]> };
 type DrvPatch = { patch: string; ok?: boolean; method?: string; why?: string[]; rules?: string[] };
@@ -1158,7 +1158,9 @@ function Content() {
               <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["perf", lab.perf?.armed ? "cancel" : "arm"]); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })}>
                 {lab.perf?.armed ? "Cancel the recording" : "Record the next game (60 s)"}</ButtonItem></PanelSectionRow>
               {(lab.perf?.runs ?? []).map((x, i) => <PanelSectionRow key={"p" + i}><div style={{ fontSize: "12px" }}><b>{x.game}</b> · {x.when}<br />
-                {x.fps} FPS avg · 1% low {x.low1} · 99% frame time {x.p99_ms} ms{x.gpu_load != null ? ` · GPU ${x.gpu_load}% ${x.clock ?? "?"} MHz ${x.power ?? "?"} W ${x.temp ?? "?"} °C` : ""}</div></PanelSectionRow>)}
+                {x.fps} FPS avg · 1% low {x.low1} · 99% frame time {x.p99_ms} ms{x.gpu_load != null ? ` · GPU ${x.gpu_load}% ${x.clock ?? "?"} MHz ${x.power ?? "?"} W ${x.temp ?? "?"} °C` : ""}
+                {(x.findings ?? []).map((f, j) => <div key={j} style={{ marginTop: "4px" }}><span style={{ color: f.level === "problem" ? "#ff8a65" : f.level === "limit" ? "#f0b429" : "#81c784" }}>{f.level === "problem" ? "⚠" : f.level === "limit" ? "◆" : "✓"} {f.text}</span>{f.hint ? <div style={{ opacity: 0.7 }}>{f.hint}</div> : null}</div>)}
+                {x.measured === false && <div style={{ opacity: 0.6 }}>(recorded before the GPU sampler: frame times only)</div>}</div></PanelSectionRow>)}
               {!!lab.perf?.runs?.length && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["perf", "clear"]); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })}>Delete the recordings</ButtonItem></PanelSectionRow>}
               <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={async () => { if (drv) setDrv(null); else await loadDrv(); }}>{drv ? "▾" : "▸"} Driver Lab</ButtonItem></PanelSectionRow>
               {drv && <>

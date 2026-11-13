@@ -529,7 +529,9 @@ ApplicationWindow {
                     Repeater { model: (win.lab || {}).master ? ((((win.lab || {}).perf || {}).runs) || []) : []
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; textFormat: Text.StyledText
                             text: "<b>" + modelData.game + "</b> · " + modelData.when + "<br>" + modelData.fps + " FPS avg · 1% low " + modelData.low1 + " · 99% frame time " + modelData.p99_ms + " ms"
-                                  + (modelData.gpu_load !== null ? " · GPU " + modelData.gpu_load + "% " + modelData.clock + " MHz " + modelData.power + " W " + modelData.temp + " °C" : "") } }
+                                  + (modelData.gpu_load !== null ? " · GPU " + modelData.gpu_load + "% " + modelData.clock + " MHz " + modelData.power + " W " + modelData.temp + " °C" : "")
+                                  + (modelData.findings || []).map(function(f) { return "<br><font color='" + (f.level === "problem" ? "#ff8a65" : f.level === "limit" ? "#f0b429" : "#81c784") + "'>"
+                                        + (f.level === "problem" ? "⚠ " : f.level === "limit" ? "◆ " : "✓ ") + f.text + "</font>" + (f.hint ? "<br><i>" + f.hint + "</i>" : "") }).join("") } }
                     Button { flat: true; visible: !!(win.lab || {}).master; text: (win.drv ? "▾" : "▸") + " Driver Lab"; onClicked: { if (win.drv) win.drv = null; else win.loadDrv() } }
                     ColumnLayout { Layout.fillWidth: true; spacing: 6; visible: !!(win.lab || {}).master && !!win.drv
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12

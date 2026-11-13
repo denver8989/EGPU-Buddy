@@ -1678,6 +1678,17 @@ def _support_report():
             elif pr: lines.append(f"update proof failed: {pr['error']}")
             for h in dl.get("history", [])[-10:]:
                 lines.append(f"  {when(h.get('t'))} {h.get('by')}: {h.get('version')} class {h.get('class')} - " + " ".join(f"{k}={v}" for k, v in (h.get("methods") or {}).items()))
+    # Advanced Tinkering > Performance Lab: every kept recording with its measured diagnosis (NVIDIA installs only)
+    if _installed_vendor() != "amd":
+        _, out, _ = _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], "/usr/local/sbin/egpu-nv-lab", "status"], 20)
+        try: runs = (json.loads(out).get("perf") or {}).get("runs") or []
+        except ValueError: runs = []
+        if runs:
+            lines += ["", f"## Performance Lab ({len(runs)} recordings, newest first)"]
+            for r in runs:
+                lines.append(f"{r.get('when')} {r.get('game')}: {r.get('fps')} FPS avg, 1% low {r.get('low1')}, 99% frame time {r.get('p99_ms')} ms, "
+                             f"GPU {r.get('gpu_load')}% {r.get('clock')} MHz {r.get('power')} W {r.get('temp')} C" + ("" if r.get("measured") else " (no GPU sampler data)"))
+                lines += [f"  [{f['level']}] {f['text']}" for f in r.get("findings", [])]
     log = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
                "egpu|nv-egpu|nvidia|NVRM|thunderbolt|pcieport|gamescope.*(drm|vulkan)"], 20)[1].splitlines()
     kept, burst = [], 0   # a GPU hang prints hundreds of NVRM lines in one go: keep the first 8 of each run
