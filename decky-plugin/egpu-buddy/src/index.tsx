@@ -1153,6 +1153,18 @@ function Content() {
             {lab.master && <>
               <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600 }}>Screens (read only)</div></PanelSectionRow>
               {(lab.displays ?? []).map((d, i) => <PanelSectionRow key={"d" + i}><div style={{ fontSize: "12px" }}>{d}</div></PanelSectionRow>)}
+              {!xg && <>
+                <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600 }}>Undervolt (experimental)</div></PanelSectionRow>
+                <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>A positive core offset with a lower top clock: the GPU reaches the same clock at a lower voltage, so less power and heat for the same FPS. Start small (+60 MHz, top clock about 150 MHz under its maximum), record a game in Performance Lab before and after, and raise step by step; a game that crashes or shows artefacts means one step back. Not kept: a restart, Safe Detach or "Reset clocks" (Power controls) clears it.</div></PanelSectionRow>
+                <PanelSectionRow><SliderField label="Core clock offset (MHz)" value={off} min={0} max={300} step={15} showValue onChange={setOff} /></PanelSectionRow>
+                {clkMax > 0 && <PanelSectionRow><SliderField label="Top GPU clock (MHz)" value={clkNow} min={Math.max(clkMin, clkMax - 900)} max={clkMax} step={15} showValue onChange={setClk} /></PanelSectionRow>}
+                <PanelSectionRow><ButtonItem layout="below" disabled={lock || clkMax <= 0} onClick={() => run(async () => {
+                  const a = await setCoreOffset(off); if (!a.ok) return a;
+                  const b = await setClockLimit(clkNow); return { ok: b.ok, message: b.ok ? `Undervolt: core +${off} MHz, top clock ${clkNow} MHz (until restart or Reset clocks)` : b.message };
+                })}>Apply undervolt</ButtonItem></PanelSectionRow>
+                <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => { setOff(0); setClk(null); run(resetClocks); }}>Undo (reset clocks)</ButtonItem></PanelSectionRow>
+                {clkMax <= 0 && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.7 }}>Needs the eGPU attached (its top clock is read from the driver).</div></PanelSectionRow>}
+              </>}
               <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600 }}>Performance Lab</div></PanelSectionRow>
               <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Records the next game you start for 60 s with MangoHud's log (no overlay): average FPS, 1% low, frame time, GPU load, clock, power, temperature. Change one thing, record again, compare.</div></PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["perf", lab.perf?.armed ? "cancel" : "arm"]); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })}>

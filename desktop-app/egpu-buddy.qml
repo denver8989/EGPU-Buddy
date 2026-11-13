@@ -532,6 +532,20 @@ ApplicationWindow {
                                   + (modelData.gpu_load !== null ? " · GPU " + modelData.gpu_load + "% " + modelData.clock + " MHz " + modelData.power + " W " + modelData.temp + " °C" : "")
                                   + (modelData.findings || []).map(function(f) { return "<br><font color='" + (f.level === "problem" ? "#ff8a65" : f.level === "limit" ? "#f0b429" : "#81c784") + "'>"
                                         + (f.level === "problem" ? "⚠ " : f.level === "limit" ? "◆ " : "✓ ") + f.text + "</font>" + (f.hint ? "<br><i>" + f.hint + "</i>" : "") }).join("") } }
+                    Label { visible: !!(win.lab || {}).master && !win.xg; font.bold: true; text: "Undervolt (experimental)" }
+                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12; visible: !!(win.lab || {}).master && !win.xg
+                        text: "A positive core offset with a lower top clock: the same clock at a lower voltage, so less power and heat for the same FPS. Start small (+60 MHz, top clock about 150 MHz under its maximum), record a game in Performance Lab before and after, and raise step by step; a crash or artefacts mean one step back. Not kept: a restart, Safe Detach or Reset clocks clears it." }
+                    RowLayout { spacing: 8; visible: !!(win.lab || {}).master && !win.xg && win.clkMax > 0
+                        Label { text: "Core offset" }
+                        Slider { id: uvOff; Layout.fillWidth: true; from: 0; to: 300; stepSize: 15; value: 0 }
+                        Label { text: "+" + Math.round(uvOff.value) + " MHz"; Layout.preferredWidth: 80 } }
+                    RowLayout { spacing: 8; visible: !!(win.lab || {}).master && !win.xg && win.clkMax > 0
+                        Label { text: "Top clock" }
+                        Slider { id: uvClk; Layout.fillWidth: true; from: Math.max(600, win.clkMax - 900); to: Math.max(600, win.clkMax); stepSize: 15; value: Math.max(600, win.clkMax) }
+                        Label { text: Math.round(uvClk.value) + " MHz"; Layout.preferredWidth: 80 } }
+                    RowLayout { spacing: 8; visible: !!(win.lab || {}).master && !win.xg && win.clkMax > 0
+                        Button { text: "Apply undervolt"; enabled: win.on; onClicked: win.act("undervolt", { core: Math.round(uvOff.value), mhz: Math.round(uvClk.value) }) }
+                        Button { text: "Undo (reset clocks)"; enabled: win.on; onClicked: win.act("reset-clocks") } }
                     Button { flat: true; visible: !!(win.lab || {}).master; text: (win.drv ? "▾" : "▸") + " Driver Lab"; onClicked: { if (win.drv) win.drv = null; else win.loadDrv() } }
                     ColumnLayout { Layout.fillWidth: true; spacing: 6; visible: !!(win.lab || {}).master && !!win.drv
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12

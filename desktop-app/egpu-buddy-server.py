@@ -312,6 +312,12 @@ def action(p):
         return {"ok": True, "started": "update"}
     if a == "power-limit":
         w = int((p or {}).get("watts", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-power-limit" if s["vendor"] in ("", "nvidia") else "set-generic-power-cap", str(w)], 20); return {"ok": rc == 0, "out": o or e}
+    if a == "undervolt":   # Advanced Tinkering (NVIDIA, not an XG Mobile): the existing core offset + clock limit actions together
+        c, m = int((p or {}).get("core", 0)), int((p or {}).get("mhz", 0))
+        rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-core-offset", str(c)], 20)
+        if rc: return {"ok": False, "out": o or e}
+        rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-graphics-clock", str(m)], 20)
+        return {"ok": rc == 0, "out": (f"Undervolt: core +{c} MHz, top clock {m} MHz (until restart or Reset clocks)" if rc == 0 else o or e)}
     if a == "clock-limit":   # laptop-class GPUs (ASUS XG Mobile): no power limit from the driver, a clock limit instead
         m = int((p or {}).get("mhz", 0)); rc, o, e = sh(["sudo", "-n", PRIV, "set-gpu-graphics-clock", str(m)], 20)
         return {"ok": rc == 0, "out": (f"GPU clock limited to {m} MHz" if rc == 0 else o or e)}   # not nvidia-smi's persistence-mode warning
