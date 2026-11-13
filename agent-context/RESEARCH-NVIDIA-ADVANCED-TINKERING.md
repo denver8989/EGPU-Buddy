@@ -130,3 +130,9 @@ Result: no driver patch is warranted by the brief; Driver Lab stays the porting 
   built-in benchmark (steam -applaunch 1091500 --launcher-skip -benchmark -skipStartScreen, ~75 s, exits by itself):
   ~240 FPS, GPU ~77 % busy, all 16 CPU threads ~68 % -> new "every core busy" CPU rule. Undervolt +120 MHz / top clock
   2600 MHz: 240 FPS (same), 1 % low 85-91 -> 96, GPU 102 W -> 78 W, 61 -> 56 C, no Xid. Clocks reset afterwards.
+- Driver trial rehearsal (2026-11-13, reference machine, Game Mode, run autonomously at the owner's request): marker
+  patch (one pr_info in nv_linux_drm_init). First attempt: Safe Detach refused (the owner's strata.service model server
+  held /dev/nvidia*): nothing changed, eGPU re-attached. With it stopped: Safe Detach -> build of 1:620.70.06-100 ->
+  attach -> health check -> kept in ~6 min; kernel log "nvidia-drm: EGPU Buddy Driver Lab build"; driver-dir unchanged.
+  revert-lab: back to 1:620.70.06-1 from the package cache in ~1 min, no marker on the new load, -100 package files
+  removed, Game Mode back on the eGPU. Marker patch removed, desktop and strata.service restored.
