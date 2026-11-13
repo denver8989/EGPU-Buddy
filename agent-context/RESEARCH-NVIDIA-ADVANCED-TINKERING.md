@@ -125,3 +125,8 @@ Result: no driver patch is warranted by the brief; Driver Lab stays the porting 
   speed, VRAM full, stutter, frame cap, GPU-bound. Rules tested on stand-ins; sampler tested live (idle GPU). Real game:
   not yet.
 - Undervolt: existing set-gpu-core-offset + set-gpu-graphics-clock + reset-gpu-clocks, no new root code.
+- Real-game verification (2026-11-13, owner's Legion Go 2 + RTX 5060 Ti, CachyOS desktop on the eGPU): MangoHud 0.8.4's
+  no_display also disables logging, so no real game had ever been recorded; fixed with an invisible HUD. Cyberpunk 2077
+  built-in benchmark (steam -applaunch 1091500 --launcher-skip -benchmark -skipStartScreen, ~75 s, exits by itself):
+  ~240 FPS, GPU ~77 % busy, all 16 CPU threads ~68 % -> new "every core busy" CPU rule. Undervolt +120 MHz / top clock
+  2600 MHz: 240 FPS (same), 1 % low 85-91 -> 96, GPU 102 W -> 78 W, 61 -> 56 C, no Xid. Clocks reset afterwards.
