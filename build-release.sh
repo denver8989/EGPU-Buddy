@@ -5,9 +5,11 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")" && pwd); cd "$ROOT"
 VER=$(cat VERSION); NAME="EGPU-Buddy-$VER"
-# the name before the rename: installed updaters (0.7.284 and older) and old copies of get-egpu-buddy.sh download this one,
-# so every release also carries the same files under it (byte for byte, listed in SHA256SUMS)
-OLD="SteamOS-EGPU-Buddy-$VER"
+# the name before the rename: updaters installed before 0.7.284 download this one. The 5 releases 0.7.284-0.7.288 also
+# carry the same files under it (byte for byte, listed in SHA256SUMS), so those installs can update across the rename;
+# from 0.7.289 on, only the new name is published (owner, 2026-11-13: no doubled releases for good).
+OLD="SteamOS-EGPU-Buddy-$VER"; OLD_UNTIL=0.7.288
+alias_on(){ [ "$(printf '%s\n%s\n' "$VER" "$OLD_UNTIL" | sort -V | tail -1)" = "$OLD_UNTIL" ]; }
 rm -rf dist && mkdir -p dist/stage/"$NAME"
 git ls-files -z | grep -zvE '^(dist/|\.github/|build-release\.sh|release-notes-for\.py|decky-plugin/egpu-buddy/(src|node_modules|pnpm-lock|rollup|tsconfig|\.gitignore))' | xargs -0 -I{} cp --parents {} dist/stage/"$NAME"/
 # prebuilt gamescope is not tracked (binary); ship it in the artifacts
@@ -44,8 +46,8 @@ HDR
 cat "dist/$NAME.tar.gz"
 } > "dist/$NAME.run"
 chmod +x "dist/$NAME.run"
-cp "dist/$NAME.tar.gz" "dist/$OLD.tar.gz"; cp "dist/$NAME.run" "dist/$OLD.run"
-(cd dist && sha256sum "$NAME.run" "$NAME.tar.gz" "EGPU-Buddy-Decky-$VER.zip" "$OLD.run" "$OLD.tar.gz" > SHA256SUMS)
+if alias_on; then cp "dist/$NAME.tar.gz" "dist/$OLD.tar.gz"; cp "dist/$NAME.run" "dist/$OLD.run"; fi
+(cd dist && sha256sum "$NAME.run" "$NAME.tar.gz" "EGPU-Buddy-Decky-$VER.zip" $(alias_on && echo "$OLD.run $OLD.tar.gz") > SHA256SUMS)
 ls -la dist | grep -E 'run|tar|SHA'
 if [ "${1:-}" = --publish ]; then
   # the release tag must point at code that is on GitHub's master: 0.7.88-0.7.108 were published from a side branch
@@ -55,5 +57,5 @@ if [ "${1:-}" = --publish ]; then
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ] || { echo "push master to GitHub first"; exit 1; }
   # a release page carries ITS OWN changes, not the whole history (RELEASE-NOTES.md stays cumulative in the repository)
   python3 release-notes-for.py "$VER" RELEASE-NOTES.md > "dist/NOTES-$VER.md"
-  gh release create "v$VER" "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" "dist/$OLD.run" "dist/$OLD.tar.gz" dist/SHA256SUMS get-egpu-buddy.sh --target "$(git rev-parse HEAD)" --title "EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
+  gh release create "v$VER" "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" $(alias_on && echo "dist/$OLD.run dist/$OLD.tar.gz") dist/SHA256SUMS get-egpu-buddy.sh --target "$(git rev-parse HEAD)" --title "EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
 fi

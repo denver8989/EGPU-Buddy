@@ -39,13 +39,13 @@ if [ "$(cat prebuilt/cecd/BUILD-ID 2>/dev/null)" != "$CWANT" ]; then
 fi
 [ "${1:-}" = --check ] && { ./build-release.sh >/dev/null && ls -la dist/*"$VER"* && echo "check ok: build works, nothing published"; exit 0; }
 ./build-release.sh
-test -s "dist/$NAME.tar.gz"; test -s "dist/$NAME.run"; cmp -s "dist/$NAME.tar.gz" "dist/$OLD.tar.gz"; grep -q " $OLD.tar.gz$" dist/SHA256SUMS
+test -s "dist/$NAME.tar.gz"; test -s "dist/$NAME.run"; ALIAS=""; [ -e "dist/$OLD.tar.gz" ] && { cmp -s "dist/$NAME.tar.gz" "dist/$OLD.tar.gz"; grep -q " $OLD.tar.gz$" dist/SHA256SUMS; ALIAS="dist/$OLD.run dist/$OLD.tar.gz"; }   # 0.7.284-0.7.288 only (build-release.sh)
 # listings to files first: `cmd | grep -q` fails under pipefail when grep stops early
 unzip -l "dist/EGPU-Buddy-Decky-$VER.zip" > "$T/zip.txt"; tar -tzf "dist/$NAME.tar.gz" > "$T/tar.txt"
 grep -q "payload/$NAME.tar.gz" "$T/zip.txt"; grep -q "EGPU-Buddy/dist/index.js" "$T/zip.txt"
 grep -q "prebuilt/gamescope-gbm/usr/bin/gamescope$" "$T/tar.txt"
 python3 release-notes-for.py "$VER" RELEASE-NOTES.md > "dist/NOTES-$VER.md"
 gh release create "v$VER" --target "$(git rev-parse HEAD)" \
-  "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" "dist/$OLD.run" "dist/$OLD.tar.gz" dist/SHA256SUMS get-egpu-buddy.sh \
+  "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" $ALIAS dist/SHA256SUMS get-egpu-buddy.sh \
   --title "EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
 echo "published v$VER"
