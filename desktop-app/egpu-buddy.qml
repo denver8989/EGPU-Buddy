@@ -102,7 +102,7 @@ ApplicationWindow {
     function loadEx() { call("GET", "/api/extras", null, function(r) { if (r) ex = r }) }
     function setEx(key, v) { act("set-extra", { key: key, value: v }); loadEx() }
     Timer { interval: 3000; repeat: true; triggeredOnStart: true; running: win.pg === 2 && win.visible; onTriggered: win.loadEx() }
-    Timer { interval: 15000; repeat: true; triggeredOnStart: true; running: win.pg === 0 && win.visible; onTriggered: win.loadEx() }   // TV controls on the Overview
+    Timer { interval: 15000; repeat: true; triggeredOnStart: true; running: (win.pg === 0 || win.pg === 1) && win.visible; onTriggered: win.loadEx() }   // TV controls on the Overview, Big Art menu fix on NVIDIA settings
     readonly property var tvr: win.ex.tvr || ({})
     property var lab: null        // NVIDIA settings > Advanced Tinkering, loaded when opened (read-only until a switch is used)
     function loadLab() { call("GET", "/api/nvlab", null, function(r) { win.lab = r || { report: [], labs: [] } }) }
@@ -492,7 +492,9 @@ ApplicationWindow {
                           + (win.nv.games || []).map(function(g) { return "<b>" + g.game + "</b>" + (g.overridden.length ? " (keeps its own " + g.overridden.join(", ") + ")" : "") }).join(" · ")
                     textFormat: Text.StyledText }
                 Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11
-                    text: "* Experimental. Done with what Linux offers rather than NVIDIA's control panel: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options, and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and its own dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Turn off removes it from games completely. In Game Mode the plugin also has Steam's own live settings (frame limit, tearing, VRR, sharpness). Not available yet: FXAA, texture filtering quality, page flipping." } }
+                    text: "* Experimental. Done with what Linux offers rather than NVIDIA's control panel: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options, and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and its own dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Turn off removes it from games completely. In Game Mode the plugin also has Steam's own live settings (frame limit, tearing, VRR, sharpness). Not available yet: FXAA, texture filtering quality, page flipping." }
+                Switch { Layout.fillWidth: true; text: "Big Art mode menu fix (Steam menu over a black bar on the NVIDIA eGPU; applies when Game Mode restarts)"; visible: !!((win.ex || {}).steam_fix || {}).available
+                         checked: !!((win.ex || {}).steam_fix || {}).enabled; onToggled: { win.act("steam-fix", { value: checked }); win.loadEx() } }
                 Button { flat: true; text: (win.lab ? "▾" : "▸") + " Advanced Tinkering (lab)"; onClicked: { if (win.lab) win.lab = null; else win.loadLab() } }
                 ColumnLayout { Layout.fillWidth: true; spacing: 6; visible: !!win.lab
                     Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12
@@ -576,7 +578,7 @@ ApplicationWindow {
                             Button { text: "Refresh"; visible: (win.drv || {}).state === "running"; onClicked: win.loadDrv() }
                             Button { text: "Clear the Driver Lab"; visible: (win.drv || {}).state === "done"; onClicked: win.labCmd(["driver", "discard"], function() { win.loadDrv() }) } } }
                     Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.6; font.pixelSize: 11; visible: !!(win.lab || {}).master
-                        text: "Planned, not in this version: " + (((win.lab || {}).planned) || []).join(" · ") + "." } }
+                        text: "Planned, not in this version: " + (((win.lab || {}).planned) || []).join(" · ") + "." } } }
             ColumnLayout { Layout.fillWidth: true; spacing: 12; visible: win.pg === 2
                 // cards stack in columns (no hole under a short card): 1 column on a small window, 2, or 3 on a wide one
                 RowLayout { Layout.fillWidth: true; spacing: 14
@@ -587,7 +589,6 @@ ApplicationWindow {
                     Card { id: cGame; show: !!win.ex.tv
                         Head { text: "Game Mode" }
                         Switch { Layout.fillWidth: true; text: "Best resolution and refresh rate on every screen"; checked: !!win.ex.game_res; onToggled: win.setEx("game_res_native", checked) }
-                        Switch { Layout.fillWidth: true; text: "Steam menu fix"; visible: !!(win.ex.steam_fix || {}).available; checked: !!(win.ex.steam_fix || {}).enabled; onToggled: { win.act("steam-fix", { value: checked }); win.loadEx() } }
                         Button { text: "Wake screens"; onClicked: win.act("wake-screens") } }
                     Card { id: cUpd
                         Head { text: "Updates" }

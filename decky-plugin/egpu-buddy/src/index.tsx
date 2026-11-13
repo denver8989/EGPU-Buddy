@@ -1095,12 +1095,6 @@ function Content() {
           <PanelSectionRow><ToggleField label="Best resolution and refresh rate on every screen" description="On by default. Steam runs big external screens (XR glasses in ultrawide, 1440p, 4K) at 1920x1080 and starts games there with black bars. With this on, Game Mode uses each screen's highest resolution and refresh rate, follows the glasses into and out of ultrawide, and games start at the screen's size. Games you set yourself are left alone; switching this off leaves Steam's settings as they are." checked={gr.enabled} onChange={(v) => run(async () => { const r = await setGameRes(v); setGr(await getGameRes()); return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
-      {tab === "setup" && sui?.available && (
-        <PanelSection title="Steam menu">
-          <PanelSectionRow><ToggleField label={nvb ? "Big Art mode menu fix (NVIDIA)" : "Big Art mode menu fix (NVIDIA eGPU)"} description={`Off by default. On ${nvb ? "an NVIDIA GPU" : "the NVIDIA eGPU"} Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: ${appName()} supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when ${nvb ? "Steam restarts" : "Game Mode restarts"}.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`}
-            checked={!!sui.enabled} onChange={(v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) { const g = await restartGamemode(); return { ok: true, message: `${r.message} ${g.message}` }; } return r; })} /></PanelSectionRow>
-        </PanelSection>
-      )}
       {tab === "setup" && nv?.available && (
         <PanelSection title="NVIDIA settings (experimental)">
           <PanelSectionRow><ButtonItem layout="below" onClick={() => { setNvEdit(null); setTab("nvidia"); }}>Open NVIDIA settings</ButtonItem></PanelSectionRow>
@@ -1210,6 +1204,12 @@ function Content() {
           <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.65 }}>* Experimental. Done with what Linux offers: DXVK and vkd3d-proton (Proton games), the NVIDIA driver's own options and NVIDIA's clock control, handed to each game as it starts (Steam games and non-Steam games added to Steam). A game's own launch options and dxvk.conf always win; EGPU_NVT_OFF=1 as a launch option keeps one game out. Not yet: FXAA, texture filtering quality, page flipping.</div></PanelSectionRow>
         </PanelSection>);
       })()}
+      {tab === "nvidia" && sui?.available && (
+        <PanelSection title="Steam menu">
+          <PanelSectionRow><ToggleField label={nvb ? "Big Art mode menu fix (NVIDIA)" : "Big Art mode menu fix (NVIDIA eGPU)"} description={`Off by default. On ${nvb ? "an NVIDIA GPU" : "the NVIDIA eGPU"} Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: ${appName()} supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when ${nvb ? "Steam restarts" : "Game Mode restarts"}.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`}
+            checked={!!sui.enabled} onChange={(v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) { const g = await restartGamemode(); return { ok: true, message: `${r.message} ${g.message}` }; } return r; })} /></PanelSectionRow>
+        </PanelSection>
+      )}
       {tab === "amd" && amd?.available && (() => {
         const cur = amdEdit ?? amd.settings ?? {};
         // every pick saves at once: a pick waiting for Apply was lost when the menu closed
