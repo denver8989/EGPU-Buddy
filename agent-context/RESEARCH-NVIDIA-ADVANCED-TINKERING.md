@@ -99,3 +99,15 @@ game (needs owner / testers; all are labelled "needs testing").
 - Which later phase next. Driver Lab needs explicit approval of the `egpu-driver-trial` extension, and a test plan on
   the reference machine.
 - Whether to test dlssg-open on the Legion Go 1 + RTX 3080 (manual, per game, off-tree).
+
+## Driver-level candidates, evaluated in the 620.70.06 source (2026-11-13, no install)
+- `RMIntrLockingMode=1`: no-op on this card. intr.c already enables interrupt-mask locking by default when
+  PDB_PROP_INTR_MASK_SUPPORTED, which g_intr_nvoc.c sets for TU10x through GB20x (GB206 = RTX 5060 Ti included).
+- Runtime power saving (`DynamicPowerManagement=0x02`): cannot engage. dynamic-power.c forces NEVER without an ACPI _PR3
+  power method; the eGPU (03:00.0) and its dock bridge have no ACPI node. A patch cannot add one: the dock cannot cut GPU power.
+- PCIe link forcing (`RMPcieLinkSpeed`): key exists but is consumed in GSP firmware (closed). The link reads Gen4 x4,
+  i.e. the USB4 tunnel; the tunnel, not the PCIe generation, sets the bandwidth. No gain to chase.
+- GPU reset: needs no display and no clients on the GPU; Safe Detach + attach already does that more safely.
+- Undervolt / clock offsets: NVML, userspace, no driver change (NVIDIA settings candidate).
+- Already set: full BAR1, RmForceExternalGpu, PreserveVideoMemoryAllocations, suspend notifiers, MSI.
+Result: no driver patch is warranted by the brief; Driver Lab stays the porting / trial machinery.
