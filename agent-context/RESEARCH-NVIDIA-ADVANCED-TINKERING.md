@@ -111,3 +111,17 @@ game (needs owner / testers; all are labelled "needs testing").
 - Undervolt / clock offsets: NVML, userspace, no driver change (NVIDIA settings candidate).
 - Already set: full BAR1, RmForceExternalGpu, PreserveVideoMemoryAllocations, suspend notifiers, MSI.
 Result: no driver patch is warranted by the brief; Driver Lab stays the porting / trial machinery.
+
+## Phase 5 (built 2026-11-13): no-AI driver updates, measured Performance Lab, undervolt
+- Driver Lab port engine (egpu-driver-lab port()): per patch exact (-F0) -> git 3-way merge (previous version as the
+  ancestor) -> pre-written intent rules for conflicted files (packaging/driver-lab-rules/rules.py, 160: FWSEC GPU-lost,
+  display ioctls on a lost device, callers read from the previous version) -> post fixers: removed macros written out,
+  dropped parameters, removal path cancels EVERY delayed worker (catches the 620 content-protection trap). Fail closed.
+- Proof: 615 patches + 620 source -> 13/13 steps automatic, same code as the shipped hand port (one reworded comment).
+  Honest limit: the rules were written with 620 visible. Blind 610 -> 615: 4/10 automatic, 6 flagged (NVIDIA rewrote that
+  code). The blind proof is the next NVIDIA release: the opt-in weekly release watch runs the whole pipeline by itself.
+- Performance Lab: sampler unit alongside MangoHud (nvidia-smi throttle reasons, PCIe link + dmon traffic vs the USB4
+  tunnel, VRAM, per-core CPU) -> findings: wrong GPU, power cap, heat, power brake, CPU-bound, USB4-bound, PCIe below
+  speed, VRAM full, stutter, frame cap, GPU-bound. Rules tested on stand-ins; sampler tested live (idle GPU). Real game:
+  not yet.
+- Undervolt: existing set-gpu-core-offset + set-gpu-graphics-clock + reset-gpu-clocks, no new root code.
