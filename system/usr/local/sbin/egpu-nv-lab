@@ -152,6 +152,27 @@ def _cpu_times():
             v = [int(x) for x in l.split()[1:]]; out.append((v[3] + v[4], sum(v)))
     return out
 
+def _cpu_power():
+    """(APU package power W, its sustained limit W or None, the highest limit the handheld allows or None)."""
+    w = lim = top = None
+    for h in glob.glob("/sys/class/hwmon/hwmon*"):
+        try:
+            if open(h + "/name").read().strip() == "amdgpu" and open(h + "/power1_label").read().strip() == "PPT":
+                w = int(open(h + "/power1_input").read()) / 1e6; break
+        except (OSError, ValueError): pass
+    for f in glob.glob("/sys/class/firmware-attributes/*/attributes/ppt_pl1_spl/current_value"):   # Lenovo Legion Go
+        try: lim = float(open(f).read()); top = float(open(f.replace("current_value", "max_value")).read())
+        except (OSError, ValueError): pass
+    return w, lim, top
+
+def _core_clocks():
+    """[(current MHz, top MHz)] per CPU thread."""
+    out = []
+    for c in sorted(glob.glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq")):
+        try: out.append((int(open(c + "/scaling_cur_freq").read()) / 1000, int(open(c + "/cpuinfo_max_freq").read()) / 1000))
+        except (OSError, ValueError): out.append((0, 0))
+    return out
+
 def _sample(armed_t):
     """Runs while a recording is armed (max 3 h): keeps the last 3 minutes of 1 s samples; when MangoHud's log appears,
     saves the samples of its time window beside it and stops."""
@@ -173,6 +194,9 @@ def _sample(armed_t):
         cur = _cpu_times()
         cores = [round(100 * (1 - (c[0] - p[0]) / max(1, c[1] - p[1]))) for c, p in zip(cur, prev)]; prev = cur
         smp = {"t": time.time(), "cpu_max": max(cores or [0]), "cpu_avg": round(sum(cores) / max(1, len(cores))), "rx": pcie["rx"], "tx": pcie["tx"]}
+        clk = [c for c, u in zip(_core_clocks(), cores) if u >= 50 and c[1]]   # busy threads only: idle ones clock down
+        if clk: smp["cpu_clock_pct"] = round(100 * sum(c[0] for c in clk) / sum(c[1] for c in clk))
+        smp["cpu_w"], smp["cpu_w_limit"], smp["cpu_w_top"] = _cpu_power()
         try:
             v = subprocess.run(["nvidia-smi", f"--query-gpu={SMI_Q}", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5).stdout.splitlines()[0].split(",")
             for k, x in zip(SMI_K, v):
@@ -212,11 +236,32 @@ def _diagnose(run, lab):
     cpu1 = [x["cpu_max"] for x in S if "cpu_max" in x]
     cpua = [x["cpu_avg"] for x in S if "cpu_avg" in x]
     hint = "Higher resolution or quality costs nothing here; lower CPU-heavy settings (view distance, crowds, physics) or use frame generation."
+    cpu_lim = None
     if cpu1 and util < 85 and sum(1 for c in cpu1 if c >= 90) / len(cpu1) >= 0.5:   # one thread holds the game back
-        say("limit", f"Limited by the CPU: its busiest core at {_pct(cpu1, 0.5)}% while the GPU waited ({util:.0f}% busy)", hint)
+        cpu_lim = f"Limited by the CPU: its busiest core at {_pct(cpu1, 0.5)}% while the GPU waited ({util:.0f}% busy)"
     elif cpua and util < 85 and sum(1 for c in cpua if c >= 60) / len(cpua) >= 0.5:
         # every core busy: with two threads per core (SMT), 60 % across all threads is about every physical core in use
-        say("limit", f"Limited by the CPU: all {os.cpu_count()} threads {_pct(cpua, 0.5)}% busy on average while the GPU waited ({util:.0f}% busy)", hint)
+        cpu_lim = f"Limited by the CPU: all {os.cpu_count()} threads {_pct(cpua, 0.5)}% busy on average while the GPU waited ({util:.0f}% busy)"
+    if cpu_lim:
+        cpu_lim += f"; removing it gives at most about {100 / max(util, 1) - 1:.0%} more FPS" if util >= 50 else ""
+        # why: power limit (package power at the handheld's TDP), or the cores at full clock (the game's own CPU cost)
+        w = [x["cpu_w"] for x in S if x.get("cpu_w")]; lim = next((x["cpu_w_limit"] for x in S if x.get("cpu_w_limit")), None)
+        ck = [x["cpu_clock_pct"] for x in S if x.get("cpu_clock_pct")]
+        w50, ck50 = _pct(w, 0.5), _pct(ck, 0.5)
+        top = next((x["cpu_w_top"] for x in S if x.get("cpu_w_top")), None)
+        if w50 and lim and w50 >= 0.9 * lim:
+            say("limit", cpu_lim + f". Cause: the handheld's power limit (CPU at {w50:.0f} of {lim:.0f} W, busy cores at {ck50 or '?'}% of their top clock)",
+                ("This is already the highest limit the handheld allows: it is the chip's ceiling. " + hint) if top and lim >= top else
+                f"Raise the power limit (TDP, up to {top:.0f} W) in Steam's performance menu or the handheld's Performance mode, plug in the charger, and record again. " + hint if top else
+                "Raise the power limit (TDP) in Steam's performance menu or the handheld's Performance mode, plug in the charger, and record again. " + hint)
+        elif ck50 and ck50 >= 90:
+            say("limit", cpu_lim + f". Cause: the game's own CPU work at this frame rate (busy cores at {ck50}% of their top clock" + (f", {w50:.0f} W" if w50 else "") + ", no power limit in the way)",
+                "Nothing to fix in the system: the CPU is at full speed. " + hint)
+        elif ck50:
+            say("limit", cpu_lim + f". Busy cores ran at only {ck50}% of their top clock" + (f" at {w50:.0f} W" if w50 else "") + ": held back by power, heat or the power profile",
+                "Try the Performance power profile or a higher power limit (TDP), and record again. " + hint)
+        else:
+            say("limit", cpu_lim, hint)
     cap = (lab or {}).get("usb4_gbs")
     rx, tx = [x.get("rx", 0) / 1000 for x in S], [x.get("tx", 0) / 1000 for x in S]
     if cap and S:
