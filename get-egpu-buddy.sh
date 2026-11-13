@@ -1,5 +1,5 @@
 #!/bin/bash
-# SteamOS EGPU Buddy one-line installer:
+# EGPU Buddy one-line installer:
 #   curl -fsSL https://raw.githubusercontent.com/denver8989/EGPU-Buddy/master/get-egpu-buddy.sh | bash
 # Fetches the latest release, verifies its SHA-256, installs Decky Loader with its official installer if it is missing
 # (EGPU_NO_DECKY=1 skips it), then runs the EGPU Buddy installer (graphical if a display is available, otherwise in this
@@ -14,13 +14,14 @@ if [ "$(passwd -S "$USER" 2>/dev/null | awk '{print $2}')" != P ]; then
   say "== your account has no password (SteamOS default); sudo needs one. Set it now (typed twice, nothing is shown):"
   passwd </dev/tty; [ "$(passwd -S "$USER" 2>/dev/null | awk '{print $2}')" = P ] || { echo "no password set; cannot continue"; exit 1; }
 fi
-say "== SteamOS EGPU Buddy: looking up the latest release"
+say "== EGPU Buddy: looking up the latest release"
 TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
 [ -n "$TAG" ] || { echo "could not determine the latest release"; exit 1; }
-VER=${TAG#v}; NAME="SteamOS-EGPU-Buddy-$VER.run"; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+VER=${TAG#v}; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+curl -fsSL -o "$T/SHA256SUMS" "https://github.com/$REPO/releases/download/$TAG/SHA256SUMS"
+NAME="EGPU-Buddy-$VER.run"; grep -q " $NAME$" "$T/SHA256SUMS" || NAME="SteamOS-EGPU-Buddy-$VER.run"   # before the rename
 say "== downloading $NAME"
 curl -fSL --progress-bar -o "$T/$NAME" "https://github.com/$REPO/releases/download/$TAG/$NAME"
-curl -fsSL -o "$T/SHA256SUMS" "https://github.com/$REPO/releases/download/$TAG/SHA256SUMS"
 WANT=$(awk -v n="$NAME" '$2 ~ ("(^|/)" n "$") {print $1; exit}' "$T/SHA256SUMS"); GOT=$(sha256sum "$T/$NAME" | cut -d" " -f1)
 [ -n "$WANT" ] && [ "$WANT" = "$GOT" ] && say "== checksum ok" || { echo "checksum mismatch, aborting"; exit 1; }
 chmod +x "$T/$NAME"

@@ -28,8 +28,11 @@ VER=${VER:-${1:-$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest
 [ "$cur" = "$VER" ] && [ "${EGPU_UPDATE_FORCE:-0}" != 1 ] && { say "already on $VER"; st ok 100 "Already up to date ($VER)."; exit 0; }
 say "updating $cur -> $VER"; st running 5 "Downloading $VER"
 T=$(mktemp -d); B=https://github.com/$REPO/releases/download/v$VER
-TGZ=SteamOS-EGPU-Buddy-$VER.tar.gz; ZIP=EGPU-Buddy-Decky-$VER.zip
-curl -fsSL -o "$T/SHA256SUMS" "$B/SHA256SUMS"; curl -fsSL -o "$T/$TGZ" "$B/$TGZ"
+TGZ=EGPU-Buddy-$VER.tar.gz; ZIP=EGPU-Buddy-Decky-$VER.zip
+curl -fsSL -o "$T/SHA256SUMS" "$B/SHA256SUMS"
+# releases before the rename (0.7.283 and older, reachable through "Install another version") only have the old name
+grep -q " $TGZ$" "$T/SHA256SUMS" 2>/dev/null || TGZ=SteamOS-EGPU-Buddy-$VER.tar.gz
+curl -fsSL -o "$T/$TGZ" "$B/$TGZ"
 [ -d "$PLUGIN" ] && curl -fsSL -o "$T/$ZIP" "$B/$ZIP"
 (cd "$T" && for f in "$TGZ" $([ -f "$ZIP" ] && echo "$ZIP"); do
   want=$(awk -v n="$f" '$2 ~ ("(^|/)" n "$") {print $1; exit}' SHA256SUMS); [ -n "$want" ] && [ "$want" = "$(sha256sum "$f" | cut -d' ' -f1)" ] || { echo "checksum mismatch on $f"; exit 3; }

@@ -4,7 +4,10 @@
 #   ./build-release.sh --publish  build and create the GitHub release for the version in VERSION
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")" && pwd); cd "$ROOT"
-VER=$(cat VERSION); NAME="SteamOS-EGPU-Buddy-$VER"
+VER=$(cat VERSION); NAME="EGPU-Buddy-$VER"
+# the name before the rename: installed updaters (0.7.284 and older) and old copies of get-egpu-buddy.sh download this one,
+# so every release also carries the same files under it (byte for byte, listed in SHA256SUMS)
+OLD="SteamOS-EGPU-Buddy-$VER"
 rm -rf dist && mkdir -p dist/stage/"$NAME"
 git ls-files -z | grep -zvE '^(dist/|\.github/|build-release\.sh|release-notes-for\.py|decky-plugin/egpu-buddy/(src|node_modules|pnpm-lock|rollup|tsconfig|\.gitignore))' | xargs -0 -I{} cp --parents {} dist/stage/"$NAME"/
 # prebuilt gamescope is not tracked (binary); ship it in the artifacts
@@ -29,19 +32,20 @@ mkdir -p dist/plugin/EGPU-Buddy/payload && cp "dist/$NAME.tar.gz" dist/plugin/EG
 {
 cat <<'HDR'
 #!/bin/sh
-# SteamOS EGPU Buddy self-extracting installer. Run it; use --uninstall to remove; --no-gui for a terminal.
+# EGPU Buddy self-extracting installer. Run it; use --uninstall to remove; --no-gui for a terminal.
 set -e
-T=$(mktemp -d "${TMPDIR:-/tmp}/steamos-egpu-buddy.XXXXXX")
+T=$(mktemp -d "${TMPDIR:-/tmp}/egpu-buddy.XXXXXX")
 LINE=$(awk '/^__PAYLOAD_BELOW__$/{print NR+1; exit}' "$0")
 tail -n +"$LINE" "$0" | tar -xzf - -C "$T"
-D=$(ls -d "$T"/SteamOS-EGPU-Buddy-*)
+D=$(ls -d "$T"/*EGPU-Buddy-*)
 exec bash "$D/installer/steamos-egpu-buddy" "$@"
 __PAYLOAD_BELOW__
 HDR
 cat "dist/$NAME.tar.gz"
 } > "dist/$NAME.run"
 chmod +x "dist/$NAME.run"
-(cd dist && sha256sum "$NAME.run" "$NAME.tar.gz" "EGPU-Buddy-Decky-$VER.zip" > SHA256SUMS)
+cp "dist/$NAME.tar.gz" "dist/$OLD.tar.gz"; cp "dist/$NAME.run" "dist/$OLD.run"
+(cd dist && sha256sum "$NAME.run" "$NAME.tar.gz" "EGPU-Buddy-Decky-$VER.zip" "$OLD.run" "$OLD.tar.gz" > SHA256SUMS)
 ls -la dist | grep -E 'run|tar|SHA'
 if [ "${1:-}" = --publish ]; then
   # the release tag must point at code that is on GitHub's master: 0.7.88-0.7.108 were published from a side branch
@@ -51,5 +55,5 @@ if [ "${1:-}" = --publish ]; then
   [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ] || { echo "push master to GitHub first"; exit 1; }
   # a release page carries ITS OWN changes, not the whole history (RELEASE-NOTES.md stays cumulative in the repository)
   python3 release-notes-for.py "$VER" RELEASE-NOTES.md > "dist/NOTES-$VER.md"
-  gh release create "v$VER" "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" dist/SHA256SUMS get-egpu-buddy.sh --target "$(git rev-parse HEAD)" --title "SteamOS EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
+  gh release create "v$VER" "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" "dist/$OLD.run" "dist/$OLD.tar.gz" dist/SHA256SUMS get-egpu-buddy.sh --target "$(git rev-parse HEAD)" --title "EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
 fi

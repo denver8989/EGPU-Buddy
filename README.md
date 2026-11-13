@@ -151,7 +151,7 @@ after a reboot.
    Developer → **Install plugin from URL**, and paste the `EGPU-Buddy-Decky-<version>.zip` link from
    [Releases](https://github.com/denver8989/EGPU-Buddy/releases). Open **EGPU Buddy** in the Quick Access
    menu, press **Install system integration**, then reboot.
-2. **From the Desktop:** download `SteamOS-EGPU-Buddy-<version>.run` from
+2. **From the Desktop:** download `EGPU-Buddy-<version>.run` from
    [Releases](https://github.com/denver8989/EGPU-Buddy/releases), make it executable and run it, then reboot.
 3. **One line in a terminal:**
    ```

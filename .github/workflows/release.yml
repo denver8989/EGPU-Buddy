@@ -41,9 +41,9 @@ jobs:
           PREV=$(gh release view --json tagName --jq .tagName)
           echo "prebuilt from $PREV"
           mkdir -p /tmp/prev
-          gh release download "$PREV" --pattern 'SteamOS-EGPU-Buddy-*.tar.gz' --dir /tmp/prev
-          tar -xzf /tmp/prev/SteamOS-EGPU-Buddy-*.tar.gz -C /tmp/prev
-          cp -a /tmp/prev/SteamOS-EGPU-Buddy-*/prebuilt .
+          gh release download "$PREV" --pattern '*EGPU-Buddy-[0-9]*.tar.gz' --dir /tmp/prev
+          tar -xzf "$(ls /tmp/prev/*.tar.gz | head -1)" -C /tmp/prev
+          cp -a /tmp/prev/*EGPU-Buddy-*/prebuilt .
           test -x prebuilt/gamescope-gbm/usr/bin/gamescope
 
       - name: Bazzite QML runner (built once in a Fedora container, then carried forward like the others)
@@ -87,17 +87,17 @@ jobs:
       - name: Check the artifacts before publishing
         run: |
           VER=$(cat VERSION)
-          test -s "dist/SteamOS-EGPU-Buddy-$VER.tar.gz"
-          test -s "dist/SteamOS-EGPU-Buddy-$VER.run"
-          unzip -l "dist/EGPU-Buddy-Decky-$VER.zip" | grep -q "payload/SteamOS-EGPU-Buddy-$VER.tar.gz"
+          test -s "dist/EGPU-Buddy-$VER.tar.gz"
+          test -s "dist/EGPU-Buddy-$VER.run"
+          unzip -l "dist/EGPU-Buddy-Decky-$VER.zip" | grep -q "payload/EGPU-Buddy-$VER.tar.gz"
           unzip -l "dist/EGPU-Buddy-Decky-$VER.zip" | grep -q "EGPU-Buddy/dist/index.js"
-          tar -tzf "dist/SteamOS-EGPU-Buddy-$VER.tar.gz" | grep -q "prebuilt/gamescope-gbm/usr/bin/gamescope$"
+          tar -tzf "dist/EGPU-Buddy-$VER.tar.gz" | grep -q "prebuilt/gamescope-gbm/usr/bin/gamescope$"
           cat dist/SHA256SUMS
 
       - name: Publish
         run: |
-          VER=$(cat VERSION); NAME="SteamOS-EGPU-Buddy-$VER"
+          VER=$(cat VERSION); NAME="EGPU-Buddy-$VER"
           python3 release-notes-for.py "$VER" RELEASE-NOTES.md > "dist/NOTES-$VER.md"
           gh release create "v$VER" --target "$GITHUB_SHA" \
-            "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" dist/SHA256SUMS get-egpu-buddy.sh \
-            --title "SteamOS EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"
+            "dist/$NAME.run" "dist/$NAME.tar.gz" "dist/EGPU-Buddy-Decky-$VER.zip" "dist/SteamOS-$NAME.run" "dist/SteamOS-$NAME.tar.gz" dist/SHA256SUMS get-egpu-buddy.sh \
+            --title "EGPU Buddy $VER" --notes-file "dist/NOTES-$VER.md"

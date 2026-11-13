@@ -913,17 +913,21 @@ def _expect():
 def _fetch_payload(version=None):
     """Return the path of the verified release tarball: bundled payload/ if present, else downloaded."""
     version = version or PAYLOAD_VERSION
-    name = f"SteamOS-EGPU-Buddy-{version}.tar.gz"
+    name = f"EGPU-Buddy-{version}.tar.gz"
+    if not os.path.exists(os.path.join(PLUGIN_DIR, "payload", name)) and os.path.exists(os.path.join(PLUGIN_DIR, "payload", f"SteamOS-{name}")):
+        name = f"SteamOS-{name}"   # a payload bundled before the rename
     local = os.path.join(PLUGIN_DIR, "payload", name)
     if os.path.exists(local):
         _slog(f"using bundled payload {name}", 3)
         return local
     base = f"https://github.com/{REPO}/releases/download/v{version}/"
+    sums = _get(base + "SHA256SUMS").decode()
+    if not any(l.strip().endswith(" " + name) for l in sums.splitlines()):   # releases before the rename: the old name only
+        name = f"SteamOS-{name}"
     dst = f"/tmp/{name}"
     _slog(f"downloading {name} (no bundled payload)", 2)
     _download(base + name, dst)
-    sums = _get(base + "SHA256SUMS").decode()
-    want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(name)), "")
+    want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(" " + name)), "")
     got = hashlib.sha256(open(dst, "rb").read()).hexdigest()
     if not want or want != got:
         raise RuntimeError("checksum mismatch on the downloaded payload")
@@ -1153,7 +1157,7 @@ def _update_plugin_files(version):
     name = f"EGPU-Buddy-Decky-{version}.zip"; dst = f"/tmp/{name}"
     _download(f"https://github.com/{REPO}/releases/download/v{version}/{name}", dst)
     sums = _get(f"https://github.com/{REPO}/releases/download/v{version}/SHA256SUMS").decode()
-    want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(name)), "")
+    want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(" " + name)), "")
     if not want or want != hashlib.sha256(open(dst, "rb").read()).hexdigest(): raise RuntimeError("checksum mismatch on the plugin zip")
     import zipfile
     tmp = f"/tmp/egpu-buddy-plugin-{version}"; shutil.rmtree(tmp, ignore_errors=True); zipfile.ZipFile(dst).extractall(tmp)
@@ -2165,7 +2169,7 @@ class Plugin:
             sums = _get(base + "SHA256SUMS").decode()
         except Exception:  # noqa: BLE001
             return {}
-        want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(name)), "")
+        want = next((l.split()[0] for l in sums.splitlines() if l.strip().endswith(" " + name)), "")
         if not want:
             return {}
         d = _settings(); d["continue_update"] = version; _save_settings(d)
