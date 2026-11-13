@@ -1,3 +1,13 @@
+0.7.284 — Driver Lab without AI, Performance Lab diagnosis, undervolt; builds named EGPU Buddy.
+
+- New: Driver Lab carries EGPU Buddy's driver patches to a new NVIDIA release with no AI and no person (exact, merged, or placed by a pre-written rule; anything else is flagged). "Replay the last driver update" proves it; an optional weekly check runs it on every new release and never installs. (NVIDIA installs only.)
+- New: Performance Lab says what limits a game: GPU, CPU, USB4 link, power limit, heat, video memory, stutter or a frame cap, with what to try. Kept in the support report.
+- New: Advanced Tinkering > Undervolt (core offset + top clock; cleared at restart).
+- Changed: the Big Art mode menu fix is now in NVIDIA settings.
+- Fixed: the desktop app showed Advanced Tinkering on every page.
+- Changed: downloads are named EGPU-Buddy-<version>; the old names stay available, so updates keep working.
+- NV GPU Buddy: Performance Lab diagnosis, undervolt, the menu fix in NVIDIA settings and the desktop page fix.
+
 0.7.283 — AMD / Intel eGPU: shutdown diagnostics.
 
 - Changed: AMD / Intel eGPU: the support report now shows what a slow restart or shutdown waits on. (AMD / Intel install only; NVIDIA unchanged.)
