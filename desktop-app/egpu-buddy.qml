@@ -525,7 +525,7 @@ ApplicationWindow {
                     Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12; visible: !!(win.lab || {}).master
                         text: "Records the next game you start for 60 s with MangoHud's log (no overlay): average FPS, 1% low, frame time, GPU load, clock, power, temperature. Change one thing, record again, compare." }
                     RowLayout { spacing: 8; visible: !!(win.lab || {}).master
-                        Button { text: (((win.lab || {}).perf || {}).armed) ? "Cancel the recording" : "Record the next game (60 s)"
+                        Button { text: (((win.lab || {}).perf || {}).armed) ? "Cancel the recording" : "Record the next game (60 s, from 90 s after it starts)"
                                  onClicked: win.labCmd(["perf", (((win.lab || {}).perf || {}).armed) ? "cancel" : "arm"], function() { win.loadLab() }) }
                         Button { text: "Delete the recordings"; visible: ((((win.lab || {}).perf || {}).runs) || []).length > 0; onClicked: win.labCmd(["perf", "clear"], function() { win.loadLab() }) } }
                     Repeater { model: (win.lab || {}).master ? ((((win.lab || {}).perf || {}).runs) || []) : []

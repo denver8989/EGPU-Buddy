@@ -1162,7 +1162,7 @@ function Content() {
               <PanelSectionRow><div style={{ fontSize: "13px", fontWeight: 600 }}>Performance Lab</div></PanelSectionRow>
               <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Records the next game you start for 60 s with MangoHud's log (no overlay): average FPS, 1% low, frame time, GPU load, clock, power, temperature. Change one thing, record again, compare.</div></PanelSectionRow>
               <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["perf", lab.perf?.armed ? "cancel" : "arm"]); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })}>
-                {lab.perf?.armed ? "Cancel the recording" : "Record the next game (60 s)"}</ButtonItem></PanelSectionRow>
+                {lab.perf?.armed ? "Cancel the recording" : "Record the next game (60 s, from 90 s after it starts)"}</ButtonItem></PanelSectionRow>
               {(lab.perf?.runs ?? []).map((x, i) => <PanelSectionRow key={"p" + i}><div style={{ fontSize: "12px" }}><b>{x.game}</b> · {x.when}<br />
                 {x.fps} FPS avg · 1% low {x.low1} · 99% frame time {x.p99_ms} ms{x.gpu_load != null ? ` · GPU ${x.gpu_load}% ${x.clock ?? "?"} MHz ${x.power ?? "?"} W ${x.temp ?? "?"} °C` : ""}
                 {(x.findings ?? []).map((f, j) => <div key={j} style={{ marginTop: "4px" }}><span style={{ color: f.level === "problem" ? "#ff8a65" : f.level === "limit" ? "#f0b429" : "#81c784" }}>{f.level === "problem" ? "⚠" : f.level === "limit" ? "◆" : "✓"} {f.text}</span>{f.hint ? <div style={{ opacity: 0.7 }}>{f.hint}</div> : null}</div>)}
