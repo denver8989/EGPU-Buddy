@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""egpu-driver-lab versions | check VERSION [--build] | status | discard
+"""egpu-driver-lab versions | check VERSION [--build] | status | discard | proof | watch on|off|run
 NVIDIA settings > Advanced Tinkering > Driver Lab (experimental, opt-in, NVIDIA installs only). NEVER installs anything.
 
 check: does EGPU Buddy's driver patch set carry over to another NVIDIA open-kernel-module release, without anyone
@@ -13,6 +13,11 @@ re-reading the source?  In an isolated folder (~/.cache/egpu-buddy/driver-lab, r
 Result: A = applies exactly, nothing new in the lifecycle code (and builds, when built); B = applies, but the lifecycle
 code changed: review by hand; C = blocked (a patch does not apply, a file is gone, download or build failed).
 Even A is only a candidate: installing a driver stays with the existing driver switch (egpu-driver-trial).
+Patches are carried over by port(): exact apply, else a git 3-way merge, else pre-written intent rules
+(packaging/driver-lab-rules), then API-drift and lifecycle fixers; anything else is flagged for a human.
+proof: replays the last recorded update (the previous recipe's patches onto the newest recipe's NVIDIA version) and
+  compares the result with the shipped hand port. watch on: a weekly user timer checks (and builds) every new NVIDIA
+  release by itself, no AI and no human; results are kept in the state file and the support report.
 Runs as the user. The long part runs as a transient user service; `status` reads its progress.
 """
 import glob, hashlib, json, os, re, shutil, subprocess, sys, tarfile, time, urllib.request
@@ -79,13 +84,13 @@ def worker(ver, build):
         shutil.rmtree(os.path.join(LAB, "work"), ignore_errors=True); os.makedirs(os.path.join(LAB, "work"))
         cand, rep["sha256"] = fetch(ver, os.path.join(LAB, "work", "cand"))
         basesrc, _ = fetch(base, os.path.join(LAB, "work", "base"))
-        save(step="applying the patches (strict, no fuzz)")
+        save(step="carrying the patches over (exact, 3-way merge, intent rules)")
         blocked = []
-        for p in order:
-            r = subprocess.run(["patch", "-d", cand, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", os.path.join(d, p)], capture_output=True, text=True)
-            off = len(re.findall(r"with offset", r.stdout))
-            rep["patches"].append({"patch": p, "ok": r.returncode == 0, "offset_hunks": off, "out": r.stdout[-600:] if r.returncode else ""})
-            if r.returncode: blocked.append(f"{p} does not apply")
+        res, ported = port(d, order, basesrc, cand, os.path.join(LAB, "work"), say=lambda m: save(step=m))
+        for r in res:
+            r["ok"] = r["method"] != "blocked"; rep["patches"].append(r)
+            if not r["ok"]: blocked.append(f"{r['patch']} needs a human: " + "; ".join(r["why"]))
+        shutil.rmtree(cand); shutil.copytree(ported, cand, symlinks=True, ignore=shutil.ignore_patterns(".git"))
         save(step="auditing workers, timers and removal paths")
         files = sorted({l[4:].split("\t")[0].strip().split("/", 1)[1] for p in order if p[:3] in LIFECYCLE
                         for l in open(os.path.join(d, p), errors="replace") if l.startswith("+++ ")})
@@ -118,43 +123,165 @@ def worker(ver, build):
                           "B": "applies, but the lifecycle code changed: needs a review by hand before any trial",
                           "C": "blocked: " + "; ".join(blocked)}[rep["class"]]
         save(state="done", step="", report=rep)
+        if ver != base:
+            h = [x for x in load().get("history", []) if x["version"] != ver] + [{"version": ver, "class": rep["class"], "summary": rep["summary"], "t": int(time.time()),
+                 "methods": {(x["patch"][:3] if x["patch"][:3].isdigit() else x["patch"] + ":" + ",".join(x.get("rules", []))): x["method"] for x in rep["patches"] if x.get("method")}, "by": "check"}]
+            save(history=h[-20:])
     except Exception as ex:  # noqa: BLE001 (fail closed: any error is a blocked result)
         rep.update({"class": "C", "blocked": [f"error: {ex}"], "summary": f"blocked: {ex}"})
         save(state="done", step="", report=rep)
     finally:
         shutil.rmtree(os.path.join(LAB, "work"), ignore_errors=True)
 
+def load_rules():
+    """packaging/driver-lab-rules/rules.py: the pre-written intent rules (none found = the merge stage alone)."""
+    import importlib.util
+    for base in REPO_DIRS:
+        f = os.path.join(base, "driver-lab-rules", "rules.py")
+        if os.path.exists(f):
+            sp = importlib.util.spec_from_file_location("egpu_driver_lab_rules", f); m = importlib.util.module_from_spec(sp)
+            sp.loader.exec_module(m); return m
+    return None
+
+CONFLICT = re.compile(r"^<<<<<<< [^\n]*\n(.*?)^=======\n.*?^>>>>>>> [^\n]*\n", re.M | re.S)
+
+def port(pdir, order, base_src, new_src, w, say=lambda m: None):
+    """Carry the patches in `pdir` (made for base_src's version) to new_src with no AI and no human, patch by patch:
+       exact     - applies to the new source as it is (patch -F0, line offsets allowed)
+       merge     - a git 3-way merge places it (the previous version is the common ancestor)
+       rules     - the merge conflicts only in files a pre-written intent rule covers; NVIDIA's new code is kept there
+                   and the rule applies the patch's meaning to it (packaging/driver-lab-rules)
+       blocked   - anything else: flagged for a human, never guessed
+    Returns (per-patch results, path of the ported tree). Fail closed on any error."""
+    rules = load_rules()
+    repo = os.path.join(w, "port")
+    g = lambda *a, **k: subprocess.run(["git", "-C", repo, "-c", "user.name=driver-lab", "-c", "user.email=driver-lab@local",
+                                        "-c", "core.autocrlf=false", "-c", "merge.conflictstyle=merge", *a], capture_output=True, text=True, **k)
+    shutil.copytree(base_src, repo, symlinks=True)
+    g("init", "-q"); g("add", "-A", "-f"); g("commit", "-q", "-m", "base")
+    base = g("rev-parse", "HEAD").stdout.strip()
+    say("recording the patches on the previous version")
+    commits = {}
+    for p in order:   # as the recipe builds it (default patch fuzz): known good for its own version
+        r = subprocess.run(["patch", "-d", repo, "-p1", "-N", "--no-backup-if-mismatch", "-i", os.path.join(pdir, p)], capture_output=True, text=True)
+        if r.returncode: raise RuntimeError(f"{p} does not apply to its own NVIDIA version")
+        g("add", "-A", "-f"); g("commit", "-q", "--allow-empty", "-m", p); commits[p] = g("rev-parse", "HEAD").stdout.strip()
+    basep = g("rev-parse", "HEAD").stdout.strip()
+    g("checkout", "-q", "-b", "new", base); g("rm", "-rq", "--cached", "."); 
+    for e in os.listdir(repo):
+        if e != ".git": (shutil.rmtree if os.path.isdir(os.path.join(repo, e)) and not os.path.islink(os.path.join(repo, e)) else os.remove)(os.path.join(repo, e))
+    for e in os.listdir(new_src):
+        src = os.path.join(new_src, e)
+        (shutil.copytree(src, os.path.join(repo, e), symlinks=True) if os.path.isdir(src) and not os.path.islink(src) else shutil.copy2(src, repo, follow_symlinks=False))
+    g("add", "-A", "-f"); g("commit", "-q", "-m", "new")
+    newc = g("rev-parse", "HEAD").stdout.strip()   # NVIDIA's new source, untouched (the branch moves on)
+    class Ctx:
+        def base(self, f): return g("show", f"{base}:{f}").stdout
+        def basep(self, f): return g("show", f"{basep}:{f}").stdout
+    ctx, res = Ctx(), []
+    for p in order:
+        n = p[:3]; say(f"porting {p}")
+        dry = subprocess.run(["patch", "-d", repo, "-p1", "-N", "-F0", "--dry-run", "-i", os.path.join(pdir, p)], capture_output=True, text=True)
+        if dry.returncode == 0:
+            subprocess.run(["patch", "-d", repo, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", os.path.join(pdir, p)], capture_output=True)
+            g("add", "-A", "-f"); g("commit", "-q", "--allow-empty", "-m", p)
+            res.append({"patch": p, "method": "exact", "offsets": len(re.findall("with offset", dry.stdout))}); continue
+        if g("cherry-pick", "--keep-redundant-commits", "-X", "diff-algorithm=histogram", commits[p]).returncode == 0:
+            res.append({"patch": p, "method": "merge"}); continue
+        files = [f for f in g("diff", "--name-only", "--diff-filter=U").stdout.split("\n") if f]
+        cover = (getattr(rules, "RULES", {}) if rules else {}).get(n, {})
+        why = [f"{f}: no intent rule" for f in files if f not in cover]
+        done = []
+        if not why:
+            for f in files:
+                fp = os.path.join(repo, f)
+                kept = CONFLICT.sub(lambda m: m.group(1), open(fp, errors="replace").read())   # NVIDIA's new code
+                try: out = cover[f](ctx, kept)
+                except Exception as ex: why.append(f"{f}: {ex}"); break   # rules.Block or anything else: fail closed
+                if "<<<<<<<" in out or ">>>>>>>" in out: why.append(f"{f}: conflict left"); break
+                open(fp, "w").write(out); done.append(cover[f].__name__)
+        if why:
+            g("cherry-pick", "--abort"); res.append({"patch": p, "method": "blocked", "why": why}); continue
+        g("add", "-A", "-f"); g("-c", "core.editor=true", "cherry-pick", "--continue")
+        res.append({"patch": p, "method": "rules", "rules": done, "files": files})
+    class Post:
+        pass
+    pc = Post(); pc.repo = repo
+    pc.old = lambda f: g("show", f"{base}:{f}").stdout
+    pc.new = lambda f: g("show", f"{newc}:{f}").stdout
+    pc.added = lambda f: "\n".join(l[1:] for l in g("diff", "-U0", newc, "--", f).stdout.split("\n") if l.startswith("+") and not l.startswith("+++"))
+    pc.changed = lambda: [f for f in g("diff", "--name-only", newc).stdout.split("\n") if f]
+    pc.grep_new = lambda pat: [l.split(":", 2)[1] for l in g("grep", "-l", "-E", pat, newc).stdout.split("\n") if l]
+    pc.grep_old = lambda pat: [l.split(":", 2)[1] for l in g("grep", "-l", "-E", pat, base).stdout.split("\n") if l]
+    if rules and not any(r["method"] == "blocked" for r in res):
+        say("API drift and lifecycle checks")
+        for fn in getattr(rules, "POST", []):
+            try: ch = fn(pc)
+            except Exception as ex: res.append({"patch": "post", "method": "blocked", "why": [f"{fn.__name__}: {ex}"]}); break
+            if ch: res.append({"patch": "post", "method": "rules", "rules": [fn.__name__], "changes": ch})
+        g("add", "-A", "-f"); g("commit", "-q", "--allow-empty", "-m", "post")
+    return res, repo
+
 def port_proof(old_dir, new_dir):
-    """Proof without a coding agent: port the OLD recipe's patches to the NEW recipe's NVIDIA version automatically, and
-    compare with the NEW recipe's hand port. Each old patch is applied as it is when it applies exactly (`patch -F0`,
-    line offsets allowed); only a patch that does not apply is taken from the hand port (what a human would supply after
-    the Driver Lab flags it). Then the auto tree and the all-hand tree are compared file by file."""
-    old = os.path.join(recipe()[0], "..", old_dir) if not os.path.isabs(old_dir) else old_dir
-    new = os.path.join(recipe()[0], "..", new_dir) if not os.path.isabs(new_dir) else new_dir
+    """Proof without a coding agent: carry the OLD recipe's patches to the NEW recipe's NVIDIA version with port()
+    (exact / 3-way merge / intent rules, nothing else) and compare the result, file by file, with the NEW recipe's
+    hand port. Identical = the update needed no AI and no human."""
+    rd = recipe()[0]
+    old = old_dir if os.path.isabs(old_dir) else os.path.join(rd, "..", old_dir)
+    new = new_dir if os.path.isabs(new_dir) else os.path.join(rd, "..", new_dir)
     pk = lambda d: open(os.path.join(d, "PKGBUILD")).read()
-    ver = re.search(r"^pkgver=(\S+)", pk(new), re.M)[1]
-    order = re.findall(r'-i "\$\{srcdir\}/([^"]+\.patch)"', pk(new))
+    over, nver = re.search(r"^pkgver=(\S+)", pk(old), re.M)[1], re.search(r"^pkgver=(\S+)", pk(new), re.M)[1]
+    order = re.findall(r'-i "\$\{srcdir\}/([^"]+\.patch)"', pk(old))
     w = os.path.join(LAB, "proof"); shutil.rmtree(w, ignore_errors=True); os.makedirs(w)
     try:
-        src, _ = fetch(ver, os.path.join(w, "src"))
-        auto, hand = os.path.join(w, "auto"), os.path.join(w, "hand")
-        shutil.copytree(src, auto, symlinks=True); shutil.copytree(src, hand, symlinks=True)
-        res = []
-        for p in order:
-            ap = lambda d, f: subprocess.run(["patch", "-d", d, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", f], capture_output=True, text=True)
-            subprocess.run(["patch", "-d", hand, "-p1", "-N", "-F0", "--no-backup-if-mismatch", "-i", os.path.join(new, p)], capture_output=True)
-            of = os.path.join(old, p)
-            if os.path.exists(of):
-                probe = os.path.join(w, "probe"); shutil.rmtree(probe, ignore_errors=True); shutil.copytree(auto, probe, symlinks=True)
-                r = ap(probe, of); shutil.rmtree(probe, ignore_errors=True)
-                if r.returncode == 0:
-                    ap(auto, of); res.append({"patch": p, "auto": True, "offsets": len(re.findall("with offset", r.stdout))}); continue
-            ap(auto, os.path.join(new, p)); res.append({"patch": p, "auto": False, "why": "not in the old set" if not os.path.exists(of) else "does not apply: flagged for a human"})
-        d = subprocess.run(["diff", "-rq", auto, hand], capture_output=True, text=True).stdout.strip().splitlines()
-        return {"from": os.path.basename(os.path.normpath(old)), "to": os.path.basename(os.path.normpath(new)), "version": ver,
-                "patches": res, "identical": not d, "differences": [x.replace(w + "/", "") for x in d][:30]}
+        t0 = time.time()
+        osrc, _ = fetch(over, os.path.join(w, "old")); nsrc, _ = fetch(nver, os.path.join(w, "new"))
+        hand = os.path.join(w, "hand"); shutil.copytree(nsrc, hand, symlinks=True)
+        for p in re.findall(r'-i "\$\{srcdir\}/([^"]+\.patch)"', pk(new)):
+            subprocess.run(["patch", "-d", hand, "-p1", "-N", "--no-backup-if-mismatch", "-i", os.path.join(new, p)], capture_output=True)
+        res, auto = port(old, order, osrc, nsrc, w)
+        d = subprocess.run(["diff", "-rq", "-x", ".git", auto, hand], capture_output=True, text=True).stdout.strip().splitlines()
+        def comments_only(line):   # "Files A and B differ": every changed line is a comment
+            m = re.match(r"Files (\S+) and (\S+) differ", line)
+            if not m: return False
+            u = subprocess.run(["diff", "-U0", m[1], m[2]], capture_output=True, text=True).stdout.splitlines()
+            ch = [l[1:].strip() for l in u if l[:1] in "+-" and l[:3] not in ("+++", "---")]
+            return bool(ch) and all(c.startswith(("//", "/*", "*")) or not c for c in ch)
+        code = [x for x in d if not comments_only(x)]
+        return {"from": f"{os.path.basename(os.path.normpath(old))} ({over})", "to": nver, "patches": res,
+                "automatic": sum(r["method"] != "blocked" for r in res), "total": len(res),
+                "identical_to_hand_port": not d, "same_code_as_hand_port": not code,
+                "comment_only_differences": [x.replace(w + "/", "") for x in d if x not in code][:30], "differences": [x.replace(w + "/", "") for x in code][:30], "seconds": int(time.time() - t0)}
     finally:
         shutil.rmtree(w, ignore_errors=True)
+
+def recipes():
+    for base in REPO_DIRS:
+        dirs = sorted(glob.glob(os.path.join(base, "nvidia-open-egpu-[0-9]*")), key=lambda d: int(re.sub(r"\D", "", os.path.basename(d)) or 0))
+        if len(dirs) >= 2: return dirs
+    return []
+
+def spawn(*args):
+    cmd = [sys.executable, os.path.realpath(__file__), *args]
+    try:
+        subprocess.run(["systemd-run", "--user", "--collect", "--quiet", "--unit", f"egpu-driver-lab-{int(time.time())}", "--nice=10", *cmd], check=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def watch_run():
+    """Timer: check (and build, when this machine can) every NVIDIA release newer than the patch set not yet checked."""
+    st = load()
+    if not st.get("watch"): return 0
+    v = versions(); seen = {h["version"] for h in st.get("history", [])}
+    new = [x for x in v["versions"] if x not in seen]
+    save(watch_last=int(time.time()), watch_new=new)
+    for ver in sorted(new, key=vt):
+        worker(ver, v["can_build"])
+        r = load().get("report") or {}
+        h = load().get("history", []) + [{"version": ver, "class": r.get("class"), "summary": r.get("summary"), "t": int(time.time()),
+             "methods": {(x["patch"][:3] if x["patch"][:3].isdigit() else x["patch"] + ":" + ",".join(x.get("rules", []))): x["method"] for x in r.get("patches", []) if x.get("method")}, "by": "watch"}]
+        save(history=h[-20:])
+    return 0
 
 def main(a):
     try:
@@ -169,8 +296,24 @@ def main(a):
         os.makedirs(LAB, exist_ok=True); print(json.dumps(port_proof(a[1], a[2]))); return 0
     if a[:1] == ["status"]:
         print(json.dumps(load() or {"state": "idle"})); return 0
-    if a[:1] == ["discard"]:
-        shutil.rmtree(LAB, ignore_errors=True); os.path.exists(STATE) and os.remove(STATE); print("Driver Lab cleared"); return 0
+    if a[:1] == ["discard"]:   # the cache and the last check go; the watch switch, proof and history stay
+        shutil.rmtree(LAB, ignore_errors=True); save(state="idle", report=None, version=None, step=""); print("Driver Lab cleared"); return 0
+    if a[:1] == ["proof"] or a[:1] == ["_proof"]:
+        r = recipes()
+        if not r: print("needs two driver recipes"); return 2
+        if a[0] == "proof":
+            if load().get("proof_state") == "running": print("the proof is already running"); return 1
+            save(proof_state="running"); spawn("_proof"); print(f"Driver Lab: replaying {os.path.basename(r[-2])} -> {os.path.basename(r[-1])}"); return 0
+        os.makedirs(LAB, exist_ok=True)
+        try: res = port_proof(r[-2], r[-1])
+        except Exception as ex: res = {"error": f"{ex}"}  # noqa: BLE001
+        save(proof_state="done", proof=dict(res, t=int(time.time()))); return 0
+    if len(a) == 2 and a[0] == "watch" and a[1] in ("on", "off"):
+        on = a[1] == "on"; save(watch=on)
+        subprocess.run(["systemctl", "--user", "enable" if on else "disable", "--now", "egpu-driver-lab-watch.timer"], capture_output=True, timeout=20)
+        print("New NVIDIA releases are checked by themselves every week" if on else "Release watch off"); return 0
+    if a[:2] == ["watch", "run"]:
+        return watch_run()
     if len(a) >= 2 and a[0] in ("check", "_worker") and re.fullmatch(r"\d+\.\d+(\.\d+)?", a[1]):
         build = "--build" in a
         if a[0] == "_worker":

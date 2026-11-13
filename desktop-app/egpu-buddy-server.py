@@ -417,7 +417,7 @@ def action(p):
         x = [str(v) for v in ((p or {}).get("args") or [])]
         ok = (x[:1] == ["perf"] and len(x) == 2 and x[1] in ("arm", "cancel", "clear")) or \
              (x[:1] == ["game"] and len(x) == 4 and re.fullmatch(r"\d{1,20}", x[1]) and re.fullmatch(r"[a-z_]+", x[2]) and x[3] in ("on", "off")) or \
-             (x[:1] == ["driver"] and (x[1:] in (["versions"], ["status"], ["discard"]) or
+             (x[:1] == ["driver"] and (x[1:] in (["versions"], ["status"], ["discard"], ["proof"], ["watch", "on"], ["watch", "off"]) or
               (len(x) in (3, 4) and x[1] == "check" and re.fullmatch(r"\d+\.\d+(\.\d+)?", x[2]) and x[3:] in ([], ["--build"]))))
         if not ok: return {"ok": False, "out": "unknown action"}
         rc, o, e = sh(["/usr/local/sbin/egpu-driver-lab", *x[1:]] if x[0] == "driver" else ["/usr/local/sbin/egpu-nv-lab", *x], 60)

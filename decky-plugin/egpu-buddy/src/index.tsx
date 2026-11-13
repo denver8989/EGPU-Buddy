@@ -155,8 +155,13 @@ const checkUpdate = callable<[boolean], Result>("check_update");
 type PerfRun = { game: string; when: string; frames: number; fps: number; low1: number; p99_ms: number; gpu_load: number | null; clock: number | null; power: number | null; temp: number | null };
 type NvLab = { master: boolean; report: string[]; labs: { key: string; label: string; desc: string; on: boolean; why_not: string }[]; planned: string[];
   displays?: string[]; perf?: { armed: boolean; runs: PerfRun[] }; games?: [string, string][]; per_game?: Record<string, string[]> };
+type DrvPatch = { patch: string; ok?: boolean; method?: string; why?: string[]; rules?: string[] };
 type DrvLab = { baseline?: string; versions?: string[]; can_build?: boolean; error?: string; state?: string; step?: string; version?: string;
-  report?: { class: string; summary: string; patches: { patch: string; ok: boolean }[]; audit: { file: string; new: string[]; gone: string[] }[] } | null };
+  report?: { class: string; summary: string; patches: DrvPatch[]; audit: { file: string; new: string[]; gone: string[] }[] } | null;
+  watch?: boolean; watch_last?: number; proof_state?: string;
+  proof?: { from?: string; to?: string; automatic?: number; total?: number; same_code_as_hand_port?: boolean; differences?: string[]; patches?: DrvPatch[]; seconds?: number; error?: string; t?: number };
+  history?: { version: string; class: string; t: number; by: string; methods?: Record<string, string> }[] };
+const drvMethods = (ps?: DrvPatch[]) => (ps ?? []).map((x) => `${/^\d{3}/.test(x.patch) ? x.patch.slice(0, 3) : "after"} ${x.method ?? (x.ok ? "ok" : "blocked")}`).join(" · ");
 const nvLabCmd = callable<[string[]], { ok: boolean; data?: any; message?: string }>("nv_lab_cmd");
 const getNvLab = callable<[], NvLab>("get_nv_lab");
 const setNvLab = callable<[string, boolean], Result>("set_nv_lab");
@@ -1157,7 +1162,14 @@ function Content() {
               {!!lab.perf?.runs?.length && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["perf", "clear"]); setLab(await getNvLab()); return { ok: r.ok, message: r.message ?? "" }; })}>Delete the recordings</ButtonItem></PanelSectionRow>}
               <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={async () => { if (drv) setDrv(null); else await loadDrv(); }}>{drv ? "▾" : "▸"} Driver Lab</ButtonItem></PanelSectionRow>
               {drv && <>
-                <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Checks whether EGPU Buddy's driver patches (made for {drv.baseline || "?"}) carry over to a newer NVIDIA release: strict apply, then a check of the code that runs when the eGPU is removed{drv.can_build ? ", optionally a build against this kernel" : ""}. Nothing is installed; the files are deleted afterwards. A = ready to try, B = needs a review by hand, C = blocked.</div></PanelSectionRow>
+                <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Carries EGPU Buddy's driver patches (made for {drv.baseline || "?"}) over to a newer NVIDIA release with no AI and no person: each patch applies exactly, or is merged, or is placed by a pre-written rule for what it means; anything else is flagged, never guessed. Then a check of the code that runs when the eGPU is removed{drv.can_build ? ", optionally a build against this kernel" : ""}. Nothing is installed. A = ready to try, B = needs a review by hand, C = blocked.</div></PanelSectionRow>
+                <PanelSectionRow><ButtonItem layout="below" disabled={lock || drv.proof_state === "running"} onClick={() => run(async () => { const r = await nvLabCmd(["driver", "proof"]); setTimeout(loadDrv, 15000); return { ok: r.ok, message: r.message ?? "" }; })}>{drv.proof_state === "running" ? "Replaying the last driver update…" : "Replay the last driver update (proof)"}</ButtonItem></PanelSectionRow>
+                {drv.proof && <PanelSectionRow><div style={{ fontSize: "12px" }}>{drv.proof.error ? `Proof failed: ${drv.proof.error}` : <>
+                  <b>{drv.proof.from} → {drv.proof.to}: {drv.proof.automatic} of {drv.proof.total} steps without a person</b>{drv.proof.same_code_as_hand_port ? "; the result is the same code as the hand-made port." : `; differs from the hand-made port in ${drv.proof.differences?.length ?? "?"} files.`}
+                  <div style={{ opacity: 0.75 }}>{drvMethods(drv.proof.patches)}</div></>}</div></PanelSectionRow>}
+                <PanelSectionRow><ToggleField label="Check new NVIDIA releases by itself" description="Weekly: every new release is carried over, checked and built as above, and the result kept here and in the support report. Never installs." checked={!!drv.watch} disabled={lock}
+                  onChange={(v) => run(async () => { const r = await nvLabCmd(["driver", "watch", v ? "on" : "off"]); await loadDrv(); return { ok: r.ok, message: r.message ?? "" }; })} /></PanelSectionRow>
+                {!!drv.history?.length && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{drv.history.slice(-5).reverse().map((h, i) => <div key={i}>{new Date(h.t * 1000).toLocaleDateString()} · {h.version}: class {h.class} ({h.by === "watch" ? "by itself" : "checked"})</div>)}</div></PanelSectionRow>}
                 {drv.error && <PanelSectionRow><div style={{ fontSize: "12px" }}>Could not list NVIDIA releases: {drv.error}</div></PanelSectionRow>}
                 {!drv.error && !drv.versions?.length && <PanelSectionRow><div style={{ fontSize: "12px" }}>No NVIDIA release newer than {drv.baseline} yet.</div></PanelSectionRow>}
                 {!!drv.versions?.length && <>
@@ -1167,6 +1179,8 @@ function Content() {
                 </>}
                 {drv.state === "running" && <PanelSectionRow><div style={{ fontSize: "12px" }}>Checking {drv.version}: {drv.step}… <ButtonItem layout="below" onClick={loadDrv}>Refresh</ButtonItem></div></PanelSectionRow>}
                 {drv.state === "done" && drv.report && <PanelSectionRow><div style={{ fontSize: "12px" }}><b>{drv.version}: class {drv.report.class}</b> · {drv.report.summary}
+                  <div style={{ opacity: 0.75 }}>{drvMethods(drv.report.patches)}</div>
+                  {drv.report.patches.filter((x) => x.why?.length).map((x, i) => <div key={"w" + i} style={{ opacity: 0.8 }}>{x.patch.slice(0, 3)}: {x.why!.join("; ")}</div>)}
                   {drv.report.audit.map((x, i) => <div key={i} style={{ opacity: 0.8 }}>{x.file}: {x.new.length} new, {x.gone.length} gone</div>)}</div></PanelSectionRow>}
                 {drv.state === "done" && <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={() => run(async () => { const r = await nvLabCmd(["driver", "discard"]); await loadDrv(); return { ok: r.ok, message: r.message ?? "" }; })}>Clear the Driver Lab</ButtonItem></PanelSectionRow>}
                 {drv.can_build && <>

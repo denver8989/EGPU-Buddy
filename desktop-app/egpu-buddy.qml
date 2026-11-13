@@ -533,7 +533,18 @@ ApplicationWindow {
                     Button { flat: true; visible: !!(win.lab || {}).master; text: (win.drv ? "▾" : "▸") + " Driver Lab"; onClicked: { if (win.drv) win.drv = null; else win.loadDrv() } }
                     ColumnLayout { Layout.fillWidth: true; spacing: 6; visible: !!(win.lab || {}).master && !!win.drv
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; opacity: 0.8; font.pixelSize: 12
-                            text: "Checks whether EGPU Buddy's driver patches (made for " + ((win.drv || {}).baseline || "?") + ") carry over to a newer NVIDIA release: strict apply, then a check of the code that runs when the eGPU is removed" + ((win.drv || {}).can_build ? ", optionally a build against this kernel" : "") + ". Nothing is installed; the files are deleted afterwards. A = ready to try, B = needs a review by hand, C = blocked." }
+                            text: "Carries EGPU Buddy's driver patches (made for " + ((win.drv || {}).baseline || "?") + ") over to a newer NVIDIA release with no AI and no person: each patch applies exactly, or is merged, or is placed by a pre-written rule for what it means; anything else is flagged, never guessed. Then a check of the code that runs when the eGPU is removed" + ((win.drv || {}).can_build ? ", optionally a build against this kernel" : "") + ". Nothing is installed. A = ready to try, B = needs a review by hand, C = blocked." }
+                        Button { text: (win.drv || {}).proof_state === "running" ? "Replaying the last driver update…" : "Replay the last driver update (proof)"; enabled: (win.drv || {}).proof_state !== "running"
+                                 onClicked: win.labCmd(["driver", "proof"], function() { drvProofPoll.restart() }) }
+                        Timer { id: drvProofPoll; interval: 15000; onTriggered: win.loadDrv() }
+                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; textFormat: Text.StyledText; visible: !!(win.drv || {}).proof
+                            text: { var p = (win.drv || {}).proof; if (!p) return ""; if (p.error) return "Proof failed: " + p.error
+                                    return "<b>" + p.from + " → " + p.to + ": " + p.automatic + " of " + p.total + " steps without a person</b>" + (p.same_code_as_hand_port ? "; the result is the same code as the hand-made port." : "; differs from the hand-made port in " + (p.differences || []).length + " files.")
+                                           + "<br>" + (p.patches || []).map(function(x) { return (/^\d{3}/.test(x.patch) ? x.patch.slice(0, 3) : "after") + " " + x.method }).join(" · ") } }
+                        Switch { text: "Check new NVIDIA releases by itself (weekly, never installs)"; checked: !!(win.drv || {}).watch
+                                 onToggled: win.labCmd(["driver", "watch", checked ? "on" : "off"], function() { win.loadDrv() }) }
+                        Repeater { model: (((win.drv || {}).history) || []).slice(-5).reverse()
+                            Label { font.pixelSize: 12; opacity: 0.8; text: new Date(modelData.t * 1000).toLocaleDateString() + " · " + modelData.version + ": class " + modelData.class + (modelData.by === "watch" ? " (by itself)" : " (checked)") } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; visible: !((win.drv || {}).versions || []).length
                             text: (win.drv || {}).error ? "Could not list NVIDIA releases: " + win.drv.error : "No NVIDIA release newer than " + ((win.drv || {}).baseline || "?") + " yet." }
                         RowLayout { spacing: 8; visible: ((win.drv || {}).versions || []).length > 0
@@ -542,7 +553,9 @@ ApplicationWindow {
                             Button { text: "Check and build"; visible: !!(win.drv || {}).can_build; enabled: (win.drv || {}).state !== "running"; onClicked: win.labCmd(["driver", "check", drvBox.currentText, "--build"], function() { win.loadDrv() }) } }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; visible: (win.drv || {}).state === "running"; text: "Checking " + (win.drv || {}).version + ": " + ((win.drv || {}).step || "") + "…" }
                         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12; visible: (win.drv || {}).state === "done" && !!(win.drv || {}).report; textFormat: Text.StyledText
-                            text: (win.drv && win.drv.report) ? "<b>" + win.drv.version + ": class " + win.drv.report.class + "</b> · " + win.drv.report.summary + (win.drv.report.audit || []).map(function(x) { return "<br>" + x.file + ": " + x.new.length + " new, " + x.gone.length + " gone" }).join("") : "" }
+                            text: (win.drv && win.drv.report) ? "<b>" + win.drv.version + ": class " + win.drv.report.class + "</b> · " + win.drv.report.summary
+                                  + "<br>" + (win.drv.report.patches || []).map(function(x) { return (/^\d{3}/.test(x.patch) ? x.patch.slice(0, 3) : "after") + " " + (x.method || (x.ok ? "ok" : "blocked")) }).join(" · ")
+                                  + (win.drv.report.audit || []).map(function(x) { return "<br>" + x.file + ": " + x.new.length + " new, " + x.gone.length + " gone" }).join("") : "" }
                         RowLayout { spacing: 8
                             Button { text: "Refresh"; visible: (win.drv || {}).state === "running"; onClicked: win.loadDrv() }
                             Button { text: "Clear the Driver Lab"; visible: (win.drv || {}).state === "done"; onClicked: win.labCmd(["driver", "discard"], function() { win.loadDrv() }) } } }

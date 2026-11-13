@@ -112,7 +112,7 @@ if [ "$AX" = 1 ]; then
   rm -f "$USER_HOME/.config/systemd/user/gamescope-session.service.d/zzz-nv-egpu-buddy-ally.conf"
   sudo rm -f /etc/sddm.conf.d/zzs-egpu-buddy-session.conf
 fi
-userctl disable --now egpu-stream-cec.service 2>/dev/null; rm -f "$USER_HOME/.config/systemd/user/cecd.service.d/egpu-buddy-stream.conf"
+userctl disable --now egpu-stream-cec.service egpu-driver-lab-watch.timer 2>/dev/null; rm -f "$USER_HOME/.config/systemd/user/cecd.service.d/egpu-buddy-stream.conf"
 userctl disable --now egpu-display-failover.service egpu-wake-guard.service egpu-screen-watch.service egpu-buddy-tray.service 2>/dev/null
 # the experimental NVIDIA settings' clock hold back to the driver, while the helper is still here (normally it ends with the game)
 userctl stop egpu-nvidia-perf.service >/dev/null 2>&1 || true

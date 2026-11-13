@@ -1,0 +1,10 @@
+[Unit]
+Description=EGPU Buddy Driver Lab: weekly check of new NVIDIA releases
+
+[Timer]
+OnCalendar=weekly
+RandomizedDelaySec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1659,6 +1659,25 @@ def _support_report():
         lines += [t[:300] for t in (run if len(run) <= 300 else run[:60] + ["  ... (build output cut) ..."] + run[-240:])]
         if start > 0:
             lines += ["", "## Driver trial: earlier entries (last 20 before that run)"] + [t[:300] for t in trial[max(0, start - 20):start]]
+    # Advanced Tinkering > Driver Lab (NVIDIA installs only): last check, the no-AI update proof, release watch history
+    if _installed_vendor() != "amd":
+        try: dl = json.loads(_read(f"{USER_HOME}/.local/state/egpu-buddy/driver-lab.json") or "{}")
+        except ValueError: dl = {}
+        if dl:
+            when = lambda t: time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "?"
+            meth = lambda ps: " ".join(f"{x['patch'][:3] if x['patch'][:3].isdigit() else x['patch'] + ':' + ','.join(x.get('rules', []))}={x.get('method', 'ok' if x.get('ok') else 'blocked')}" for x in ps)
+            lines += ["", "## Driver Lab", f"release watch: {'on' if dl.get('watch') else 'off'}" + (f" (last run {when(dl.get('watch_last'))})" if dl.get("watch_last") else "")]
+            r = dl.get("report")
+            if r: lines += [f"last check: {r.get('version')} (patches for {r.get('baseline')}): class {r.get('class')} - {r.get('summary')}", "  " + meth(r.get("patches", []))]
+            for x in (r or {}).get("patches", []):
+                if x.get("why"): lines.append(f"  {x['patch']}: " + "; ".join(x["why"])[:300])
+            pr = dl.get("proof")
+            if pr and not pr.get("error"):
+                lines += [f"update proof ({when(pr.get('t'))}): {pr.get('from')} -> {pr.get('to')}: {pr.get('automatic')} of {pr.get('total')} steps without a human; "
+                          + ("same code as the hand port" if pr.get("same_code_as_hand_port") else f"differs from the hand port in {len(pr.get('differences', []))} files"), "  " + meth(pr.get("patches", []))]
+            elif pr: lines.append(f"update proof failed: {pr['error']}")
+            for h in dl.get("history", [])[-10:]:
+                lines.append(f"  {when(h.get('t'))} {h.get('by')}: {h.get('version')} class {h.get('class')} - " + " ".join(f"{k}={v}" for k, v in (h.get("methods") or {}).items()))
     log = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
                "egpu|nv-egpu|nvidia|NVRM|thunderbolt|pcieport|gamescope.*(drm|vulkan)"], 20)[1].splitlines()
     kept, burst = [], 0   # a GPU hang prints hundreds of NVRM lines in one go: keep the first 8 of each run
@@ -2604,7 +2623,7 @@ class Plugin:
         a = [str(x) for x in (args or [])]
         ok = (a[:1] == ["perf"] and len(a) == 2 and a[1] in ("arm", "cancel", "clear")) or \
              (a[:1] == ["game"] and len(a) == 4 and re.fullmatch(r"\d{1,20}", a[1]) and re.fullmatch(r"[a-z_]+", a[2]) and a[3] in ("on", "off")) or \
-             (a[:1] == ["driver"] and (a[1:] in (["versions"], ["status"], ["discard"]) or
+             (a[:1] == ["driver"] and (a[1:] in (["versions"], ["status"], ["discard"], ["proof"], ["watch", "on"], ["watch", "off"]) or
               (len(a) in (3, 4) and a[1] == "check" and re.fullmatch(r"\d+\.\d+(\.\d+)?", a[2]) and a[3:] in ([], ["--build"]))))
         if not ok: return {"ok": False, "message": "Unknown action."}
         tool = "/usr/local/sbin/egpu-driver-lab" if a[0] == "driver" else "/usr/local/sbin/egpu-nv-lab"

@@ -1,0 +1,8 @@
+[Unit]
+Description=EGPU Buddy Driver Lab: check new NVIDIA releases (never installs)
+
+[Service]
+Type=oneshot
+Nice=15
+ExecStart=/usr/local/sbin/egpu-driver-lab watch run
+TimeoutStartSec=1h
