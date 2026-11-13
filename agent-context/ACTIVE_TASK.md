@@ -2,6 +2,8 @@
 
 Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript, read-only tmux capture, and durable local Claude memory. Owner `unclaimed` means no agent is currently editing that task. Waiting tasks are retained, not silently abandoned. Product changes require their own claim and scope review.
 
+## 2026-11-14 08:40 — 0.7.285 RELEASED (local, no Actions): Perf Lab real-game fix + CPU-limit cause (TDP vs full clock, FPS cost). Measured: Legion Go 2 Z2E hits 35/35 W (its max SPL) at all-core load, cores ~75% of top clock = Cyberpunk CPU limit cause. cecd left running after a Game Mode switch suspended the desktop (allow_standby + DP-8 standby); strata stopped (owner: only when a harness starts it). GitHub Actions storage 100% = 17 old ios-ipa artifacts (1.27 GB) in Bali-Villa-Checker-Flutter repo, not EGPU Buddy; delete awaits owner OK.
+
 ## EGPU-001 — Release AMD/Titan Ridge CEC fix | done | Claude session 43bbea5e
 
 - Owner approved ("yes" / "release it", 2026-11-10). Released 0.7.251: commit 6912dbb on origin/master (verified), release workflow run 42738108610 succeeded, tag v0.7.251 with 5 assets.
