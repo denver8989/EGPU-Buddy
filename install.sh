@@ -481,6 +481,9 @@ elif want gamescope; then
   # background after this install, which tells the user what it does. The shipped build only fills in until then.
   CYV=""; command -v pacman >/dev/null && ! command -v steamos-readonly >/dev/null && [ "$IS_BAZZITE" != 1 ] && [ "$GPU_VENDOR" != amd ] &&
     CYV=$(pacman -Q gamescope 2>/dev/null | awk '{print $2}' | sed 's/^[0-9]*://; s/-[^-]*$//')
+  # SteamOS, NVIDIA install: the same (built into SteamOS's gamescope version by egpu-gamescope-repair in its build root)
+  command -v steamos-readonly >/dev/null 2>&1 && [ "$GPU_VENDOR" != amd ] && [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" != nv-gpu-buddy ] &&
+    CYV=$(pacman -Q gamescope 2>/dev/null | awk '{print $2}' | sed 's/^[0-9]*://; s/-[^-]*$//')
   CYG="$USER_HOME/.local/gamescope-gbm"
   CYW="$CYV+$(sha256sum "$ROOT/packaging/gamescope-gbm/valve/egpu.bundle" 2>/dev/null | cut -c1-12)"   # as build-system.sh writes it
   if [ -n "$CYV" ] && [ "$(cat "$CYG/BUILT-FROM" 2>/dev/null)" = "$CYW" ] && [ -x "$CYG/usr/bin/gamescope" ] && ! ldd "$CYG/usr/bin/gamescope" 2>/dev/null | grep -q 'not found'; then

@@ -37,6 +37,15 @@ if [ "$BZ" = 0 ] && ! command -v steamos-readonly >/dev/null 2>&1 && command -v 
    [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" != nv-gpu-buddy ]; then
   CY=1; BUILD=$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/build-system.sh
 fi
+# SteamOS, NVIDIA install: the same, built in the SteamOS build root (build-steamos.sh <user> <version> <prefix>), so an
+# OS update or a channel switch (Game Mode or desktop) that brings a new gamescope gets EGPU Buddy's changes again at the
+# next start-up (egpu-buddy-gamescope-repair.timer) or EGPU Buddy update, instead of the old pinned build staying.
+SO=0
+if [ "$BZ" = 0 ] && [ "$CY" = 0 ] && command -v steamos-readonly >/dev/null 2>&1 && command -v pacman >/dev/null 2>&1 &&
+   [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" != amd ] && [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" != nv-gpu-buddy ] &&
+   [ -f "$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/valve/egpu.bundle" ]; then
+  SO=1; CY=1   # CachyOS's version-following logic; only the build itself differs (so_build)
+fi
 CYTRIES=/var/lib/nvegpu/gamescope-system-tries   # line 1 the gamescope version, line 2 the builds tried for it
 CYCANNOT=/var/lib/nvegpu/gamescope-system-cannot # the version our changes do not apply to
 cy_ver(){ pacman -Q gamescope 2>/dev/null | awk '{print $2}' | sed 's/^[0-9]*://; s/-[^-]*$//'; }
@@ -76,7 +85,10 @@ reason(){
     local v; v=$(cy_ver); [ -n "$v" ] && [ -f "$BUILD" ] || return 1
     [ "$(cat "$CYCANNOT" 2>/dev/null)" = "$(cy_want)" ] && return 1           # our changes do not apply to it: wait for a new one
     [ "$(cy_tries)" -ge 3 ] 2>/dev/null && return 1                   # tried 3 times for this version
+    if [ "$SO" = 1 ]; then [ -x "$BR/usr/bin/makepkg" ] || { echo "cannot build: no SteamOS build root yet (the driver step creates it)" >&2; return 1; }
+    else
     for t in git meson ninja cc cmake glslangValidator; do command -v $t >/dev/null 2>&1 || { echo "cannot build: $t missing (pacman -S --needed base-devel git meson ninja cmake glslang)" >&2; return 1; }; done
+    fi
     [ "$(cy_built)" = "$(cy_want)" ] && [ -x "$PRIV" ] && ! ldd "$PRIV" 2>/dev/null | grep -q 'not found' &&
       ! case "$(cat "$BAD" 2>/dev/null)" in "$(os_id) "*) true ;; *) false ;; esac && return 1
     local b; b=$(cy_built)
@@ -125,6 +137,10 @@ os_gamescope_note(){
   [ "$(printf '%s\n%s\n' "$fixv" "$osv" | sort -V | tail -1)" = "$fixv" ] && return 0      # the fix is as new or newer
   [ "$(cat "$GSVER" 2>/dev/null)" = "$osv" ] && return 0
   echo "$osv" > "$GSVER"
+  if [ "$SO" = 1 ]; then   # SteamOS: built for it in the background (the guard tells the user what it does)
+    log "verify: SteamOS now ships gamescope $osv, newer than the NVIDIA picture fix's gamescope $fixv: building it"
+    systemctl start --no-block egpu-buddy-gamescope-repair.service >/dev/null 2>&1 || true; return 0
+  fi
   log "verify: SteamOS now ships gamescope $osv, newer than the NVIDIA picture fix's gamescope $fixv"
   mkdir -p /run/nvegpu; printf '%s\n' "SteamOS updated gamescope to $osv. The NVIDIA picture fix keeps working on its own gamescope ($fixv); an EGPU Buddy update will bring it up to date." > /run/nvegpu/notice
   chown "$(stat -c %U "$UH")": /run/nvegpu/notice 2>/dev/null || true
@@ -194,7 +210,8 @@ log "=== GBM-scanout gamescope: $r (OS $OS) ==="
 done
 # the driver build / re-pack use the same build root (pacman lock): wait for them
 for _ in $(seq 1 240); do
-  systemctl is-active --quiet egpu-buddy-driver-build.service egpu-buddy-driver-repack.service || break; sleep 30
+  systemctl is-active --quiet egpu-buddy-driver-build.service egpu-buddy-driver-repack.service ||
+    { [ "$SO" = 1 ] && pgrep -f 'build-steamos[.]sh' >/dev/null; } || break; sleep 30   # SteamOS: the installer's own build too
 done
 NETCHK=https://steamdeck-packages.steamos.cloud/; { [ "$BZ" = 1 ] || [ "$CY" = 1 ]; } && NETCHK=https://github.com/   # where the build fetches from
 for _ in $(seq 1 40); do curl -sI -o /dev/null --max-time 8 "$NETCHK" 2>/dev/null && break; sleep 30; done
@@ -234,7 +251,8 @@ cy_build(){ # CachyOS: built as the user into ~/.local/gamescope-egpu-<version>,
   local S="$UH/.cache/egpu-buddy/gamescope-src"
   local B=/var/lib/nvegpu/gamescope-build-src; rm -rf "${B:?}"; cp -a "$(dirname "$BUILD")" "$B" && chown -R "$u": "$B" || return 1
   rm -rf "${D:?}"; runuser -u "$u" -- mkdir -p "$D" "$UH/.cache/egpu-buddy"
-  runuser -u "$u" -- env HOME="$UH" GAMESCOPE_SRC="$S" nice -n 10 bash "$B/build-system.sh" "$v" "$D/usr"; rc=$?
+  if [ "$SO" = 1 ]; then nice -n 10 bash "$B/build-steamos.sh" "$u" "$v" "$D/usr"; rc=$?   # SteamOS: in its build root
+  else runuser -u "$u" -- env HOME="$UH" GAMESCOPE_SRC="$S" nice -n 10 bash "$B/build-system.sh" "$v" "$D/usr"; rc=$?; fi
   rm -rf "${B:?}" "${S:?}"
   if [ "$rc" = 3 ]; then cy_want > "$CYCANNOT"; rm -rf "${D:?}"; return 3; fi
   [ "$rc" = 0 ] && [ -x "$D/usr/bin/gamescope" ] && ! ldd "$D/usr/bin/gamescope" 2>/dev/null | grep -q 'not found' || { rm -rf "${D:?}"; return 1; }

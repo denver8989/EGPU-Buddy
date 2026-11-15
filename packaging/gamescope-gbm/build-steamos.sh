@@ -4,10 +4,12 @@
 # (GLIBCXX_3.4.35) than SteamOS 3.8 has, so the session fell back to Valve's gamescope = no GBM scanout = the NVIDIA
 # scanout corruption on the monitor (seen on a real device). Nothing is installed into the system: build dependencies go
 # into the build root, the result goes to ~/.local/gamescope-gbm/usr (where the session shim looks).
-#   build-steamos.sh <login user>
+#   build-steamos.sh <login user>                     the pinned GBM build (build.sh) into ~/.local/gamescope-gbm/usr
+#   build-steamos.sh <login user> <version> <prefix>  SteamOS's installed gamescope version with EGPU Buddy's changes
+#                                                     (build-system.sh) into <prefix>; exit 3 = they do not apply to it
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
-U=${1:?login user}; UH=$(getent passwd "$U" | cut -d: -f6); HERE=$(cd "$(dirname "$0")" && pwd)
+U=${1:?login user}; UH=$(getent passwd "$U" | cut -d: -f6); HERE=$(cd "$(dirname "$0")" && pwd); VER=${2:-}; PFX=${3:-}
 BASE=${EGPU_SYSEXT_BASE:-/home/.egpu-buddy}; BR=$BASE/buildroot; CACHE=$BASE/pkgcache
 [ -x "$BR/usr/bin/makepkg" ] || { echo "no SteamOS build root at $BR (the driver step creates it)"; exit 2; }
 P(){ pacman --root "$BR" --dbpath "$BR/var/lib/pacman" --cachedir "$CACHE" --gpgdir /etc/pacman.d/gnupg --config "$BASE/pacman.conf" --noconfirm "$@"; }
@@ -16,6 +18,19 @@ P -Sy --needed git meson ninja cmake pkgconf glslang glm benchmark vulkan-header
   libdrm libx11 libxcb libxcomposite libxdamage libxext libxfixes libxkbcommon libxmu libxrender libxres libxtst libxxf86vm libxcursor \
   libinput libcap libdecor lcms2 luajit seatd sdl2 xcb-util-wm xcb-util-errors xorg-xwayland hwdata libei catch2 libdisplay-info >/dev/null
 G="$UH/.local/gamescope-gbm"; S="$BASE/gamescope-src"; mkdir -p "$G" "$S" "$BR/opt/gs"; cp -a "$HERE"/. "$BR/opt/gs/"; chown -R "$U" "$G" "$S"
+if [ -n "$VER" ]; then   # follow SteamOS's gamescope: built into the version it has (the prefix is compiled in: bound at its real path)
+  [ -n "$PFX" ] || { echo "a prefix is needed with a version"; exit 2; }
+  D=$(dirname "$PFX"); mkdir -p "$D"; chown "$U" "$D"; S="$BASE/gamescope-sys-src"; rm -rf "${S:?}"; mkdir -p "$S"; chown "$U" "$S"
+  printf '%s\n' '#!/bin/bash' 'id builder >/dev/null 2>&1 || useradd -m -u 1000 builder' 'chown -R builder /src' \
+    "runuser -u builder -- env HOME=/home/builder GAMESCOPE_SRC=/src/gs bash /opt/gs/build-system.sh '$VER' '$PFX'" > "$BR/opt/gs/run.sh"
+  chmod +x "$BR/opt/gs/run.sh"
+  echo "== compiling gamescope $VER with EGPU Buddy's changes — several minutes"
+  rc=0; systemd-nspawn -q --register=no --keep-unit --resolv-conf=copy-host -D "$BR" --bind="$S:/src" --bind="$D:$D" /bin/bash /opt/gs/run.sh || rc=$?
+  rm -rf "${S:?}"; chown -R "$U" "$D"
+  [ "$rc" = 0 ] || exit "$rc"
+  if ldd "$PFX/bin/gamescope" | grep -q 'not found'; then echo "the built gamescope has unresolved libraries on the host"; exit 1; fi
+  exit 0
+fi
 id -u builder >/dev/null 2>&1 || true
 cat > "$BR/opt/gs/run.sh" <<EOS
 #!/bin/bash
