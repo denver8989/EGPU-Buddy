@@ -1,3 +1,8 @@
+0.7.286 — SteamOS: Game Mode fixes follow SteamOS updates.
+
+- Fixed: SteamOS: after a SteamOS update or a switch to Beta / Preview, EGPU Buddy now rebuilds its NVIDIA Game Mode fixes for the new gamescope by itself (it kept an older one). (SteamOS NVIDIA install only; CachyOS, Bazzite and AMD / Intel unchanged.)
+- New: SteamOS: the plugin shows a banner while that runs, and a note at Automatic updates.
+
 0.7.285 — Performance Lab works in real games and says why the CPU limits.
 
 - Fixed: Performance Lab recordings stayed empty in real games; recording now starts 90 s after the game launches.
