@@ -1,3 +1,5 @@
+
+## 2026-11-16 — 0.7.286 RELEASED (gamescope follow: worked on SilverplayerX Ally, 3.17.0-17 built 11-15 10:24). Black bars remained: Steam SteamRT3 client (~Nov 10) launches webhelper directly in its container, no steamwebhelper_sniper_wrap.sh, so the STEAM_RUNTIME_STEAMRT hook is dead EVERYWHERE (owner LG2 log last active Nov 11). 0.7.287 committed (b581bfe, NOT released, awaits owner OK): Ally/XG gate puts libegpu-steam-ui.so + EGPU_TFP=1 into zzzz steam-launcher drop-in. dlsym passthrough is a tail jmp (RTLD_NEXT safe, tested). Ask owner: widen to all SteamOS/CachyOS NVIDIA (needs non-drop-in route), add steam-ui-fix.log tail to report.
 # Shared task ledger
 
 Checkpoint: 2026-11-10, Asia/Tokyo. Source: checked-out code, Claude transcript, read-only tmux capture, and durable local Claude memory. Owner `unclaimed` means no agent is currently editing that task. Waiting tasks are retained, not silently abandoned. Product changes require their own claim and scope review.
