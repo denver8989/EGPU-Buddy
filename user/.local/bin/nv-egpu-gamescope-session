@@ -977,13 +977,13 @@ if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e 
     if [ -n "$_lib" ] && [ -n "$_other" ]; then
       case "$_other" in *libegpu-nvt.so*) _want="$_other" ;; *) _want="$_lib:$_other" ;; esac
     fi
-    # Steam menu fix on: Steam's SteamRT3 client (Nov 2026) starts its interface inside its container without the
-    # webhelper script the runtime override hooked, so the fix never loaded (black bars back, SilverplayerX). The library
-    # goes into Steam's LD_PRELOAD here; it steps in only in the interface process (EGPU_TFP), everything else passes through.
-    _sl="$HOME/.local/lib/nv-egpu-buddy/steam-ui-fix/libegpu-steam-ui.so"
-    if [ -n "$_sui" ] && [ -r "$_sl" ]; then
+    # Steam menu fix on (egpu-steam-ui-fix env put its library into LD_PRELOAD): this drop-in replaces Steam's LD_PRELOAD,
+    # so the library goes in here too (SteamRT3 client, black bars back: SilverplayerX).
+    _sl=$(printf '%s' "${LD_PRELOAD:-}" | tr ':' '\n' | grep -m1 'libegpu-steam-ui\.so')
+    if [ -n "$_sl" ]; then
       _b=${_want:-${_other:-${LD_PRELOAD:-}}}
-      _new=$(printf '[Service]\n# EGPU Buddy: Steam menu fix and the NVIDIA settings loader next to any other LD_PRELOAD (ROG Ally / XG Mobile)\nEnvironment=EGPU_TFP=1\nEnvironment=LD_PRELOAD=%s\n' "$_sl${_b:+:$_b}")
+      case "$_b" in *libegpu-steam-ui.so*) ;; *) _b="$_sl${_b:+:$_b}" ;; esac
+      _new=$(printf '[Service]\n# EGPU Buddy: Steam menu fix and the NVIDIA settings loader next to any other LD_PRELOAD (ROG Ally / XG Mobile)\nEnvironment=EGPU_TFP=1\nEnvironment=LD_PRELOAD=%s\n' "$_b")
     elif [ -n "$_want" ]; then
       _new=$(printf '[Service]\n# EGPU Buddy: the NVIDIA settings loader next to the LD_PRELOAD another drop-in sets (ROG Ally / XG Mobile)\nEnvironment=LD_PRELOAD=%s\n' "$_want")
     else _new=""; fi

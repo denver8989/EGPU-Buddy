@@ -6,5 +6,6 @@ OUT=${1:?usage: build.sh <out dir>}; SRC=$(cd "$(dirname "$0")" && pwd)/egpu-ste
 mkdir -p "$OUT"
 gcc -O2 -fPIC -shared -Wall -Wno-misleading-indentation -Wno-nonnull-compare -Wno-missing-braces -Wl,--as-needed \
   -o "$OUT/libegpu-steam-ui.so" "$SRC" -lxcb -lxcb-shm -lxcb-dri3 -lXdamage -lXfixes -lX11 -ldl -lpthread
+mkdir -p "$OUT/stub32"; gcc -m32 -O2 -fPIC -shared -o "$OUT/stub32/libegpu-steam-ui.so" "${SRC%/*}/stub32.c"
 sha256sum "$SRC" | cut -c1-16 > "$OUT/BUILD-ID"
 ls -la "$OUT/libegpu-steam-ui.so"

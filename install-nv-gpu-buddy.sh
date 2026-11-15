@@ -233,6 +233,7 @@ for p in lib64 lib/x86_64-linux-gnu; do ucmd cp -f "$NVTB/lib64/libegpu-nvt.so" 
 for p in lib32 lib/i386-linux-gnu; do ucmd cp -f "$NVTB/lib32/libegpu-nvt.so" "$ND/$p/"; done
 if [ -e /usr/lib64/libc.so.6 ] && [ ! -L /usr/lib64 ]; then ucmd cp -f "$NVTB/lib32/libegpu-nvt.so" "$ND/lib/"; else ucmd cp -f "$NVTB/lib64/libegpu-nvt.so" "$ND/lib/"; fi
 [ -r "$ROOT/packaging/steam-ui-fix/build/libegpu-steam-ui.so" ] && ucmd cp -f "$ROOT/packaging/steam-ui-fix/build/libegpu-steam-ui.so" "$LIBD/steam-ui-fix/"
+[ -r "$ROOT/packaging/steam-ui-fix/build/stub32/libegpu-steam-ui.so" ] && ucmd mkdir -p "$LIBD/steam-ui-fix/stub32" && ucmd cp -f "$ROOT/packaging/steam-ui-fix/build/stub32/libegpu-steam-ui.so" "$LIBD/steam-ui-fix/stub32/"
 # what the loader hands every game on this track: NVIDIA's render offload (a laptop's or a motherboard-port screen's games
 # go to the NVIDIA card; harmless when the screen is on it) and NVAPI for DLSS. A value set for one game still wins.
 printf '# NV GPU Buddy (written by the installer)\n__NV_PRIME_RENDER_OFFLOAD=1\n__VK_LAYER_NV_optimus=NVIDIA_only\n__GLX_VENDOR_LIBRARY_NAME=nvidia\nPROTON_ENABLE_NVAPI=1\nDXVK_ENABLE_NVAPI=1\n' | ucmd tee "$NV_ENV" >/dev/null

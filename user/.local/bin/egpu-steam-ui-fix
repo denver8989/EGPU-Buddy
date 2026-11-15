@@ -9,7 +9,8 @@
 #
 #   egpu-steam-ui-fix status   JSON: enabled, available (NVIDIA install + library), bigart (Steam setting), active (running Steam has it)
 #   egpu-steam-ui-fix on|off   the user's choice (Game Mode restart applies it)
-#   egpu-steam-ui-fix env      shell lines for a Game Mode session on the NVIDIA route (nothing unless on + available)
+#   egpu-steam-ui-fix env      shell lines for a Game Mode session on the NVIDIA route (nothing unless on + available);
+#                              its LD_PRELOAD line is the caller's own LD_PRELOAD with the library in front
 set -u
 CFG="$HOME/.config/egpu-buddy/steam-ui-fix"
 D="$HOME/.local/lib/nv-egpu-buddy/steam-ui-fix"
@@ -64,6 +65,18 @@ EOT
   chmod 755 "$RTD/_v2-entry-point.new" "$D/egpu-steam-ui-inner.new" && mv -f "$RTD/_v2-entry-point.new" "$RTD/_v2-entry-point" \
     && mv -f "$D/egpu-steam-ui-inner.new" "$D/egpu-steam-ui-inner"
 }
+# Steam's SteamRT3 client (Nov 2026) starts its interface inside its container without the webhelper script hooked above,
+# so the library also goes into Steam's LD_PRELOAD ($LIB layout like the NVIDIA settings loader; 32-bit = an empty stub
+# so 32-bit programs load nothing). It steps in only in Steam's interface process (EGPU_TFP), everywhere else it passes through.
+pl_dir() {
+  local s src
+  for s in lib64 lib/x86_64-linux-gnu lib32 lib/i386-linux-gnu lib; do
+    case $s in lib64|lib/x86_64-linux-gnu) src=$LIB ;; lib32|lib/i386-linux-gnu) src=$D/stub32/libegpu-steam-ui.so ;;
+      lib) if [ -e /usr/lib64/libc.so.6 ] && [ ! -L /usr/lib64 ]; then src=$D/stub32/libegpu-steam-ui.so; else src=$LIB; fi ;; esac   # Fedora: lib = 32-bit
+    [ -r "$src" ] || continue
+    mkdir -p "$D/pl/$s" && { cmp -s "$src" "$D/pl/$s/libegpu-steam-ui.so" || cp -f "$src" "$D/pl/$s/libegpu-steam-ui.so"; } || return 1
+  done
+}
 json_bool() { if "$@"; then printf true; else printf false; fi; }
 
 case "${1:-}" in
@@ -73,6 +86,10 @@ case "${1:-}" in
   on)  available || { echo "not available here (NVIDIA install with Steam only)" >&2; exit 2; }
        mkdir -p "${CFG%/*}" && touch "$CFG" && echo "on: applies at the next Game Mode start" ;;
   off) rm -f "$CFG"; echo "off: Steam starts without it at the next Game Mode start" ;;
-  env) [ -e "$CFG" ] && available && prepare && printf 'export STEAM_RUNTIME_STEAMRT=%q\n' "$RTD" ;;
+  env) [ -e "$CFG" ] && available && prepare && printf 'export STEAM_RUNTIME_STEAMRT=%q\n' "$RTD" || exit 0
+       pl_dir || exit 0
+       # the caller's LD_PRELOAD (inherited) with ours in front; single quotes keep $LIB for ld.so (also a valid EnvironmentFile line)
+       case ":${LD_PRELOAD:-}:" in *libegpu-steam-ui.so*) v=${LD_PRELOAD:-} ;; *) v="$D/pl/\$LIB/libegpu-steam-ui.so${LD_PRELOAD:+:$LD_PRELOAD}" ;; esac
+       printf "export EGPU_TFP=1\nexport LD_PRELOAD='%s'\n" "$v" ;;
   *) sed -n '2,15p' "$0" >&2; exit 2 ;;
 esac

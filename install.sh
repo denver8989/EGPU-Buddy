@@ -549,7 +549,8 @@ fi
 # user's choice, and the next Game Mode start rebuilds the runtime entry point it is loaded through.
 SUIB="$ROOT/packaging/steam-ui-fix/build/libegpu-steam-ui.so"
 if [ "$GPU_VENDOR" != amd ] && [ -r "$SUIB" ]; then
-  SD="$USER_HOME/.local/lib/nv-egpu-buddy/steam-ui-fix"; umkdir "$SD"; cp -f "$SUIB" "$SD/libegpu-steam-ui.so"; uown "$SD"
+  SD="$USER_HOME/.local/lib/nv-egpu-buddy/steam-ui-fix"; umkdir "$SD"; cp -f "$SUIB" "$SD/libegpu-steam-ui.so"
+  [ -r "$ROOT/packaging/steam-ui-fix/build/stub32/libegpu-steam-ui.so" ] && umkdir "$SD/stub32" && cp -f "$ROOT/packaging/steam-ui-fix/build/stub32/libegpu-steam-ui.so" "$SD/stub32/"; uown "$SD"
   say "== installed the Steam menu fix library ($(cat "$ROOT/packaging/steam-ui-fix/build/BUILD-ID" 2>/dev/null); off until turned on)"
 fi
 

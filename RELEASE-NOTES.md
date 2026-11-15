@@ -1,3 +1,8 @@
+0.7.288 — Big Art menu fix works with Steam's new client on every NVIDIA setup.
+
+- Fixed: the Steam menu fix (Big Art mode) loads again on every NVIDIA install (SteamOS, CachyOS, Bazzite), not only on ROG Ally / XG Mobile. (Only when the menu fix is on; off = unchanged; AMD / Intel unchanged.)
+- NV GPU Buddy: the same menu fix repair.
+
 0.7.287 — Big Art menu fix works with Steam's new client.
 
 - Fixed: the Steam menu fix (Big Art mode) stopped loading after Steam's November client update, so the black bars in menus and notifications came back. (ROG Ally / XG Mobile only; every other machine unchanged.)
