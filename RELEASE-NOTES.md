@@ -1,3 +1,7 @@
+0.7.289 — Support report: Steam menu fix details.
+
+- New: the support report shows whether the Steam menu fix (Big Art mode) is on and loaded, what Steam received, and the fix's own log.
+
 0.7.288 — Big Art menu fix works with Steam's new client on every NVIDIA setup.
 
 - Fixed: the Steam menu fix (Big Art mode) loads again on every NVIDIA install (SteamOS, CachyOS, Bazzite), not only on ROG Ally / XG Mobile. (Only when the menu fix is on; off = unchanged; AMD / Intel unchanged.)

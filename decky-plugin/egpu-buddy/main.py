@@ -1601,6 +1601,22 @@ def _support_report():
               "sddm|plasmalogin|steamos-session-select|session-select|Switch to|autologin"], 20)[1].splitlines()
     if sw:
         lines += ["", "## Session switches this boot (last 40)"] + [l[:300] for l in sw[-40:]]
+    # Steam menu fix (Big Art): on / loaded / what Steam and its interface really got, and its own log (read-only)
+    sui = f"{USER_HOME}/.local/bin/egpu-steam-ui-fix"
+    if os.path.exists(sui):
+        lines += ["", "## Steam menu fix (Big Art mode)", "status: " + _sh(["runuser", "-u", USER, "--", "env", f"HOME={USER_HOME}", sui, "status"], 10)[1].strip()]
+        for comm in ("steam", "steamwebhelper"):
+            for pid in _sh(["pgrep", "-u", USER, "-x", comm], 5)[1].split()[:6]:
+                cmd = _read(f"/proc/{pid}/cmdline").replace("\0", " ")
+                if comm == "steamwebhelper" and "--type=" in cmd:
+                    continue
+                env = [e for e in _read(f"/proc/{pid}/environ").split("\0") if e.startswith(("LD_PRELOAD=", "EGPU_TFP=", "STEAM_RUNTIME_STEAMRT="))]
+                lines.append(f"{comm} {pid}: {' '.join(env) or '(none of LD_PRELOAD / EGPU_TFP / STEAM_RUNTIME_STEAMRT)'}"[:400])
+        ue = [l for l in _sh(["runuser", "-u", USER, "--", "env", f"XDG_RUNTIME_DIR=/run/user/{os.stat(USER_HOME).st_uid}", "systemctl", "--user", "show-environment"], 10)[1].splitlines()
+              if l.startswith(("LD_PRELOAD=", "EGPU_TFP="))]
+        lines.append("user session environment: " + (" ".join(ue) or "(no LD_PRELOAD / EGPU_TFP)"))
+        lg = _read(f"{USER_HOME}/.local/state/nv-egpu-buddy/steam-ui-fix.log").splitlines()
+        lines += ["log (last 15):"] + ["    " + l[:300] for l in lg[-15:]]
     # which desktop Switch to Desktop starts (an X11 one probes the eGPU as its primary GPU) and what the login manager is set to
     sess = sorted(os.path.basename(p) for p in glob.glob("/usr/share/xsessions/*.desktop") + glob.glob("/usr/share/wayland-sessions/*.desktop"))
     pins = [f"{os.path.basename(p)}: {s}" for p in sorted(glob.glob("/etc/sddm.conf.d/*.conf") + glob.glob("/etc/plasmalogin.conf.d/*.conf"))
