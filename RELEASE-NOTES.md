@@ -1,3 +1,8 @@
+0.7.292 — Support report: why the Big Art menu fix may not draw.
+
+- New: the support report shows whether Steam draws its interface on the GPU or in software, its interface start flags, and how far the Steam menu fix got (Steam asked / first window).
+- NV GPU Buddy: the same report details.
+
 0.7.291 — Send the support report to your phone; Switch to Desktop trail.
 
 - New: "Send full report to phone" in Game Mode: a QR code downloads the full report to a phone on the same Wi-Fi (link works 10 minutes, this file only). For when the desktop cannot be reached.

@@ -1615,6 +1615,16 @@ def _support_report():
         ue = [l for l in _sh(["runuser", "-u", USER, "--", "env", f"XDG_RUNTIME_DIR=/run/user/{os.stat(USER_HOME).st_uid}", "systemctl", "--user", "show-environment"], 10)[1].splitlines()
               if l.startswith(("LD_PRELOAD=", "EGPU_TFP="))]
         lines.append("user session environment: " + (" ".join(ue) or "(no LD_PRELOAD / EGPU_TFP)"))
+        # Steam's own view of its interface: GPU or software drawing (Steam falls back to software after interface crashes,
+        # and then the fix has nothing to do), the flags it started it with, and how it builds its window textures
+        sl = f"{USER_HOME}/.local/share/Steam/logs"
+        g = [l for l in _read(f"{sl}/webhelper_gpu.txt").splitlines()[-4000:] if re.search(r"GL_RENDERER \]|\[ (gpu_compositing|opengl|webgl) \]", l)]
+        lines += ["Steam interface GPU (last start): " + " · ".join(re.sub(r"^\[[^]]*\]\s*", "", l).strip() for l in g[-4:])[:400]]
+        wl = [l for l in _read(f"{sl}/webhelper.txt").splitlines() if "webhelper launched" in l]
+        if wl:
+            lines.append("Steam interface flags: " + " ".join(f for f in wl[-1].split() if re.search(r"gpu|gl|angle|swiftshader|xcomposite|software", f, re.I))[:300])
+        ts = [l for l in _read(f"{sl}/webhelper.txt").splitlines() if "window texture stream" in l]
+        lines.append("Steam window textures: " + (ts[-1][:200] if ts else "(no line)"))
         lg = _read(f"{USER_HOME}/.local/state/nv-egpu-buddy/steam-ui-fix.log").splitlines()
         lines += ["log (last 15):"] + ["    " + l[:300] for l in lg[-15:]]
     # Switch to Desktop trail, this boot and the previous one: each step of the switch as the system logs it (Steam asks

@@ -87,6 +87,7 @@ static double now_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &
 static int passthrough;   /* the real GLX has the extension (Mesa, handheld GPU): never step in */
 static const char *my_qes(Display *d, int s) {
   static char buf[8192]; const char *(*f)(Display *, int) = rgpa("glXQueryExtensionsString");
+  static int asked; if (!asked++) LOG("egpu-steam-ui: Steam asked for the GLX extensions (offering %s)\n", TFP_EXT);
   const char *r = f ? f(d, s) : ""; if (strstr(r, TFP_EXT)) { if (!passthrough) LOG("egpu-steam-ui: the GLX in use has the extension itself: not needed\n"); passthrough = 1; return r; }
   snprintf(buf, sizeof buf, "%s %s ", r, TFP_EXT); return buf;
 }
@@ -116,6 +117,7 @@ static int my_getattr(Display *d, GLXFBConfig c, int at, int *v) {
 static GLXPixmap my_create(Display *d, GLXFBConfig c, Pixmap p, const int *a) {
   if (passthrough) { GLXPixmap (*rf)(Display *, GLXFBConfig, Pixmap, const int *) = rgpa("glXCreatePixmap"); return rf(d, c, p, a); }
   int target = GL_TEXTURE_2D, rgba = 1;
+  static int first; if (!first++) LOG("egpu-steam-ui: Steam created its first window pixmap\n");
   for (int i = 0; a && a[i] != None; i += 2) {
     if (a[i] == GLX_TEXTURE_TARGET_EXT) target = a[i + 1] == GLX_TEXTURE_RECTANGLE_EXT ? 0x84F5 : GL_TEXTURE_2D;
     if (a[i] == GLX_TEXTURE_FORMAT_EXT) rgba = a[i + 1] == GLX_TEXTURE_FORMAT_RGBA_EXT;
