@@ -973,11 +973,23 @@ if [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e 
       _v=$(sed -n 's/^Environment="\{0,1\}LD_PRELOAD=\([^" ]*\)"\{0,1\}[[:space:]]*$/\1/p' "$_f" | tail -1)
       [ -n "$_v" ] && _other=$_v
     done
+    _want=""
     if [ -n "$_lib" ] && [ -n "$_other" ]; then
       case "$_other" in *libegpu-nvt.so*) _want="$_other" ;; *) _want="$_lib:$_other" ;; esac
+    fi
+    # Steam menu fix on: Steam's SteamRT3 client (Nov 2026) starts its interface inside its container without the
+    # webhelper script the runtime override hooked, so the fix never loaded (black bars back, SilverplayerX). The library
+    # goes into Steam's LD_PRELOAD here; it steps in only in the interface process (EGPU_TFP), everything else passes through.
+    _sl="$HOME/.local/lib/nv-egpu-buddy/steam-ui-fix/libegpu-steam-ui.so"
+    if [ -n "$_sui" ] && [ -r "$_sl" ]; then
+      _b=${_want:-${_other:-${LD_PRELOAD:-}}}
+      _new=$(printf '[Service]\n# EGPU Buddy: Steam menu fix and the NVIDIA settings loader next to any other LD_PRELOAD (ROG Ally / XG Mobile)\nEnvironment=EGPU_TFP=1\nEnvironment=LD_PRELOAD=%s\n' "$_sl${_b:+:$_b}")
+    elif [ -n "$_want" ]; then
       _new=$(printf '[Service]\n# EGPU Buddy: the NVIDIA settings loader next to the LD_PRELOAD another drop-in sets (ROG Ally / XG Mobile)\nEnvironment=LD_PRELOAD=%s\n' "$_want")
+    else _new=""; fi
+    if [ -n "$_new" ]; then
       if [ "$(cat "$_ours" 2>/dev/null)" != "$_new" ]; then
-        printf '%s\n' "$_new" > "$_ours" && systemctl --user daemon-reload && log "NVIDIA settings: Steam's LD_PRELOAD drop-in combined with $_other"
+        printf '%s\n' "$_new" > "$_ours" && systemctl --user daemon-reload && log "NVIDIA settings: Steam's LD_PRELOAD drop-in written: $(sed -n 's/^Environment=LD_PRELOAD=//p' "$_ours")"
       fi
     elif [ -e "$_ours" ]; then
       rm -f "$_ours" && systemctl --user daemon-reload && log "NVIDIA settings: Steam LD_PRELOAD drop-in removed (loader off or no other drop-in)"

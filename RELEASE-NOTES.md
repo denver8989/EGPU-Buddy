@@ -1,3 +1,7 @@
+0.7.287 — Big Art menu fix works with Steam's new client.
+
+- Fixed: the Steam menu fix (Big Art mode) stopped loading after Steam's November client update, so the black bars in menus and notifications came back. (ROG Ally / XG Mobile only; every other machine unchanged.)
+
 0.7.286 — SteamOS: Game Mode fixes follow SteamOS updates.
 
 - Fixed: SteamOS: after a SteamOS update or a switch to Beta / Preview, EGPU Buddy now rebuilds its NVIDIA Game Mode fixes for the new gamescope by itself (it kept an older one). (SteamOS NVIDIA install only; CachyOS, Bazzite and AMD / Intel unchanged.)

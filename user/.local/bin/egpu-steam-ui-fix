@@ -34,7 +34,7 @@ bigart() {   # Steam's "Big Art" home layout for the most recent Steam user (loc
 }
 active() {   # the running Steam client was started with our runtime entry point
   local p; for p in $(pgrep -u "$(id -u)" -x steam 2>/dev/null); do
-    tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "STEAM_RUNTIME_STEAMRT=$RTD" && return 0
+    tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx -e "STEAM_RUNTIME_STEAMRT=$RTD" -e 'EGPU_TFP=1' && return 0
   done; return 1
 }
 prepare() {   # $RTD: every entry of Steam's runtime linked, except its entry point, which goes through ours
