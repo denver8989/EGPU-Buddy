@@ -1,4 +1,6 @@
 
+## 2026-11-16 02:20 — 0.7.287 (Ally) + 0.7.288 (all NVIDIA) RELEASED: Big Art menu fix via LD_PRELOAD (egpu-steam-ui-fix env prints EGPU_TFP=1 + LD_PRELOAD=pl/$LIB lib:caller, 32-bit stub). Owner LG2 updated; NOT yet proven in a real Game Mode start: next Game Mode start, check ~/.local/state/nv-egpu-buddy/steam-ui-fix.log for "active pid". Waiting on SilverplayerX.
+
 ## 2026-11-16 — 0.7.286 RELEASED (gamescope follow: worked on SilverplayerX Ally, 3.17.0-17 built 11-15 10:24). Black bars remained: Steam SteamRT3 client (~Nov 10) launches webhelper directly in its container, no steamwebhelper_sniper_wrap.sh, so the STEAM_RUNTIME_STEAMRT hook is dead EVERYWHERE (owner LG2 log last active Nov 11). 0.7.287 committed (b581bfe, NOT released, awaits owner OK): Ally/XG gate puts libegpu-steam-ui.so + EGPU_TFP=1 into zzzz steam-launcher drop-in. dlsym passthrough is a tail jmp (RTLD_NEXT safe, tested). Ask owner: widen to all SteamOS/CachyOS NVIDIA (needs non-drop-in route), add steam-ui-fix.log tail to report.
 # Shared task ledger
 
