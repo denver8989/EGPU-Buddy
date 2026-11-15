@@ -1,4 +1,6 @@
 
+## 2026-11-16 03:45 — 0.7.293 RELEASED: menu fix checks Steam "enable_gpu_accelerated_webviews" (config.vdf + userdata localconfig.vdf); status gpu_webviews; env (Game Mode start, Steam not running, fix on) sets it to 1; plugin shows it at the toggle. Stand-in tested. Not proven that this is SilverplayerX's cause.
+
 ## 2026-11-16 03:40 — 0.7.292 RELEASED (menu fix diagnostics). SilverplayerX report 2ZN63K: now SteamOS 3.9.6 BETA, 0.7.290, report taken on handheld GPU (no eGPU). Menu fix log: only "active pid" lines, never DRI3/GPU path/imported (owner LG2 shows full chain) -> Steam never uses GLX TFP for him: suspect Steam UI on software rendering (after webhelper crashes) or never asks. 0.7.292 logs "Steam asked"/"first window pixmap" + report shows webhelper_gpu featureStatus + flags. Need his report WITH eGPU attached while black bar shows.
 
 ## 2026-11-16 03:16 — 0.7.291 RELEASED: plugin "Send full report to phone" (share_report: ThreadingHTTPServer on LAN IP, random token, 1 file, 10 min, replaced on re-share) + report "Switch to Desktop trail" (journal, this + previous boot). Backend tested on this machine (download ok, wrong token 404, old link refused; trail shows the 02:58 switch chain). Button not clicked in real Game Mode yet.
