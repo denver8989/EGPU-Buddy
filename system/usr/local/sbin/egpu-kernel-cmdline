@@ -73,6 +73,17 @@ if [ "$MODE" = --check ]; then m=$(missing); [ -z "$m" ] && { echo "kernel comma
 [ "$MODE" = --apply ] || { echo "usage: $0 --check | --apply [--dry-run]"; exit 2; }
 [ "$(id -u)" = 0 ] || { echo "--apply needs root"; exit 1; }
 TS=$(date +%Y%m%d-%H%M%S); did=0
+# SteamOS boot config: build into a temp file, accept it only when it has a menu entry whose kernel file exists, keep the
+# current file as <cfg>.bak-egpu-buddy, then move it in. Never leaves a half-written or kernel-less config on the ESP.
+egpu_grub_rebuild() {
+  local cfg=$1 tmp k
+  tmp=$(mktemp) || return 1
+  if ! grub-mkconfig -o "$tmp" >/dev/null 2>&1 || ! grep -q '^menuentry ' "$tmp"; then rm -f "$tmp"; echo "boot config not changed: the rebuilt one had no boot entry"; return 1; fi
+  k=$(sed -n 's/^[[:space:]]*linux[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$tmp" | head -1)
+  if [ -z "$k" ] || { [ ! -e "${k#/@}" ] && [ ! -e "/boot/${k##*/}" ]; }; then rm -f "$tmp"; echo "boot config not changed: the rebuilt one names a kernel that is not here ($k)"; return 1; fi
+  cp -a "$cfg" "$cfg.bak-egpu-buddy" 2>/dev/null
+  cat "$tmp" > "$cfg.egpu-new" && mv -f "$cfg.egpu-new" "$cfg"; rm -f "$tmp"
+}
 edit(){ # $1 file, $2 sed script
   [ -f "$1" ] || return 1
   if [ $DRY = 1 ]; then echo "would edit $1:"; sed -E "$2" "$1" | diff "$1" - | grep '^>' | cut -c1-200; return 0; fi
@@ -154,7 +165,9 @@ elif [ -f /etc/default/grub ] && command -v steamos-readonly >/dev/null 2>&1; th
     printf '# SteamOS EGPU Buddy: kernel parameters the eGPU path needs (kept across OS updates)\nGRUB_CMDLINE_LINUX_DEFAULT="%s ${GRUB_CMDLINE_LINUX_DEFAULT}"\nGRUB_CMDLINE_LINUX="${GRUB_CMDLINE_LINUX} %s"\nGRUB_TIMEOUT=0\nGRUB_TIMEOUT_STYLE=hidden\n' "$WANT" "$QUIET" > "$d"; echo "wrote $d"; did=1; fi
   cfg=$(ls /efi/EFI/steamos/grub.cfg /boot/efi/EFI/steamos/grub.cfg /boot/grub/grub.cfg 2>/dev/null | head -1)
   if [ $DRY = 0 ] && [ -n "$cfg" ]; then
-    if grub-mkconfig -o "$cfg" >/dev/null 2>&1; then
+    # Built aside first (as SteamOS's own update-grub does) and swapped in only when it boots a kernel that exists;
+    # the config it replaces is kept next to it.
+    if egpu_grub_rebuild "$cfg"; then
       echo "grub config regenerated: $cfg"
       # Never leave a config that stops at a menu: this device may have no keyboard.
       if ! grep -qE '^[[:space:]]*set timeout=' "$cfg"; then

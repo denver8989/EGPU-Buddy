@@ -163,7 +163,14 @@ if [ -f /etc/pacman.conf ] && grep -qE '^IgnorePkg' /etc/pacman.conf; then
 fi
 if [ -f /etc/default/grub.d/egpu-buddy.cfg ]; then sudo rm -f /etc/default/grub.d/egpu-buddy.cfg
   cfg=$(ls /efi/EFI/steamos/grub.cfg /boot/efi/EFI/steamos/grub.cfg /boot/grub/grub.cfg 2>/dev/null | head -1)
-  if [ -n "$cfg" ] && sudo grub-mkconfig -o "$cfg" >/dev/null 2>&1; then
+  # built aside and checked first (same as the install): a boot entry whose kernel exists, the old file kept as .bak-egpu-buddy
+  _t=$(mktemp); _k=""
+  if [ -n "$cfg" ] && sudo grub-mkconfig -o "$_t" >/dev/null 2>&1 && grep -q '^menuentry ' "$_t"; then
+    _k=$(sed -n 's/^[[:space:]]*linux[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$_t" | head -1)
+    { [ -n "$_k" ] && { [ -e "${_k#/@}" ] || [ -e "/boot/${_k##*/}" ]; }; } || _k=""
+  fi
+  [ -z "$_k" ] && [ -n "$cfg" ] && echo "boot configuration NOT rebuilt (the rebuilt one was not bootable); kept as it was"
+  if [ -n "$_k" ] && sudo cp -a "$cfg" "$cfg.bak-egpu-buddy" && sudo sh -c "cat '$_t' > '$cfg.egpu-new' && mv -f '$cfg.egpu-new' '$cfg'"; then
     echo "kernel parameters removed from the boot configuration ($cfg)"
     # Uninstalling must leave the machine as it was found. grub-mkconfig on SteamOS produces a config
     # WITHOUT the steamenv header block, and without it the bootloader strips the verbosity parameters
@@ -192,6 +199,7 @@ if [ -f /etc/default/grub.d/egpu-buddy.cfg ]; then sudo rm -f /etc/default/grub.
     sudo grep -qE '^[[:space:]]*set timeout=' "$cfg" 2>/dev/null ||
       { sudo sed -i '1i set timeout=0' "$cfg"; sudo sed -i '1i set timeout_style=hidden' "$cfg"; }
   fi
+  rm -f "$_t"
 fi
 sudo rm -f /etc/nv-egpu-buddy/version
 # Everything else this project creates at RUNTIME rather than at install time. Without

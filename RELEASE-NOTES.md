@@ -1,3 +1,7 @@
+0.7.294 — SteamOS: safer boot settings on install and uninstall.
+
+- Fixed: SteamOS: installing or uninstalling now builds the new boot settings aside, uses them only when they boot a kernel that exists, and keeps the previous ones as a backup. Before, they were rewritten in place. (SteamOS only; CachyOS, Bazzite and AMD / Intel unchanged.)
+
 0.7.293 — Big Art menu fix checks Steam's GPU drawing.
 
 - Fixed: Steam turns off GPU drawing for its interface after the interface crashes, and then the Big Art menu fix cannot work. The plugin now shows it, and with the menu fix on it is turned back on at the next Game Mode start. (Only when the menu fix is on; off = unchanged; AMD / Intel unchanged.)
