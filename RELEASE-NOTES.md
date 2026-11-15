@@ -1,3 +1,8 @@
+0.7.290 — Steam menu fix: one copy with Steam's older client.
+
+- Fixed: with Steam's older client the Big Art menu fix could load twice (0.7.288). (Only when the menu fix is on; off = unchanged.)
+- NV GPU Buddy: the same fix.
+
 0.7.289 — Support report: Steam menu fix details.
 
 - New: the support report shows whether the Steam menu fix (Big Art mode) is on and loaded, what Steam received, and the fix's own log.

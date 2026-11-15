@@ -59,7 +59,8 @@ EOT
 #!/bin/sh
 # runs inside Steam's runtime container: EGPU Buddy's Steam menu fix, then Steam's own webhelper script unchanged
 real="\$1"; shift
-export EGPU_TFP=1 LD_PRELOAD="$LIB\${LD_PRELOAD:+:\$LD_PRELOAD}"
+# (already in LD_PRELOAD through the Steam route below: not a second copy)
+case ":\${LD_PRELOAD:-}:" in *libegpu-steam-ui.so*) export EGPU_TFP=1 ;; *) export EGPU_TFP=1 LD_PRELOAD="$LIB\${LD_PRELOAD:+:\$LD_PRELOAD}" ;; esac
 exec "\$real" "\$@"
 EOT
   chmod 755 "$RTD/_v2-entry-point.new" "$D/egpu-steam-ui-inner.new" && mv -f "$RTD/_v2-entry-point.new" "$RTD/_v2-entry-point" \
