@@ -265,7 +265,9 @@ cy_build(){ # CachyOS: built as the user into ~/.local/gamescope-egpu-<version>,
 if [ "$BZ" = 1 ]; then bz_build >> "$LOG" 2>&1; brc=$?
 elif [ "$CY" = 1 ]; then
   tell "$r. Building EGPU Buddy's gamescope for it in the background (about 5-10 minutes, try $(cy_tries) of 3). Game Mode keeps working meanwhile."
-  cy_build >> "$LOG" 2>&1; brc=$?
+  # SteamOS: the plugin shows a banner while this runs (removed when it ends, however it ends)
+  [ "$SO" = 1 ] && { mkdir -p /run/nvegpu; printf 'from=%s\nto=%s\nstarted=%s\ntry=%s\n' "$(cy_built | cut -d+ -f1)" "$(cy_ver)" "$(date +%s)" "$(cy_tries)" > /run/nvegpu/gamescope-carrying; trap 'rm -f /run/nvegpu/gamescope-carrying' EXIT; }
+  cy_build >> "$LOG" 2>&1; brc=$?; rm -f /run/nvegpu/gamescope-carrying
   case $brc in
     0) tell "EGPU Buddy's gamescope is ready for gamescope $(cy_ver) (NVIDIA picture fix, touchpad picture with XR glasses). Game Mode uses it from its next start." ;;
     3) tell "EGPU Buddy's changes do not fit gamescope $(cy_ver) yet. Game Mode keeps using $( [ -x "$PRIV" ] && echo "the previous EGPU Buddy gamescope" || echo "the system gamescope") until an EGPU Buddy update." ;;

@@ -2128,6 +2128,14 @@ def _save_report():
     return code, path, text
 
 
+def _gamescope_carrying():
+    """SteamOS NVIDIA install: egpu-gamescope-repair is carrying EGPU Buddy's Game Mode fixes over to a new SteamOS gamescope
+    (after an update or a channel switch). Only that guard writes the file, so nothing shows anywhere else."""
+    try: d = dict(l.split("=", 1) for l in open("/run/nvegpu/gamescope-carrying").read().split("\n") if "=" in l)
+    except OSError: return None
+    return {"from": d.get("from", ""), "to": d.get("to", ""), "started": int(d.get("started") or 0), "try": d.get("try", "")}
+
+
 class Plugin:
     async def get_update_status(self):
         d = _settings()
@@ -2224,7 +2232,8 @@ class Plugin:
                 "installed_vendor": _installed_vendor(), "egpu_on_bus": _egpu_on_bus(),
                 # NV GPU Buddy: the mode this machine is in, and before a first install what kind of machine it looks like
                 "track": "nv-gpu-buddy" if _track() else "", "machine": "" if _read(VERSION_FILE) else _machine(),
-                "can_build_driver": bool(shutil.which("pacman")), "slow_build": bool(shutil.which("steamos-readonly")) and _installed_vendor() != "amd", "log": tail}
+                "can_build_driver": bool(shutil.which("pacman")), "slow_build": bool(shutil.which("steamos-readonly")) and _installed_vendor() != "amd", "log": tail,
+                "gamescope_carrying": _gamescope_carrying()}
 
     async def pop_notice(self):
         _decky_ui["seen"] = time.time()   # the plugin's UI polls this every 5 s from the moment Decky loads it

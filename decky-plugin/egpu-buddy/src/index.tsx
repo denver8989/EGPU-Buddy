@@ -125,7 +125,7 @@ const xgmIntro = callable<[], string>("xgm_intro");   // the XG Mobile intro ani
 const xgmIntroDone = callable<[], boolean>("xgm_intro_done");   // light-effect, brightness, offset
 const XGM_COLORS: [string, string][] = [["ff0000", "Red"], ["ff6000", "Orange"], ["ffd000", "Yellow"], ["00ff40", "Green"], ["00e0ff", "Cyan"], ["0040ff", "Blue"], ["a000ff", "Purple"], ["ffffff", "White"]];
 const resetClocks = callable<[], Result>("reset_clocks");
-type Setup = { track?: string; machine?: string; gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
+type Setup = { gamescope_carrying?: { from: string; to: string; started: number; try: string } | null; track?: string; machine?: string; gm_restart?: boolean; driver_building?: string; started?: number; expect?: string; driver_ready?: boolean; slow_build?: boolean; cmdline_pending?: boolean; installed_vendor?: string; egpu_on_bus?: string; untested?: string; accepted_untested?: boolean; installed_version: string; payload_version: string; needs_reboot: boolean; helpers_present: boolean; busy: boolean; step: string; rc: number | null; progress: number; can_build_driver: boolean; cmdline_missing: string; unsupported: string; log: string };
 const getSetup = callable<[], Setup>("get_setup_status");
 type Conflict = { id: string; name: string; url: string; why: string; evidence: string[]; removable?: boolean };
 const getConflicts = callable<[], Conflict[]>("get_conflicts");   // other eGPU tools that change the same things
@@ -740,6 +740,11 @@ function Content() {
         <PanelSection title={nvb ? "GPU" : "eGPU"}>
           <PanelSectionRow><div className={staticClasses.Text}>{s ? (nvb ? `${gpuName(tel["name"]) || "NVIDIA GPU"} · ${s.driver_loaded ? `driver ${tel["driver_version"] ?? ""}` : "driver not loaded"}${s.game_mode ? "" : " · Desktop"}` : stateLine(s)) : "Loading…"}</div></PanelSectionRow>
           {su?.unsupported && <PanelSectionRow><div style={{ fontSize: "12px", color: "#ff6b6b" }}>{su.unsupported}</div></PanelSectionRow>}
+          {su?.gamescope_carrying && (
+            <PanelSectionRow><div style={{ fontSize: "12px", padding: "6px", borderRadius: "4px", background: "rgba(255, 196, 0, 0.12)" }}>
+              <b>SteamOS changed its Game Mode (update or channel switch).</b> EGPU Buddy is carrying its Game Mode fixes over to gamescope {su.gamescope_carrying.to}{su.gamescope_carrying.started ? ` (started ${Math.max(0, Math.round((Date.now() / 1000 - su.gamescope_carrying.started) / 60))} min ago, about 10-15 min` : " (about 10-15 min"}{su.gamescope_carrying.try && su.gamescope_carrying.try !== "1" ? `, try ${su.gamescope_carrying.try} of 3` : ""}). Game Mode keeps working meanwhile. Please wait for it: keep the device on and plugged in, and do not update SteamOS or switch its channel again until it says it is done.
+            </div></PanelSectionRow>
+          )}
           {su?.driver_building && !su.busy && (
             <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{su.driver_building.includes("prebuild") ? "A SteamOS update is ready: EGPU Buddy is preparing the eGPU driver for it. Restart once it says it is done." : "SteamOS changed the kernel: EGPU Buddy is building the eGPU driver for it in the background (a few minutes). The eGPU works again by itself when it is done; nothing to install."}</div></PanelSectionRow>
           )}
@@ -1279,6 +1284,7 @@ function Content() {
       )}
       {tab === "setup" && (
         <PanelSection title="Updates">
+          {su?.slow_build && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>Updating SteamOS or switching it to Beta / Preview can undo EGPU Buddy's Game Mode fixes for a while: the new SteamOS brings its own gamescope. EGPU Buddy's guard carries them over by itself after the next start (about 10-15 minutes; the main page shows it while it works).</div></PanelSectionRow>}
           <PanelSectionRow><ToggleField label="Automatic updates" description="Off (default): a new release is only announced here and you decide when to install it. On: it installs by itself when no game is running." checked={!!up?.auto_update} onChange={(v) => run(() => setAutoUpdate(v))} /></PanelSectionRow>
           <PanelSectionRow><ButtonItem layout="below" disabled={busy || !!su?.busy} onClick={() => run(() => checkUpdate(false))}>Check for updates now</ButtonItem></PanelSectionRow>
           <ReleaseNotes label={up?.available ? `What's new in ${up.available}` : "Release notes"} />
