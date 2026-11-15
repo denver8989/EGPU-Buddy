@@ -1,3 +1,9 @@
+0.7.291 — Send the support report to your phone; Switch to Desktop trail.
+
+- New: "Send full report to phone" in Game Mode: a QR code downloads the full report to a phone on the same Wi-Fi (link works 10 minutes, this file only). For when the desktop cannot be reached.
+- New: the support report shows each step of Switch to Desktop (this boot and the previous one), so a failed switch shows where it stopped.
+- NV GPU Buddy: both.
+
 0.7.290 — Steam menu fix: one copy with Steam's older client.
 
 - Fixed: with Steam's older client the Big Art menu fix could load twice (0.7.288). (Only when the menu fix is on; off = unchanged.)

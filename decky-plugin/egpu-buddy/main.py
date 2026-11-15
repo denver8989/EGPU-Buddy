@@ -1617,6 +1617,15 @@ def _support_report():
         lines.append("user session environment: " + (" ".join(ue) or "(no LD_PRELOAD / EGPU_TFP)"))
         lg = _read(f"{USER_HOME}/.local/state/nv-egpu-buddy/steam-ui-fix.log").splitlines()
         lines += ["log (last 15):"] + ["    " + l[:300] for l in lg[-15:]]
+    # Switch to Desktop trail, this boot and the previous one: each step of the switch as the system logs it (Steam asks
+    # for it -> Game Mode stops -> the login manager starts the desktop -> KWin / Plasma). A failed switch shows where it stopped.
+    pat = (r"steam-set-session|steamos-session-select|session-select|set-session|Stopped target Gamescope Session|gamescope-session\.service: "
+           r"|Gamescope Session Ended|Starting (Wayland|X11) user session|Session started|startplasma|plasma-kwin_wayland\.service: (Failed|Main process exited)"
+           r"|kwin_wayland.*(fatal|[Cc]rash|abort)|plasmashell.*(SIGSEGV|SIGABRT)|egpu-buddy.*(desktop|Gaming Mode|login)|Auth: sddm-helper exited")
+    for b, title in (("0", "this boot"), ("-1", "previous boot")):
+        tr = [l for l in _sh(["journalctl", "-b", b, "--no-pager", "-o", "short-iso", "--grep", pat], 20)[1].splitlines() if l and not l.startswith("--")]
+        if tr:
+            lines += ["", f"## Switch to Desktop trail, {title} (last 50)"] + [l[:300] for l in tr[-50:]]
     # which desktop Switch to Desktop starts (an X11 one probes the eGPU as its primary GPU) and what the login manager is set to
     sess = sorted(os.path.basename(p) for p in glob.glob("/usr/share/xsessions/*.desktop") + glob.glob("/usr/share/wayland-sessions/*.desktop"))
     pins = [f"{os.path.basename(p)}: {s}" for p in sorted(glob.glob("/etc/sddm.conf.d/*.conf") + glob.glob("/etc/plasmalogin.conf.d/*.conf"))
@@ -2152,6 +2161,45 @@ def _gamescope_carrying():
     return {"from": d.get("from", ""), "to": d.get("to", ""), "started": int(d.get("started") or 0), "try": d.get("try", "")}
 
 
+_SHARE = {}
+
+
+def _share_file(path, minutes=10):
+    """Serve one file at a random link on the local network for `minutes` (one server at a time)."""
+    import socket, secrets, threading, http.server
+    old = _SHARE.pop("srv", None)
+    if old:
+        threading.Thread(target=lambda: (old.shutdown(), old.server_close()), daemon=True).start()
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("192.0.2.1", 9)); ip = s.getsockname()[0]; s.close()   # no packet is sent
+    except OSError:
+        return {"ok": False, "message": "No network connection: connect to Wi-Fi first."}
+    tok, name = secrets.token_urlsafe(12), os.path.basename(path)
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path != f"/{tok}/{name}":
+                self.send_error(404); return
+            data = open(path, "rb").read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+
+        def log_message(self, *a):
+            pass
+
+    try:
+        srv = http.server.ThreadingHTTPServer((ip, 0), H)
+    except OSError as e:
+        return {"ok": False, "message": f"Could not share: {e}"}
+    _SHARE["srv"] = srv
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    tm = threading.Timer(minutes * 60, lambda: (srv.shutdown(), srv.server_close(), _SHARE.get("srv") is srv and _SHARE.pop("srv")))
+    tm.daemon = True; tm.start()
+    return {"ok": True, "url": f"http://{ip}:{srv.server_address[1]}/{tok}/{name}", "minutes": minutes}
+
+
 class Plugin:
     async def get_update_status(self):
         d = _settings()
@@ -2435,6 +2483,14 @@ class Plugin:
 
     async def get_usb4(self):
         return _usb4() if _addon("usb4") else {}
+
+    async def share_report(self, code):
+        """Send to phone: the saved report, downloadable once from this device's network address for 10 minutes
+        (a random link, this one file only, nothing sent to any outside service). For users who cannot reach the desktop."""
+        path = f"{USER_HOME}/Desktop/egpu-buddy-report-{code}.txt"
+        if not re.fullmatch(r"[A-Z0-9]{4,12}", str(code)) or not os.path.isfile(path):
+            return {"ok": False, "message": "Save the report first."}
+        return _share_file(path)
 
     async def make_report(self):
         code, path, text = _save_report()

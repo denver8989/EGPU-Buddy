@@ -202,6 +202,7 @@ const getAddons = callable<[], Addons>("get_addons");
 const setAddon = callable<[string, boolean], Result>("set_addon");
 const getUsb4 = callable<[], { name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>("get_usb4");
 const makeReport = callable<[], { code: string; file: string; url: string }>("make_report");
+const shareReport = callable<[string], { ok: boolean; url?: string; minutes?: number; message?: string }>("share_report");
 // a QR code as an SVG (scanned with a phone, it opens the GitHub issue form with the report summary filled in)
 const qrSvg = (text: string) => { const q = qrcode(0, "L"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }); };
 const setTvControl = callable<[boolean], Result>("set_tv_control");
@@ -538,6 +539,7 @@ function Content() {
   const [ad, setAd] = useState<Addons | null>(null);
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
+  const [share, setShare] = useState<{ ok: boolean; url?: string; minutes?: number; message?: string } | null>(null);
   const [gr, setGr] = useState<{ enabled: boolean } | null>(null);
   const [sui, setSui] = useState<SteamUi | null>(null);
   const [lpad, setLpad] = useState<{ available: boolean; enabled: boolean } | null>(null);
@@ -883,11 +885,18 @@ function Content() {
           </PanelSection>
           {(
             <PanelSection title="Support report">
-              <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={async () => { setReport(null); try { setReport(await makeReport()); } catch { setMsg("Could not make the report."); } }}>Save support report to Desktop</ButtonItem></PanelSectionRow>
+              <PanelSectionRow><ButtonItem layout="below" disabled={lock} onClick={async () => { setReport(null); setShare(null); try { setReport(await makeReport()); } catch { setMsg("Could not make the report."); } }}>Save support report to Desktop</ButtonItem></PanelSectionRow>
               {report && (<>
                 <PanelSectionRow><div style={{ fontSize: "12px" }}>Scan with your phone to open a new GitHub issue with the report summary filled in. The full report is saved as <b>{report.file}</b>: attach it to the issue.</div></PanelSectionRow>
                 <PanelSectionRow><div style={{ width: "240px", margin: "0 auto", background: "#fff", borderRadius: "4px" }} dangerouslySetInnerHTML={{ __html: qrSvg(report.url) }} /></PanelSectionRow>
                 <Row k="Code" v={report.code} />
+                {/* Send to phone: the full report straight to a phone on the same Wi-Fi, for users who cannot reach the desktop */}
+                <PanelSectionRow><ButtonItem layout="below" onClick={async () => { try { setShare(await shareReport(report.code)); } catch { setShare({ ok: false, message: "Could not share the report." }); } }}>Send full report to phone</ButtonItem></PanelSectionRow>
+                {share && !share.ok && <PanelSectionRow><div style={{ fontSize: "12px" }}>{share.message}</div></PanelSectionRow>}
+                {share?.ok && share.url && (<>
+                  <PanelSectionRow><div style={{ fontSize: "12px" }}>Phone on the same Wi-Fi: scan to download the full report, then attach it to the issue or send it on Discord. The link works for {share.minutes} minutes, for this file only.</div></PanelSectionRow>
+                  <PanelSectionRow><div style={{ width: "240px", margin: "0 auto", background: "#fff", borderRadius: "4px" }} dangerouslySetInnerHTML={{ __html: qrSvg(share.url) }} /></PanelSectionRow>
+                </>)}
               </>)}
               <PanelSectionRow><div style={{ fontSize: "11px", opacity: 0.75 }}>{nvb ? "One file with everything NV GPU Buddy logs (versions, GPU, screens, Game Mode, NVIDIA settings and the system log), saved in the Desktop folder. Also in Desktop Mode: the \"Save NV GPU Buddy report\" icon." : "One file with everything EGPU Buddy logs (versions, GPU and link, screens, Game Mode, attach, Safe Detach, driver trial and the system log), saved in the Desktop folder. Also in Desktop Mode: the \"Save EGPU Buddy report\" icon."} No serial numbers, Wi-Fi names, IP addresses or user names.</div></PanelSectionRow>
             </PanelSection>
