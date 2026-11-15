@@ -79,15 +79,28 @@ pl_dir() {
   done
 }
 json_bool() { if "$@"; then printf true; else printf false; fi; }
+# Steam's "GPU accelerated rendering in web views" (config.vdf + each user's localconfig.vdf). Steam turns it off by itself
+# after its interface crashes; then the interface is drawn in software and the menu fix has nothing to work on.
+webviews_off() { local r; r=$(steam_root) || return 1; grep -qE '"enable_gpu_accelerated_webviews"[[:space:]]+"0"' "$r/config/config.vdf" 2>/dev/null; }
+webviews_on() {   # only while Steam is not running (Steam rewrites these files when it exits)
+  local r f; r=$(steam_root) || return 1
+  pgrep -u "$(id -u)" -x steam >/dev/null 2>&1 && return 1
+  for f in "$r/config/config.vdf" "$r"/userdata/*/config/localconfig.vdf; do
+    [ -f "$f" ] && grep -qE '"enable_gpu_accelerated_webviews"[[:space:]]+"0"' "$f" || continue
+    sed -i -E 's/("enable_gpu_accelerated_webviews"[[:space:]]+)"0"/\1"1"/' "$f"
+  done
+  mkdir -p "$HOME/.local/state/nv-egpu-buddy" && echo "egpu-steam-ui: Steam's GPU drawing for its interface was off: turned on" >> "$HOME/.local/state/nv-egpu-buddy/steam-ui-fix.log"
+}
 
 case "${1:-}" in
   status)
-    printf '{"enabled": %s, "available": %s, "bigart": %s, "active": %s}\n' \
-      "$(json_bool test -e "$CFG")" "$(json_bool available)" "$(json_bool bigart)" "$(json_bool active)" ;;
+    printf '{"enabled": %s, "available": %s, "bigart": %s, "active": %s, "gpu_webviews": %s}\n' \
+      "$(json_bool test -e "$CFG")" "$(json_bool available)" "$(json_bool bigart)" "$(json_bool active)" "$(if webviews_off; then printf false; else printf true; fi)" ;;
   on)  available || { echo "not available here (NVIDIA install with Steam only)" >&2; exit 2; }
        mkdir -p "${CFG%/*}" && touch "$CFG" && echo "on: applies at the next Game Mode start" ;;
   off) rm -f "$CFG"; echo "off: Steam starts without it at the next Game Mode start" ;;
   env) [ -e "$CFG" ] && available && prepare && printf 'export STEAM_RUNTIME_STEAMRT=%q\n' "$RTD" || exit 0
+       webviews_off && webviews_on   # the fix needs Steam's interface on the GPU
        pl_dir || exit 0
        # the caller's LD_PRELOAD (inherited) with ours in front; single quotes keep $LIB for ld.so (also a valid EnvironmentFile line)
        case ":${LD_PRELOAD:-}:" in *libegpu-steam-ui.so*) v=${LD_PRELOAD:-} ;; *) v="$D/pl/\$LIB/libegpu-steam-ui.so${LD_PRELOAD:+:$LD_PRELOAD}" ;; esac

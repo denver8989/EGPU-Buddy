@@ -1,3 +1,8 @@
+0.7.293 — Big Art menu fix checks Steam's GPU drawing.
+
+- Fixed: Steam turns off GPU drawing for its interface after the interface crashes, and then the Big Art menu fix cannot work. The plugin now shows it, and with the menu fix on it is turned back on at the next Game Mode start. (Only when the menu fix is on; off = unchanged; AMD / Intel unchanged.)
+- NV GPU Buddy: the same check.
+
 0.7.292 — Support report: why the Big Art menu fix may not draw.
 
 - New: the support report shows whether Steam draws its interface on the GPU or in software, its interface start flags, and how far the Steam menu fix got (Steam asked / first window).

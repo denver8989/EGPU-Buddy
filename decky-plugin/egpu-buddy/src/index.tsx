@@ -135,7 +135,7 @@ const installSystem = callable<[boolean, string?], Result>("install_system");   
 const uninstallSystem = callable<[], Result>("uninstall_system");
 const rebootSystem = callable<[], Result>("reboot_system");
 const restartGamemode = callable<[], Result>("restart_gamemode");
-type SteamUi = { available: boolean; enabled?: boolean; bigart?: boolean; active?: boolean; route?: boolean; offer?: boolean; pending?: boolean };
+type SteamUi = { available: boolean; gpu_webviews?: boolean; enabled?: boolean; bigart?: boolean; active?: boolean; route?: boolean; offer?: boolean; pending?: boolean };
 const getSteamUi = callable<[], SteamUi>("get_steam_ui_fix");
 const getHandheldArt = callable<[], { svg: string; name: string }>("get_handheld_art");
 const getKeepAwake = callable<[], { enabled: boolean; active: boolean; egpu: boolean; prev: number[] }>("get_keep_awake");
@@ -1220,7 +1220,7 @@ function Content() {
       })()}
       {tab === "nvidia" && sui?.available && (
         <PanelSection title="Steam menu">
-          <PanelSectionRow><ToggleField label={nvb ? "Big Art mode menu fix (NVIDIA)" : "Big Art mode menu fix (NVIDIA eGPU)"} description={`Off by default. On ${nvb ? "an NVIDIA GPU" : "the NVIDIA eGPU"} Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: ${appName()} supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when ${nvb ? "Steam restarts" : "Game Mode restarts"}.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}`}
+          <PanelSectionRow><ToggleField label={nvb ? "Big Art mode menu fix (NVIDIA)" : "Big Art mode menu fix (NVIDIA eGPU)"} description={`Off by default. On ${nvb ? "an NVIDIA GPU" : "the NVIDIA eGPU"} Steam's interface compositor cannot start, so in Big Art mode the main menu slides in over a black bar. On: ${appName()} supplies what it is missing, on the NVIDIA GPU; no Steam file is changed. Applies when ${nvb ? "Steam restarts" : "Game Mode restarts"}.${sui.enabled && sui.route ? (sui.active ? " Active now." : " Not active yet: restart Game Mode.") : ""}${sui.gpu_webviews === false ? (sui.enabled ? " Steam's GPU drawing for its interface is off (Steam turns it off after its interface crashes): turned back on at the next Game Mode start." : " Steam's GPU drawing for its interface is off: turning the fix on also turns it back on.") : ""}`}
             checked={!!sui.enabled} onChange={(v) => run(async () => { const r = await setSteamUi(v); setSui(await getSteamUi()); if (r.ok && r.restart) { const g = await restartGamemode(); return { ok: true, message: `${r.message} ${g.message}` }; } return r; })} /></PanelSectionRow>
         </PanelSection>
       )}
