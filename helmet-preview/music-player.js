@@ -5,14 +5,14 @@ let selected='scifi';try{selected=localStorage.getItem('egpu-helmet-music')||sel
 if(!options.some(o=>o.key===selected))selected='scifi';
 const label=document.createElement('label');label.textContent='Background music ';const select=document.createElement('select');select.id='music-choice';select.setAttribute('aria-label','Background music');for(const o of options){const opt=document.createElement('option');opt.value=o.key;opt.textContent=o.label;select.append(opt)}label.append(select);document.querySelector('.controls').append(label);
 
-const voiceLabel=document.createElement('label');voiceLabel.textContent='Narration voice ';const voiceSelect=document.createElement('select');voiceSelect.id='voice-choice';voiceSelect.setAttribute('aria-label','Narration voice');for(const [value,text] of [['natural','App Author voice'],['helmet','Helmet voice daft presentation']]){const o=document.createElement('option');o.value=value;o.textContent=text;voiceSelect.append(o)}voiceLabel.append(voiceSelect);document.querySelector('.controls').prepend(voiceLabel);
+const voiceLabel=document.createElement('label');voiceLabel.textContent='Narration voice ';const voiceSelect=document.createElement('select');voiceSelect.id='voice-choice';voiceSelect.setAttribute('aria-label','Narration voice');for(const [value,text] of [['natural','App Author voice'],['helmet','Helmet voice daft presentation'],['radio','Radio host daft presentation']]){const o=document.createElement('option');o.value=value;o.textContent=text;voiceSelect.append(o)}voiceLabel.append(voiceSelect);document.querySelector('.controls').prepend(voiceLabel);
 let voiceMode=null;
 function applyVoice(value){
  const mode=window.VOICE_MODES?.[value];if(!mode||voiceMode===value)return;
  const current=SCENES.find(s=>t>=s.start&&t<s.end)||SCENES.at(-1),fraction=clamp((t-current.start)/(current.end-current.start));
  const active=playing;voice.pause();voiceId=null;voicePending=false;
  // Keep the intro at its original speed; retime narration, captions and scenes together.
- const rate=value==='natural'?1:0.9025,base=key==='egpu'?20:0;
+ const rate=value==='helmet'?0.9025:1,base=key==='egpu'?20:0;
  window.narrationPlaybackRate=rate;voice.playbackRate=rate;voice.preservesPitch=true;
  const scenes=mode.scenes.map(scene=>{
   if(scene.kind==='footage')return {...scene};
