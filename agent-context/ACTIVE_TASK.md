@@ -288,6 +288,18 @@ Owner explicitly approves delivery trial approach for BOTH full App Author narra
 
 - Public verification complete: gh-pages 8d93ca9 deployed; both presentations pass narration default/selection/timing, preserved helmet rate and music level, all six music choices and pause handoff, no JS/asset errors. Fresh URL: https://denver8989.github.io/EGPU-Buddy/?revision=delivery-05 . No ownership retained.
 
-## 2026-11-17 — Optional radio host narration | active | Codex radio-host-20261117 | gh-pages media only
+## 2026-11-17 — Optional radio host narration | done | unclaimed | gh-pages media only
 
 Owner supplies 11.264 s reference and asks another radio-host style narration with adjusted daft jokes. Add third radio mode for both presentations; keep author default, helmet 0.9025, music -12 dB. Owns new radio audio/scripts/timing and shared mode selectors/cache URLs. Raw reference stays local. Generate native-pace speech, verify words/pace, browser-test and publish.
+
+- Additional owner request: replace helmet breathing with new “Kimikagecho … 4” sample. Supplied attachment is a 28-byte UTF-8 .txt containing only the recording name, NOT audio. No matching audio available in attachments/Downloads. Asked owner to attach actual .m4a; breathing update waits for file while radio work continues. Existing breathing unchanged.
+
+- Owner approves radio-host preview (“what I had in mind”). New 2.965 s .m4a (“Kimikagecho … 6”) contains a spoken line, not breathing; owner asks updated HELMET SAMPLE based on that voice. Generating separate reference-style helmet preview with current breathing and 0.9025 pacing; full helmet tracks stay unchanged pending sample review. Uploaded raw voice stays local. Previous new-breathing request still needs actual breathing audio.
+
+- Radio-host full versions deployed as gh-pages 0a5b9c4. New optional radio mode in global/per-player selectors; author still default, helmet 0.9025, music -12 dB unchanged. 53 radio sections pass transcription; one GPU-list low word-rate reviewed (spelled models/acronyms), intact waveform/integrity checks. Public browser checks pass all three voices, radio audio/scripts/jokes for both players, same-slide mode switching, six music choices, mutual pause and natural on reload; no JS/asset errors.
+
+## 2026-11-17 — Revised helmet voice/breath sample | waiting-user | unclaimed | preview only
+
+- Owner rejected first generated helmet preview as unlike supplied voice/breath. That preview used old breath and Qwen clone from 2.965 s spoken “6.m4a”; DO NOT use it or replace full helmet tracks from it. The earlier “4.txt” was only a filename.
+- Owner then supplied actual Breathing.m4a (5.589 s). New local preview uses full actual breath waveform at native speed (gain only), then Seed-VC conversion of generated custom speech to the “6.m4a” spoken voice reference. Current 0.9025 pacing applied to speech only, no extra helmet filtering, one opening breath. New audition is helmet-new-sample/helmet-new-reference-v2.mp3, 16.720 s. Words verified by Whisper; subjective voice likeness remains for owner to judge.
+- Full helmet voice/breath tracks remain unchanged while revised SAMPLE is reviewed; radio and author editions published. Next: owner judges v2 audition; after requested full rollout, rebuild helmet tracks/timings with approved voice and new actual breathing. Raw references and experiment files stay local. No app/hardware actions or retained ownership.

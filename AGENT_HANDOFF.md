@@ -2,6 +2,12 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-17 (Codex radio-host-20261117)
+
+- Radio-host voice and adjusted daft jokes added to BOTH full presentations as optional radio mode; owner approved preview. Published gh-pages 0a5b9c4; public browser checks passed all three modes/audio/scripts, six music choices, pause handoff, author default/reload and synchronization, no asset/JS errors. Author audio unchanged, helmet still 0.9025, music -12 dB. All 53 radio sections passed transcript/integrity checks; GPU-list pace outlier reviewed as spelled model names.
+- Separate helmet sample request: first Qwen clone + OLD breath preview was rejected as unlike references. Do NOT use it. Actual new Breathing.m4a now received (5.589 s); new v2 audition uses full real breath at native speed, then Seed-VC conversion to short supplied spoken voice reference, paced 0.9025. Native sample: Desktop/EGPU-Buddy-Voice-Experiments/helmet-new-sample/helmet-new-reference-v2.mp3 (16.720 s). Words checked; likeness needs owner review. No full helmet audio/breath changes published.
+- No app/hardware changes or breakage observed; no ownership retained. Next: review revised helmet audition before any full voice replacement. Raw/private references remain local; generated radio speech/scripts only published. Seed-VC dependencies/models and minor compatibility edits are isolated in helmet-new-sample/, existing TTS environment not modified.
+
 ## Checkpoint — 2026-11-17 (Codex author-delivery-20261117)
 
 - Owner explicitly approved the new delivery-trial approach for both full App Author narrations, then stressed natural talking speed. Generated 40 EGPU + 13 NV sections with the same earlier narration performance context plus corrected speaker embedding; no speed filtering. Sentence pauses retained, 0.28 s chapter gap; private reference remains local.
