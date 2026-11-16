@@ -1,0 +1,68 @@
+[
+  {
+    "key": "scifi",
+    "label": "SciFi — Bensound",
+    "file": "scifi.mp3",
+    "source_duration": 284.845737,
+    "loop_section": [
+      12,
+      280.845737
+    ],
+    "crossfade_seconds": 6
+  },
+  {
+    "key": "retro",
+    "label": "Retro Chiptune Adventure — Nick Panek",
+    "file": "retro.mp3",
+    "source_duration": 200.28,
+    "loop_section": [
+      12,
+      196.28
+    ],
+    "crossfade_seconds": 6
+  },
+  {
+    "key": "swing",
+    "label": "Night Walk — Electro Swing",
+    "file": "swing.mp3",
+    "source_duration": 106.292219,
+    "loop_section": [
+      12,
+      102.292219
+    ],
+    "crossfade_seconds": 6
+  },
+  {
+    "key": "gorila",
+    "label": "Gorila — Alex MakeMusic",
+    "file": "gorila.mp3",
+    "source_duration": 115.488,
+    "loop_section": [
+      12,
+      111.488
+    ],
+    "crossfade_seconds": 6
+  },
+  {
+    "key": "ultraviolet",
+    "label": "Ultraviolet — S Deion",
+    "file": "ultraviolet.mp3",
+    "source_duration": 128.808,
+    "loop_section": [
+      12,
+      124.80799999999999
+    ],
+    "crossfade_seconds": 6
+  },
+  {
+    "key": "upbeat",
+    "label": "Fun Upbeat — Jonas Blakewood",
+    "file": "upbeat.mp3",
+    "source_duration": 142.001625,
+    "loop_section": [
+      12,
+      138.001625
+    ],
+    "crossfade_seconds": 6
+  }
+]

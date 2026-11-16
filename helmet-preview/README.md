@@ -1,0 +1,1 @@
+Character narration preview for both presentations. The approved natural voice is separate. Six selectable background tracks use six-second crossfades; the main public presentation page remains unchanged. Only generated character speech and previously public opening-demo speech are included, not the new private voice-reference recording.
