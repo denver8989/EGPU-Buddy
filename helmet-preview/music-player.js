@@ -12,7 +12,7 @@ function applyVoice(value){
  const current=SCENES.find(s=>t>=s.start&&t<s.end)||SCENES.at(-1),fraction=clamp((t-current.start)/(current.end-current.start));
  const active=playing;voice.pause();voiceId=null;voicePending=false;
  // Keep the intro at its original speed; retime narration, captions and scenes together.
- const rate=value==='natural'?1:0.95,base=key==='egpu'?20:0;
+ const rate=value==='natural'?1:0.9025,base=key==='egpu'?20:0;
  window.narrationPlaybackRate=rate;voice.playbackRate=rate;voice.preservesPitch=true;
  const scenes=mode.scenes.map(scene=>{
   if(scene.kind==='footage')return {...scene};
@@ -53,7 +53,7 @@ syncMusic=()=>{
  }
  if(!active||quick){bed.pause();return}
  const at=offset();if(bed.readyState>0&&Math.abs(bed.currentTime-at)>.25)bed.currentTime=Math.min(at,bed.duration);
- const remaining=inIntro?10:D-t;bed.volume=Math.pow(10,-14/20)*clamp(remaining/3);
+ const remaining=inIntro?10:D-t;bed.volume=Math.pow(10,-12/20)*clamp(remaining/3);
  if(bed.paused&&!bedPending){bedPending=true;bed.play().catch(()=>{}).finally(()=>bedPending=false)}
 };
 bed.addEventListener('loadedmetadata',()=>{bed.currentTime=Math.min(offset(),bed.duration);syncMusic()});

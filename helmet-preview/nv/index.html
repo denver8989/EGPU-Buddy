@@ -114,4 +114,4 @@ window.renderAt=render;window.setGuideCaptions=v=>captions=v;Promise.all(Object.
  for(const audio of [voice,bed])audio.addEventListener('play',()=>tell('nv-play'));
  window.addEventListener('message',e=>{if(e.source!==parent||e.origin!==location.origin||e.data?.type!=='nv-pause')return;playing=false;voice.pause();bed.pause();$('play').textContent='Play'});
 })();
-</script><script src="voice-modes.js?v=pacing-03"></script><script src="../music-player.js?v=pacing-03"></script></html>
+</script><script src="voice-modes.js?v=mix-04"></script><script src="../music-player.js?v=mix-04"></script></html>
