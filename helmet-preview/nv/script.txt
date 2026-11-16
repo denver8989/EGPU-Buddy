@@ -1,0 +1,38 @@
+00 — NV GPU Buddy
+This is NV GPU Buddy, an experimental mode of EGPU Buddy for desktop PCs and laptops with a built-in NVIDIA card. It brings the app’s NVIDIA controls and desktop experience to those machines. Handhelds with external graphics use the regular EGPU Buddy mode. The desktop division has entered the command centre.
+
+01 — Who this mode is for
+It targets NVIDIA-equipped desktop PCs and laptops running SteamOS, CachyOS or Bazzite in Game Mode. There is also a card-coming option for a desktop PC that will receive an NVIDIA card later. Handhelds always use the normal EGPU Buddy install. This mode has not yet been hardware-tested on a PC or laptop. This fleet is recruiting testers, not announcing universal domination.
+
+02 — What it keeps
+The mode retains the Decky plugin and desktop app, NVIDIA game settings, power and clock controls, live readings, the Big Art menu fix, screens, best resolution, support reports and updates. Available controls still depend on the card and session. A respectable arsenal for your pursuit of frame-time supremacy.
+
+03 — Built-in graphics changes the job
+A built-in graphics card does not need an eGPU attach or Safe Detach flow. This installer leaves out the eGPU hot-plug rules, dock tools, eGPU boot policy and eGPU session. It does not force a built-in card to behave like an external one. This card lives inside the ship. There is no docking manoeuvre to perform.
+
+04 — The project’s patched NVIDIA driver
+NV GPU Buddy uses this project’s patched NVIDIA driver, with its userspace kept at the matching version. It does not simply use the distro’s existing NVIDIA driver. On Bazzite, choose an image without a built-in NVIDIA driver before installation. The mode does not make eGPU removal promises for the built-in card. Matching components: a more reliable route to dominance than shouting at the driver.
+
+05 — Start with the Decky plugin
+With Decky Loader already installed, add the same EGPU Buddy plugin ZIP using Decky’s Developer settings. Then open Install system integration. Eligible desktop PCs and laptops are offered the NV GPU Buddy mode. Handhelds use the regular EGPU Buddy installation.
+
+06 — Choose NV GPU Buddy
+On an eligible desktop or laptop, the plugin offers NV GPU Buddy experimental, Normal eGPU install, or Cancel. Read the offer and choose the experimental mode only for the intended built-in NVIDIA setup. A desktop without a card can install its driver ahead of fitting the card while powered off.
+
+07 — Confirm this is not a handheld
+A second confirmation explicitly asks whether this is a desktop PC or a laptop. Confirm only if that is true. This extra gate helps prevent handheld users taking the wrong installation path. The handheld fleet has its own orders. Do not send it down this corridor.
+
+08 — Review and install the integration
+Review the final installation confirmation and any risk notice before continuing. NV GPU Buddy replaces the NVIDIA driver with this project’s patched version. This shared confirmation currently mentions some eGPU components, although the dedicated NV GPU Buddy installer leaves those components out.
+
+09 — The interface becomes NV GPU Buddy
+After a successful mode install, the plugin and desktop app are named NV GPU Buddy. The main panel exposes NVIDIA controls instead of eGPU attachment actions. The values in this source-rendered capture are mocked, not evidence of a successful installation or performance result. Simulated telemetry is not a victory parade. Real testing comes next.
+
+10 — NVIDIA settings in both interfaces
+The NVIDIA settings page carries game options such as latency, V-sync, frame limits and shader-cache choices. The same settings are available in the desktop app. Compatibility and whether a game actually receives an option still matter. Tune with purpose. Even a space tyrant should avoid changing every switch at once.
+
+11 — Its own update selection
+The mode follows releases marked NV GPU Buddy in their notes. eGPU-only dock and hot-plug changes are not its update channel. OS-update repair is included. On SteamOS, changes that cannot replace an in-use NVIDIA driver may be staged until reboot; follow the displayed status. Only the appropriate transmissions reach this command deck.
+
+12 — Experimental, ready for testers
+NV GPU Buddy builds on the same project and community work. The target PC and laptop hardware path still needs testing. Read the current instructions and release notes, then send a support report if you test it. The project and Discord links are below. Bring your reports, your curiosity, and a healthy respect for experimental software. The quest for smoother frames continues.

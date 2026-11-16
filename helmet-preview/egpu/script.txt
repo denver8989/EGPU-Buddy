@@ -1,0 +1,119 @@
+01 — EGPU Buddy
+This is EGPU Buddy. It brings an external graphics card into your Linux handheld’s Game Mode, with the controls right in the Quick Access menu. Your handheld has been promoted to command the big screen.
+
+02 — The handheld needs USB4
+For a USB-connected eGPU, the handheld needs USB4 with PCIe tunneling, or a compatible Thunderbolt port. An ordinary USB-C charging or display port is not enough. Check the handheld, dock and cable. Older proprietary XG Mobile connectors use their own supported path. The tested XG Mobile 2025 uses the USB4 / Thunderbolt route. The connector may look innocent. The bandwidth must be worthy of the fleet.
+
+03 — What had to be fixed
+This took more than adding a menu. The NVIDIA driver needs changes so removal does not keep touching hardware that has gone away. Gamescope needs a different scan-out buffer path to fix NVIDIA picture corruption. The app also coordinates Game Mode, screens and audio, with system integration that survives OS updates. Performance supremacy requires engineering. A dramatic cape alone will not suffice.
+
+04 — Built on community fixes
+The NVIDIA picture work builds on NightHammer1000 and antheas, with the root cause identified by matt-schwartz. The hot-unplug driver work builds on NickNill, bdandy and roger-pmta, plus this project’s removal cleanup patches. Decky supplies the plugin framework. These credits are part of the story, not just the closing card.
+
+05 — Three parts working together
+There are three parts: a Decky plugin for Game Mode, a desktop app with a tray icon, and the system integration underneath. That last part handles the driver and session setup, so the plugin can control it. Three stations. One slightly overdramatic command centre.
+
+06 — Start with tested setups
+Testing includes Legion Go 2 with the AORUS RTX 5060 Ti AI Box, Legion Go 1 with an RTX 3080 and AOOSTAR AG03, and ROG Xbox Ally X with XG Mobile 2025. Legion Go S Z1 Extreme is also in testing, including Ming’s Radeon RX 9070 XT setup. The original presentation captured that setup while AMD removal work was still in progress; consult the current release notes for its status. These are reported test combinations, not a blanket compatibility list. This is the test fleet, not a promise to conquer every dock in the galaxy.
+
+07 — eGPU docks tested so far
+The dock list includes the AORUS RTX 5060 Ti AI Box, AOOSTAR AG03 and AG02, ASUS XG Mobile 2025, MINISFORUM DEG2, and a TREBLEET Thunderbolt 3 enclosure. There is also another Intel JHL7440-based Thunderbolt 3 enclosure whose brand and model are not documented. These are project test reports, including testing still in progress. The catalog photographs identify the dock families, not every tester’s exact unit or revision.
+
+08 — GPUs tested and reported
+The NVIDIA list is RTX 3080, RTX 5060 Ti, and the RTX 5070 Ti Laptop GPU inside XG Mobile 2025. An RTX 4070 has also been reported working by a user, with less complete setup detail. AMD testing includes Radeon RX 6800 XT, RX 6750 XT, RX 9070 and RX 9070 XT. AMD remains beta. No specific Intel eGPU model is documented as tested in this source set. An impressive gathering of graphics power. The electricity bill has requested diplomatic immunity.
+
+09 — Device glyphs by Victor Borges
+The device-specific handheld outlines come from Victor Borges’s handheld-controller-glyphs project. EGPU Buddy uses those real outlines in its screen picker. Thanks, Victor, for making them available under the MIT license.
+
+10 — SteamOS. CachyOS. Bazzite.
+The tested Game Mode systems are SteamOS, the handheld Deckify configuration of CachyOS, and Bazzite’s handheld image, bazzite-deck. NVIDIA is the main supported path. AMD and Intel use a beta path. Check the exact card, dock, device and operating-system combination.
+
+11 — Connect, then let Game Mode move
+After installation and the required reboot, plugging in the eGPU starts the attach flow. On supported tested setups, Game Mode moves to the external screen and sound follows. The display can go dark briefly during the transition. The timing depends on the device and setup. The big screen awaits your arrival, commander.
+
+12 — Safe Detach comes before unplugging
+For a planned disconnect, close the game, open EGPU Buddy and choose Safe Detach. Confirm, keep the cable connected, and wait for Game Mode to return to the handheld. Reopen the menu and check that it says it is safe to unplug. That is the normal controlled route. Even a galactic overlord must respect the disconnect procedure.
+
+13 — What if the cable gets pulled?
+The patched NVIDIA driver also handles surprise removal. It tracks that the GPU is gone and avoids invalid hardware accesses, while the app brings Game Mode back to the handheld. On tested NVIDIA setups, a yank recovers to a usable handheld in a way similar to Safe Detach, and replugging attaches again. A running game may close. This is recovery support, not a universal guarantee across all cards and docks.
+
+14 — Choose where Game Mode appears
+The screen picker shows connected displays with their names, ports, resolution and refresh rate. The shapes distinguish a handheld, a TV and an ultrawide. Choose a screen to move Game Mode there. The default best-picture setting asks for native resolution and the highest refresh rate. Compatible screens can also wake and switch input automatically. Your pixels require more territory. Choose their next destination.
+
+15 — The eGPU can render for a small screen
+You can keep the handheld screen while games render on the eGPU. XR glasses connected to the handheld can use the passthrough path too. Compatibility is still being tested, so check the current notes for your glasses and setup.
+
+16 — Readings and GPU controls
+Details shows the GPU, driver, connection and live readings: temperature, power, clocks, memory and load. Available controls include a power limit and clock offset. What you can change depends on the card and install path. The animated example values are illustrations; check the real readings on your device. Study the telemetry before declaring thermal supremacy.
+
+17 — XG Mobile gets its own controls
+On the supported ASUS XG Mobile setup, the plugin and desktop app expose the power target, fan modes, a custom fan curve, dock lighting, and core and memory offsets. These are specific dock controls, shown here with the project’s real interface. Control the lights, command the fans, and resist the temptation to call it a space station.
+
+18 — The same setup on the desktop
+Desktop Mode has an EGPU Buddy app and tray icon, with GPU readings, screen selection, power controls, Safe Detach and Re-attach. This screenshot uses an ASUS XG Mobile: the lighting and fan controls shown here are specific to that dock. The command centre is now open for desktop business.
+
+19 — Optional settings (experimental)
+NVIDIA settings adds low latency, V-sync and frame limits. AMD’s Adrenaline Settings adds supported Linux equivalents, with experimental FSR upgrades and Fluid Motion Frames for compatible games. Other opt-in extras include USB4 link checks and LG TV control. The Big Art mode menu fix is for NVIDIA only. Experimental means experimental. The laws of physics have declined our request for absolute dominance.
+
+20 — Save a report for Discord support
+For help on Discord, open EGPU Buddy and choose Show details. Under Support report, select Save support report to Desktop. Wait for it to finish. Then switch to Desktop Mode and open your Desktop folder. In the Discord support channel, attach the saved report file with a short description of the problem and what you were doing when it happened. Send the report. Our support fleet cannot diagnose a disturbance in the graphics by telepathy.
+
+21 — Built with testers and upstream projects
+Thanks to the hardware testers, including SilverplayerX, 1khanfusion, RetroMann, Ivan C.nunes, zergpoop, akamel001 and Ming. Thanks also to Victor Borges for the handheld glyphs, and the projects and patch authors credited earlier. The full list is in CREDITS.md. Next, let’s install the plugin. No single commander built this fleet alone.
+
+22 — Install the Decky plugin
+With Decky Loader already installed, we will add the EGPU Buddy plugin from Game Mode, then install its system integration. Those are two separate steps.
+
+23 — Before you start
+This tutorial assumes Decky Loader is already installed. Start in Game Mode, with internet and power available. Keep the eGPU unplugged during installation and the reboot afterwards. A stable power supply is more useful than unlimited dramatic confidence.
+
+24 — 1. Enable Decky Developer mode
+In Game Mode, open the Quick Access menu and select Decky. Open Decky’s settings, choose General, and turn on Developer mode. The Developer tab becomes available. This is Decky’s setting, not Steam’s separate developer menu.
+
+25 — 2. Download the Decky ZIP
+The file route avoids typing a long URL. Open the project’s Releases page in a browser. Desktop Mode is the simplest place to do that. Download the EGPU-Buddy-Decky ZIP asset for the current release. Do not choose the dot run desktop installer or GitHub’s source-code ZIP.
+
+26 — 3. Browse to the downloaded ZIP
+Return to Game Mode. In Decky settings, open Developer. Under Install Plugin from ZIP File, choose Browse. In the file picker, open your Downloads folder and select the EGPU Buddy Decky ZIP. The file route and URL route install the same plugin.
+
+27 — 4. Read Decky’s warning
+Decky shows a third-party plugin warning after Browse and before its file picker opens. Read it and check that the download came from the official project. Continue after any countdown, then select the ZIP. The URL route shows the same warning before starting its install flow.
+
+28 — The download is in Downloads
+Select the Decky ZIP you downloaded, then confirm the selection. On a device with a different account name or browser download directory, use that location. Keep the ZIP intact; Decky reads it directly.
+
+29 — Confirm EGPU Buddy, then open it
+Check the plugin name and version in the installation confirmation, and install it. Once Decky finishes, return to its plugin list and open EGPU Buddy. You have installed the plugin; the system integration comes next.
+
+30 — Alternative: paste the direct ZIP URL
+If you already have the direct release-asset link, paste it into Install Plugin from URL and choose Install. Use the ZIP download link, rather than the release-page address. This is an alternative to browsing for the downloaded file.
+
+31 — 5. Choose the external GPU vendor
+Press Install system integration. The next prompt asks Which GPU type will you use? Choose NVIDIA for an NVIDIA eGPU, or AMD / Intel beta for those external cards. Choose the eGPU’s vendor, even when your handheld’s built-in graphics uses another vendor.
+
+32 — NVIDIA branch: build the patched driver
+For NVIDIA, the next confirmation is titled Install for an NVIDIA eGPU. Review the components and expected time, then continue. It installs the patched driver, the NVIDIA picture fix and the rest of the integration. Keep the charger connected and the eGPU unplugged. Patience, commander. The driver is being forged.
+
+33 — AMD / Intel branch: no NVIDIA build
+For AMD or Intel, select AMD / Intel beta. The confirmation is titled Install for an AMD / Intel eGPU. The installer skips the patched NVIDIA driver and NVIDIA-only gamescope build, and installs the vendor-neutral attach, detach, fallback and audio integration. The shared confirmation still mentions NVIDIA components, but the AMD / Intel installer skips them. This path remains beta.
+
+34 — Conditional prompts: stop and read
+Your setup can add prompts. Unknown hardware can require I accept the risk. Conflicting eGPU tools can offer removal or cancellation. If Bazzite carries a built-in NVIDIA driver, use the appropriate non-NVIDIA handheld image before installing. Do not treat Continue anyway as a recommendation to ignore an incompatible image.
+
+35 — Conflicts need attention first
+If a conflict prompt appears, read its identified tool or image and the evidence. Use the supported removal or image-change route. The screenshot shows the actual source-driven warning with a simulated Bazzite image conflict. Cancel rather than blindly continuing past an incompatible image.
+
+36 — 6. Wait for integration to finish
+The NVIDIA path can take several minutes while the driver builds. The AMD / Intel path skips that build. Read the actual progress and result rather than using the animation’s elapsed time. You can close the menu while work continues, and the plugin reports completion. The progress bar will not move faster if you threaten the galaxy.
+
+37 — The AMD / Intel progress path
+Here is the same progress interface on the AMD / Intel branch. The capture uses a mocked installation step, so it demonstrates the layout rather than a successful hardware test. Follow the result on your own device.
+
+38 — If installation fails, repair first
+An installation error is not the success screen. Keep the eGPU unplugged, read the message and log location, and use the displayed Repair route. Resume the reboot and first-connect steps only after the integration reports success.
+
+39 — 7. Reboot before connecting the eGPU
+When installation reports success, choose Reboot the system. Keep the eGPU unplugged throughout that reboot. The required kernel protections are not active until then. If an error appears, leave the eGPU unplugged and follow Repair or the displayed message before proceeding. One reboot now. Galactic ambitions afterwards.
+
+40 — Connect after the reboot
+Once Game Mode is back, connect the eGPU and check its status in EGPU Buddy. Your setup is ready for its first test. You’ll find the downloads, tested hardware list and full instructions on GitHub, with the Discord link below. See you on the big screen. May your frame times be steady, your thermals controlled, and your desktop space magnificently excessive.
