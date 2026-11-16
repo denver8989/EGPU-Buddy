@@ -287,3 +287,7 @@ Owner explicitly approves delivery trial approach for BOTH full App Author narra
 - Generated both full tracks; all 53 sections pass transcription and pace checks. Raw speech kept at native speed with original generated pauses; integrity verifies no chapter waveform alteration/truncation. Local browser passes timing/mode/music/default checks; ending playback has no repeated sync seeks. gh-pages 8d93ca9 publishing. Helmet 0.9025 and music -12 dB retained. Public verification next.
 
 - Public verification complete: gh-pages 8d93ca9 deployed; both presentations pass narration default/selection/timing, preserved helmet rate and music level, all six music choices and pause handoff, no JS/asset errors. Fresh URL: https://denver8989.github.io/EGPU-Buddy/?revision=delivery-05 . No ownership retained.
+
+## 2026-11-17 — Optional radio host narration | active | Codex radio-host-20261117 | gh-pages media only
+
+Owner supplies 11.264 s reference and asks another radio-host style narration with adjusted daft jokes. Add third radio mode for both presentations; keep author default, helmet 0.9025, music -12 dB. Owns new radio audio/scripts/timing and shared mode selectors/cache URLs. Raw reference stays local. Generate native-pace speech, verify words/pace, browser-test and publish.
