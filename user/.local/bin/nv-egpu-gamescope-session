@@ -378,6 +378,17 @@ use_ultrawide_nested_canvas() {
   return 1
 }
 
+# Setup > Screen settings in the plugin: the resolution and refresh picked for this screen ("W H Hz"), used while the
+# screen still offers that resolution. No file (the default) = the automatic choice below, unchanged.
+saved_screen_mode() {
+  local w h r n
+  read -r w h r 2>/dev/null < "/var/lib/nvegpu/screen-mode-$1" || return 1
+  for n in /sys/class/drm/card*-"$1"/modes; do
+    grep -qsx "${w}x${h}" "$n" && { echo "$w $h $r"; return 0; }
+  done
+  return 1
+}
+
 best_sysfs_mode() {
   local output=$1 node mode
   for node in /sys/class/drm/card*-"$output"; do
@@ -460,7 +471,9 @@ stage_gamescope_native_mode() {
   fi
   # in Game Mode's own order (the plugin's choice first): the mode must be the screen gamescope drives
   for output in $(connector_order | tr , '\n' | grep -vxE '\*|eDP-[0-9]+'); do
-    mode=$(best_egpu_drm_mode "$output" || true)
+    mode=$(saved_screen_mode "$output" || true)
+    [ -n "$mode" ] && log "$output: resolution picked in the plugin (${mode// /x})"
+    [ -n "$mode" ] || mode=$(best_egpu_drm_mode "$output" || true)
     if [ -z "$mode" ]; then
       mode=$(best_sysfs_mode "$output" || true)
     fi
@@ -659,7 +672,7 @@ if [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && [ -z 
   if [ "$hh" != "$PANEL" ] && [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" != rog-ally ] && [ ! -e /var/lib/nvegpu/xg-mobile-seen ]; then
     _hc=$(basename "$(ls -d /sys/class/drm/card[0-9]*-"$PANEL" 2>/dev/null | head -1)"); _hc=${_hc%%-*}
     _hb=$(basename "$(readlink -f "/sys/class/drm/$_hc/device" 2>/dev/null)")
-    _hm=$( [ -n "$_hb" ] && best_egpu_drm_mode "$hh" "-D pci:$_hb" || true)
+    _hm=$(saved_screen_mode "$hh" || { [ -n "$_hb" ] && best_egpu_drm_mode "$hh" "-D pci:$_hb"; } || true)
     [ -n "$_hm" ] && { export NV_EGPU_GAMESCOPE_HANDHELD_MODE="$_hm"; log "handheld USB-C screen $hh: ${_hm// /x} (highest resolution, then refresh)"; }
     unset _hc _hb _hm
   fi

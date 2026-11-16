@@ -425,6 +425,7 @@ def _nvidia_query(bdf, xg=False):
 
 
 GAME_SCREEN = "/var/lib/nvegpu/game-screen"   # connector Game Mode goes to first (nv-egpu-gamescope-session)
+SCREEN_MODE = "/var/lib/nvegpu/screen-mode-"   # + connector: "W H Hz" picked in Screen settings (Game Mode session + desktop login)
 HANDHELD_CFG = "/var/lib/nvegpu/handheld-screen.json"   # opt-in passthrough: eGPU renders, a handheld-driven screen shows it
 XPW_LIB = f"{USER_HOME}/.local/lib/nv-egpu-buddy/xpw/libxpw.so"   # its display-GPU side (installed when it runs here)
 SCREEN_NET = "/var/lib/nvegpu/screen-net.json"   # TV control tricks: paired network TVs (egpu-screen)
@@ -682,6 +683,29 @@ def _audio_sink():
         _, info, _ = _sh(["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()], "pactl", "info"], 5)
         out = next((l.split(":", 1)[1].strip() for l in info.splitlines() if l.startswith("Default Sink:")), "")
     return "" if out.startswith("@") else out
+
+
+def _audio_report():
+    """Sound distortion / crackle evidence: the output, its format and latency, PipeWire's clock, dropouts (xruns) per
+    stream, sound warnings this boot, and the temperatures (a long heavy session that heats up shows here)."""
+    u = ["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()]]
+    out = [f"default output: {_audio_sink() or '?'}"]
+    sinks = _sh(u + ["pactl", "list", "sinks"], 8)[1]
+    out += [l.strip() for l in sinks.splitlines() if re.match(r"\s*(Name|Description|State|Sample Specification|Latency|Mute|Volume):", l)]
+    clk = re.findall(r"key:'(clock\.[\w-]+)' value:'([^']*)'", _sh(u + ["pw-metadata", "-n", "settings"], 5)[1])
+    out.append("PipeWire clock: " + (" · ".join(f"{k}={v}" for k, v in clk) or "?"))
+    top = _sh(u + ["pw-top", "-b", "-n", "3"], 10)[1].splitlines()
+    h = max((i for i, l in enumerate(top) if "QUANT" in l), default=0)   # the last of the 3 samples
+    out += ["", "streams (pw-top, ERR = dropouts since they started):"] + [l[:200] for l in top[h:h + 40]]
+    jn = _sh(["journalctl", "-b", "0", "-o", "short-iso", "--no-pager", "--grep", "pipewire|wireplumber|xrun|underrun|spa\\.alsa|snd_hda|hda_intel|hdmi.*audio"], 15)[1].splitlines()
+    jn = [l for l in jn if not l.startswith("-- ")]
+    out += ["", f"sound warnings this boot (last 40 of {len(jn)}):"] + [l[:300] for l in jn[-40:]]
+    temps = []
+    for z in sorted(glob.glob("/sys/class/thermal/thermal_zone*")):
+        v = _read(z + "/temp")
+        if v.isdigit(): temps.append(f"{_read(z + '/type')} {int(v) // 1000} °C")
+    out += ["", "temperatures now: " + (" · ".join(temps) or "?")]
+    return out
 
 
 def _ssl_ctx():
@@ -1497,6 +1521,8 @@ def _support_report():
     for c in sorted(glob.glob("/sys/class/drm/card*-*")):
         if _read(f"{c}/status") == "connected":
             model, detail = _screen_info(os.path.basename(c)); lines.append(f"{os.path.basename(c)}: {model or '?'} {detail}")
+    lines += [f"picked mode {os.path.basename(f)[len('screen-mode-'):]}: {_read(f)}" for f in sorted(glob.glob(SCREEN_MODE + "*"))]
+    lines += ["", "## Sound"] + _audio_report()
     # which gamescope Game Mode on the eGPU really runs: the GBM-scanout build (the NVIDIA picture fix) or Valve's fallback
     priv = f"{USER_HOME}/.local/gamescope-gbm/usr/bin/gamescope"
     if IS_BAZZITE:   # Bazzite: built into a private, user-independent prefix (install.sh, egpu-gamescope-repair)
@@ -2422,6 +2448,41 @@ class Plugin:
             "ts": time.time(),
         }
         return status
+
+    # Setup > Screen settings: the resolution and refresh for one screen (its own EDID modes the kernel offers) and
+    # whether it is the preferred screen. Saved per connector; read by the Game Mode session and the desktop login.
+    async def get_screen_modes(self, connector: str):
+        if not re.fullmatch(r"[A-Za-z]+(-[A-Za-z0-9]+)+", connector or ""):
+            return {"modes": []}
+        node = next((c for c in glob.glob(f"/sys/class/drm/card*-{connector}") if _read(c + "/status") == "connected"), "")
+        try: e = open(node + "/edid", "rb").read() if node else b""
+        except OSError: e = b""
+        kernel = set(_read(node + "/modes").split()) if node else set()
+        dtds, vics = _edid_modes(e) if len(e) >= 128 else ([], [])
+        modes = sorted({m for m in dtds + vics if f"{m[0]}x{m[1]}" in kernel}, key=lambda m: (-m[0] * m[1], -m[2]))
+        w = _read(SCREEN_MODE + connector).split()
+        return {"modes": [f"{a}x{b}@{c}" for a, b, c in modes], "saved": f"{w[0]}x{w[1]}@{w[2]}" if len(w) == 3 else "",
+                "preferred": _read(GAME_SCREEN) == connector, "current": _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] == connector}
+
+    async def set_screen_mode(self, connector: str, mode: str):
+        if _track() or _installed_vendor() == "amd":
+            return {"ok": False, "message": "Not available on this install."}
+        if not re.fullmatch(r"[A-Za-z]+(-[A-Za-z0-9]+)+", connector or ""):
+            return {"ok": False, "message": "Unknown screen."}
+        m = re.fullmatch(r"(\d{3,5})x(\d{3,5})@(\d{2,3})", mode or "")
+        if mode and not m:
+            return {"ok": False, "message": "Unknown mode."}
+        if m:
+            os.makedirs(os.path.dirname(SCREEN_MODE), exist_ok=True)
+            open(SCREEN_MODE + connector, "w").write(" ".join(m.groups()) + "\n")
+        else:
+            try: os.remove(SCREEN_MODE + connector)
+            except FileNotFoundError: pass
+        what = f"{m.group(1)}x{m.group(2)} at {m.group(3)} Hz" if m else "the automatic choice"
+        if _gamescope_env("OUTPUT_CONNECTOR").split(",")[0] == connector and not _game_running():
+            _spawn_root_job("switch", ["/bin/bash", "-c", SWITCH])
+            return {"ok": True, "message": f"{connector}: {what}. Game Mode restarts on it (dark for a few seconds)."}
+        return {"ok": True, "message": f"{connector}: {what}. Used the next time Game Mode or the desktop starts on this screen."}
 
     async def get_screens(self):
         rc, out, _ = _sh(["/usr/local/sbin/egpu-screen", "list"], 20)

@@ -1,3 +1,8 @@
+0.7.295 — Screen settings: resolution, refresh rate and preferred screen.
+
+- New: Setup > Game screen: a Settings button for each screen to pick its resolution and refresh rate, and to make it the preferred screen. Used in Game Mode and on the desktop. Automatic (the default) keeps today's choice. (NVIDIA eGPU installs; AMD / Intel and NV GPU Buddy unchanged.)
+- New: the support report has a Sound section: output format, PipeWire clock, dropouts per stream, sound warnings and temperatures.
+
 0.7.294 — SteamOS: safer boot settings on install and uninstall.
 
 - Fixed: SteamOS: installing or uninstalling now builds the new boot settings aside, uses them only when they boot a kernel that exists, and keeps the previous ones as a backup. Before, they were rewritten in place. (SteamOS only; CachyOS, Bazzite and AMD / Intel unchanged.)

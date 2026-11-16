@@ -138,6 +138,14 @@ for out in $EXTS; do
   MODE=$(kscreen-doctor -o 2>/dev/null | awk -v tv="$out" '
     $0 ~ ("Output:.* " tv "$") {f=1} f && /Modes:/{m=1}
     m && /3840x2160/ { for(i=1;i<=NF;i++) if($i ~ /^[0-9]+:3840x2160@1(1|2)[0-9]/){print $i; exit} }')
+  # Setup > Screen settings in the plugin: the resolution and refresh picked for this screen ("W H Hz") wins
+  if read -r _w _h _r 2>/dev/null < "/var/lib/nvegpu/screen-mode-$out"; then
+    _m=$(kscreen-doctor -o 2>/dev/null | awk -v tv="$out" -v wh="${_w}x${_h}" -v r="$_r" '
+      $0 ~ ("Output:.* " tv "$") {f=1} f && /Modes:/{m=1}
+      m && /Output:/ {exit}
+      m { for(i=1;i<=NF;i++) if (split($i, a, /[:@]/) == 3 && a[2] == wh && int(a[3] + 0.5) == r + 0) {print $i; exit} }')
+    [ -n "$_m" ] && MODE=$_m || log "$out: picked mode ${_w}x${_h}@${_r} not offered; automatic choice kept"
+  fi
   kscreen-doctor output.$out.enable output.$out.priority.$prio >/dev/null 2>&1
   [ -n "${MODE:-}" ] && kscreen-doctor output.$out.mode.${MODE%%:*} >/dev/null 2>&1
   log "enabled $out (priority $prio${MODE:+, mode ${MODE%%:*}})"

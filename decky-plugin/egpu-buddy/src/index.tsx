@@ -118,6 +118,27 @@ function NotesModal({ closeModal }: { closeModal?: () => void }) {
     </Focusable>
   </ModalRoot>);
 }
+// Setup > Game screen > Settings (one per screen): resolution + refresh for that screen and "preferred screen", used in
+// Game Mode and at the desktop login. Automatic (no pick) keeps the old choice.
+type ScreenModes = { modes: string[]; saved: string; preferred: boolean; current: boolean };
+const getScreenModes = callable<[string], ScreenModes>("get_screen_modes");
+const setScreenMode = callable<[string, string], Result>("set_screen_mode");
+function ScreenSettingsModal({ closeModal, conn, label, game, apply }: { closeModal?: () => void; conn: string; label: string; game: boolean; apply: (fn: () => Promise<Result>) => void }) {
+  const [d, setD] = useState<ScreenModes | null>(null);
+  useEffect(() => { getScreenModes(conn).then(setD).catch(() => setD({ modes: [], saved: "", preferred: false, current: false })); }, []);
+  const done = (fn: () => Promise<Result>) => { closeModal?.(); apply(fn); };
+  return (<ModalRoot closeModal={closeModal}>
+    <div style={{ fontWeight: 700, fontSize: "18px", marginBottom: "8px" }}>{label}</div>
+    {!d ? <div>Reading the screen…</div> : <>
+      <DropdownItem label="Resolution and refresh rate" disabled={game} selectedOption={d.saved}
+        rgOptions={[{ data: "", label: "Automatic" }, ...(d.saved && !d.modes.includes(d.saved) ? [d.saved] : []).concat(d.modes).map((m) => ({ data: m, label: m.replace("@", " @ ") + " Hz" }))]}
+        onChange={(o) => { if (o.data !== d.saved) done(() => setScreenMode(conn, o.data)); }} />
+      <div style={{ fontSize: "12px", opacity: 0.8, margin: "4px 0 12px" }}>{game ? "Exit the game first." : d.current ? "Game Mode restarts on this screen with the new setting (dark for a few seconds)." : "Used the next time Game Mode or the desktop starts on this screen."}</div>
+      <ButtonItem layout="below" disabled={d.preferred || game} onClick={() => done(() => setGameScreen(conn))}>{d.preferred ? "This is the preferred screen" : "Make this the preferred screen"}</ButtonItem>
+      <div style={{ fontSize: "12px", opacity: 0.8, marginTop: "4px" }}>The preferred screen is used first in Game Mode and on the desktop. Choosing it moves Game Mode there now.</div>
+    </>}
+  </ModalRoot>);
+}
 function ReleaseNotes({ label }: { label: string }) {
   return <PanelSectionRow><ButtonItem layout="below" onClick={() => showModal(<NotesModal />)}>{label}</ButtonItem></PanelSectionRow>;
 }
@@ -1093,6 +1114,9 @@ function Content() {
             selectedOption={s.output && s.output !== "*" ? s.output : "eDP-1"}
             rgOptions={screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label }))}
             onChange={(o) => { if (o.data !== s.output) run(() => setGameScreen(o.data)); }} /></PanelSectionRow>
+          {su?.installed_vendor !== "amd" && [...s.displays, ...(s.handheld_displays ?? [])].map((d) => (
+            <PanelSectionRow key={"set" + d.name}><ButtonItem layout="inline" label={d.model || d.name} disabled={busy}
+              onClick={() => showModal(<ScreenSettingsModal conn={d.name} label={d.model || d.name} game={gameUp} apply={run} />)}>Settings</ButtonItem></PanelSectionRow>))}
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)."}</div></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed.</div></PanelSectionRow>
         </PanelSection>
