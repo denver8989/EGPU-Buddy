@@ -271,3 +271,11 @@ Owner requests App Author voice / Helmet voice daft presentation names; natural 
 - Added short experimental delivery-preview/ comparison (earlier delivery context + corrected speaker embedding, versus earlier and current corrected clips). Generated words checked with Whisper; subjective accent/intonation is NOT verified. Full natural audio unchanged. Next: owner compares trial; if inadequate, a short owner-read narration passage would directly supply intended rhythm/emphasis rather than inferring from casual reference. No raw private reference published. No runtime/hardware changes or retained ownership.
 
 - Publication verified: gh-pages cc87aa0 deployed successfully. Public main page passes voice label/default/rate/timing/music/playback checks. https://denver8989.github.io/EGPU-Buddy/delivery-preview/ is available (HTTP 200), short comparison only. Full natural delivery still pending owner review.
+
+## 2026-11-17 — Helmet pacing and music level | done | unclaimed | gh-pages only
+
+Owner requests another 5% helmet slowdown and slightly louder music. Owns shared music-player.js and four cache-query HTML references. Apply 0.9025 rate (0.95 × 0.95), music -12 dB instead of -14 dB; browser-check and publish. Author delivery approval clarification pending separately.
+
+- gh-pages 35921ba: helmet rate 0.9025 (another 5% relative slowdown), music gain raised by 2 dB to -12 dB. Pitch preserved; scene/caption timeline retimed. Local browser checks passed both modes, expected rate/duration, gain, all six tracks and pause handoff. Author audio unchanged; owner message “ok fo updated author voice” is being clarified via pending question before full replacement. No hardware/app changes.
+
+- Public verification: successful Pages deployment of 35921ba; browser checks passed new helmet speed, music gain, mode selection/default, all six music tracks and synchronization.

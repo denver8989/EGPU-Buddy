@@ -2,6 +2,12 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-17 (Codex mix-20261117)
+
+- Owner requests another 5% helmet slowdown and slightly louder music. gh-pages 35921ba sets helmet rate 0.9025, music +2 dB (-12 dB); synchronized scene/caption timing and pitch preservation. Local playback checks passed both presentations, modes, all six tracks and gain.
+- Natural audio remains unchanged. Owner said “ok fo updated author voice”; pending clarification asks whether to apply the new delivery trial to full narration for both. Do not silently replace based on ambiguous wording while question is pending.
+- No app/hardware changes or retained ownership. No breakage observed. GitHub deployment succeeded and the public page passed the same browser checks, including new gain and helmet rate; no JS/asset errors.
+
 ## Checkpoint — 2026-11-17 (Codex voice-pacing-20261117)
 
 - Owner asked for App Author voice and Helmet voice daft presentation labels; renamed across both presentations. Helmet slowed 5% with pitch preserved, narration scene/caption timing scaled. Natural speed remains unchanged: owner clarified corrected accent lost natural delivery, emphasis and pauses.

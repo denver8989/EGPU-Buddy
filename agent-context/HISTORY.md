@@ -15,3 +15,5 @@
 - 2026-11-16 — Codex: corrected EGPU-020 after owner clarification: natural narration is the default on both main and preview pages; helmet voice with fun commentary is an optional selector. Per-mode chapter timings/scripts, six music choices, and default-on-reload verified locally. Media only.
 
 - 2026-11-17 — Codex: presentation voice labels renamed, helmet slowed 5% with synchronized scenes and pitch preservation. Owner reports corrected natural voice lacks original rhythm/emphasis; natural unchanged, short performance-context comparison prepared for review. No hardware/app changes.
+
+- 2026-11-17 — Codex: helmet narration slowed another 5% (0.9025 playback) and shared music raised 2 dB. Author delivery confirmation pending; no audio replacement or app/hardware actions.
