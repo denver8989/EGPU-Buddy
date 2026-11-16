@@ -2,6 +2,12 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-17 (Codex voice-pacing-20261117)
+
+- Owner asked for App Author voice and Helmet voice daft presentation labels; renamed across both presentations. Helmet slowed 5% with pitch preserved, narration scene/caption timing scaled. Natural speed remains unchanged: owner clarified corrected accent lost natural delivery, emphasis and pauses.
+- A short delivery-preview/ trial compares earlier performance context with corrected speaker embedding against both prior versions. Full natural audio NOT replaced; subjective approval pending. Raw voice reference stays local. Local playback/mode/music checks passed, generated trial transcription complete. Published gh-pages cc87aa0; public player checks passed both modes, labels, helmet speed/pitch, all six music choices and pause handoff with no asset/JS errors. Delivery comparison URL returns HTTP 200.
+- Nothing broke on the live machine; no app/runtime/hardware work or retained ownership. Next: review short trial before any full narration replacement.
+
 ## Checkpoint — 2026-11-16 (Codex voice-default-correction-20261116)
 
 - Owner clarified the corrected natural voice must be DEFAULT, with the helmet voice and fun notes OPTIONAL. Full natural narration generated from the approved new reference for both presentations; the private reference recording itself stays local.

@@ -13,3 +13,5 @@
 - 2026-11-16 — Codex: EGPU-020, separate hosted character narration preview for EGPU Buddy and NV GPU Buddy; six selectable music beds, full breathing at longer intervals, synchronized players, skippable real intro. Main presentation URL unchanged; media-only, no hardware actions. Natural-voice reference kept local.
 
 - 2026-11-16 — Codex: corrected EGPU-020 after owner clarification: natural narration is the default on both main and preview pages; helmet voice with fun commentary is an optional selector. Per-mode chapter timings/scripts, six music choices, and default-on-reload verified locally. Media only.
+
+- 2026-11-17 — Codex: presentation voice labels renamed, helmet slowed 5% with synchronized scenes and pitch preservation. Owner reports corrected natural voice lacks original rhythm/emphasis; natural unchanged, short performance-context comparison prepared for review. No hardware/app changes.
