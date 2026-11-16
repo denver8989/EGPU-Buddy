@@ -1,3 +1,7 @@
+0.7.296 — Screen settings button on each screen.
+
+- New: a small ⚙ in the corner of each "Show Game Mode on…" screen, and next to the screen Game Mode is on: resolution, refresh rate and preferred screen. Replaces the Settings rows on the Setup page. (NVIDIA eGPU installs; AMD / Intel and NV GPU Buddy unchanged.)
+
 0.7.295 — Screen settings: resolution, refresh rate and preferred screen.
 
 - New: Setup > Game screen: a Settings button for each screen to pick its resolution and refresh rate, and to make it the preferred screen. Used in Game Mode and on the desktop. Automatic (the default) keeps today's choice. (NVIDIA eGPU installs; AMD / Intel and NV GPU Buddy unchanged.)

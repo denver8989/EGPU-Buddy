@@ -1,7 +1,7 @@
-import { ButtonItem, ConfirmModal, DropdownItem, Field, Focusable, ModalRoot, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
+import { ButtonItem, ConfirmModal, DialogButton, DropdownItem, Field, Focusable, ModalRoot, PanelSection, PanelSectionRow, SliderField, ToggleField, Router, showModal, staticClasses } from "@decky/ui";
 import { callable, definePlugin, toaster, useQuickAccessVisible } from "@decky/api";
 import { useEffect, useState, useRef } from "react";
-import { FaPlug } from "react-icons/fa";
+import { FaCog, FaPlug } from "react-icons/fa";
 import qrcode from "qrcode-generator";
 
 type Status = {
@@ -610,6 +610,10 @@ function Content() {
   const run = async (fn: () => Promise<Result>) => { if (keepFocus && running.current) { ui("change ignored: one is still running"); return; } running.current = true;
     const t0 = Date.now(); ui(`change started (page ${keepPage.tab})`);
     setBusy(true); try { const r = await fn(); setMsg(r.message); ui(`change done in ${Date.now() - t0} ms: ${r.ok ? "ok" : "failed"} ${String(r.message ?? "").slice(0, 120)}`); } catch (e) { setMsg(`${e}`); ui(`change error: ${e}`); } finally { running.current = false; setBusy(false); refresh(); } };
+  // the small settings button in a screen's corner: resolution, refresh rate, preferred screen
+  const gear = (conn: string, label: string, pos: Record<string, string> = {}) => (
+    <DialogButton style={{ ...pos, width: "32px", minWidth: "32px", height: "32px", padding: 0, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}
+      disabled={busy} onClick={() => showModal(<ScreenSettingsModal conn={conn} label={label} game={gameUp} apply={run} />)}><FaCog /></DialogButton>);
 
   const nvb = s?.track === "nv-gpu-buddy" || su?.track === "nv-gpu-buddy";
   APP_NAME.v = nvb ? "NV GPU Buddy" : "EGPU Buddy";
@@ -818,8 +822,11 @@ function Content() {
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || gameUp || (s?.present && (s?.on_egpu || s?.egpu_handheld))} onClick={() => showModal(<ConfirmModal strTitle="Attach the eGPU" strDescription="Game Mode restarts on the eGPU display: the screen goes dark for a few seconds. When it is back, reopen this menu to see the result." strOKButtonText="Attach" onOK={() => run(() => attach(false))} />)}>Attach eGPU</ButtonItem>
           </PanelSectionRow>
+          {s?.game_mode && (s.on_egpu || s.egpu_handheld) && !s.output.startsWith("eDP") && su?.installed_vendor !== "amd" && (
+            <PanelSectionRow><Focusable flow-children="row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "13px" }}>
+              <span>Game Mode is on {screenName(s)}</span>{gear(s.output.split(",")[0], screenName(s))}</Focusable></PanelSectionRow>)}
           {s?.game_mode && (s.on_egpu || s.egpu_handheld) && screenTargets(s, tvWakes).filter((t) => t.name !== s.output).map((t) => (
-            <PanelSectionRow key={t.name}><ButtonItem layout="below" disabled={busy || gameUp}
+            <PanelSectionRow key={t.name}><Focusable flow-children="row" style={{ position: "relative" }}><ButtonItem layout="below" disabled={busy || gameUp}
               onClick={() => showModal(<ConfirmModal strTitle={`Show Game Mode on ${t.label}`} strDescription={`${t.detail}\n\nGame Mode restarts on that screen (the current one goes dark for a few seconds). Switch back the same way.`}
                 strOKButtonText="Switch" onOK={() => run(() => setGameScreen(t.name))} />)}>
                 {/* picture above the text: beside it, the text was squeezed into a narrow column */}
@@ -827,7 +834,8 @@ function Content() {
                   {/* the handheld: bigger outline, its exact model under it, smaller text */}
                   {t.name === "eDP-1" && HH_NAME && <div style={{ fontSize: "10px", opacity: 0.6, marginTop: "-4px" }}>{HH_NAME}</div>}
                   <div style={{ textAlign: "center", fontSize: t.name === "eDP-1" ? "12px" : undefined }}>Show Game Mode on {t.label}{t.xr && <span style={{ fontSize: "10px", background: "#1a9fff", borderRadius: "2px", padding: "0 4px", marginLeft: "6px" }}>XR</span>}
-                    <div style={{ fontSize: "11px", opacity: 0.7 }}>{t.detail}</div></div></div></ButtonItem></PanelSectionRow>
+                    <div style={{ fontSize: "11px", opacity: 0.7 }}>{t.detail}</div></div></div></ButtonItem>
+              {t.name !== "eDP-1" && su?.installed_vendor !== "amd" && gear(t.name, t.label, { position: "absolute", top: "6px", right: "6px" })}</Focusable></PanelSectionRow>
           ))}
           <PanelSectionRow>
             <ButtonItem layout="below" disabled={busy || !s?.game_mode || !s?.present || gameUp} onClick={() => showModal(<ConfirmModal strTitle="Safe Detach" strDescription="Game Mode moves to the handheld screen and the eGPU is removed from the bus: the screen goes dark for a few seconds and the monitor loses signal. Do not unplug yet. When the handheld screen is back, reopen this menu: it says when it is safe to unplug the cable." strOKButtonText="Detach" bDestructiveWarning onOK={() => run(safeDetach)} />)}>Safe Detach</ButtonItem>
@@ -1114,9 +1122,6 @@ function Content() {
             selectedOption={s.output && s.output !== "*" ? s.output : "eDP-1"}
             rgOptions={screenTargets(s, tvWakes).map((t) => ({ data: t.name, label: t.name === "eDP-1" ? "Handheld screen (games on the eGPU)" : t.label }))}
             onChange={(o) => { if (o.data !== s.output) run(() => setGameScreen(o.data)); }} /></PanelSectionRow>
-          {su?.installed_vendor !== "amd" && [...s.displays, ...(s.handheld_displays ?? [])].map((d) => (
-            <PanelSectionRow key={"set" + d.name}><ButtonItem layout="inline" label={d.model || d.name} disabled={busy}
-              onClick={() => showModal(<ScreenSettingsModal conn={d.name} label={d.model || d.name} game={gameUp} apply={run} />)}>Settings</ButtonItem></PanelSectionRow>))}
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{gameUp ? "Exit the game first: switching screens restarts Game Mode." : "Switching restarts Game Mode on the chosen screen (dark for a few seconds)."}</div></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>XR glasses passthrough: glasses plugged into the handheld's USB-C show your eGPU games, with no HDMI-to-USB-C adapter on the eGPU needed.</div></PanelSectionRow>
         </PanelSection>
