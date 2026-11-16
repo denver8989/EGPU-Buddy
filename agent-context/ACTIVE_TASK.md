@@ -279,3 +279,7 @@ Owner requests another 5% helmet slowdown and slightly louder music. Owns shared
 - gh-pages 35921ba: helmet rate 0.9025 (another 5% relative slowdown), music gain raised by 2 dB to -12 dB. Pitch preserved; scene/caption timeline retimed. Local browser checks passed both modes, expected rate/duration, gain, all six tracks and pause handoff. Author audio unchanged; owner message “ok fo updated author voice” is being clarified via pending question before full replacement. No hardware/app changes.
 
 - Public verification: successful Pages deployment of 35921ba; browser checks passed new helmet speed, music gain, mode selection/default, all six music tracks and synchronization.
+
+## 2026-11-17 — Full author delivery replacement | active | Codex author-delivery-20261117 | gh-pages media only
+
+Owner explicitly approves delivery trial approach for BOTH full App Author narrations, and stresses natural talking speed/phrasing. Generate separate author-delivery-tracks using same original 03 performance context + corrected speaker embedding. Preserve sentence pauses, check pace/outliers, transcribe every section, retime scenes, retain helmet 0.9025 and music -12 dB. Owns natural audio/mode timing plus cache URLs in isolated Pages tree. No app/hardware actions.
