@@ -17,3 +17,5 @@
 - 2026-11-17 — Codex: presentation voice labels renamed, helmet slowed 5% with synchronized scenes and pitch preservation. Owner reports corrected natural voice lacks original rhythm/emphasis; natural unchanged, short performance-context comparison prepared for review. No hardware/app changes.
 
 - 2026-11-17 — Codex: helmet narration slowed another 5% (0.9025 playback) and shared music raised 2 dB. Author delivery confirmation pending; no audio replacement or app/hardware actions.
+
+- 2026-11-17 — Codex: owner-approved delivery trial expanded to both full App Author narrations (53 sections). Native speech with sentence pauses and retimed slides; text/pace/integrity/browser checks passed locally. Helmet slowdown and louder music preserved. No app/hardware work.

@@ -2,6 +2,13 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-17 (Codex author-delivery-20261117)
+
+- Owner explicitly approved the new delivery-trial approach for both full App Author narrations, then stressed natural talking speed. Generated 40 EGPU + 13 NV sections with the same earlier narration performance context plus corrected speaker embedding; no speed filtering. Sentence pauses retained, 0.28 s chapter gap; private reference remains local.
+- All 53 sections passed transcription checks and pace review (118–189 words/minute; technical lists affect this measure). Whole-track integrity checks prove chapter samples preserved with no clipping/truncation. EGPU speech 727.280 s; NV speech 225.160 s. Scene/caption timings updated; App Author remains default. Helmet 0.9025 and music -12 dB preserved.
+- Local browser passed modes, six music choices, labels/default, sync and mutual pause. Late-track playback at normal rate had no repeated seeking and <0.11 s drift in both players. gh-pages 8d93ca9 deployed successfully; public browser checks passed new narration audio/timing, default/reload, both modes, six music choices and playback handoff with no asset/JS errors. Full speech follows the approved trial approach; subjective naturalness is ultimately the owner's judgment.
+- No app/hardware changes, no breakage observed. Public verification complete; no ownership retained. Local provenance and checks: Desktop/EGPU-Buddy-Voice-Experiments/author-delivery-tracks/ and generate_author_delivery.py. No raw voice references uploaded.
+
 ## Checkpoint — 2026-11-17 (Codex mix-20261117)
 
 - Owner requests another 5% helmet slowdown and slightly louder music. gh-pages 35921ba sets helmet rate 0.9025, music +2 dB (-12 dB); synchronized scene/caption timing and pitch preservation. Local playback checks passed both presentations, modes, all six tracks and gain.

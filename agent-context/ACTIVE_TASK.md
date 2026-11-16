@@ -280,6 +280,10 @@ Owner requests another 5% helmet slowdown and slightly louder music. Owns shared
 
 - Public verification: successful Pages deployment of 35921ba; browser checks passed new helmet speed, music gain, mode selection/default, all six music tracks and synchronization.
 
-## 2026-11-17 — Full author delivery replacement | active | Codex author-delivery-20261117 | gh-pages media only
+## 2026-11-17 — Full author delivery replacement | done | unclaimed | gh-pages media only
 
 Owner explicitly approves delivery trial approach for BOTH full App Author narrations, and stresses natural talking speed/phrasing. Generate separate author-delivery-tracks using same original 03 performance context + corrected speaker embedding. Preserve sentence pauses, check pace/outliers, transcribe every section, retime scenes, retain helmet 0.9025 and music -12 dB. Owns natural audio/mode timing plus cache URLs in isolated Pages tree. No app/hardware actions.
+
+- Generated both full tracks; all 53 sections pass transcription and pace checks. Raw speech kept at native speed with original generated pauses; integrity verifies no chapter waveform alteration/truncation. Local browser passes timing/mode/music/default checks; ending playback has no repeated sync seeks. gh-pages 8d93ca9 publishing. Helmet 0.9025 and music -12 dB retained. Public verification next.
+
+- Public verification complete: gh-pages 8d93ca9 deployed; both presentations pass narration default/selection/timing, preserved helmet rate and music level, all six music choices and pause handoff, no JS/asset errors. Fresh URL: https://denver8989.github.io/EGPU-Buddy/?revision=delivery-05 . No ownership retained.
