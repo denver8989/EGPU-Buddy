@@ -2,6 +2,12 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-16 (Codex voice-default-correction-20261116)
+
+- Owner clarified the corrected natural voice must be DEFAULT, with the helmet voice and fun notes OPTIONAL. Full natural narration generated from the approved new reference for both presentations; the private reference recording itself stays local.
+- gh-pages b988199 updates the main presentation URL and helmet-preview/: visible Narration voice selector, separate timing/scripts/audio per mode, all six music choices, natural on reload. Local browser checks passed every mode/music switch and playback handoff; 53 natural chapters passed transcription checks. Public deployed-player checks passed: natural default and reload, optional helmet, current-slide preservation, all six music choices, and mutual pause; no JavaScript or asset errors.
+- No app code, hardware, services or release changes; no task ownership retained. Previous helmet-only preview was a scope misunderstanding, now corrected.
+
 ## Checkpoint — 2026-11-16 (Codex helmet-preview-20261116)
 
 - Approved helmet character editions for both presentations are at https://denver8989.github.io/EGPU-Buddy/helmet-preview/, separate from the main landing page. Added five owner-supplied background options alongside SciFi, with six-second loop crossfades, shared selectors, and separate narration. Full breathing cycles are spaced at longer chapter breaks.

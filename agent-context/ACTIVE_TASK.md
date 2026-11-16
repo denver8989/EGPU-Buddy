@@ -247,11 +247,18 @@ EGPU-021 RELEASED 0.7.259 (68a5bf8, run 42823604923, owner OK).
 
 ## 2026-11-12 — 0.7.281 RELEASED (local): per-game lab behind optional switch (default all games). Display overrides: not built (black-screen risk). Driver Lab trial: deferred until NVIDIA > 620.70.06 exists; owner wants no per-game driver.
 
-## EGPU-020 — Hosted character presentation preview and music choices | done | unclaimed | media / gh-pages only
+## EGPU-020 — Unified narration voices and music choices | done | unclaimed | media / gh-pages only
 
 - Owner approved the slower helmet voice for both presentations, then reported that the local file link failed remotely. Creating a separate helmet-preview/ web address; the existing landing page stays unchanged.
 - Owner supplied five additional music tracks; adding them alongside SciFi with crossfaded loops and synchronized selectors. The natural baseline recording remains local and separate.
 - Files owned: new helmet-preview/ paths on gh-pages, plus this coordination checkpoint. No app, driver, hardware, or release changes.
 - Published separately at https://denver8989.github.io/EGPU-Buddy/helmet-preview/ (gh-pages commits 85df1e1, 6903080). Existing main landing page unchanged.
 - Validation: 53 spoken chapters transcribed with no flagged omissions; local HTTP tests passed all six tracks, intro skip, playback handoff and seek alignment. Public URL returns HTTP 200; final deployed-player check recorded in the local preview validation. No hardware actions or app release.
+- Files currently owned: none.
+
+- Owner correction, 2026-11-16: corrected natural voice must be DEFAULT; helmet voice with fun notes is OPTIONAL via a visible voice selector. Earlier helmet-only preview misunderstood that requirement. Regenerating plain narration from the approved new reference, adding per-mode timing/scripts, preserving all six music choices; updating the public presentation entry page once verified. No app/runtime changes.
+- Files currently owned: presentation HTML/JS/audio on gh-pages, and this coordination checkpoint.
+
+- Corrected implementation (gh-pages b988199): the main presentation URL and helmet-preview/ now default to the approved corrected natural voice. A visible Narration voice selector enables the helmet voice with jokes and breathing. Voice changes preserve the current slide and select matching scripts/timing; reload returns to natural. Both presentations retain all six music choices, extended to cover the longer natural track.
+- Validation: all 53 new natural chapters passed transcription checks. Browser checks passed natural default/reload, both directions of voice switching, current-slide preservation, all music choices, seek sync and mutual pause. The deployed public page passed the same browser checks, with no JavaScript or asset errors. No app/runtime/hardware changes.
 - Files currently owned: none.
