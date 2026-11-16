@@ -12,7 +12,8 @@ function applyVoice(value){
  const current=SCENES.find(s=>t>=s.start&&t<s.end)||SCENES.at(-1),fraction=clamp((t-current.start)/(current.end-current.start));
  const active=playing;voice.pause();voiceId=null;voicePending=false;
  // Keep the intro at its original speed; retime narration, captions and scenes together.
- const rate=value==='helmet'?0.9025:1,base=key==='egpu'?20:0;
+ // Helmet v2 speech pacing is baked into its audio; its breathing stays at native speed.
+ const rate=mode.playbackRate??1,base=key==='egpu'?20:0;
  window.narrationPlaybackRate=rate;voice.playbackRate=rate;voice.preservesPitch=true;
  const scenes=mode.scenes.map(scene=>{
   if(scene.kind==='footage')return {...scene};
