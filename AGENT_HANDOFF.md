@@ -2,6 +2,12 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-16 (Codex helmet-preview-20261116)
+
+- Approved helmet character editions for both presentations are at https://denver8989.github.io/EGPU-Buddy/helmet-preview/, separate from the main landing page. Added five owner-supplied background options alongside SciFi, with six-second loop crossfades, shared selectors, and separate narration. Full breathing cycles are spaced at longer chapter breaks.
+- Media-only gh-pages commits: 85df1e1 and 6903080. No app code, driver, services, GPU/display state, or releases changed. Nothing broke on the live machine. The private new natural-voice reference stays local and separate; only generated character speech and previously public demo speech are in this preview.
+- The earlier local file link failed for the remote user; use the web URL above. No task ownership retained. Other app/tester tasks remain untouched.
+
 ## Checkpoint — 2026-11-10 (Codex banner-publish-20261110)
 
 - Owner approved replacing the old repository banner with the animated gear banner. README now uses docs/assets/gear-playground.gif (18-second infinite loop, centered opening labels). Documentation/media only; nothing broke or changed on the live machine.

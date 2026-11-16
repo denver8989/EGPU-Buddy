@@ -9,3 +9,5 @@
 - 2026-11-10 Claude: released 0.7.251 (AMD/Titan Ridge Safe Detach releases DP-CEC adapter via /sys/bus/cec). Awaiting Ming report.
 
 - 2026-11-10 — Codex: owner-approved animated GitHub banner replaces the static README header; validated GIF dimensions, 180 frames / 18 seconds / infinite loop and label alignment. Documentation/media only, no hardware actions. EGPU-018.
+
+- 2026-11-16 — Codex: EGPU-020, separate hosted character narration preview for EGPU Buddy and NV GPU Buddy; six selectable music beds, full breathing at longer intervals, synchronized players, skippable real intro. Main presentation URL unchanged; media-only, no hardware actions. Natural-voice reference kept local.
