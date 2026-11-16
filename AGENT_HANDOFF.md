@@ -2,6 +2,14 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-17 (Codex helmet-v2-full-20261117)
+
+- Owner approved v2 helmet audition (“yeah use that”). Rebuilt BOTH full helmet narrations using the exact approved approach: Qwen with supplied spoken reference, Seed-VC conversion to that reference, speech pace baked at 0.9025, complete actual new Breathing.m4a (5.589 s) at NATIVE speed. No extra helmet filters. Existing jokes/text preserved.
+- EGPU: 991.954 s, 40 chapters, 14 complete breath clips, minimum interval 56.537 s. NV: 330.410 s, 13 chapters, 5 complete breath clips, minimum interval 56.956 s. Both fit existing 1200 s music beds, including EGPU intro. New breath waveform preserved; encoded correlation >0.997 with actual recording. All 53 final sections pass text checks; four slower technical/credit/safety sections reviewed, no pauses over 2 s.
+- IMPORTANT: new helmet mode playbackRate=1 because 0.9025 speech pace is already baked into its audio; this keeps breathing at native speed. Do NOT apply the former global 0.9025 slowdown again. Controller reads per-mode playbackRate, defaults to 1. Scene/caption/chapter timing follows new full audio.
+- Author/radio audio and mode data byte/semantic hashes unchanged; App Author remains default, music -12 dB/all six choices retained. Local browser passes all 3 voices, audio for both players, voice switching/current slide, music, default/reload and mutual pause. Late-track playback has no repeated sync seeks and <0.13 s drift. gh-pages a846b82 deployed successfully; live browser checks passed new helmet audio for BOTH players, all 3 voice modes, all 6 music choices, same-slide switching, pause handoff and author default/reload. No JS/asset errors.
+- No app/hardware changes or breakage observed; no ownership retained or unpushed media work. Local provenance/checks: Desktop/EGPU-Buddy-Voice-Experiments/helmet-v2-tracks/, generate_helmet_v2_sources.py, assemble_helmet_v2.py and integrate_helmet_v2.py. Private spoken reference stays local; actual breathing is included only as authorized in the combined generated tracks.
+
 ## Checkpoint — 2026-11-17 (Codex radio-host-20261117)
 
 - Radio-host voice and adjusted daft jokes added to BOTH full presentations as optional radio mode; owner approved preview. Published gh-pages 0a5b9c4; public browser checks passed all three modes/audio/scripts, six music choices, pause handoff, author default/reload and synchronization, no asset/JS errors. Author audio unchanged, helmet still 0.9025, music -12 dB. All 53 radio sections passed transcript/integrity checks; GPU-list pace outlier reviewed as spelled model names.
