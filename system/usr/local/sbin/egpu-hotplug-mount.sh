@@ -144,6 +144,8 @@ if dmesg 2>/dev/null | grep -qi 'data fabric sync flood'; then
 fi
 
 log "=== hotplug-mount triggered ==="
+# (ROG Ally / XG Mobile marker, see the desktop routing below) the driver has been unloaded since: the stale state is gone
+[ -e /run/nvegpu/stale-nvidia-driver ] && ! lsmod | grep -q '^nvidia' && rm -f /run/nvegpu/stale-nvidia-driver
 # ONE owner at boot: the dock's "add" fires this hook while egpu-boot-enumerate is still bringing the same card up. Both
 # then reset / re-pin / resize it at once, the card drops off the bus for a moment, and egpu-surprise-recover took that
 # for a cable pull and killed the healthy Game Mode 90 s later (crash loop after boot, Legion Go 2, 2026-10-08).
@@ -922,7 +924,14 @@ if [ -n "$kw" ] && desk_handheld; then
   fi
   wait; exit 0
 fi
-if [ "$crosstalk" = 1 ]; then
+# ROG Ally / XG Mobile: a desktop Safe Detach that had to remove the card by force left the NVIDIA driver loaded; this
+# attach then ran on that stale driver (a new DRM card number, the link at 2.5 GT/s) and the NVIDIA-only desktop came up
+# black on both screens (SilverplayerX, 0.7.302). Keep the desktop on the handheld and ask for one restart instead.
+if [ "$crosstalk" = 1 ] && [ -e /run/nvegpu/stale-nvidia-driver ] \
+   && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; }; then
+  log "eGPU attached, but the NVIDIA driver could not be reset after the last desktop detach: desktop kept on the handheld (restart to use the eGPU here)"
+  /usr/local/sbin/egpu-notify "The XG Mobile is connected, but its driver could not be reset after the last Safe Detach. Restart the handheld once to use it on the desktop."
+elif [ "$crosstalk" = 1 ]; then
   log "eGPU display up + iGPU desktop (crosstalk) -> re-login for NVIDIA-only"; sleep 2; gpu_healthy && relogin_session
 else
   log "eGPU display up + already NVIDIA-only desktop -> leave as-is"

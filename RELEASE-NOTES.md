@@ -1,3 +1,8 @@
+0.7.303 — XG Mobile: no black desktop after a forced detach.
+
+- Fixed: ROG Ally / XG Mobile: when a desktop Safe Detach could not unload the NVIDIA driver, the next attach no longer moves the desktop onto that driver (both screens stayed black). The desktop stays on the handheld and a notice asks for one restart. (ROG Ally / XG Mobile only; every other machine unchanged.)
+- New: on the ROG Ally / XG Mobile, the support report shows Steam's and the games' own output from the last 15 minutes, and the previous boot's desktop log. Report only.
+
 0.7.302 — XG Mobile: clearer Re-attach message.
 
 - Fixed: ROG Ally / XG Mobile: Re-attach with the XG Mobile unplugged now says it is not connected and to plug it in (it attaches by itself), instead of "GPU did not enumerate". (ROG Ally / XG Mobile only; every other machine unchanged.)

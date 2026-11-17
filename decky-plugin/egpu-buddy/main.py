@@ -1598,6 +1598,14 @@ def _support_report():
     sj = _user_cmd(["journalctl", "--user", "-b", "--no-pager", "-o", "short-monotonic", "-u", "gamescope-session.service",
                     "-u", "steam-launcher.service", "--grep", "nv-egpu|egpu|Gamescope Session|rror|Failed|Started|Stopped|exited"], 20).splitlines()
     lines += ["", "## Game Mode session log, this boot (last 80)"] + [l[:300] for l in sj[-80:]]
+    # ROG Ally / XG Mobile: Steam's and the games' own output from the last 15 minutes (Steam logs it under steam-launcher),
+    # without the cursor-buffer and crash-key lines that filled every 80-line window above. Games stayed on Steam's loading
+    # logo in Game Mode on the eGPU and none of their output was in the report (SilverplayerX, 0.7.302).
+    if _ally_xgm():
+        go = [l for l in _user_cmd(["journalctl", "--user", "-b", "--no-pager", "-o", "short-monotonic", "--since", "-15min",
+                                    "-u", "steam-launcher.service", "-u", "gamescope-session.service"], 20).splitlines()
+              if not re.search(r"GBM allocation failed for 32x32|crash_reporting\.cc|Failed to set crash key", l)]
+        lines += ["", "## Steam and game output, last 15 minutes (last 150)"] + [l[:300] for l in go[-150:]]
     if IS_BAZZITE:
         # Bazzite's Game Mode is gamescope-session-plus@<client>: its unit, the per-client config files it sources (ours
         # hook in there) and whether one of them sets the whole gamescope command (then GAMESCOPE_BIN is not used)
@@ -1719,6 +1727,17 @@ def _support_report():
               "kwin_x11|kwin_wayland|plasmashell.*(rror|crash)|startplasma|Xorg|egpu-safe-detach|safe-detach-ui|egpu-display|egpu-republish|relogin"], 20)[1].splitlines()
     if dj:
         lines += ["", "## Desktop and compositor log, this boot (last 60)"] + [l[:300] for l in dj[-60:]]
+    # ROG Ally / XG Mobile: the same for the previous boot. After an Attach on the desktop both screens stayed black and the
+    # handheld was restarted; that session's KWin lines were in the previous boot, which the report did not show (0.7.302).
+    if _ally_xgm():
+        for title, cmd in (("Desktop and compositor log, previous boot (last 80)",
+                            ["journalctl", "-b", "-1", "--no-pager", "-o", "short-iso", "--grep",
+                             "kwin_wayland|kwin_x11|plasmashell.*(rror|crash)|startplasma|sddm.*Session|egpu-safe-detach|safe-detach-ui|egpu-display|relogin|NVRM|nvidia-drm|nvidia_drm"]),):
+            pj = [l for l in _sh(cmd, 20)[1].splitlines() if "GBM allocation failed for 32x32" not in l]
+            if pj: lines += ["", f"## {title}"] + [l[:300] for l in pj[-80:]]
+        pu = [l for l in _user_cmd(["journalctl", "--user", "-b", "-1", "--no-pager", "-o", "short-iso", "--grep",
+                                    "kwin|plasma|egpu|safe-detach"], 20).splitlines() if "GBM allocation failed for 32x32" not in l]
+        if pu: lines += ["", "## Desktop user session log, previous boot (last 80)"] + [l[:300] for l in pu[-80:]]
     # the attach, Game Mode switch/detach and driver trial logs: the journal tail alone was all NVRM flood after a GPU hang
     # ROG Ally / XG Mobile: the last 40 lines held only the newest attach, so an earlier failed one in the same session was
     # cut off (ROG Xbox Ally X report on 0.7.192: why the first attach chose the handheld screen was not in the report)
