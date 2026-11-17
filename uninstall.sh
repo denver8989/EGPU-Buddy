@@ -165,9 +165,9 @@ if [ -f /etc/default/grub.d/egpu-buddy.cfg ]; then sudo rm -f /etc/default/grub.
   cfg=$(ls /efi/EFI/steamos/grub.cfg /boot/efi/EFI/steamos/grub.cfg /boot/grub/grub.cfg 2>/dev/null | head -1)
   # built aside and checked first (same as the install): a boot entry whose kernel exists, the old file kept as .bak-egpu-buddy
   _t=$(mktemp); _k=""
-  if [ -n "$cfg" ] && sudo grub-mkconfig -o "$_t" >/dev/null 2>&1 && grep -q '^menuentry ' "$_t"; then
-    _k=$(sed -n 's/^[[:space:]]*linux[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$_t" | head -1)
-    { [ -n "$_k" ] && { [ -e "${_k#/@}" ] || [ -e "/boot/${_k##*/}" ]; }; } || _k=""
+  if [ -n "$cfg" ] && _e=$(sudo grub-mkconfig -o "$_t" 2>&1 >/dev/null) && grep -q '^menuentry ' "$_t"; then
+    for _c in $(grep -o '[^[:space:]"]*vmlinuz[^[:space:]"]*' "$_t") $(printf '%s\n' "$_e" | sed -n 's/^Found linux image: //p'); do
+      { [ -e "${_c#/@}" ] || [ -e "/boot/${_c##*/}" ]; } && { _k=$_c; break; }; done
   fi
   [ -z "$_k" ] && [ -n "$cfg" ] && echo "boot configuration NOT rebuilt (the rebuilt one was not bootable); kept as it was"
   if [ -n "$_k" ] && sudo cp -a "$cfg" "$cfg.bak-egpu-buddy" && sudo sh -c "cat '$_t' > '$cfg.egpu-new' && mv -f '$cfg.egpu-new' '$cfg'"; then

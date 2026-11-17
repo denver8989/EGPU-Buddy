@@ -1,3 +1,7 @@
+0.7.299 — SteamOS: kernel parameters activate again.
+
+- Fixed: SteamOS: since 0.7.294 the boot-menu safety check could not read SteamOS's own menu format and rejected every rebuild, so the kernel parameters never became active ("setup incomplete", reboot asked again and again). The check now finds the kernel in any menu format. Install and uninstall. (SteamOS only; CachyOS, Bazzite and AMD / Intel unchanged.)
+
 0.7.298 — SteamOS: no more endless "reboot to activate kernel parameters".
 
 - Fixed: SteamOS: when the boot menu cannot be rebuilt with the kernel parameters, the plugin no longer asks for a reboot that cannot activate them. The reason is logged. (SteamOS only; CachyOS, Bazzite and AMD / Intel unchanged.)

@@ -82,8 +82,11 @@ egpu_grub_rebuild() {
   tmp=$(mktemp) || return 1
   if ! err=$(grub-mkconfig -o "$tmp" 2>&1 >/dev/null) || ! grep -q '^menuentry ' "$tmp"; then
     rm -f "$tmp"; echo "boot config not changed: the rebuilt one had no boot entry ($(printf '%s' "$err" | tail -2 | tr '\n' ' '))"; return 1; fi
-  k=$(sed -n 's/^[[:space:]]*linux[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$tmp" | head -1)
-  if [ -z "$k" ] || { [ ! -e "${k#/@}" ] && [ ! -e "/boot/${k##*/}" ]; }; then rm -f "$tmp"; echo "boot config not changed: the rebuilt one names a kernel that is not here ($k)"; return 1; fi
+  # the kernel: named in the menu (any line format: SteamOS's entries are not plain "linux ..." lines), or the one
+  # grub-mkconfig reports it found; at least one must be a file that is here
+  k=""; for c in $(grep -o '[^[:space:]"]*vmlinuz[^[:space:]"]*' "$tmp") $(printf '%s\n' "$err" | sed -n 's/^Found linux image: //p'); do
+    { [ -e "${c#/@}" ] || [ -e "/boot/${c##*/}" ]; } && { k=$c; break; }; done
+  if [ -z "$k" ]; then rm -f "$tmp"; echo "boot config not changed: the rebuilt one names no kernel that is here"; return 1; fi
   cp -a "$cfg" "$cfg.bak-egpu-buddy" 2>/dev/null
   cat "$tmp" > "$cfg.egpu-new" && mv -f "$cfg.egpu-new" "$cfg"; rm -f "$tmp"
 }
@@ -93,11 +96,11 @@ if [ "$MODE" = --diagnose ]; then
   echo "missing on this boot: $(missing)"; echo "drop-in: $(grep -s CMDLINE_LINUX_DEFAULT /etc/default/grub.d/egpu-buddy.cfg | cut -c1-200)"
   for c in $cfg $cfg.bak-egpu-buddy; do [ -f "$c" ] || continue
     echo "$c: $(stat -c '%y %s bytes' "$c"), $(grep -c '^menuentry ' "$c") entries, our parameters $(grep -q hpmemprefsize "$c" && echo in || echo NOT in)"
-    grep -E '^[[:space:]]*linux[[:space:]]' "$c" | head -2 | cut -c1-220 | sed 's/^/  /'; done
+    grep -E 'vmlinuz' "$c" | head -2 | cut -c1-220 | sed 's/^/  /'; done
   tmp=$(mktemp); err=$(grub-mkconfig -o "$tmp" 2>&1 >/dev/null); rc=$?
-  echo "test rebuild (not used): rc $rc, $(grep -c '^menuentry ' "$tmp") entries"; grep -E '^[[:space:]]*linux[[:space:]]' "$tmp" | head -2 | cut -c1-220 | sed 's/^/  /'
+  echo "test rebuild (not used): rc $rc, $(grep -c '^menuentry ' "$tmp") entries"; grep -E 'vmlinuz' "$tmp" | head -2 | cut -c1-220 | sed 's/^/  /'
   printf '%s\n' "$err" | tail -6 | sed 's/^/  grub-mkconfig: /'
-  k=$(sed -n 's/^[[:space:]]*linux[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$tmp" | head -1); echo "kernel it names: ${k:-none} ($( [ -n "$k" ] && { [ -e "${k#/@}" ] || [ -e "/boot/${k##*/}" ]; } && echo present || echo NOT present))"
+  k=$(grep -o '[^[:space:]"]*vmlinuz[^[:space:]"]*' "$tmp" | head -1); [ -n "$k" ] || k=$(printf '%s\n' "$err" | sed -n 's/^Found linux image: //p' | head -1); echo "kernel it names: ${k:-none} ($( [ -n "$k" ] && { [ -e "${k#/@}" ] || [ -e "/boot/${k##*/}" ]; } && echo present || echo NOT present))"
   rm -f "$tmp"; exit 0
 fi
 edit(){ # $1 file, $2 sed script
