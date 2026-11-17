@@ -1,3 +1,7 @@
+0.7.297 — Support report: earlier boots.
+
+- New: the support report lists the last boots and, for the three before this one, their errors and how they ended. A boot loop or a boot that never reached the screen shows up in the next working boot's report, even before the system integration is installed.
+
 0.7.296 — Screen settings button on each screen.
 
 - New: a small ⚙ in the corner of each "Show Game Mode on…" screen, and next to the screen Game Mode is on: resolution, refresh rate and preferred screen. Replaces the Settings rows on the Setup page. (NVIDIA eGPU installs; AMD / Intel and NV GPU Buddy unchanged.)

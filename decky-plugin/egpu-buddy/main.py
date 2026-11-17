@@ -1516,6 +1516,15 @@ def _support_report():
         lines.append(f"USB4 {u['name']}: {u['lanes']} x {u['per_lane']:g} Gb/s")
     if bdf and _dock_label(bdf):
         lines += ["", "## ASUS XG Mobile: power and fan"] + _xg_power_report(bdf)
+    # earlier boots (a boot loop or a boot that never reached the screen leaves its trace here, readable from the next
+    # good boot, even with the system parts not installed): when each ran, its errors and how it ended
+    bl = _sh(["journalctl", "--list-boots", "--no-pager"], 10)[1].splitlines()
+    lines += ["", "## Boots (last 10)"] + bl[-10:]
+    for n in range(1, 4):
+        if len(bl) <= n + 1: break
+        er = _sh(["journalctl", "-b", f"-{n}", "-p", "3", "-o", "short-iso", "--no-pager"], 15)[1].splitlines()
+        end = _sh(["journalctl", "-b", f"-{n}", "-n", "25", "-o", "short-iso", "--no-pager"], 15)[1].splitlines()
+        lines += ["", f"## Boot -{n}: errors (last 40 of {len(er)}) and its last 25 lines"] + [l[:300] for l in er[-40:]] + ["--- end of that boot:"] + [l[:300] for l in end]
     lines += ["", "## Screens", f"Game Mode output: {_gamescope_env('OUTPUT_CONNECTOR') or '(not running)'}",
               f"chosen game screen: {_read(GAME_SCREEN) or 'automatic'}"]
     for c in sorted(glob.glob("/sys/class/drm/card*-*")):
