@@ -1,3 +1,7 @@
+0.7.301 — Support report: why a game does not start.
+
+- New: on the ROG Ally / XG Mobile, the support report includes Steam's own game launch logs and the game's output, for games that stay on Steam's loading logo. Report only. (ROG Ally / XG Mobile only; every other machine unchanged.)
+
 0.7.300 — NVIDIA driver 620 is the main driver.
 
 - Changed: NVIDIA driver 620 is now the main driver, and 615 is the fallback. On 615 or 610 the plugin offers the switch once in Game Mode (eGPU on, no game running). If 620 does not come up, the driver you were on comes back by itself. (NVIDIA installs on SteamOS / CachyOS / Arch; Bazzite, NV GPU Buddy and AMD / Intel unchanged.)

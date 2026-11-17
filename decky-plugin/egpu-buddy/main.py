@@ -1633,6 +1633,15 @@ def _support_report():
            if re.search(r"(?i)log(ged)?\s*(on|off)|logon|logoff|disconnect|relogin|expired", l)]
     if con:
         lines += ["", "## Steam sign-in events (last 20)"] + [re.sub(r"\[U:\d:\d+\]|\b\d{6,}\b", "[id]", l)[:300] for l in con[-20:]]
+    # ROG Ally / XG Mobile: Steam's own game launch logs. Games never got past Steam's loading logo in Game Mode (with and
+    # without the eGPU; they ran in desktop) and nothing in the report said why: these hold each launch's steps and the
+    # game's own output (Proton, the runtime, crashes). Account numbers removed.
+    if _ally_xgm():
+        sl = f"{USER_HOME}/.local/share/Steam/logs"
+        ga = [l for l in _read(f"{sl}/console_log.txt").splitlines() if re.search(r"GameAction|Game process|Game Recording|Exiting app|AppID \d+ (state|exit)", l)]
+        for title, ls, n in (("Steam game launches (last 40)", ga, 40), ("Steam compatibility tool log (last 20)", _read(f"{sl}/compat_log.txt").splitlines(), 20),
+                             ("Game output, Steam's game process log (last 80)", _read(f"{sl}/gameprocess_log.txt").splitlines(), 80)):
+            if ls: lines += ["", f"## {title}"] + [re.sub(r"\[U:\d:\d+\]", "[id]", l)[:300] for l in ls[-n:]]
     # login manager and session switches (Switch to Desktop, return to Game Mode)
     sw = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
               "sddm|plasmalogin|steamos-session-select|session-select|Switch to|autologin"], 20)[1].splitlines()
