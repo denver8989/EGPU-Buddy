@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # egpu-driver-trial — move the eGPU to another NVIDIA driver, and go back to the one before by itself if it fails.
-#   610 -> 615 (EGPU Buddy's main driver since 0.7.220), and 615 -> 620 (the beta driver since 0.7.221).
+#   -> 620 (EGPU Buddy's main driver since 0.7.300; 615 before it, from 0.7.220), from 615 (the fallback) or 610.
 #
-#   egpu-driver-trial start       (Decky "Switch to 615", on 610) Safe Detach, build + install 615, attach, health check;
-#                                 healthy -> 615 is kept; anything else -> 610 is put back and attached again
-#   egpu-driver-trial start-beta  (Decky "Try beta driver 620", on 615 only) the same, 615 -> 620; failure -> 615 back
+#   egpu-driver-trial start       (Decky "Switch to 620", on 615 or 610) Safe Detach, build + install 620, attach, health
+#                                 check; healthy -> 620 is kept; anything else -> the driver before is put back and attached
 #   egpu-driver-trial revert      (Decky "Return to ...") Safe Detach, put the driver before back, attach again:
 #                                 on 620 -> 615, on 615 -> 610
 #   egpu-driver-trial boot        (egpu-driver-trial-boot.service, before ANY eGPU bring-up) a trial that never reached
@@ -23,7 +22,7 @@
 # SteamOS: the driver is a system-extension image on /home; every version has its own image, a revert links the one before back.
 # The driver that should be used after a reinstall or self-heal is /etc/nv-egpu-buddy/driver-dir (absent = 610).
 set -u
-STATE=/var/lib/nvegpu/driver-trial; SWITCH=/var/lib/nvegpu/driver-switch-615; LOG=/var/log/egpu-driver-trial.log; SEL=/etc/nv-egpu-buddy/driver-dir
+STATE=/var/lib/nvegpu/driver-trial; SWITCH=/var/lib/nvegpu/driver-switch-620; LOG=/var/log/egpu-driver-trial.log; SEL=/etc/nv-egpu-buddy/driver-dir
 PAY=/home/deck/.local/share/steamos-egpu-buddy/packaging
 CUR=$(cat "$SEL" 2>/dev/null); CUR=${CUR:-nvidia-open-egpu}   # the driver this machine is on (absent = 610)
 pick(){ # <old dir> <new dir>: the driver to go back to, and the one to try (an absolute path: a Driver Lab recipe)
@@ -41,7 +40,7 @@ get(){ sed -n "s/^$1=//p" "$STATE" 2>/dev/null | tail -1; }
 put(){ local st=$1; shift; { echo "state=$st"; echo "message=$*"; echo "target=${TPV:-}"; echo "from=${OPV:-}"; echo "olddir=${OLDN:-}"; echo "newdir=${NEWN:-}"; echo "prev=$(get prev)"; echo "started=$(get started)"; echo "time=$(date +%s)"; } > "$STATE.new"
   mv -f "$STATE.new" "$STATE"; sync -f "$STATE" 2>/dev/null || sync; log "[$st] $*"
   case "$st" in reverting|failed) /usr/local/sbin/egpu-snapshot "driver-trial-$st" >/dev/null 2>&1 ;; esac
-  # the switch to 615 the update offers (install.sh writes the "pending" marker on 610 machines): asked once. Any outcome
+  # the switch to 620 the update offers (install.sh writes the "pending" marker on 610 / 615 machines): asked once. Any outcome
   # (kept, put back, failed) answers it; the buttons in Setup & updates stay for a later change of mind.
   case "$st" in kept|reverted|failed) touch "$SWITCH-done" 2>/dev/null; rm -f "$SWITCH" ;; esac; }
 steamos(){ command -v steamos-readonly >/dev/null 2>&1; }
@@ -134,11 +133,10 @@ exec 9>/run/egpu-driver-trial.lock; flock -n 9 || { echo "a driver trial is alre
 
 # which two drivers this run is about
 case "${1:-status}" in
-  start) [ "$CUR" = nvidia-open-egpu ] || { echo "already on $CUR (the main driver 615 or the beta)"; exit 0; }
-    pick nvidia-open-egpu nvidia-open-egpu-615 ;;
-  start-beta) [ "$CUR" = nvidia-open-egpu-615 ] || { echo "the beta driver is tried from the main driver 615: switch to 615 first"; exit 2; }
-    pick nvidia-open-egpu-615 nvidia-open-egpu-620 ;;
-  revert) case "$CUR" in nvidia-open-egpu-620) pick nvidia-open-egpu-615 nvidia-open-egpu-620 ;;
+  start) [ "$CUR" = nvidia-open-egpu-620 ] && { echo "already on the main driver 620"; exit 0; }
+    pick "$CUR" nvidia-open-egpu-620 ;;
+  revert) case "$CUR" in   # back to the driver the switch to 620 came from (its package files are the ones recorded), else 615
+           nvidia-open-egpu-620) o=$(get olddir); [ "$(get newdir)" = nvidia-open-egpu-620 ] && [ -n "$o" ] || o=nvidia-open-egpu-615; pick "$o" nvidia-open-egpu-620 ;;
                          *) pick nvidia-open-egpu nvidia-open-egpu-615 ;; esac ;;
   boot) o=$(get olddir); n=$(get newdir); pick "${o:-nvidia-open-egpu}" "${n:-nvidia-open-egpu-615}" ;;   # older state files: 610 -> 615
   # Driver Lab (NVIDIA settings > Advanced Tinkering): the driver this machine is on, rebuilt from a copy of its recipe
@@ -168,7 +166,7 @@ case "${1:-status}" in
       else put failed "The machine restarted while switching to driver $TPV and the previous driver could not be put back automatically. Details: $LOG"; fi ;;
     esac; exit 0 ;;
 
-  start|start-beta|start-lab)
+  start|start-lab)
     [ -n "$TPV" ] && [ -n "$OPV" ] || { echo "the driver files ($NEWN) are not installed"; exit 2; }
     [ -z "$LABREL" ] && [ "$(modver)" = "$TPV" ] && [ "$(get state)" = kept ] && { echo "the driver $TPV is already in use"; exit 0; }
     [ -n "$LABREL" ] && lab_installed && { echo "a Driver Lab build is already in use: return to the normal driver first"; exit 0; }
@@ -210,5 +208,5 @@ case "${1:-status}" in
     sed -i '/^started=/d' "$STATE" 2>/dev/null; echo "started=$(date +%s)" >> "$STATE"   # a new operation: the plugin shows its result once
     revert_and_attach "Return to the previous driver requested."; finish; exit 0 ;;
 
-  *) echo "usage: egpu-driver-trial start|start-beta|start-lab|revert|revert-lab|boot|status"; exit 1 ;;
+  *) echo "usage: egpu-driver-trial start|start-lab|revert|revert-lab|boot|status"; exit 1 ;;
 esac

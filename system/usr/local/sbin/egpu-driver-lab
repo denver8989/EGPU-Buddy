@@ -16,7 +16,7 @@ Even A is only a candidate: installing a driver stays with the existing driver s
 Patches are carried over by port(): exact apply, else a git 3-way merge, else pre-written intent rules
 (packaging/driver-lab-rules), then API-drift and lifecycle fixers; anything else is flagged for a human.
 proof: replays the last recorded update (the previous recipe's patches onto the newest recipe's NVIDIA version) and
-  compares the result with the shipped hand port. watch on: a weekly user timer checks (and builds) every new NVIDIA
+  compares the result with the shipped hand port. watch on: a daily user timer checks (and builds) every new NVIDIA
   release by itself, no AI and no human; results are kept in the state file and the support report.
 Runs as the user. The long part runs as a transient user service; `status` reads its progress.
 """
@@ -311,7 +311,7 @@ def main(a):
     if len(a) == 2 and a[0] == "watch" and a[1] in ("on", "off"):
         on = a[1] == "on"; save(watch=on)
         subprocess.run(["systemctl", "--user", "enable" if on else "disable", "--now", "egpu-driver-lab-watch.timer"], capture_output=True, timeout=20)
-        print("New NVIDIA releases are checked by themselves every week" if on else "Release watch off"); return 0
+        print("New NVIDIA releases are checked by themselves every day" if on else "Release watch off"); return 0
     if a[:2] == ["watch", "run"]:
         return watch_run()
     if len(a) >= 2 and a[0] in ("check", "_worker") and re.fullmatch(r"\d+\.\d+(\.\d+)?", a[1]):

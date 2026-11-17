@@ -1,3 +1,8 @@
+0.7.300 — NVIDIA driver 620 is the main driver.
+
+- Changed: NVIDIA driver 620 is now the main driver, and 615 is the fallback. On 615 or 610 the plugin offers the switch once in Game Mode (eGPU on, no game running). If 620 does not come up, the driver you were on comes back by itself. (NVIDIA installs on SteamOS / CachyOS / Arch; Bazzite, NV GPU Buddy and AMD / Intel unchanged.)
+- New: Driver Lab release watch checks NVIDIA daily instead of weekly. A newer driver it finds is shown as the beta in Setup & updates, with whether the eGPU patches carry over (not installable from there yet).
+
 0.7.299 — SteamOS: kernel parameters activate again.
 
 - Fixed: SteamOS: since 0.7.294 the boot-menu safety check could not read SteamOS's own menu format and rejected every rebuild, so the kernel parameters never became active ("setup incomplete", reboot asked again and again). The check now finds the kernel in any menu format. Install and uninstall. (SteamOS only; CachyOS, Bazzite and AMD / Intel unchanged.)

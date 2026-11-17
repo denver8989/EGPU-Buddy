@@ -1,9 +1,9 @@
 [Unit]
-Description=EGPU Buddy Driver Lab: weekly check of new NVIDIA releases
+Description=EGPU Buddy Driver Lab: daily check of new NVIDIA releases
 
 [Timer]
-OnCalendar=weekly
-RandomizedDelaySec=6h
+OnCalendar=daily
+RandomizedDelaySec=2h
 Persistent=true
 
 [Install]

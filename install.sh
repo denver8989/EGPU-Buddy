@@ -677,13 +677,15 @@ else
     say "== patched driver not installed. Without it a cable yank can hang the compositor (safe detach still works)."
   fi
 fi
-# ---- driver 615 is the main driver since 0.7.220 (NVIDIA install on SteamOS / CachyOS / Arch; Bazzite builds 615 already)
-# A machine on 610 is not switched here: the Decky plugin offers the switch once, in Game Mode with the eGPU on and no game
-# running, and runs it through egpu-driver-trial (Safe Detach, build, attach, health check, 610 back by itself on failure).
+# ---- driver 620 is the main driver since 0.7.300, 615 the fallback (NVIDIA install on SteamOS / CachyOS / Arch; Bazzite
+# builds its own). A machine on 610 or 615 is not switched here: the Decky plugin offers the switch once, in Game Mode with the
+# eGPU on and no game running, and runs it through egpu-driver-trial (Safe Detach, build, attach, health check, the driver
+# before back by itself on failure).
 if [ "$GPU_VENDOR" != amd ] && [ "$IS_BAZZITE" != 1 ] && [ "${DRIVER_FAILED:-0}" != 1 ] \
-   && { [ -d /home/.egpu-buddy/sysext ] || pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1; } && [ -f "$ROOT/packaging/nvidia-open-egpu-615/PKGBUILD" ]; then
-  if grep -qxE 'nvidia-open-egpu-6(15|20)' /etc/nv-egpu-buddy/driver-dir 2>/dev/null; then sudo rm -f /var/lib/nvegpu/driver-switch-615   # on 615, or on the beta 620
-  elif [ ! -e /var/lib/nvegpu/driver-switch-615-done ]; then sudo mkdir -p /var/lib/nvegpu && sudo touch /var/lib/nvegpu/driver-switch-615 && say "== driver 615 is now the main driver: the plugin offers the switch in Game Mode (eGPU on, no game running)"; fi
+   && { [ -d /home/.egpu-buddy/sysext ] || pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1; } && [ -f "$ROOT/packaging/nvidia-open-egpu-620/PKGBUILD" ]; then
+  sudo rm -f /var/lib/nvegpu/driver-switch-615   # the 0.7.220 offer (615) is replaced by this one
+  if grep -qx nvidia-open-egpu-620 /etc/nv-egpu-buddy/driver-dir 2>/dev/null; then sudo rm -f /var/lib/nvegpu/driver-switch-620
+  elif [ ! -e /var/lib/nvegpu/driver-switch-620-done ]; then sudo mkdir -p /var/lib/nvegpu && sudo touch /var/lib/nvegpu/driver-switch-620 && say "== driver 620 is now the main driver: the plugin offers the switch in Game Mode (eGPU on, no game running)"; fi
 fi
 
 # ---- gamescope built on the device (only when no shipped build runs here; needs the SteamOS build root from the driver step)

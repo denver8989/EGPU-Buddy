@@ -55,8 +55,9 @@ are supported in beta (RX 6800 XT, RX 6750 XT, RX 9070 and RX 9070 XT tested by 
 - **ASUS XG Mobile support** (ROG Xbox Ally X tested): attach, Safe Detach and cable pulls in both modes, plus
   XG Mobile controls in the plugin and the desktop app: a power target in watts, fan modes and a custom fan curve, the
   dock's lights, and core and memory clock offsets.
-- **NVIDIA driver 615 (main):** offered once after the update on 610 machines, with an automatic return to 610 if it fails.
-- **Beta driver 620 (testers):** NVIDIA 620.70.06 with the same eGPU patches, tried from 615 with an automatic return to 615 if it fails.
+- **NVIDIA driver 620 (main):** NVIDIA 620.70.06 with the eGPU patches, offered once after the update on 615 / 610 machines,
+  with an automatic return to the driver before it (615, the fallback) if it fails.
+- **Beta (Driver Lab):** with the release watch on, every new NVIDIA driver is checked daily and shown as the beta in Setup & updates.
 - **Keeps itself working:** Decky restarts if it stops, and the setup repairs itself after OS updates.
 - **Release notes when updating:** "What's new" in the plugin and in the desktop app's Update window, straight from
   GitHub: every version between the one you have and the update.

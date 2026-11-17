@@ -559,7 +559,7 @@ ApplicationWindow {
                             text: { var p = (win.drv || {}).proof; if (!p) return ""; if (p.error) return "Proof failed: " + p.error
                                     return "<b>" + p.from + " → " + p.to + ": " + p.automatic + " of " + p.total + " steps without a person</b>" + (p.same_code_as_hand_port ? "; the result is the same code as the hand-made port." : "; differs from the hand-made port in " + (p.differences || []).length + " files.")
                                            + "<br>" + (p.patches || []).map(function(x) { return (/^\d{3}/.test(x.patch) ? x.patch.slice(0, 3) : "after") + " " + x.method }).join(" · ") } }
-                        Switch { text: "Check new NVIDIA releases by itself (weekly, never installs)"; checked: !!(win.drv || {}).watch
+                        Switch { text: "Check new NVIDIA releases by itself (daily, never installs)"; checked: !!(win.drv || {}).watch
                                  onToggled: win.labCmd(["driver", "watch", checked ? "on" : "off"], function() { win.loadDrv() }) }
                         Repeater { model: (((win.drv || {}).history) || []).slice(-5).reverse()
                             Label { font.pixelSize: 12; opacity: 0.8; text: new Date(modelData.t * 1000).toLocaleDateString() + " · " + modelData.version + ": class " + modelData.class + (modelData.by === "watch" ? " (by itself)" : " (checked)") } }

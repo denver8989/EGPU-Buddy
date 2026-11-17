@@ -202,11 +202,10 @@ async function updateInPlace(version: string): Promise<Result> {
   return { ok: true, message: `Confirm in Decky's prompt: the plugin updates in place to ${version}, then its system files install (no restart).` };
 }
 const popNotice = callable<[], string>("pop_notice");
-type Trial = { available: boolean; main: string; beta: string; old: string; current: "old" | "main" | "beta"; to: string; from: string; installed: string; state: string; message: string; running: boolean; log: string; started: number; progress: number; step: string; acked: boolean; switch_offer?: boolean };
+type Trial = { available: boolean; main: string; fallback: string; beta: string; beta_class: string; beta_summary: string; watch: boolean; old: string; current: "old" | "fallback" | "main"; to: string; from: string; installed: string; state: string; message: string; running: boolean; log: string; started: number; progress: number; step: string; acked: boolean; switch_offer?: boolean };
 const getTrial = callable<[], Trial>("get_driver_trial");
 const startTrial = callable<[], Result>("start_driver_trial");
 const revertTrial = callable<[], Result>("revert_driver_trial");
-const startBetaTrial = callable<[], Result>("start_beta_trial");
 const driverLabTrial = callable<[boolean], Result>("driver_lab_trial");
 // ROG Ally / XG Mobile: menu events in the plugin log (the backend writes them only there; a no-op everywhere else)
 const uiEvent = callable<[string], boolean>("ui_event");
@@ -483,12 +482,12 @@ const maybeShowTrial = async () => {
   const t = await getTrial();
   const recent = t.started && Date.now() / 1000 - t.started < 7200;
   if (recent && (t.running || (["kept", "reverted", "failed"].includes(t.state) && !t.acked))) { trialOpen = true; showModal(<TrialModal />); return; }
-  // 0.7.220: driver 615 is the main driver. A 610 machine is asked once per Game Mode start (Later = next time), only on
+  // 0.7.300: driver 620 is the main driver. A 610 / 615 machine is asked once per Game Mode start (Later = next time), only on
   // the eGPU's screen with no game running (the backend checks that); any outcome of the switch ends the asking.
   if (t.switch_offer && !switchAsked) {
     switchAsked = true; trialOpen = true;
     showModal(<ConfirmModal strTitle={`Switch to NVIDIA driver ${t.main}?`}
-      strDescription={`Driver ${t.main} is now EGPU Buddy's main driver: most testers run it without problems. The eGPU is safely detached, the driver is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed), then the eGPU is attached with it and checked. If it does not come up, your current driver ${t.old} is put back and attached again by itself, also after a reset or hang. Keep the charger and the eGPU connected. Later: asked again next time; you can also switch any time in Setup & updates.`}
+      strDescription={`Driver ${t.main} is now EGPU Buddy's main driver: most testers run it without problems. The eGPU is safely detached, the driver is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed), then the eGPU is attached with it and checked. If it does not come up, your current driver ${t.current === "fallback" ? t.fallback : t.old} is put back and attached again by itself, also after a reset or hang. Keep the charger and the eGPU connected. Later: asked again next time; you can also switch any time in Setup & updates.`}
       strOKButtonText="Switch now" strCancelButtonText="Later"
       onOK={async () => { trialOpen = false; const r = await startTrial(); toaster.toast({ title: appName(), body: r.message, duration: 10000 }); }}
       onCancel={() => { trialOpen = false; }} />);
@@ -1091,26 +1090,24 @@ function Content() {
       {tab === "setup" && tr?.available && (
         <PanelSection title="NVIDIA driver">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>
-            Main driver: {tr.main}. Beta: {tr.beta || "none"} (for testers, tried from {tr.main}). Previous: {tr.old}. Running now: {tr.installed || "not installed"}.
+            Main driver: {tr.main}. Fallback: {tr.fallback}. Running now: {tr.installed || "not installed"}.
+          </div></PanelSectionRow>
+          <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>
+            {tr.beta ? `Beta: NVIDIA ${tr.beta}, found by the Driver Lab's daily check: ${tr.beta_class === "A" ? "EGPU Buddy's patches carry over" : tr.beta_class === "B" ? "the patches apply, a review by hand is needed" : "the patches do not carry over yet"}. Not installable from here yet.`
+              : tr.watch ? "Beta: none. The Driver Lab checks NVIDIA for a newer driver every day." : "Beta: none. Turn on the Driver Lab's release watch (NVIDIA settings > Advanced Tinkering) to check NVIDIA for newer drivers every day."}
           </div></PanelSectionRow>
           {tr.message && <PanelSectionRow><div style={{ fontSize: "12px", color: tr.state === "failed" ? "#ff6b6b" : tr.state === "kept" ? "#4caf50" : "#f0b429" }}>{tr.message}</div></PanelSectionRow>}
-          {tr.current === "old" && (
+          {tr.current !== "main" && (
             <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || !!su?.busy || gameUp || !s?.game_mode}
               onClick={() => showModal(<ConfirmModal strTitle={`Switch to driver ${tr.main}`}
-                strDescription={`The eGPU is safely detached, the NVIDIA driver ${tr.main} is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the previous driver ${tr.old} is put back and attached again by itself. If the machine resets or hangs during the switch, it is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`}
+                strDescription={`The eGPU is safely detached, the NVIDIA driver ${tr.main} is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the driver you are on now (${tr.current === "fallback" ? tr.fallback : tr.old}) is put back and attached again by itself. If the machine resets or hangs during the switch, it is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`}
                 strOKButtonText="Switch now" bDestructiveWarning onOK={() => run(startTrial)} />)}>Switch to driver {tr.main}</ButtonItem></PanelSectionRow>
-          )}
-          {tr.current === "main" && !!tr.beta && (
-            <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || !!su?.busy || gameUp || !s?.game_mode}
-              onClick={() => showModal(<ConfirmModal strTitle={`Try beta driver ${tr.beta}`}
-                strDescription={`For testers. The eGPU is safely detached, the beta NVIDIA driver ${tr.beta} is downloaded from NVIDIA (about 550 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the main driver ${tr.main} is put back and attached again by itself. If the machine resets or hangs during the test, ${tr.main} is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`}
-                strOKButtonText="Try the beta driver" bDestructiveWarning onOK={() => run(startBetaTrial)} />)}>Try beta driver {tr.beta}</ButtonItem></PanelSectionRow>
           )}
           {tr.current !== "old" && (
             <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || gameUp || !s?.game_mode}
-              onClick={() => { const back = tr.current === "beta" ? tr.main : tr.old;
+              onClick={() => { const back = tr.current === "main" ? tr.fallback : tr.old;
                 showModal(<ConfirmModal strTitle={`Return to ${back}`} strDescription={`The eGPU is safely detached, the driver ${back} is put back (offline, a few minutes) and the eGPU is attached again.`}
-                  strOKButtonText="Return" onOK={() => run(revertTrial)} />); }}>{tr.current === "beta" ? `Return to the main driver ${tr.main}` : `Return to the previous driver ${tr.old}`}</ButtonItem></PanelSectionRow>
+                  strOKButtonText="Return" onOK={() => run(revertTrial)} />); }}>{tr.current === "main" ? `Return to the fallback driver ${tr.fallback}` : `Return to the previous driver ${tr.old}`}</ButtonItem></PanelSectionRow>
           )}
           {tr.log && <PanelSectionRow><ButtonItem layout="below" onClick={() => setLogOpen(logOpen === "trial" ? "" : "trial")}>{logOpen === "trial" ? "Hide driver log" : "Show driver log"}</ButtonItem></PanelSectionRow>}
           {tr.log && logOpen === "trial" && <PanelSectionRow><div style={{ fontSize: "10px", whiteSpace: "pre-wrap", opacity: 0.8 }}>{tr.log}</div></PanelSectionRow>}
@@ -1218,7 +1215,7 @@ function Content() {
                 {drv.proof && <PanelSectionRow><div style={{ fontSize: "12px" }}>{drv.proof.error ? `Proof failed: ${drv.proof.error}` : <>
                   <b>{drv.proof.from} → {drv.proof.to}: {drv.proof.automatic} of {drv.proof.total} steps without a person</b>{drv.proof.same_code_as_hand_port ? "; the result is the same code as the hand-made port." : `; differs from the hand-made port in ${drv.proof.differences?.length ?? "?"} files.`}
                   <div style={{ opacity: 0.75 }}>{drvMethods(drv.proof.patches)}</div></>}</div></PanelSectionRow>}
-                <PanelSectionRow><ToggleField label="Check new NVIDIA releases by itself" description="Weekly: every new release is carried over, checked and built as above, and the result kept here and in the support report. Never installs." checked={!!drv.watch} disabled={lock}
+                <PanelSectionRow><ToggleField label="Check new NVIDIA releases by itself" description="Daily: every new release is carried over, checked and built as above; the result is kept here, in the support report and as the beta in Setup &amp; updates. Never installs." checked={!!drv.watch} disabled={lock}
                   onChange={(v) => run(async () => { const r = await nvLabCmd(["driver", "watch", v ? "on" : "off"]); await loadDrv(); return { ok: r.ok, message: r.message ?? "" }; })} /></PanelSectionRow>
                 {!!drv.history?.length && <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>{drv.history.slice(-5).reverse().map((h, i) => <div key={i}>{new Date(h.t * 1000).toLocaleDateString()} · {h.version}: class {h.class} ({h.by === "watch" ? "by itself" : "checked"})</div>)}</div></PanelSectionRow>}
                 {drv.error && <PanelSectionRow><div style={{ fontSize: "12px" }}>Could not list NVIDIA releases: {drv.error}</div></PanelSectionRow>}
