@@ -1,3 +1,8 @@
+0.7.298 — SteamOS: no more endless "reboot to activate kernel parameters".
+
+- Fixed: SteamOS: when the boot menu cannot be rebuilt with the kernel parameters, the plugin no longer asks for a reboot that cannot activate them. The reason is logged. (SteamOS only; CachyOS, Bazzite and AMD / Intel unchanged.)
+- New: the support report shows the SteamOS boot menu: whether it carries the parameters, and what a rebuild would produce (tested aside, nothing changed).
+
 0.7.297 — Support report: earlier boots.
 
 - New: the support report lists the last boots and, for the three before this one, their errors and how they ended. A boot loop or a boot that never reached the screen shows up in the next working boot's report, even before the system integration is installed.

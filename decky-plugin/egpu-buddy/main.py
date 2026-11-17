@@ -1525,6 +1525,8 @@ def _support_report():
         er = _sh(["journalctl", "-b", f"-{n}", "-p", "3", "-o", "short-iso", "--no-pager"], 15)[1].splitlines()
         end = _sh(["journalctl", "-b", f"-{n}", "-n", "25", "-o", "short-iso", "--no-pager"], 15)[1].splitlines()
         lines += ["", f"## Boot -{n}: errors (last 40 of {len(er)}) and its last 25 lines"] + [l[:300] for l in er[-40:]] + ["--- end of that boot:"] + [l[:300] for l in end]
+    if shutil.which("steamos-readonly") and os.path.exists("/usr/local/sbin/egpu-kernel-cmdline"):   # SteamOS: why parameters stay inactive
+        lines += ["", "## Boot configuration (SteamOS)"] + _sh(["/usr/local/sbin/egpu-kernel-cmdline", "--diagnose"], 90)[1].splitlines()[:30]
     lines += ["", "## Screens", f"Game Mode output: {_gamescope_env('OUTPUT_CONNECTOR') or '(not running)'}",
               f"chosen game screen: {_read(GAME_SCREEN) or 'automatic'}"]
     for c in sorted(glob.glob("/sys/class/drm/card*-*")):

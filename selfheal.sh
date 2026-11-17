@@ -114,6 +114,7 @@ if grep -qsiE '^(ID|NAME)="?bazzite' /etc/os-release; then
     || { systemd-run --no-block --collect --quiet --unit=egpu-buddy-kargs-boot /usr/local/sbin/egpu-kernel-cmdline --apply >/dev/null 2>&1 \
          && log "kernel parameters missing: being written in the background; reboot needed"; }
 elif ! /usr/local/sbin/egpu-kernel-cmdline --check >/dev/null 2>&1; then
-  /usr/local/sbin/egpu-kernel-cmdline --apply >/dev/null 2>&1 && log "kernel parameters re-applied; reboot needed" || log "kernel parameters missing and could not be written"
+  _ko=$(/usr/local/sbin/egpu-kernel-cmdline --apply 2>&1) && log "kernel parameters re-applied; reboot needed" || log "kernel parameters missing and could not be activated"
+  printf '%s\n' "$_ko" | tail -6 | while read -r l; do log "kernel parameters: $l"; done
 fi
 exit 0

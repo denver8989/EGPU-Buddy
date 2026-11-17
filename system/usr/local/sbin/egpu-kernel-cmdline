@@ -54,6 +54,8 @@ written(){ local cfg
   elif [ -f /etc/default/limine ]; then   # the generated entries, when found: /etc/default/limine alone is only the source
     cfg=""; c=$(find /boot /efi /boot/efi -maxdepth 4 -iname limine.conf 2>/dev/null | head -1); [ -n "$c" ] && cfg=$(cat "$c" 2>/dev/null)
     [ -n "$cfg" ] || cfg=$(cat /etc/default/limine 2>/dev/null)
+  elif command -v steamos-readonly >/dev/null 2>&1; then   # SteamOS: the boot menu itself, not only the drop-in it is built from
+    cfg=$(cat "$(ls /efi/EFI/steamos/grub.cfg /boot/efi/EFI/steamos/grub.cfg /boot/grub/grub.cfg 2>/dev/null | head -1)" 2>/dev/null)
   else cfg=$(cat /etc/default/grub /etc/default/grub.d/*.cfg /boot/loader/entries/*.conf 2>/dev/null); fi
   for p in $WANT; do case "$cfg" in *"$p"*) ;; *) return 1;; esac; done; return 0; }
 # --written: exit 0 when the bootloader CONFIGURATION carries all parameters (they survive the next kernel update).
@@ -70,20 +72,34 @@ fi
 if [ "$MODE" = --written ]; then written && { echo "kernel parameters persisted"; exit 0; }; echo "kernel parameters are NOT in the bootloader configuration"; exit 1; fi
 if [ "$MODE" = --pending ]; then [ -n "$(missing)" ] && written && { echo "kernel parameters written; reboot to activate"; exit 0; }; exit 1; fi
 if [ "$MODE" = --check ]; then m=$(missing); [ -z "$m" ] && { echo "kernel command line: ok"; exit 0; }; echo "missing kernel parameters: $m"; exit 1; fi
-[ "$MODE" = --apply ] || { echo "usage: $0 --check | --apply [--dry-run]"; exit 2; }
+[ "$MODE" = --apply ] || [ "$MODE" = --diagnose ] || { echo "usage: $0 --check | --apply [--dry-run] | --diagnose"; exit 2; }
 [ "$(id -u)" = 0 ] || { echo "--apply needs root"; exit 1; }
 TS=$(date +%Y%m%d-%H%M%S); did=0
 # SteamOS boot config: build into a temp file, accept it only when it has a menu entry whose kernel file exists, keep the
 # current file as <cfg>.bak-egpu-buddy, then move it in. Never leaves a half-written or kernel-less config on the ESP.
 egpu_grub_rebuild() {
-  local cfg=$1 tmp k
+  local cfg=$1 tmp k err
   tmp=$(mktemp) || return 1
-  if ! grub-mkconfig -o "$tmp" >/dev/null 2>&1 || ! grep -q '^menuentry ' "$tmp"; then rm -f "$tmp"; echo "boot config not changed: the rebuilt one had no boot entry"; return 1; fi
+  if ! err=$(grub-mkconfig -o "$tmp" 2>&1 >/dev/null) || ! grep -q '^menuentry ' "$tmp"; then
+    rm -f "$tmp"; echo "boot config not changed: the rebuilt one had no boot entry ($(printf '%s' "$err" | tail -2 | tr '\n' ' '))"; return 1; fi
   k=$(sed -n 's/^[[:space:]]*linux[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$tmp" | head -1)
   if [ -z "$k" ] || { [ ! -e "${k#/@}" ] && [ ! -e "/boot/${k##*/}" ]; }; then rm -f "$tmp"; echo "boot config not changed: the rebuilt one names a kernel that is not here ($k)"; return 1; fi
   cp -a "$cfg" "$cfg.bak-egpu-buddy" 2>/dev/null
   cat "$tmp" > "$cfg.egpu-new" && mv -f "$cfg.egpu-new" "$cfg"; rm -f "$tmp"
 }
+# SteamOS: what a rebuild would produce, written nowhere (support report)
+if [ "$MODE" = --diagnose ]; then
+  cfg=$(ls /efi/EFI/steamos/grub.cfg /boot/efi/EFI/steamos/grub.cfg /boot/grub/grub.cfg 2>/dev/null | head -1)
+  echo "missing on this boot: $(missing)"; echo "drop-in: $(grep -s CMDLINE_LINUX_DEFAULT /etc/default/grub.d/egpu-buddy.cfg | cut -c1-200)"
+  for c in $cfg $cfg.bak-egpu-buddy; do [ -f "$c" ] || continue
+    echo "$c: $(stat -c '%y %s bytes' "$c"), $(grep -c '^menuentry ' "$c") entries, our parameters $(grep -q hpmemprefsize "$c" && echo in || echo NOT in)"
+    grep -E '^[[:space:]]*linux[[:space:]]' "$c" | head -2 | cut -c1-220 | sed 's/^/  /'; done
+  tmp=$(mktemp); err=$(grub-mkconfig -o "$tmp" 2>&1 >/dev/null); rc=$?
+  echo "test rebuild (not used): rc $rc, $(grep -c '^menuentry ' "$tmp") entries"; grep -E '^[[:space:]]*linux[[:space:]]' "$tmp" | head -2 | cut -c1-220 | sed 's/^/  /'
+  printf '%s\n' "$err" | tail -6 | sed 's/^/  grub-mkconfig: /'
+  k=$(sed -n 's/^[[:space:]]*linux[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$tmp" | head -1); echo "kernel it names: ${k:-none} ($( [ -n "$k" ] && { [ -e "${k#/@}" ] || [ -e "/boot/${k##*/}" ]; } && echo present || echo NOT present))"
+  rm -f "$tmp"; exit 0
+fi
 edit(){ # $1 file, $2 sed script
   [ -f "$1" ] || return 1
   if [ $DRY = 1 ]; then echo "would edit $1:"; sed -E "$2" "$1" | diff "$1" - | grep '^>' | cut -c1-200; return 0; fi
@@ -202,7 +218,7 @@ elif [ -f /etc/default/grub ] && command -v steamos-readonly >/dev/null 2>&1; th
         echo "the regenerated config had no steamenv header: restored it (quiet boot + no menu)"
       fi
     else
-      echo "could not regenerate the GRUB config; kernel parameters are written but not active yet"
+      echo "could not regenerate the GRUB config; kernel parameters are written but not active yet"; grub_failed=1
     fi
   fi
 elif [ -f /etc/default/grub ]; then                                   # GRUB (Arch)
@@ -222,5 +238,7 @@ else
   echo "no supported bootloader config found (rpm-ostree, /etc/default/limine, /etc/default/grub, /boot/loader/entries). Add these parameters by hand:"; echo "  $WANT"; exit 3
 fi
 [ $DRY = 1 ] && exit 0
+# SteamOS: the boot menu was not rebuilt, so a reboot does not activate them (said instead of "reboot" on every boot)
+[ "${grub_failed:-0}" = 1 ] && { echo "the boot menu could not be rebuilt: a reboot will not activate the kernel parameters"; exit 4; }
 [ $did = 1 ] || { [ "${regen-x}" != "" ] && written; } || { echo "the kernel parameters could not be written; add them by hand: $WANT"; exit 1; }
 echo "reboot to activate the new kernel parameters"
