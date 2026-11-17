@@ -8,6 +8,11 @@ say "[1/4] PCI rescan"; echo 1 > /sys/bus/pci/rescan; sleep 4
 GPU=$(lspci -Dn 2>/dev/null | awk '$2=="0300:" && $3 ~ /^10de:/{print $1; exit}')
 # the AMD / Intel install: its own bring-up + attach (an NVIDIA install never goes there)
 [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && { say "AMD / Intel install -> generic attach"; exec /usr/local/sbin/egpu-generic bringup --manual; }
+# ROG Ally / XG Mobile: with no USB4 device connected there is nothing to rescan (SilverplayerX pressed Re-attach after the
+# XG Mobile was unplugged and only saw "GPU did not enumerate"); say what to do. Elsewhere unchanged.
+if [ -z "$GPU" ] && { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } \
+   && ! ls -d /sys/bus/thunderbolt/devices/[0-9]-[1-9]* >/dev/null 2>&1; then
+  say "The XG Mobile is not connected (no USB4 device found). Plug it in with its power on: it attaches by itself."; exit 2; fi
 [ -n "$GPU" ] || { say "GPU did not enumerate"; exit 2; }; say "      GPU at $GPU"
 say "[2/4] fresh nvidia stack"; modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia 2>/dev/null
 # ROG Ally / XG Mobile (each detected on its own): nouveau bound the eGPU at the rescan in a beta driver trial, so the NVIDIA

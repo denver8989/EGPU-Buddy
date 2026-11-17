@@ -1,3 +1,7 @@
+0.7.302 — XG Mobile: clearer Re-attach message.
+
+- Fixed: ROG Ally / XG Mobile: Re-attach with the XG Mobile unplugged now says it is not connected and to plug it in (it attaches by itself), instead of "GPU did not enumerate". (ROG Ally / XG Mobile only; every other machine unchanged.)
+
 0.7.301 — Support report: why a game does not start.
 
 - New: on the ROG Ally / XG Mobile, the support report includes Steam's own game launch logs and the game's output, for games that stay on Steam's loading logo. Report only. (ROG Ally / XG Mobile only; every other machine unchanged.)
