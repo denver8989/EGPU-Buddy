@@ -51,6 +51,20 @@ static int is_browser(void) {
   return strstr(b, "steamwebhelper") != NULL;
 }
 static int on(void) { if (active < 0) { active = is_browser() && getenv("EGPU_TFP"); if (active) LOG("egpu-steam-ui: active pid %d\n", (int)getpid()); } return active; }
+/* A game launch (SteamAppId / SteamGameId set; Steam and its interface never have them) drops this library from
+   LD_PRELOAD, so nothing the launch starts loads it. Any dlsym hook placed ahead of Steam's gameoverlayrenderer.so
+   breaks the overlay's close()/read() hooks: the first $(...) in Steam Linux Runtime's _v2-entry-point then never
+   gets end-of-file and the game never leaves Steam's loading logo. */
+__attribute__((constructor)) static void leave_games(void) {
+  char *p = getenv("LD_PRELOAD");
+  if (!p || (!getenv("SteamAppId") && !getenv("SteamGameId")) || !strstr(p, "libegpu-steam-ui.so")) return;
+  char *in = strdup(p), *out = calloc(1, strlen(p) + 1), *save = NULL;
+  if (!in || !out) { free(in); free(out); return; }
+  for (char *t = strtok_r(in, ": ", &save); t; t = strtok_r(NULL, ": ", &save))
+    if (!strstr(t, "libegpu-steam-ui.so")) { if (*out) strcat(out, ":"); strcat(out, t); }
+  if (*out) setenv("LD_PRELOAD", out, 1); else unsetenv("LD_PRELOAD");
+  free(in); free(out);
+}
 static dlsym_fn rdlsym(void) {
   if (!real_dlsym) { real_dlsym = (dlsym_fn)dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.34"); if (!real_dlsym) real_dlsym = (dlsym_fn)dlvsym(RTLD_NEXT, "dlsym", "GLIBC_2.2.5"); }
   return real_dlsym;

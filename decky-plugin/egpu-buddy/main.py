@@ -2942,7 +2942,8 @@ class Plugin:
         if _track():   # NV GPU Buddy: Steam's interface draws on the NVIDIA card unless this is a laptop (built-in GPU there)
             route = _gamescope_running() and os.path.exists("/sys/module/nvidia") and not _game_running() and _read("/etc/nv-egpu-buddy/machine").strip() != "nv-laptop"
         d["route"] = bool(route)
-        d["offer"] = bool(d.get("available") and route and d.get("bigart") and not d.get("enabled"))   # ask: Big Art on, fix off
+        d["offer"] = bool(d.get("available") and route and d.get("bigart") and not d.get("enabled")
+                         and not os.path.exists(f"{USER_HOME}/.config/egpu-buddy/steam-ui-fix.off"))   # ask: Big Art on, fix off, not switched off by the user
         d["pending"] = bool(d.get("available") and route and d.get("enabled") and not d.get("active"))  # on, Steam started without it
         return d
 

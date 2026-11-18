@@ -97,8 +97,8 @@ case "${1:-}" in
     printf '{"enabled": %s, "available": %s, "bigart": %s, "active": %s, "gpu_webviews": %s}\n' \
       "$(json_bool test -e "$CFG")" "$(json_bool available)" "$(json_bool bigart)" "$(json_bool active)" "$(if webviews_off; then printf false; else printf true; fi)" ;;
   on)  available || { echo "not available here (NVIDIA install with Steam only)" >&2; exit 2; }
-       mkdir -p "${CFG%/*}" && touch "$CFG" && echo "on: applies at the next Game Mode start" ;;
-  off) rm -f "$CFG"; echo "off: Steam starts without it at the next Game Mode start" ;;
+       mkdir -p "${CFG%/*}" && touch "$CFG" && rm -f "$CFG.off" && echo "on: applies at the next Game Mode start" ;;
+  off) rm -f "$CFG"; mkdir -p "${CFG%/*}" && touch "$CFG.off"; echo "off: Steam starts without it at the next Game Mode start" ;;
   env) [ -e "$CFG" ] && available && prepare && printf 'export STEAM_RUNTIME_STEAMRT=%q\n' "$RTD" || exit 0
        webviews_off && webviews_on   # the fix needs Steam's interface on the GPU
        pl_dir || exit 0

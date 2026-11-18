@@ -2,6 +2,13 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-18 evening (Claude on-device session 8fc08078)
+
+- EGPU-STUCKLOGO SOLVED + released as 0.7.305 (includes all of unreleased 0.7.304; owner chose to fix before releasing). Cause: Steam menu fix library's dlsym hook ahead of Steam's gameoverlayrenderer.so in game launches breaks the overlay's close()/read() hooks -> SLR _v2-entry-point hangs in its first $(...). Fix: library drops itself from LD_PRELOAD in game launches (SteamAppId/SteamGameId). Verified live on owner LG2 (menu fix on: Big Art menu ok, Cyberpunk + another game launched). Details in ledger.
+- Plugin no longer re-offers the menu fix after a manual off (steam-ui-fix.off marker).
+- Open: Cyberpunk-only GPU hang on owner LG2 (Xid 109/31, DLSS MFG x3); DLSSFrameGen turned off in its UserSettings.json (backup kept) as a test, result pending. Mod Maniac toggle hardware check (0.7.304 feature) still to do on the LG2.
+- Live actions: replaced ~/.local/lib/nv-egpu-buddy/steam-ui-fix/{libegpu-steam-ui.so,pl/lib/...} + ~/.local/bin/egpu-steam-ui-fix before the release; killed Steam's frozen webhelper GPU process once and restarted Game Mode via egpu-gamemode-switch (after the Cyberpunk Xid). Nothing broke. No ownership retained.
+
 ## Checkpoint — 2026-11-18 late (Claude remote session_01VL2HtjLTr9tZCDReBmPqeS) — FOR THE ON-DEVICE CLAUDE
 
 - 0.7.304 is on master (897e22d + this ledger commit), NOT released. Owner said "ok release that". The remote session built and verified it (checksums, new files inside) but may not create GitHub releases. DO: `git pull`, `./release-local.sh` (tree clean, no container rebuilds needed: prebuilt IDs match 0.7.303), verify v0.7.304.

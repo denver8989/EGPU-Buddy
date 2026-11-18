@@ -1,3 +1,9 @@
+0.7.305 — NVIDIA: games no longer stuck on Steam's loading logo in Game Mode.
+
+- Fixed: with the Steam menu fix on (NVIDIA eGPU, Game Mode), every game stayed on Steam's loading logo and never started. The menu fix's library now stays out of game launches; Steam's own menu keeps it. (NVIDIA installs with the Steam menu fix on; menu fix off, AMD / Intel installs unchanged.)
+- Fixed: after you switch the Steam menu fix off, the plugin no longer offers to turn it back on at every Game Mode start. (NVIDIA installs only.)
+- NV GPU Buddy: the same fix for games stuck on Steam's loading logo with the Steam menu fix on.
+
 0.7.304 — Mod Maniac diagnostic help; XG Mobile: fan mode sent on every attach.
 
 - Fixed: ROG Ally / XG Mobile: after an attach the dock now always gets its fan mode ("Auto", the dock's own curve, when none was chosen). With no saved XG Mobile settings (for example after a reinstall) it got nothing at all, a likely reason its fans ran loud from the attach on. (ROG Ally / XG Mobile only; every other machine unchanged)
