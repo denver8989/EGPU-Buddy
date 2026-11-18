@@ -2,6 +2,14 @@
 
 Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.md`.
 
+## Checkpoint — 2026-11-18 late (Claude remote session_01VL2HtjLTr9tZCDReBmPqeS) — FOR THE ON-DEVICE CLAUDE
+
+- 0.7.304 is on master (897e22d + this ledger commit), NOT released. Owner said "ok release that". The remote session built and verified it (checksums, new files inside) but may not create GitHub releases. DO: `git pull`, `./release-local.sh` (tree clean, no container rebuilds needed: prebuilt IDs match 0.7.303), verify v0.7.304.
+- 0.7.304 contents: XG Mobile fan mode on every attach; report: running game launch with full command lines, DRM clients/framebuffers at a failed Ally desktop detach, gamescope versions no longer masked; NEW Extras toggles "Mod Maniac diagnostic help" (other Decky plugins off via Decky's disabled_plugins, exact restore, recommendations) and "Silver Player rank" (cosmetic). Mod Maniac is stand-in tested only: flip it once on the LG2 after the release (plugins must come back when turned off; ~/homebrew/settings/loader.json "disabled_plugins"; record /var/lib/nvegpu/mod-maniac.json).
+- NEW, top priority: owner reproduces the never-ending Steam logo on game launch in Game Mode on the LG2. See ledger EGPU-STUCKLOGO for evidence, the A/B order and the candidate fix. Diagnose live, read-only first.
+- Open (Ally): desktop Safe Detach leaves nvidia_drm loaded (regression, cause unknown; 0.7.303 guard asks for a restart). Waiting for SilverplayerX's report on 0.7.304.
+- Nothing broke; no live machine touched by the remote session. No ownership retained.
+
 ## Checkpoint — 2026-11-18 (Claude remote session_01VL2HtjLTr9tZCDReBmPqeS)
 
 - SilverplayerX 0.7.303 reports 7UJ5MF (game stuck on logo, eGPU Game Mode) + R3ZRC5 (desktop/reattach). Findings in the ledger entry of 2026-11-18. Main lead: the Steam menu fix (STEAM_RUNTIME_STEAMRT override, NVIDIA route only) is in the stuck launch's path; unproven, tester asked to turn it off.

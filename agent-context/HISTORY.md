@@ -28,3 +28,4 @@
 
 - 2026-11-18 — Claude (remote): SilverplayerX 0.7.303 reports analysed; 0.7.304 pushed to master (XG Mobile fan mode on every attach, report: running game launch command lines), release pending on owner machine (release-local.sh). Menu-fix-off test requested from tester.
 - 2026-11-18 — Claude (remote): Mod Maniac diagnostic help (Extras toggle: other Decky plugins off via Decky's disabled_plugins, recommendations for mods / Proton builds, exact restore, uninstall restore) added to unreleased 0.7.304; desktop-detach DRM logging for the Ally. Release + hardware test pending.
+- 2026-11-18 — Claude (remote): owner reproduces the stuck Steam logo on the LG2 (EGPU-STUCKLOGO, handed to the on-device session); 0.7.304 built and verified remotely but not publishable from the remote session; owner approved the release.
