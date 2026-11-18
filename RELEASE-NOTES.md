@@ -1,8 +1,9 @@
-0.7.304 — XG Mobile: fan mode sent on every attach.
+0.7.304 — Mod Maniac diagnostic help; XG Mobile: fan mode sent on every attach.
 
 - Fixed: ROG Ally / XG Mobile: after an attach the dock now always gets its fan mode ("Auto", the dock's own curve, when none was chosen). With no saved XG Mobile settings (for example after a reinstall) it got nothing at all, a likely reason its fans ran loud from the attach on. (ROG Ally / XG Mobile only; every other machine unchanged)
 - New: on the ROG Ally / XG Mobile, the support report lists a game launch that is running (or stuck) with each process's full command line and runtime settings. Report only.
 - New: ROG Ally / XG Mobile: when a desktop Safe Detach cannot unload the NVIDIA driver, the report now shows what the kernel says still uses the eGPU (open clients, live framebuffers, leftover session processes). Report only.
+- New: **Mod Maniac diagnostic help** (plugin > Setup & updates > Extras, off by default). For heavily modded setups: switches every other Decky plugin off for a clean test, using Decky's own "disable" (nothing is uninstalled), and lists what to try for the plugins, Proton builds, launch options and Steam start-up changes it finds. Turning it off brings back exactly the plugins it switched off; plugins you had off stay off. Decky restarts once each way. Uninstall restores them too. (Every install; changes nothing unless switched on.)
 - Fixed: support reports showed gamescope's version as "x.x.x.x" (mistaken for a network address), so which gamescope build a machine runs could not be seen. Report only, every machine.
 
 0.7.303 — XG Mobile: no black desktop after a forced detach.

@@ -219,6 +219,11 @@ const setGameScreen = callable<[string], Result>("set_game_screen");
 const getTvControl = callable<[], { enabled: boolean; paired: string[] }>("get_tv_control");
 type Addons = { usb4: boolean; report: boolean };
 const getAddons = callable<[], Addons>("get_addons");
+// Extras > Mod Maniac diagnostic help: every other Decky plugin off for a clean test (Decky's own list), and what to try
+// for the mods and Proton builds found next to EGPU Buddy
+type ModManiac = { available: boolean; on: boolean; disabled_by_us: string[]; plugins: { name: string; disabled: boolean; kind: string; root: boolean }[]; advice: { level: string; title: string; detail: string }[] };
+const getModManiac = callable<[], ModManiac>("get_mod_maniac");
+const setModManiac = callable<[boolean], Result>("set_mod_maniac");
 const setAddon = callable<[string, boolean], Result>("set_addon");
 const getUsb4 = callable<[], { name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>("get_usb4");
 const makeReport = callable<[], { code: string; file: string; url: string }>("make_report");
@@ -557,6 +562,8 @@ function Content() {
   const [pickVer, setPickVer] = useState("");   // "CEC advanced" folded by default
   const [tpad, setTpad] = useState<{ enabled: boolean; active: boolean; speed?: number; invert?: boolean; three?: boolean; keep_screen?: boolean } | null>(null);
   const [ad, setAd] = useState<Addons | null>(null);
+  const [mm, setMm] = useState<ModManiac | null>(null);
+  useEffect(() => { if (visible && tab === "setup") getModManiac().then(setMm).catch(() => setMm(null)); }, [visible, tab]);
   const [usb4, setUsb4] = useState<{ name?: string; per_lane?: number; lanes?: number; total?: number; slow?: boolean }>({});
   const [report, setReport] = useState<{ code: string; file: string; url: string } | null>(null);
   const [share, setShare] = useState<{ ok: boolean; url?: string; minutes?: number; message?: string } | null>(null);
@@ -1329,6 +1336,20 @@ function Content() {
       {tab === "setup" && (
         <PanelSection title="Extras (testing)">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.8 }}>All off by default.</div></PanelSectionRow>
+          {mm?.available && (() => { const others = mm.plugins.filter((p) => !p.disabled).length;
+            return <>
+              <PanelSectionRow><ToggleField label="Mod Maniac diagnostic help" checked={mm.on} disabled={busy}
+                description={mm.on ? `On: ${mm.disabled_by_us.length} other plugin(s) are switched off for testing. Turn off to bring exactly those back.` : "For heavily modded setups: switches every other Decky plugin off for a clean test and lists what to try for the mods and Proton builds found. Nothing is uninstalled."}
+                onChange={(v) => showModal(<ConfirmModal strTitle={v ? "Switch the other plugins off?" : "Switch the plugins back on?"}
+                  strDescription={v ? `${others} other Decky plugin(s) are switched off (Decky's own "disable", nothing is removed) and Decky restarts: this menu closes for a few seconds. Plugins you had off already stay off. Turning this off brings back exactly the ones it switched off.` : `${mm.disabled_by_us.length} plugin(s) come back and Decky restarts: this menu closes for a few seconds.`}
+                  strOKButtonText={v ? "Switch them off" : "Switch them on"} onOK={() => run(async () => { const r = await setModManiac(v); return r; })} />)} /></PanelSectionRow>
+              {mm.on && <>
+                <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>Test now: does the problem still happen with the plugins off? Then send a support report (Details). Plugins switched off: {mm.disabled_by_us.join(", ") || "none"}.</div></PanelSectionRow>
+                {mm.advice.map((a, i) => <PanelSectionRow key={i}><div style={{ fontSize: "12px" }}>
+                  <div style={{ fontWeight: 600, color: a.level === "test" ? "#f0b429" : undefined }}>{a.title}</div>
+                  <div style={{ opacity: 0.8 }}>{a.detail}</div></div></PanelSectionRow>)}
+              </>}
+            </>; })()}
           {!nvb && <PanelSectionRow><ToggleField label="USB4 link speed" description="Adds a USB4 row to the Details tab and warns about a slow cable or port." checked={!!ad?.usb4} onChange={(v) => run(async () => { const r = await setAddon("usb4", v); await refresh(); return r; })} /></PanelSectionRow>}
           <PanelSectionRow><ToggleField label="Handheld screen as touchpad" description={`Off by default. While the handheld screen is off because another screen is in use (XR glasses, a monitor or a TV, with or without an eGPU), the whole touchscreen works as a touchpad: pointer, tap to click (two fingers: right click), two-finger scroll, three-finger drag or double tap to drag. Game Mode and the desktop. Desktop only: four fingers up or down show the window previews, a long swipe left or right switches desktop, five fingers spread out show the desktop and pinched in bring the windows back.${tpad?.active ? " Active now." : ""}`} checked={!!tpad?.enabled} onChange={(v) => run(async () => { const r = await setTouchpad(v); setTpad(await getTouchpad()); return r; })} /></PanelSectionRow>
           {tpad?.enabled && <>

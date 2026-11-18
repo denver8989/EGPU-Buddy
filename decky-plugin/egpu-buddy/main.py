@@ -1863,6 +1863,13 @@ def _support_report():
         lines += ["", f"## Other Decky plugins ({len(dp)})"] + (dp or ["(none)"])
     except Exception as ex:  # noqa: BLE001
         lines += ["", f"## Other Decky plugins: could not be read ({ex})"]
+    try:
+        mmn = _mod_maniac()
+        lines += ["", f"## Mod Maniac diagnostic help: {'ON' if mmn['on'] else 'off'}"
+                      + (f" · switched off by it: {', '.join(mmn['disabled_by_us']) or 'none'}" if mmn["on"] else "")]
+        lines += [f"{a['level']}: {a['title']}\n    {a['detail'][:400]}" for a in mmn["advice"]]
+    except Exception as e:  # noqa: BLE001  (never break the report)
+        lines += ["", f"## Mod Maniac diagnostic help: could not be read ({e})"]
     try:   # other eGPU tools (all-ways-eGPU, egpu-switcher) or their leftovers: every install path offers their removal
         ot = _sh(["bash", f"{SYSDIR}/packaging/other-egpu-tools.sh", "detect"], 10)[1].splitlines() if os.path.exists(f"{SYSDIR}/packaging/other-egpu-tools.sh") else []
         lines += ["", "## Other eGPU tools still installed (all-ways-eGPU, egpu-switcher)"] + (ot or ["(none)"])
@@ -2181,6 +2188,89 @@ def _other_mods():
         if not os.path.basename(f).startswith("egpu-"):
             out.append(f"user service {os.path.basename(f)}: " + "; ".join(keylines(f, r"^\s*ExecStart\b")))
     return out
+
+
+MODMANIAC = "/usr/local/sbin/egpu-mod-maniac"
+# Decky plugins by what they do, for the Mod Maniac recommendations. Only kinds whose effect is known: a name that matches
+# nothing gets the general line. (pattern on the plugin's name, kind, what to try)
+_MOD_KINDS = (
+    (r"optiscaler|reframe|reshade|frame ?gen|framegen|lsfg|lossless|mako|helixsr|fsr ?4",
+     "upscaling / frame generation",
+     "It puts its own files into games (and can add its own Proton build). Switching the plugin off does not take those out again: "
+     "for a test, also remove its patch from the game in the plugin itself, clear the game's launch options, and pick Valve's Proton for the game. "
+     "On one ROG Ally, removing such a plugin fixed games that stayed on Steam's loading logo."),
+    (r"css ?loader|theme|decky ui|animation changer|art ?hero|steamgriddb",
+     "Steam interface",
+     "It reshapes Steam's own menus. If menus look wrong (black bars, wrong size, missing parts), test with it off before reporting a picture problem."),
+    (r"powertools|simpledeckytdp|tdp|power ?control|fantastic|ally companion|hhd|handheld daemon|panel de control|hv-decky",
+     "power, fan or controller control",
+     "It can set power limits, fans or the controller on its own. If performance, fans or buttons behave oddly with the eGPU, test with it off. "
+     "A file it added to Steam's start-up stays in place while the plugin is off (listed below if there is one)."),
+    (r"wifi|bluetooth|syncthing|storage|share|discord|steamcord|hub|glance|protondb|playtime|music|web ?browser",
+     "utility",
+     "Not expected to affect the eGPU. Switched off only so the test is clean."),
+)
+
+
+def _mod_maniac():
+    """Mod Maniac diagnostic help: its state and the recommendations for what is installed next to EGPU Buddy. Read-only."""
+    H = USER_HOME
+    st = _json("/var/lib/nvegpu/mod-maniac.json"); off = (_json(f"{H}/homebrew/settings/loader.json") or {}).get("disabled_plugins") or []
+    plugins, advice = [], []
+    for d in sorted(glob.glob(f"{H}/homebrew/plugins/*/")):
+        pj = _json(os.path.join(d, "plugin.json"))
+        name = pj.get("name") or os.path.basename(d.rstrip("/"))
+        if name in ("EGPU Buddy", "NV GPU Buddy") or not os.path.exists(os.path.join(d, "plugin.json")):
+            continue
+        kind, tip = next(((k, t) for rx, k, t in _MOD_KINDS if re.search(rx, name, re.I)), ("other", ""))
+        root = "root" in (pj.get("flags") or []) or "_root" in (pj.get("flags") or [])
+        plugins.append({"name": name, "disabled": name in off, "kind": kind, "root": root})
+    for rx, kind, tip in _MOD_KINDS:
+        names = [p["name"] for p in plugins if p["kind"] == kind]
+        if names and kind != "utility":
+            advice.append({"level": "test", "title": f"{kind.capitalize()}: {', '.join(names)}"[:160], "detail": tip})
+    rest = [p["name"] for p in plugins if p["kind"] == "other"]
+    if rest:
+        rooted = [p["name"] for p in plugins if p["kind"] == "other" and p["root"]]
+        advice.append({"level": "info", "title": f"Other plugins: {', '.join(rest)}"[:160],
+                       "detail": "No known effect on the eGPU." + (f" Running with full system rights: {', '.join(rooted)}." if rooted else "")
+                                 + " If the problem is gone with everything off, switch them back on one at a time in Decky's own settings to find the one."})
+    # compatibility layers: Proton builds that did not come from Steam, and what Steam uses when a game has no own choice
+    tools = sorted({os.path.basename(d.rstrip("/")) for g in (f"{H}/.local/share/Steam/compatibilitytools.d/*/", f"{H}/.steam/root/compatibilitytools.d/*/") for d in glob.glob(g)})
+    cfg = _read(f"{H}/.local/share/Steam/config/config.vdf")
+    m = re.search(r'"CompatToolMapping"\s*\{\s*"0"\s*\{\s*"name"\s*"([^"]*)"', cfg)
+    default = m.group(1) if m else ""
+    if tools:
+        patched = [t for t in tools if re.search(r"fsr|optiscaler|lite|lsfg|framegen", t, re.I)]
+        advice.append({"level": "test", "title": f"Proton builds not from Steam ({len(tools)}): {', '.join(tools)}"[:160],
+                       "detail": "For a test, give the game one of Valve's own: game > Properties > Compatibility > Proton Experimental or the newest numbered Proton."
+                                 + (f" Changed builds installed by a mod: {', '.join(patched)}." if patched else "")
+                                 + (f" Steam's default for every game is \"{default}\": set it back to a Valve Proton for the test (Steam > Settings > Compatibility)."
+                                    if default and not re.match(r"proton_(\d|experimental|hotfix)", default) else "")})
+    # launch options mods wrote into games
+    lo = []
+    for f in glob.glob(f"{H}/.local/share/Steam/userdata/*/config/localconfig.vdf"):
+        lo += [x for x in re.findall(r'"LaunchOptions"\s+"((?:[^"\\]|\\.)*)"', _read(f)) if re.search(r"fgmod|optiscaler|lsfg|reshade|WINEDLLOVERRIDES|LD_PRELOAD|mako|PROTON_FSR4", x, re.I)]
+    if lo:
+        advice.append({"level": "test", "title": f"{len(lo)} game(s) carry launch options from a mod",
+                       "detail": "They stay active with every plugin off. For a test, empty the game's launch options (game > Properties > General). First one: " + lo[0][:120]})
+    # session and Steam start-up changes by other tools (the support report's list), with what each kind means
+    mods = _other_mods()
+    for rx, title, tip in (
+        (r"^session drop-in .*steam-launcher\.service\.d", "Another tool changes how Steam starts",
+         "If it sets LD_PRELOAD, its library is loaded into Steam and every game. It stays active with the plugins off. For a test, move that file out of the folder and restart Game Mode."),
+        (r"^replacement program ", "Game Mode's start program was replaced",
+         "A file in ~/.local/bin takes the place of SteamOS's own. EGPU Buddy starts Game Mode through its own session; a second replacement can undo its screen choice. For a test, rename it and restart Game Mode."),
+        (r"^session drop-in .*gamescope-session\.service\.d", "Another tool changes the Game Mode session",
+         "It can replace EGPU Buddy's start line. For a test, move that file out of the folder and restart Game Mode."),
+        (r"^Steam developer settings", "Steam developer settings file (steam_dev.cfg)", "It forces Steam start options. For a test, rename it and restart Steam."),
+        (r"^environment ", "Variables set for the whole session", "They reach Steam and every game. For a test, move the file out of ~/.config/environment.d and log in again."),
+    ):
+        hit = [l for l in mods if re.search(rx, l)]
+        if hit:
+            advice.append({"level": "test", "title": f"{title} ({len(hit)})", "detail": tip + " Found: " + "; ".join(h.split(" ", 2)[-1] for h in hit)[:300]})
+    return {"available": os.path.exists(MODMANIAC) and os.path.isdir(f"{H}/homebrew/settings"), "on": bool(st.get("on")),
+            "disabled_by_us": st.get("disabled") or [], "plugins": plugins, "advice": advice}
 
 
 def _conflicts():
@@ -2611,6 +2701,18 @@ class Plugin:
             return {"ok": False, "message": "Unknown option."}
         d = _settings(); d.setdefault("addons", {})[name] = bool(enabled); _save_settings(d)
         return {"ok": True, "message": ""}
+
+    async def get_mod_maniac(self):
+        return _mod_maniac()
+
+    async def set_mod_maniac(self, enabled: bool):
+        """Extras > Mod Maniac diagnostic help: every other Decky plugin off (Decky's own list), or back on. Decky restarts."""
+        if not os.path.exists(MODMANIAC):
+            return {"ok": False, "message": "Install or update the system integration first."}
+        if _operation_in_progress():
+            return {"ok": False, "message": "Not now: a game, an install, a detach or a driver change is running. Close the game or wait, then try again."}
+        _spawn_root_job("mod-maniac", [MODMANIAC, "on" if enabled else "off", USER_HOME])
+        return {"ok": True, "message": "Decky restarts now: this menu closes for a few seconds. Open it again afterwards."}
 
     async def get_usb4(self):
         return _usb4() if _addon("usb4") else {}

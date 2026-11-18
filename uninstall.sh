@@ -55,6 +55,12 @@ runtime_leftovers(){
 
 # ROG Ally / XG Mobile: decided now, while egpu-detect and the XG Mobile marker still exist (both are removed below)
 AX=0; { [ "$(/usr/local/sbin/egpu-detect --device 2>/dev/null)" = rog-ally ] || [ -e /var/lib/nvegpu/xg-mobile-seen ]; } && AX=1
+# Mod Maniac diagnostic help was left on: the Decky plugins it switched off come back (Decky's own list), before the tool
+# and its record are removed. Decky reads the list when it starts: restarted once at the very end.
+MM_RESTORED=0
+if [ "${1:-}" != "--verify" ] && [ -e /var/lib/nvegpu/mod-maniac.json ] && [ -x /usr/local/sbin/egpu-mod-maniac ]; then   # --verify changes nothing
+  if sudo /usr/local/sbin/egpu-mod-maniac off "$USER_HOME" --no-restart; then MM_RESTORED=1; fi
+fi
 # ROG Ally / XG Mobile: the session's Steam LD_PRELOAD drop-in (NVIDIA settings loader next to Ally Companion's library)
 if [ "$AX" = 1 ] && [ -e "$USER_HOME/.config/systemd/user/steam-launcher.service.d/zzzz-egpu-buddy-nvt.conf" ]; then
   rm -f "$USER_HOME/.config/systemd/user/steam-launcher.service.d/zzzz-egpu-buddy-nvt.conf"
@@ -208,6 +214,7 @@ sudo rm -f /etc/nv-egpu-buddy/version
 runtime_leftovers | while read -r d; do sudo rm -rf "$d"; done
 sudo rm -rf /var/log/egpu-*.log /var/log/egpu-buddy /run/nvegpu/* 2>/dev/null
 userctl daemon-reload
+if [ "$MM_RESTORED" = 1 ]; then sudo systemd-run --collect --quiet --on-active=5 systemctl try-restart plugin_loader.service >/dev/null 2>&1 || true; fi
 if [ -n "${UNINSTALL_INCOMPLETE:-}" ] || ls /usr/local/sbin/egpu-* /usr/local/sbin/nv-egpu-buddy-* >/dev/null 2>&1; then
   echo "WARNING: some files could not be removed. Run 'sudo steamos-readonly disable' and uninstall again."
   echo "done, but INCOMPLETE — run uninstall.sh --verify to see what is left."

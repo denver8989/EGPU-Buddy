@@ -27,3 +27,4 @@
 - Public verification of a846b82 complete: both new helmet tracks and all three voice modes/music options pass live playback checks, author remains default. No outstanding work for the approved v2 rollout.
 
 - 2026-11-18 — Claude (remote): SilverplayerX 0.7.303 reports analysed; 0.7.304 pushed to master (XG Mobile fan mode on every attach, report: running game launch command lines), release pending on owner machine (release-local.sh). Menu-fix-off test requested from tester.
+- 2026-11-18 — Claude (remote): Mod Maniac diagnostic help (Extras toggle: other Decky plugins off via Decky's disabled_plugins, recommendations for mods / Proton builds, exact restore, uninstall restore) added to unreleased 0.7.304; desktop-detach DRM logging for the Ally. Release + hardware test pending.

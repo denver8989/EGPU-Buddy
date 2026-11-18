@@ -6,6 +6,7 @@ Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.m
 
 - SilverplayerX 0.7.303 reports 7UJ5MF (game stuck on logo, eGPU Game Mode) + R3ZRC5 (desktop/reattach). Findings in the ledger entry of 2026-11-18. Main lead: the Steam menu fix (STEAM_RUNTIME_STEAMRT override, NVIDIA route only) is in the stuck launch's path; unproven, tester asked to turn it off.
 - 0.7.304 on master (dec828d), NOT released (no gh login in the remote container; Actions minutes saved): XG Mobile fan mode sent on every attach; report lists the running game launch with full command lines. Release with ./release-local.sh on the owner's machine.
+- Later the same day: owner said the tester never needed a restart between desktop detach and attach before -> treated as a regression (cause unknown; 0.7.304 logs DRM clients/framebuffers at a failed desktop detach). Owner asked for "Mod Maniac diagnostic help" (Extras toggle): built into 0.7.304, see its ledger entry; stand-in tested only.
 - Nothing broke; no live machine touched (remote session: owner machine and local Claude state unverified). No ownership retained.
 
 ## Checkpoint — 2026-11-17 (Codex helmet-v2-full-20261117)
