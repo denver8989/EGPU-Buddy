@@ -1866,7 +1866,8 @@ def _support_report():
     try:
         mmn = _mod_maniac()
         lines += ["", f"## Mod Maniac diagnostic help: {'ON' if mmn['on'] else 'off'}"
-                      + (f" · switched off by it: {', '.join(mmn['disabled_by_us']) or 'none'}" if mmn["on"] else "")]
+                      + (f" · switched off by it: {', '.join(mmn['disabled_by_us']) or 'none'}" if mmn["on"] else "")
+                      + f" · mods found: {mmn['count']} ({mmn['rank']}: plugins {mmn['parts']['plugins']}, Proton builds {mmn['parts']['proton']}, launch commands {mmn['parts']['launch']}, system changes {mmn['parts']['system']})"]
         lines += [f"{a['level']}: {a['title']}\n    {a['detail'][:400]}" for a in mmn["advice"]]
     except Exception as e:  # noqa: BLE001  (never break the report)
         lines += ["", f"## Mod Maniac diagnostic help: could not be read ({e})"]
@@ -2247,13 +2248,52 @@ def _mod_maniac():
                                  + (f" Changed builds installed by a mod: {', '.join(patched)}." if patched else "")
                                  + (f" Steam's default for every game is \"{default}\": set it back to a Valve Proton for the test (Steam > Settings > Compatibility)."
                                     if default and not re.match(r"proton_(\d|experimental|hotfix)", default) else "")})
-    # launch options mods wrote into games
+    # launch commands mods wrote into games: Steam games (localconfig.vdf) and non-Steam games (shortcuts.vdf), by name.
+    # These load the mod at every start of that game, whatever is switched off here.
+    MODLO = r"fgmod|optiscaler|lsfg|reshade|WINEDLLOVERRIDES|LD_PRELOAD|mako|PROTON_FSR4|dxgi\.dll|nvngx"
     lo = []
     for f in glob.glob(f"{H}/.local/share/Steam/userdata/*/config/localconfig.vdf"):
-        lo += [x for x in re.findall(r'"LaunchOptions"\s+"((?:[^"\\]|\\.)*)"', _read(f)) if re.search(r"fgmod|optiscaler|lsfg|reshade|WINEDLLOVERRIDES|LD_PRELOAD|mako|PROTON_FSR4", x, re.I)]
+        app = ""
+        for line in _read(f).splitlines():
+            k = re.match(r'\s*"(\d+)"\s*$', line)
+            if k: app = k.group(1); continue
+            v = re.match(r'\s*"LaunchOptions"\s+"((?:[^"\\]|\\.)*)"', line)
+            if v and re.search(MODLO, v.group(1), re.I):
+                nm = re.search(r'"name"\s+"([^"]*)"', "".join(_read(a) for a in glob.glob(f"{H}/.local/share/Steam/steamapps/appmanifest_{app}.acf")))
+                lo.append((nm.group(1) if nm else f"app {app}", v.group(1)))
+    for f in glob.glob(f"{H}/.local/share/Steam/userdata/*/config/shortcuts.vdf"):
+        try: data = open(f, "rb").read()
+        except OSError: continue
+        names = [(m.start(), m.group(1).decode(errors="replace")) for m in re.finditer(rb"\x01[Aa]pp[Nn]ame\x00([^\x00]*)\x00", data)]
+        for m in re.finditer(rb"\x01LaunchOptions\x00([^\x00]*)\x00", data):
+            opt = m.group(1).decode(errors="replace")
+            if re.search(MODLO, opt, re.I):
+                lo.append((next((n for pos, n in reversed(names) if pos < m.start()), "non-Steam game"), opt))
     if lo:
-        advice.append({"level": "test", "title": f"{len(lo)} game(s) carry launch options from a mod",
-                       "detail": "They stay active with every plugin off. For a test, empty the game's launch options (game > Properties > General). First one: " + lo[0][:120]})
+        advice.append({"level": "test", "title": f"{len(lo)} game(s) start through a mod's launch command",
+                       "detail": "The mod loads at every start of these games, also with every plugin off. For a test, empty the game's launch options "
+                                 "(game > Properties > General) and put them back afterwards: " + "; ".join(f"{n}: {o[:60]}" for n, o in lo[:6])[:420]})
+    # what is loaded RIGHT NOW: a library in the running Steam stays until Game Mode restarts, and a running game keeps
+    # what it was started with. Switching plugins off does not unload either.
+    live = []
+    def _rb(f):   # /proc files as text, whatever bytes they hold
+        try: return open(f, "rb").read().decode(errors="replace")
+        except OSError: return ""
+    for pid in _pids("steam"):
+        env = dict(e.split("=", 1) for e in _rb(f"/proc/{pid}/environ").split("\0") if "=" in e)
+        for lib in env.get("LD_PRELOAD", "").replace(" ", ":").split(":"):
+            b = os.path.basename(lib)
+            if b and "egpu" not in b and not b.startswith("gameoverlayrenderer") and f"Steam: {b}" not in live:
+                live.append(f"Steam: {b}")
+    for pd in glob.glob("/proc/[0-9]*"):
+        env = _rb(f"{pd}/environ")
+        if "SteamAppId=" not in env or not re.search(MODLO, env + _rb(f"{pd}/cmdline"), re.I): continue
+        nm = f"running game: {_read(pd + '/comm').strip()}"
+        if nm not in live: live.append(nm)
+    if live:
+        advice.insert(0, {"level": "test", "title": f"Still loaded right now ({len(live)})",
+                          "detail": "Switching plugins off does not unload what is already running. Close the game, then restart Game Mode once "
+                                    "(Steam > Power > Restart Steam) before you test. Loaded: " + ", ".join(live[:8])[:300]})
     # session and Steam start-up changes by other tools (the support report's list), with what each kind means
     mods = _other_mods()
     for rx, title, tip in (
@@ -2269,8 +2309,14 @@ def _mod_maniac():
         hit = [l for l in mods if re.search(rx, l)]
         if hit:
             advice.append({"level": "test", "title": f"{title} ({len(hit)})", "detail": tip + " Found: " + "; ".join(h.split(" ", 2)[-1] for h in hit)[:300]})
+    # "Silver Player rank" (Extras, a nod to the tester whose 18 plugins and 25 tweaks started this page): everything
+    # found, counted, with a rank. Shown only when that toggle is on; it changes nothing.
+    count = len(plugins) + len(tools) + len(lo) + len([l for l in mods if not l.startswith("    ")])
+    rank = "Stock" if count == 0 else "Tinkerer" if count <= 5 else "Mod Maniac" if count <= 15 else "Silver Player"
     return {"available": os.path.exists(MODMANIAC) and os.path.isdir(f"{H}/homebrew/settings"), "on": bool(st.get("on")),
-            "disabled_by_us": st.get("disabled") or [], "plugins": plugins, "advice": advice}
+            "disabled_by_us": st.get("disabled") or [], "plugins": plugins, "advice": advice,
+            "silver": bool(_settings().get("addons", {}).get("silver")), "count": count, "rank": rank,
+            "parts": {"plugins": len(plugins), "proton": len(tools), "launch": len(lo), "system": count - len(plugins) - len(tools) - len(lo)}}
 
 
 def _conflicts():
@@ -2697,7 +2743,7 @@ class Plugin:
         return {"usb4": bool(a.get("usb4")), "report": bool(a.get("report"))}
 
     async def set_addon(self, name: str, enabled: bool):
-        if name not in ("usb4", "report"):
+        if name not in ("usb4", "report", "silver"):
             return {"ok": False, "message": "Unknown option."}
         d = _settings(); d.setdefault("addons", {})[name] = bool(enabled); _save_settings(d)
         return {"ok": True, "message": ""}

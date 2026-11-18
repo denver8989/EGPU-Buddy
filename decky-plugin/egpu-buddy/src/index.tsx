@@ -221,7 +221,7 @@ type Addons = { usb4: boolean; report: boolean };
 const getAddons = callable<[], Addons>("get_addons");
 // Extras > Mod Maniac diagnostic help: every other Decky plugin off for a clean test (Decky's own list), and what to try
 // for the mods and Proton builds found next to EGPU Buddy
-type ModManiac = { available: boolean; on: boolean; disabled_by_us: string[]; plugins: { name: string; disabled: boolean; kind: string; root: boolean }[]; advice: { level: string; title: string; detail: string }[] };
+type ModManiac = { available: boolean; on: boolean; disabled_by_us: string[]; plugins: { name: string; disabled: boolean; kind: string; root: boolean }[]; advice: { level: string; title: string; detail: string }[]; silver?: boolean; count?: number; rank?: string; parts?: { plugins: number; proton: number; launch: number; system: number } };
 const getModManiac = callable<[], ModManiac>("get_mod_maniac");
 const setModManiac = callable<[boolean], Result>("set_mod_maniac");
 const setAddon = callable<[string, boolean], Result>("set_addon");
@@ -1343,6 +1343,15 @@ function Content() {
                 onChange={(v) => showModal(<ConfirmModal strTitle={v ? "Switch the other plugins off?" : "Switch the plugins back on?"}
                   strDescription={v ? `${others} other Decky plugin(s) are switched off (Decky's own "disable", nothing is removed) and Decky restarts: this menu closes for a few seconds. Plugins you had off already stay off. Turning this off brings back exactly the ones it switched off.` : `${mm.disabled_by_us.length} plugin(s) come back and Decky restarts: this menu closes for a few seconds.`}
                   strOKButtonText={v ? "Switch them off" : "Switch them on"} onOK={() => run(async () => { const r = await setModManiac(v); return r; })} />)} /></PanelSectionRow>
+              {/* a nod to tester SilverplayerX, whose 18 plugins and 25 tweaks started this page: counts what is installed, changes nothing */}
+              <PanelSectionRow><ToggleField label="Silver Player rank" checked={!!mm.silver}
+                description="Just for fun, named after the tester who brought 18 plugins and 25 tweaks to one bug hunt. Counts every mod found and gives this setup a rank. Changes nothing."
+                onChange={async (v) => { await setAddon("silver", v); setMm(await getModManiac()); }} /></PanelSectionRow>
+              {mm.silver && <PanelSectionRow><div style={{ fontSize: "12px", padding: "8px 10px", borderRadius: "6px", background: "rgba(192,192,192,0.12)", border: "1px solid rgba(192,192,192,0.35)" }}>
+                <div style={{ fontWeight: 700, fontSize: "14px", color: mm.rank === "Silver Player" ? "#d8dde3" : undefined }}>{mm.rank === "Silver Player" ? "\u{1F948} " : ""}{mm.rank} · {mm.count} mods</div>
+                <div style={{ opacity: 0.8 }}>{mm.parts?.plugins ?? 0} plugins · {mm.parts?.proton ?? 0} Proton builds · {mm.parts?.launch ?? 0} launch commands · {mm.parts?.system ?? 0} system changes</div>
+                <div style={{ opacity: 0.7, marginTop: "2px" }}>{mm.rank === "Silver Player" ? "Top rank (16 or more). Respect. Also: a lot of suspects when something breaks." : mm.rank === "Mod Maniac" ? "6 to 15 mods. Silver Player starts at 16." : mm.rank === "Tinkerer" ? "1 to 5 mods. Mod Maniac starts at 6." : "Nothing but EGPU Buddy. Easy to diagnose."}</div>
+              </div></PanelSectionRow>}
               {mm.on && <>
                 <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>Test now: does the problem still happen with the plugins off? Then send a support report (Details). Plugins switched off: {mm.disabled_by_us.join(", ") || "none"}.</div></PanelSectionRow>
                 {mm.advice.map((a, i) => <PanelSectionRow key={i}><div style={{ fontSize: "12px" }}>
