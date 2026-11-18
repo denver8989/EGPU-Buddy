@@ -25,3 +25,5 @@
 - 2026-11-17 — Codex: approved v2 helmet voice rolled out to both full tracks, new complete native-speed breathing spaced >=56.5 s. Speech slowdown baked once; per-mode runtime rate=1. All 53 sections, waveform/encoded-breath integrity, other-mode preservation and local playback/end-sync checks passed. a846b82 pushed to gh-pages; no app/hardware actions.
 
 - Public verification of a846b82 complete: both new helmet tracks and all three voice modes/music options pass live playback checks, author remains default. No outstanding work for the approved v2 rollout.
+
+- 2026-11-18 — Claude (remote): SilverplayerX 0.7.303 reports analysed; 0.7.304 pushed to master (XG Mobile fan mode on every attach, report: running game launch command lines), release pending on owner machine (release-local.sh). Menu-fix-off test requested from tester.
