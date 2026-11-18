@@ -1338,7 +1338,10 @@ def _usb4():
 def _redact(text):
     """No serial numbers, Wi-Fi names, IP / MAC addresses or user / host names in a report that goes public."""
     host = _read("/etc/hostname") or os.uname().nodename
-    text = re.sub(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "x.x.x.x", text)
+    # IPv4 addresses, but not gamescope's own version (3.16.20.6: four numbers too). Masking it hid which gamescope
+    # build a machine runs ("gamescope-egpu-x.x.x.x", "gamescope version x.x.x.x-17-g...": SilverplayerX, 0.7.303)
+    text = re.sub(r"(gamescope(?:-egpu-| version | |-)?)?\b((?:\d{1,3}\.){3}\d{1,3})\b",
+                  lambda m: m.group(0) if m.group(1) else "x.x.x.x", text)
     text = re.sub(r"\b(?:[0-9a-fA-F]{1,4}:){3,7}[0-9a-fA-F]{1,4}\b", "x:x:x:x", text)
     text = re.sub(r"\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b", "xx:xx:xx:xx:xx:xx", text)
     text = re.sub(r"(?i)(serial(?:\s*number)?|sn|uuid|ssid)(\s*[:=]\s*)\S+", r"\1\2[removed]", text)
