@@ -1650,6 +1650,24 @@ def _support_report():
         for title, ls, n in (("Steam game launches (last 40)", ga, 40), ("Steam compatibility tool log (last 20)", _read(f"{sl}/compat_log.txt").splitlines(), 20),
                              ("Game output, Steam's game process log (last 80)", _read(f"{sl}/gameprocess_log.txt").splitlines(), 80)):
             if ls: lines += ["", f"## {title}"] + [re.sub(r"\[U:\d:\d+\]", "[id]", l)[:300] for l in ls[-n:]]
+        # a game launch running now (stuck on Steam's logo): every process of it with its FULL command line and the
+        # runtime variables it got. The process list elsewhere cuts commands at 100 characters, which hid which of
+        # EGPU Buddy's files the stuck launch ran (SilverplayerX, 0.7.303: "steam-runtime-launch-client --alongside-steam
+        # -- /home/[user]/.local/lib/nv-egpu-budd...")
+        run = []
+        for pd in sorted(glob.glob("/proc/[0-9]*"), key=lambda x: int(x.rsplit("/", 1)[1])):
+            try:
+                env = dict(e.split("=", 1) for e in open(f"{pd}/environ", "rb").read().decode(errors="replace").split("\0") if "=" in e)
+                if "SteamAppId" not in env and "SteamGameId" not in env: continue
+                cmd = open(f"{pd}/cmdline", "rb").read().replace(b"\0", b" ").decode(errors="replace").strip()
+                st = open(f"{pd}/stat").read().rsplit(")", 1)[1].split()
+                keep = " ".join(f"{k}={env[k]}" for k in ("SteamAppId", "STEAM_RUNTIME_STEAMRT", "PRESSURE_VESSEL_RUNTIME", "STEAM_COMPAT_TOOL_PATHS", "LD_PRELOAD", "EGPU_TFP") if k in env)
+                run.append(f"{pd[6:]} ppid={st[1]} state={st[0]} {open(f'{pd}/comm').read().strip()}: {cmd[:700]}")
+                run.append(f"    {keep[:600]}")
+            except (OSError, ValueError, IndexError):
+                continue
+        if run:
+            lines += ["", "## Game launch running now: its processes, full command lines (last 80)"] + run[-80:]
     # login manager and session switches (Switch to Desktop, return to Game Mode)
     sw = _sh(["journalctl", "-b", "--no-pager", "-o", "short-monotonic", "--grep",
               "sddm|plasmalogin|steamos-session-select|session-select|Switch to|autologin"], 20)[1].splitlines()

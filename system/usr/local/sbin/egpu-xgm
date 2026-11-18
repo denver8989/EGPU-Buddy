@@ -251,7 +251,10 @@ def status():
 def restore():
     s = load()
     if hidraw():
-        if s.get("fan", "auto") != "auto": fan(s["fan"])
+        # always, "auto" (the dock's own curve) included: every message starts with the handshake and "host active"
+        # (E4 02). With nothing saved (settings reset by a reinstall) restore sent the dock nothing at all after an attach,
+        # and its fans ran loud from the attach on (SilverplayerX, 0.7.303, xgm.json empty)
+        fan(s.get("fan", "auto"))
         if s.get("light") and s.get("effect"): light_effect(f"{s['effect']}:{s.get('color', 'ff0000')}:{s.get('speed', 'normal')}")
         elif s.get("light") is not None: light(bool(s["light"]))
         if s.get("brightness") is not None: brightness(int(s["brightness"]))

@@ -1,3 +1,8 @@
+0.7.304 — XG Mobile: fan mode sent on every attach.
+
+- Fixed: ROG Ally / XG Mobile: after an attach the dock now always gets its fan mode ("Auto", the dock's own curve, when none was chosen). With no saved XG Mobile settings (for example after a reinstall) it got nothing at all, a likely reason its fans ran loud from the attach on. (ROG Ally / XG Mobile only; every other machine unchanged)
+- New: on the ROG Ally / XG Mobile, the support report lists a game launch that is running (or stuck) with each process's full command line and runtime settings. Report only.
+
 0.7.303 — XG Mobile: no black desktop after a forced detach.
 
 - Fixed: ROG Ally / XG Mobile: when a desktop Safe Detach could not unload the NVIDIA driver, the next attach no longer moves the desktop onto that driver (both screens stayed black). The desktop stays on the handheld and a notice asks for one restart. (ROG Ally / XG Mobile only; every other machine unchanged.)
