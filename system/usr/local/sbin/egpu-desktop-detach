@@ -100,6 +100,15 @@ if inuse; then
     # the holder table last: snapshots keep the end of each /run/nvegpu log
     { echo "--- /sys/kernel/debug/dma_buf/bufinfo (exporter names read \"drm\" for nvidia-drm and amdgpu alike)"
       head -80 /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null
+      # who still has the eGPU's DRM device open and which framebuffers are alive, from the kernel's own lists: buffers
+      # stayed referenced with no process holding them, so the driver could not unload and the next attach needed a
+      # restart, which it never did before (SilverplayerX, 0.7.303). Read-only.
+      for dd in /sys/kernel/debug/dri/*; do [ -r "$dd/name" ] && grep -qi nvidia "$dd/name" 2>/dev/null || continue
+        echo "--- $dd ($(cat "$dd/name" 2>/dev/null)) clients:"; head -30 "$dd/clients" 2>/dev/null
+        echo "--- $dd framebuffers:"; grep -E '^framebuffer|refcount|size=|allocated by' "$dd/framebuffer" 2>/dev/null | head -40
+        echo "--- $dd internal clients:"; head -10 "$dd/internal_clients" 2>/dev/null; done
+      echo "--- login sessions: $(loginctl list-sessions --no-legend 2>/dev/null | tr -s ' ' | tr '\n' ';')"
+      echo "--- processes left in the user's session scopes: $(for c in /sys/fs/cgroup/user.slice/user-$U.slice/session-*.scope/cgroup.procs; do [ -r "$c" ] && for q in $(cat "$c"); do printf '%s(%s) ' "$q" "$(cat /proc/$q/comm 2>/dev/null)"; done; done)"
       echo "--- nvidia_drm users: $(cat /sys/module/nvidia_drm/refcnt 2>/dev/null)"; echo "pid uid shared-buffers nvidia-libs name"; holders; } > $ST/gm-dmabuf.log 2>&1
     dlog "still in use: shared buffers in the kernel: $(grep -cE '^[0-9]{8}' /sys/kernel/debug/dma_buf/bufinfo 2>/dev/null); holders: $(holders | awk '{printf "%s(%s,uid %s,%s bufs,%s) ", $1, $5, $2, $3, $4}')"
     # Owner's rule: stop anything that holds the eGPU, as long as stopping it does not harm the system. So not only the
