@@ -1,4 +1,8 @@
 
+## 2026-11-19 — EGPU-DETACHICD: no game starts after Safe Detach in Game Mode (report 67QADW, ming) | fixed on master (not released) | Claude on-device session 8fc08078 | every SteamOS / Bazzite install (Safe Detach Game Mode session, ROG Ally wedged-NVIDIA path, handheld passthrough); Arch/CachyOS unchanged
+- Legion Go S, SteamOS 3.11, AMD RX 9070 XT eGPU, 0.7.305. Detach-mode session exported VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json; SteamOS ships only radeon_icd.x86_64.json + .i686.json -> pressure-vessel "Failed to load Vulkan ICD #0", D3D11/D3D12CreateDevice failed for every launch.
+- Same bug was fixed for cable yanks in egpu-surprise-recover (a09c5e1, Sep 20) but not in nv-egpu-gamescope-session. Fix: RADEON_ICDS = the radeon_icd files on disk (x86_64, plain, i686), used by all three pins. Stand-in tested (SteamOS / CachyOS / none layouts). Workaround until released: restart Game Mode after Safe Detach.
+
 ## 2026-11-19 — EGPU-CECSLEEP: TV/monitor puts the device to sleep over CEC despite KDE "block sleep" | done on master (not released) | Claude on-device session 8fc08078 | every install running cecd (new toggle, off by default)
 - Owner LG2 08:47: logind "suspend requested from client cecd"; cecd config 99-steamos-manager.toml (Steam Game Mode CEC settings) has allow_standby = true; KDE/EGPU Buddy keep-awake inhibitors are idle-only or PowerDevil-level, cecd calls logind Suspend directly.
 - Fix: CEC advanced toggle "Don't let the TV put the device to sleep" (no_tv_sleep) adds allow_standby = false to zz-egpu-buddy.toml (sorts after steamos-manager's file). Owner approved ("ok fix that").

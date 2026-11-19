@@ -84,6 +84,11 @@ STEAM_SCALE_CLAMP=${NV_EGPU_GAMESCOPE_STEAM_SCALE_CLAMP_BIN:-/home/deck/.local/b
 log() {
   printf 'nv-egpu-gamescope-session: %s\n' "$*" >&2
 }
+# The built-in AMD GPU's Vulkan driver files as they are on disk: SteamOS and Bazzite ship radeon_icd.x86_64.json +
+# radeon_icd.i686.json (no radeon_icd.json), Arch / CachyOS radeon_icd.json. A pin to a missing file leaves Steam with no
+# Vulkan driver: after a Safe Detach in Game Mode no game started (Legion Go S, SteamOS 3.11, report 67QADW). 64-bit first.
+RADEON_ICDS=$(for _f in /usr/share/vulkan/icd.d/radeon_icd.x86_64.json /usr/share/vulkan/icd.d/radeon_icd.json /usr/share/vulkan/icd.d/radeon_icd.i686.json; do [ -e "$_f" ] && printf '%s:' "$_f"; done)
+RADEON_ICDS=${RADEON_ICDS%:}; RADEON_ICDS=${RADEON_ICDS:-/usr/share/vulkan/icd.d/radeon_icd.json}
 
 # A Game Mode reload is the moment to finish an update that was staged because the eGPU was in use:
 # the previous session is gone and this one has not taken the display yet. Requiring a detach — or a
@@ -792,7 +797,7 @@ elif [ "$detach_mode" = 0 ] && [ -n "$egpu_card" ] && [ -n "$igpu_card" ] && { [
     export GAMESCOPE_XGPU_PANEL="${xgpu_mode}@0,$xgpu_conn"         # native size, highest refresh it offers
     export GAMESCOPE_XGPU_MODE="$xgpu_transfer" GAMESCOPE_XGPU_LIB="$XGPU_LIB"
     export gamescope_drm_gbm_scanout=1
-    export NV_EGPU_GAMESCOPE_XGPU_DRIVERS=/usr/share/vulkan/icd.d/nvidia_icd.json:/usr/share/vulkan/icd.d/radeon_icd.json
+    export NV_EGPU_GAMESCOPE_XGPU_DRIVERS="/usr/share/vulkan/icd.d/nvidia_icd.json:$RADEON_ICDS"
     export NV_EGPU_GAMESCOPE_HDR=0
     export OUTPUT_CONNECTOR="$xgpu_conn"
     unset NV_EGPU_GAMESCOPE_OUTPUT_WIDTH NV_EGPU_GAMESCOPE_OUTPUT_HEIGHT NV_EGPU_GAMESCOPE_NESTED_WIDTH NV_EGPU_GAMESCOPE_NESTED_HEIGHT NV_EGPU_GAMESCOPE_NESTED_REFRESH STEAM_DISPLAY_REFRESH_LIMITS
@@ -920,7 +925,7 @@ else
       # this session off it: expose ONLY the built-in GPU to Vulkan, or gamescope may open the eGPU and the detach waits
       _hv=$(cut -c3- "/sys/class/drm/${_amd#/dev/dri/}/device/vendor" 2>/dev/null); _hd=$(cut -c3- "/sys/class/drm/${_amd#/dev/dri/}/device/device" 2>/dev/null)
       [ "$(cat /etc/nv-egpu-buddy/gpu-vendor 2>/dev/null)" = amd ] && [ -n "$_hv" ] && [ -n "$_hd" ] && export MESA_VK_DEVICE_SELECT="$_hv:$_hd!" ;; esac
-    export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json
+    export VK_DRIVER_FILES="$RADEON_ICDS" VK_ICD_FILENAMES="$RADEON_ICDS"
     export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
   fi
   # ROG Ally / XG Mobile only (every other machine unchanged): an NVIDIA eGPU bound to the driver whose init is wedged
@@ -935,7 +940,7 @@ else
       [ "$(basename "$(readlink -f "$_d/driver" 2>/dev/null)")" = nvidia ] && { _nv=${_d##*/}; break; }
     done
     if [ -n "$_nv" ] && ! timeout 5 nvidia-smi -i "$_nv" --query-gpu=name --format=csv,noheader >/dev/null 2>&1; then
-      export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json
+      export VK_DRIVER_FILES="$RADEON_ICDS" VK_ICD_FILENAMES="$RADEON_ICDS"
       export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json __GLX_VENDOR_LIBRARY_NAME=mesa
       log "the NVIDIA eGPU $_nv does not answer (wedged init): Game Mode on the handheld with Vulkan/EGL on the built-in GPU only"
     fi
