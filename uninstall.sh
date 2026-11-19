@@ -46,6 +46,7 @@ runtime_leftovers(){
     "$USER_HOME/.config/egpu-buddy/amd-tweaks.json" "$USER_HOME/.config/egpu-buddy/amd-tweaks.env" "$USER_HOME/.config/egpu-buddy/amd-tweaks.dxvk.conf" \
     "$USER_HOME/.config/egpu-buddy/steam-ui-fix" \
     "$USER_HOME/.config/egpu-buddy/steam-ui-fix.off" \
+    "$USER_HOME/.config/cecd/config.d/zz-egpu-buddy.toml" \
     "$USER_HOME/.local/state/nv-egpu-buddy/steam-ui-fix.log" \
     "$USER_HOME/.cache/egpu-buddy/dxvk-conf-scan.json" "$USER_HOME/.cache/egpu-buddy/fsr4-get.json"
   # Fluid Motion Frames (afmf-linux), only when Adrenaline Settings installed it (a user's own copy stays)
