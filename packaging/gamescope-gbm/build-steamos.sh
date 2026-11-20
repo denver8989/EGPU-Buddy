@@ -8,6 +8,14 @@
 #   build-steamos.sh <login user> <version> <prefix>  SteamOS's installed gamescope version with EGPU Buddy's changes
 #                                                     (build-system.sh) into <prefix>; exit 3 = they do not apply to it
 set -euo pipefail
+# One EGPU Buddy build at a time: the driver builds (also the update pre-build) and the gamescope build all run
+# systemd-nspawn on a build root named "buildroot"; two at once collided ("Directory tree ... is currently busy", "Mount
+# point /run/systemd/nspawn/buildroot/unix-export exists already": a switch to 620 failed that way, report P2LCBQ).
+# Waits for the other build (up to 2 h); with no build running, the leftover of one that was killed is cleared first.
+# Held for this whole script (it also installs packages into the shared build root before compiling).
+exec 9>/run/egpu-buddy-build.lock
+flock -n 9 || { echo "== waiting for another EGPU Buddy build to finish"; flock -w 7200 9; } || { echo "another EGPU Buddy build is still running after 2 hours"; exit 75; }
+pgrep -x systemd-nspawn >/dev/null || rm -rf /run/systemd/nspawn/buildroot
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 U=${1:?login user}; UH=$(getent passwd "$U" | cut -d: -f6); HERE=$(cd "$(dirname "$0")" && pwd); VER=${2:-}; PFX=${3:-}
 BASE=${EGPU_SYSEXT_BASE:-/home/.egpu-buddy}; BR=$BASE/buildroot; CACHE=$BASE/pkgcache

@@ -86,6 +86,14 @@ mkdir -p "$BASE" "$CACHE" "$BASE/sysext"; chmod 755 "$BASE"
 need=4000; free=$(df -Pm "$BASE" | awk 'NR==2{print $4}')
 [ "$free" -ge "$need" ] || have_modules || { echo "NOT ENOUGH SPACE on $(df -P "$BASE" | awk 'NR==2{print $6}'): ${free} MB free, about ${need} MB needed for the build environment and the driver. Nothing was changed."; exit 3; }
 
+# One EGPU Buddy build at a time, held to the end: the driver builds (also the update pre-build) and the gamescope build
+# share the build root ("buildroot"); two at once collided ("Directory tree ... is currently busy", "Mount point
+# /run/systemd/nspawn/buildroot/unix-export exists already": a switch to 620 failed that way, report P2LCBQ).
+# Waits for the other build (up to 2 h); with no build running, the leftover of one that was killed is cleared first.
+exec 9>/run/egpu-buddy-build.lock
+flock -n 9 || { say "waiting for another EGPU Buddy build to finish"; flock -w 7200 9; } || { echo "another EGPU Buddy build is still running after 2 hours"; exit 75; }
+pgrep -x systemd-nspawn >/dev/null || rm -rf /run/systemd/nspawn/buildroot
+
 # ---- 0. keyring + the exact kernel package of the RUNNING kernel ---------------------------------------------------
 pacman-key --list-keys >/dev/null 2>&1 || { say "initialising the pacman keyring"; pacman-key --init >/dev/null 2>&1 && pacman-key --populate >/dev/null 2>&1; }
 kpkg=${EGPU_KPKG:-}; [ -n "$kpkg" ] || kpkg=$(pacman -Qqo "/usr/lib/modules/$K/vmlinuz" 2>/dev/null || true); [ -n "$kpkg" ] || kpkg=$(pacman -Qqo "/usr/lib/modules/$K" 2>/dev/null | head -1 || true)

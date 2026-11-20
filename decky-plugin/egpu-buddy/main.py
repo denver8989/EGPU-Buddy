@@ -2432,6 +2432,19 @@ def _share_file(path, minutes=10):
     return {"ok": True, "url": f"http://{ip}:{srv.server_address[1]}/{tok}/{name}", "minutes": minutes}
 
 
+def _lab_watch_default():
+    """Setup's Beta driver line (NVIDIA installs): the Driver Lab's release watch is on unless the user turned it off, so a
+    new NVIDIA release is found and EGPU Buddy's patches are tried on it by themselves (never installed). First check now."""
+    if _installed_vendor() != "nvidia" or not os.path.exists("/usr/local/sbin/egpu-driver-lab"): return
+    try: dl = json.loads(_read(f"{USER_HOME}/.local/state/egpu-buddy/driver-lab.json") or "{}")
+    except ValueError: dl = {}
+    if "watch" in dl: return   # on, or turned off in Advanced Tinkering: left as the user set it
+    u = ["runuser", "-u", USER, "--", "env", *[f"{k}={v}" for k, v in RUNENV.items()]]
+    _sh(u + ["/usr/local/sbin/egpu-driver-lab", "watch", "on"], 30)
+    _sh(u + ["systemctl", "--user", "start", "--no-block", "egpu-driver-lab-watch.service"], 15)
+    decky.logger.info("Driver Lab: release watch on by default (off in NVIDIA settings > Advanced Tinkering); first check started")
+
+
 class Plugin:
     async def get_update_status(self):
         d = _settings()
@@ -3287,7 +3300,7 @@ class Plugin:
         main, fallback, old = pv("nvidia-open-egpu-620"), pv("nvidia-open-egpu-615"), pv("nvidia-open-egpu")
         # the driver this machine is on, as the trial records it (/etc/nv-egpu-buddy/driver-dir; absent = 610)
         cur = {"nvidia-open-egpu-620": "main", "nvidia-open-egpu-615": "fallback"}.get(_read("/etc/nv-egpu-buddy/driver-dir").strip(), "old")
-        # beta = the newest NVIDIA release the Driver Lab's daily release watch checked (Advanced Tinkering, opt-in):
+        # beta = the newest NVIDIA release the Driver Lab's daily release watch checked (on by default, off in Advanced Tinkering):
         # shown with its result; it is not installable from here yet
         try: dl = json.loads(_read(f"{USER_HOME}/.local/state/egpu-buddy/driver-lab.json") or "{}")
         except ValueError: dl = {}
@@ -3429,6 +3442,7 @@ class Plugin:
         threading.Thread(target=_continue_update, daemon=True).start()   # second half of a plugin-first update, if one is pending
         threading.Thread(target=_resume_detached_update, daemon=True).start()   # an update waiting for its Safe Detach, if one is pending
         threading.Thread(target=self._decky_watchdog, daemon=True).start()
+        threading.Thread(target=_lab_watch_default, daemon=True).start()
         await asyncio.sleep(300)
         while True:  # automatic updates: hourly check; install only if enabled, already installed, and no game running
             try:

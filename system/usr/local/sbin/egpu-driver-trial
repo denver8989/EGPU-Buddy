@@ -125,8 +125,11 @@ revert_and_attach(){ # <reason>
     return 0
   fi
   if restore_old; then
-    on_egpu || attach || true   # an eGPU that was unplugged meanwhile simply is not attached
-    put reverted "$1 The previous driver $OPV is back."
+    # after the swap the eGPU can take a few seconds to come back on the bus: the attach gave up 9 s before it did (P2LCBQ)
+    on_egpu || attach || { for _ in $(seq 1 12); do sleep 5; gpu_on_bus && break; done
+      gpu_on_bus && { log "the eGPU is back on the bus: attaching once more"; attach; }; } || true   # unplugged meanwhile: not attached
+    if on_egpu; then put reverted "$1 The previous driver $OPV is back."
+    else put reverted "$1 The previous driver $OPV is back. If the eGPU's screen stays dark, unplug the eGPU and plug it in again."; fi
   else put failed "$1 The previous driver could not be put back automatically. Details: $LOG"; fi; }
 
 exec 9>/run/egpu-driver-trial.lock; flock -n 9 || { echo "a driver trial is already running"; exit 3; }
@@ -178,6 +181,12 @@ case "${1:-status}" in
     log "==== driver trial: $OPV -> $TPV ($(steamos && echo SteamOS || echo pacman)) ===="
     steamos || remember_prev || { put failed "Nothing was changed: the previous driver's package files are not in the package cache, so a revert could not be guaranteed."; exit 4; }
     steamos && { bash "$OLD/install-steamos-sysext.sh" --status >/dev/null 2>&1 || { put failed "Nothing was changed: the previous driver's image is not in place."; exit 4; }; }
+    # another EGPU Buddy build (gamescope after a SteamOS update, the update pre-build) holds the shared build root: wait
+    # for it here, with the eGPU still attached, instead of failing after the Safe Detach (report P2LCBQ)
+    if ! flock -n /run/egpu-buddy-build.lock true; then
+      put building "Waiting for another EGPU Buddy build to finish (gamescope or the update pre-build) before starting."
+      flock -w 7200 /run/egpu-buddy-build.lock true || { put failed "Nothing was changed: another EGPU Buddy build is still running. Try again later."; exit 4; }
+    fi
     put building "Safe Detach, then downloading and building the driver $TPV (10-20 minutes)."
     if ! detach; then
       # ROG Ally / XG Mobile: a Safe Detach that fails there has so far meant the eGPU itself was failing. Attaching again

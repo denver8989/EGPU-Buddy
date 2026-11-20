@@ -110,10 +110,36 @@ def r160_display_ioctls_lost_device(ctx, t):
     return t
 
 
+# --- 180 (HDMI-CEC through a DisplayPort adapter) -----------------------------------------------------------------
+
+def r180_connector_fields(ctx, t):
+    """The patch's fields in struct nv_drm_connector (the AUX channel, the CEC poll work, the switch), guarded by
+    NV_DRM_DP_CEC: placed right before connection_status_dirty, as in the previous version. 620.73.04 moved
+    hdcp_topology_blob in next to them, which is all the merge tripped over. The block is taken from the previous
+    patched header, not written here."""
+    f = "kernel-open/nvidia-drm/nvidia-drm-connector.h"
+    prev = ctx.basep(f)
+    m = re.search(r"^#if defined\(NV_DRM_DP_CEC\)\n(?:(?!^#endif).*\n)*?#endif\n\n(?=    atomic_t connection_status_dirty;)", prev, re.M)
+    if not m:
+        raise Block("the CEC field block is not where it was in the previous version")
+    if "NV_DRM_DP_CEC 1" not in t:
+        raise Block("the include part of the patch is missing")
+    if "cec_poll;" in t:
+        return t   # already in
+    anchor = "\n    atomic_t connection_status_dirty;"
+    if t.count(anchor) != 1:
+        raise Block(f"connection_status_dirty: {t.count(anchor)} places")
+    i = t.index(anchor) + 1
+    return t[:i] + m.group(0) + t[i:]
+
+
 RULES = {
     "160": {
         "src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c": r160_fwsec_gpu_lost,
         "src/nvidia-modeset/src/nvkms.c": r160_display_ioctls_lost_device,
+    },
+    "180": {
+        "kernel-open/nvidia-drm/nvidia-drm-connector.h": r180_connector_fields,
     },
 }
 

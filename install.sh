@@ -230,6 +230,12 @@ fi
 # On SteamOS /usr/local is part of the system partition (no separate mount), and a merged system extension turns /usr
 # into a read-only overlay: a second install then fails with "Read-only file system" (seen on a real device, 0.7.21).
 # So: unmerge for the duration of the install, and merge again on EVERY way out. Not while the driver is in use.
+# A new NVIDIA install (no patched driver on this machine yet, none chosen) starts on the main driver 620. Machines already
+# on 610 or 615 keep it until they take the plugin's switch (Safe Detach, build, health check, automatic return).
+if [ "$GPU_VENDOR" != amd ] && [ "$IS_BAZZITE" != 1 ] && [ ! -e /etc/nv-egpu-buddy/driver-dir ] && [ ! -d /home/.egpu-buddy/sysext ] \
+   && ! pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1 && [ -f "$ROOT/packaging/nvidia-open-egpu-620/PKGBUILD" ] && want driver; then
+  sudo mkdir -p /etc/nv-egpu-buddy && echo nvidia-open-egpu-620 | sudo tee /etc/nv-egpu-buddy/driver-dir >/dev/null && say "== new install: the NVIDIA driver 620 (the main driver)"
+fi
 # the kept driver's tool: the 610 one re-linked the 610 image on exit, so a kept 615 trial fell back to 610 after every update
 SYSEXT_TOOL="$ROOT/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu)/install-steamos-sysext.sh"; [ -f "$SYSEXT_TOOL" ] || SYSEXT_TOOL="$ROOT/packaging/nvidia-open-egpu/install-steamos-sysext.sh"
 # SteamOS keeps the system partition read-only. The Decky plugin disables that around the install,
@@ -613,7 +619,7 @@ KEEP
 fi
 
 # ---- patched NVIDIA driver (optional, Arch-based) ------------------------------------------------
-# the driver this machine runs: 610 (tested) unless a beta driver trial was kept (/etc/nv-egpu-buddy/driver-dir)
+# the driver this machine runs: /etc/nv-egpu-buddy/driver-dir (620 on a new install, or the one a driver switch kept); absent = 610
 DRVDIR="$ROOT/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu)"; [ -f "$DRVDIR/PKGBUILD" ] || DRVDIR="$ROOT/packaging/nvidia-open-egpu"
 if want driver; then
   PKGV="$(sed -n 's/^pkgver=//p' "$DRVDIR/PKGBUILD")-$(sed -n 's/^pkgrel=//p' "$DRVDIR/PKGBUILD")"
