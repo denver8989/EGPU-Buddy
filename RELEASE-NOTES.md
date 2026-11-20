@@ -1,3 +1,13 @@
+0.7.306 — NVIDIA 620.73.04 as a beta driver; one driver build at a time.
+
+- New: **Beta driver** (Setup & updates > NVIDIA driver, NVIDIA installs): when NVIDIA releases a new driver and the Driver Lab carries all of EGPU Buddy's patches over to it, Setup offers "Try beta driver". Same safe switch as a driver change: Safe Detach, build, attach, health check, and your current driver comes back by itself if it fails. "Switch to driver 620" returns to the main driver. First beta: NVIDIA 620.73.04.
+  NVIDIA 620.73.04 (18 Nov): NVIDIA lists only "minor bug fixes and improvements". Its open driver source shows fixes for colour / HDR tone-mapping settings being dropped on a display mode change, DisplayPort and suspend / resume fixes, and support for newer kernels. 620 (620.70.06) brought faster Wayland explicit sync, fixes for Assassin's Creed Shadows hangs, Final Fantasy VII Rebirth crashes, Vulkan flicker on multi-GPU Wayland and the frame-rate limit with frame generation.
+- New: the Driver Lab checks daily for new NVIDIA drivers by default (NVIDIA installs); it only builds a test copy, nothing is installed without you.
+- New: new NVIDIA installs start on driver 620. Existing installs keep their driver.
+- New: HDMI-CEC advanced: "Don't let the TV put the device to sleep" (off by default).
+- Fixed: a driver change no longer fails with "Mount point ... exists already" when another EGPU Buddy build is running (for example after a SteamOS update); it waits for it. After a failed switch, the eGPU is attached again by itself.
+- Fixed: games no longer fail to start after a Safe Detach in Game Mode on SteamOS / Bazzite.
+
 0.7.305 — NVIDIA: games no longer stuck on Steam's loading logo in Game Mode.
 
 - Fixed: with the Steam menu fix on (NVIDIA eGPU, Game Mode), every game stayed on Steam's loading logo and never started. The menu fix's library now stays out of game launches; Steam's own menu keeps it. (NVIDIA installs with the Steam menu fix on; menu fix off, AMD / Intel installs unchanged.)
