@@ -202,9 +202,10 @@ async function updateInPlace(version: string): Promise<Result> {
   return { ok: true, message: `Confirm in Decky's prompt: the plugin updates in place to ${version}, then its system files install (no restart).` };
 }
 const popNotice = callable<[], string>("pop_notice");
-type Trial = { available: boolean; main: string; fallback: string; beta: string; beta_class: string; beta_summary: string; watch: boolean; old: string; current: "old" | "fallback" | "main"; to: string; from: string; installed: string; state: string; message: string; running: boolean; log: string; started: number; progress: number; step: string; acked: boolean; switch_offer?: boolean };
+type Trial = { available: boolean; main: string; fallback: string; beta: string; beta_class: string; beta_summary: string; watch: boolean; old: string; current: "old" | "fallback" | "main" | "beta"; beta_ready?: string; beta_now?: string; to: string; from: string; installed: string; state: string; message: string; running: boolean; log: string; started: number; progress: number; step: string; acked: boolean; switch_offer?: boolean };
 const getTrial = callable<[], Trial>("get_driver_trial");
 const startTrial = callable<[], Result>("start_driver_trial");
+const startBeta = callable<[], Result>("start_beta_driver");
 const revertTrial = callable<[], Result>("revert_driver_trial");
 const driverLabTrial = callable<[boolean], Result>("driver_lab_trial");
 // ROG Ally / XG Mobile: menu events in the plugin log (the backend writes them only there; a no-op everywhere else)
@@ -1097,12 +1098,20 @@ function Content() {
       {tab === "setup" && tr?.available && (
         <PanelSection title="NVIDIA driver">
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>
-            Main driver: {tr.main}. Fallback: {tr.fallback}. Running now: {tr.installed || "not installed"}.
+            Main driver: {tr.main}. Fallback: {tr.fallback}.{tr.current === "beta" && tr.beta_now ? ` Beta: ${tr.beta_now}.` : ""} Running now: {tr.installed || "not installed"}.
           </div></PanelSectionRow>
           <PanelSectionRow><div style={{ fontSize: "12px", opacity: 0.85 }}>
-            {tr.beta ? `Beta: NVIDIA ${tr.beta}, found by the Driver Lab's daily check: ${tr.beta_class === "A" ? "EGPU Buddy's patches carry over" : tr.beta_class === "B" ? "the patches apply, a review by hand is needed" : "the patches do not carry over yet"}. Not installable from here yet.`
+            {tr.current === "beta" ? `You are on the beta driver ${tr.beta_now}: NVIDIA's newest release with EGPU Buddy's patches carried over by the Driver Lab. "Switch to driver ${tr.main}" goes back to the main driver.`
+              : tr.beta_ready ? `Beta: NVIDIA ${tr.beta_ready}. The Driver Lab carried EGPU Buddy's patches over to it and built it on this device. Not tested by EGPU Buddy yet; if it does not come up, your current driver comes back by itself.`
+              : tr.beta ? `Beta: NVIDIA ${tr.beta}, found by the Driver Lab's daily check: ${tr.beta_class === "A" ? "EGPU Buddy's patches carry over (the recipe is being prepared)" : tr.beta_class === "B" ? "the patches apply, a review by hand is needed" : "the patches do not carry over yet"}.`
               : tr.watch ? "Beta: none. The Driver Lab checks NVIDIA for a newer driver every day." : "Beta: none. Turn on the Driver Lab's release watch (NVIDIA settings > Advanced Tinkering) to check NVIDIA for newer drivers every day."}
           </div></PanelSectionRow>
+          {tr.beta_ready && tr.current !== "beta" && (
+            <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || !!su?.busy || gameUp || !s?.game_mode}
+              onClick={() => showModal(<ConfirmModal strTitle={`Try beta driver ${tr.beta_ready}`}
+                strDescription={`Beta, not tested by EGPU Buddy: NVIDIA's newest driver ${tr.beta_ready} with EGPU Buddy's patches, carried over by the Driver Lab. The eGPU is safely detached, the driver is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the driver you are on now comes back by itself. You can go back to the main driver ${tr.main} at any time.`}
+                strOKButtonText="Try it" bDestructiveWarning onOK={() => run(startBeta)} />)}>Try beta driver {tr.beta_ready}</ButtonItem></PanelSectionRow>
+          )}
           {tr.message && <PanelSectionRow><div style={{ fontSize: "12px", color: tr.state === "failed" ? "#ff6b6b" : tr.state === "kept" ? "#4caf50" : "#f0b429" }}>{tr.message}</div></PanelSectionRow>}
           {tr.current !== "main" && (
             <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || !!su?.busy || gameUp || !s?.game_mode}
@@ -1110,7 +1119,7 @@ function Content() {
                 strDescription={`The eGPU is safely detached, the NVIDIA driver ${tr.main} is downloaded from NVIDIA (about 530 MB) and built on this device (10-20 minutes, about 6 GB free space needed while building), then the eGPU is attached with it and checked. If it does not come up, the driver you are on now (${tr.current === "fallback" ? tr.fallback : tr.old}) is put back and attached again by itself. If the machine resets or hangs during the switch, it is put back at the next boot, before the eGPU is used. Keep the charger and the eGPU connected. Everything is logged to /var/log/egpu-driver-trial.log.`}
                 strOKButtonText="Switch now" bDestructiveWarning onOK={() => run(startTrial)} />)}>Switch to driver {tr.main}</ButtonItem></PanelSectionRow>
           )}
-          {tr.current !== "old" && (
+          {tr.current !== "old" && tr.current !== "beta" && (
             <PanelSectionRow><ButtonItem layout="below" disabled={busy || tr.running || gameUp || !s?.game_mode}
               onClick={() => { const back = tr.current === "main" ? tr.fallback : tr.old;
                 showModal(<ConfirmModal strTitle={`Return to ${back}`} strDescription={`The eGPU is safely detached, the driver ${back} is put back (offline, a few minutes) and the eGPU is attached again.`}

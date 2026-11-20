@@ -13,6 +13,10 @@
 #                                 patches in /var/lib/nvegpu/driver-lab/patches, same version, package release 100; the same
 #                                 Safe Detach / attach / health check / automatic return; never recorded as the driver to use
 #   egpu-driver-trial revert-lab  back to the normal build of the driver in use (its cached package files, offline)
+#   egpu-driver-trial start-beta  (Setup "Try beta driver") the newest NVIDIA release the Driver Lab ported with grade A and
+#                                 built (its recipe, ~/.local/state/egpu-buddy/driver-recipes, copied to /var/lib/nvegpu/
+#                                 driver-beta): the same Safe Detach / build / attach / health check / automatic return;
+#                                 kept = recorded as the driver to use (driver-dir holds its folder); revert = the one before
 #   egpu-driver-trial status
 #
 # Nothing here is new teardown or attach logic: it calls the same Safe Detach and Attach the plugin buttons use, and the
@@ -26,12 +30,13 @@ STATE=/var/lib/nvegpu/driver-trial; SWITCH=/var/lib/nvegpu/driver-switch-620; LO
 PAY=/home/deck/.local/share/steamos-egpu-buddy/packaging
 CUR=$(cat "$SEL" 2>/dev/null); CUR=${CUR:-nvidia-open-egpu}   # the driver this machine is on (absent = 610)
 pick(){ # <old dir> <new dir>: the driver to go back to, and the one to try (an absolute path: a Driver Lab recipe)
-  OLDN=$1; NEWN=$2; OLD=$PAY/$1; NEW=$PAY/$2; case "$2" in /*) NEW=$2 ;; esac
+  OLDN=$1; NEWN=$2; OLD=$PAY/$1; NEW=$PAY/$2; case "$1" in /*) OLD=$1 ;; esac; case "$2" in /*) NEW=$2 ;; esac
   TPV=$(sed -n 's/^pkgver=//p' "$NEW/PKGBUILD" 2>/dev/null); OPV=$(sed -n 's/^pkgver=//p' "$OLD/PKGBUILD" 2>/dev/null); }
 PERSIST=/home/deck/.local/share/steamos-egpu-buddy; U=$(stat -c %U "$PERSIST" 2>/dev/null || echo deck)
 DETACH=/usr/local/sbin/egpu-gamemode-detach; REATTACH=/usr/local/sbin/egpu-reattach
 PKGS="nvidia-utils lib32-nvidia-utils nvidia-open-egpu-dkms"
 LABREL_DEFAULT=100; LABREL=""   # Driver Lab builds: package release 100 (same driver version)
+BETA=/var/lib/nvegpu/driver-beta   # Driver Lab beta recipes, root-owned copies (the folder is what driver-dir records)
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 mkdir -p "$(dirname "$STATE")" /etc/nv-egpu-buddy
 log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOG"; sync -d "$LOG" 2>/dev/null || true; }
@@ -136,15 +141,23 @@ exec 9>/run/egpu-driver-trial.lock; flock -n 9 || { echo "a driver trial is alre
 
 # which two drivers this run is about
 case "${1:-status}" in
+  start-beta)
+    UH=$(getent passwd "$U" | cut -d: -f6); src=$(ls -d "$UH"/.local/state/egpu-buddy/driver-recipes/nvidia-open-egpu-[0-9]* 2>/dev/null | sort -V | tail -1)
+    [ -n "$src" ] && [ -s "$src/LAB-RECIPE.json" ] && [ -s "$src/PKGBUILD" ] || { echo "no beta driver from the Driver Lab yet"; exit 2; }
+    bd=$BETA/$(basename "$src"); [ "$CUR" = "$bd" ] && { echo "already on the beta driver"; exit 0; }
+    mkdir -p "$BETA"; rm -rf "$bd.new"; cp -a "$src" "$bd.new"; chown -R root:root "$bd.new"; rm -rf "$bd"; mv "$bd.new" "$bd"
+    pick "$CUR" "$bd" ;;
   start) [ "$CUR" = nvidia-open-egpu-620 ] && { echo "already on the main driver 620"; exit 0; }
     pick "$CUR" nvidia-open-egpu-620 ;;
   revert) case "$CUR" in   # back to the driver the switch to 620 came from (its package files are the ones recorded), else 615
            nvidia-open-egpu-620) o=$(get olddir); [ "$(get newdir)" = nvidia-open-egpu-620 ] && [ -n "$o" ] || o=nvidia-open-egpu-615; pick "$o" nvidia-open-egpu-620 ;;
+           /*) o=$(get olddir); [ "$(get newdir)" = "$CUR" ] && [ -n "$o" ] || o=nvidia-open-egpu-620; pick "$o" "$CUR" ;;   # beta -> the one before
                          *) pick nvidia-open-egpu nvidia-open-egpu-615 ;; esac ;;
   boot) o=$(get olddir); n=$(get newdir); pick "${o:-nvidia-open-egpu}" "${n:-nvidia-open-egpu-615}" ;;   # older state files: 610 -> 615
   # Driver Lab (NVIDIA settings > Advanced Tinkering): the driver this machine is on, rebuilt from a copy of its recipe
   # with any lab patches added, same version, its own package release (LABREL). CachyOS / Arch only for now.
   start-lab) steamos && { echo "Driver Lab trials are CachyOS / Arch only for now"; exit 2; }
+    case "$CUR" in /*) echo "on a beta driver: return to the main driver first"; exit 2 ;; esac
     LD=/var/lib/nvegpu/driver-lab/recipe; rm -rf "$LD"; mkdir -p "${LD%/*}"; cp -a "$PAY/$CUR" "$LD"
     for f in /var/lib/nvegpu/driver-lab/patches/*.patch; do [ -e "$f" ] || continue; cp "$f" "$LD/"
       sed -i "s|^    # Substitute version placeholder in dkms.conf|    patch -d \"NVIDIA-kernel-module-source-\${pkgver}\" -Np1 -i \"\${srcdir}/$(basename "$f")\"\n&|" "$LD/PKGBUILD"
@@ -155,7 +168,7 @@ case "${1:-status}" in
   *) pick nvidia-open-egpu nvidia-open-egpu-615 ;;
 esac
 
-case "$NEWN" in /*) LABREL=$(sed -n 's/^pkgrel=//p' "$NEW/PKGBUILD" 2>/dev/null) ;; esac
+case "$NEWN" in "$BETA"/*) ;; /*) LABREL=$(sed -n 's/^pkgrel=//p' "$NEW/PKGBUILD" 2>/dev/null) ;; esac   # a beta is a real version, recorded when kept
 lab_installed(){ pacman -Q nvidia-open-egpu-dkms 2>/dev/null | grep -q -- "-$LABREL\$"; }
 
 case "${1:-status}" in
@@ -169,7 +182,7 @@ case "${1:-status}" in
       else put failed "The machine restarted while switching to driver $TPV and the previous driver could not be put back automatically. Details: $LOG"; fi ;;
     esac; exit 0 ;;
 
-  start|start-lab)
+  start|start-lab|start-beta)
     [ -n "$TPV" ] && [ -n "$OPV" ] || { echo "the driver files ($NEWN) are not installed"; exit 2; }
     [ -z "$LABREL" ] && [ "$(modver)" = "$TPV" ] && [ "$(get state)" = kept ] && { echo "the driver $TPV is already in use"; exit 0; }
     [ -n "$LABREL" ] && lab_installed && { echo "a Driver Lab build is already in use: return to the normal driver first"; exit 0; }
@@ -217,5 +230,5 @@ case "${1:-status}" in
     sed -i '/^started=/d' "$STATE" 2>/dev/null; echo "started=$(date +%s)" >> "$STATE"   # a new operation: the plugin shows its result once
     revert_and_attach "Return to the previous driver requested."; finish; exit 0 ;;
 
-  *) echo "usage: egpu-driver-trial start|start-lab|revert|revert-lab|boot|status"; exit 1 ;;
+  *) echo "usage: egpu-driver-trial start|start-beta|start-lab|revert|revert-lab|boot|status"; exit 1 ;;
 esac

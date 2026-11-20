@@ -47,7 +47,8 @@ kernels=$(ls -1 /usr/lib/modules | sort -V)   # every installed kernel: the one 
 kpkg(){ pacman -Qqo "/usr/lib/modules/$newest/vmlinuz" 2>/dev/null; }
 HERE=$(getent passwd 1000 | cut -d: -f6)/.local/share/steamos-egpu-buddy; CACHE=$HERE/pkgcache
 # the driver line this machine uses (610 / 615 beta): its packages are the ones to put back
-PV=$(sed -n 's/^pkgver=//p' "$HERE/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu)/PKGBUILD" 2>/dev/null)
+_d=$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu); case "$_d" in /*) ;; *) _d="$HERE/packaging/$_d" ;; esac   # a Driver Lab beta: its own folder
+PV=$(sed -n 's/^pkgver=//p' "$_d/PKGBUILD" 2>/dev/null)
 mod(){ modinfo -k "$newest" -n "$1" 2>/dev/null; }
 has(){ local f; f=$(mod "$1") && [ -f "$f" ] && { case "$f" in *.zst) zstd -dcq "$f";; *.xz) xz -dc "$f";; *) cat "$f";; esac; } | grep -aqF "$2"; }
 check(){ # sets $bad to the first problem found on any kernel ($newest is then that kernel), empty when all is well

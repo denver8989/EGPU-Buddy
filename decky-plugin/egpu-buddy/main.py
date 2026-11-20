@@ -3299,9 +3299,17 @@ class Plugin:
         pv = lambda d: next((l.split("=", 1)[1] for l in _read(f"{SYSDIR}/packaging/{d}/PKGBUILD").splitlines() if l.startswith("pkgver=")), "")
         main, fallback, old = pv("nvidia-open-egpu-620"), pv("nvidia-open-egpu-615"), pv("nvidia-open-egpu")
         # the driver this machine is on, as the trial records it (/etc/nv-egpu-buddy/driver-dir; absent = 610)
-        cur = {"nvidia-open-egpu-620": "main", "nvidia-open-egpu-615": "fallback"}.get(_read("/etc/nv-egpu-buddy/driver-dir").strip(), "old")
+        dd = _read("/etc/nv-egpu-buddy/driver-dir").strip()
+        cur = "beta" if dd.startswith("/var/lib/nvegpu/driver-beta/") else {"nvidia-open-egpu-620": "main", "nvidia-open-egpu-615": "fallback"}.get(dd, "old")
+        vn = lambda v: [int(x) for x in re.findall(r"\d+", v or "0")]
+        # a beta the switch can install: the newest Driver Lab recipe (grade A, built here), newer than the main driver
+        rc = sorted(glob.glob(f"{USER_HOME}/.local/state/egpu-buddy/driver-recipes/nvidia-open-egpu-[0-9]*/LAB-RECIPE.json"), key=lambda f: vn(os.path.basename(os.path.dirname(f))))
+        try: ready = json.loads(_read(rc[-1])).get("version", "") if rc else ""
+        except ValueError: ready = ""
+        ready = ready if vn(ready) > vn(main) else ""
+        beta_now = next((l.split("=", 1)[1] for l in _read(f"{dd}/PKGBUILD").splitlines() if l.startswith("pkgver=")), "") if cur == "beta" else ""
         # beta = the newest NVIDIA release the Driver Lab's daily release watch checked (on by default, off in Advanced Tinkering):
-        # shown with its result; it is not installable from here yet
+        # shown with its result; installable ("Try beta driver") once the lab wrote its recipe (grade A, built)
         try: dl = json.loads(_read(f"{USER_HOME}/.local/state/egpu-buddy/driver-lab.json") or "{}")
         except ValueError: dl = {}
         bh = max(dl.get("history") or [{}], key=lambda h: [int(x) for x in re.findall(r"\d+", h.get("version") or "")])
@@ -3314,6 +3322,7 @@ class Plugin:
                 # main = 620 (main driver since 0.7.300), fallback = 615 (main 0.7.220-0.7.299), old = 610
                 "main": main, "fallback": fallback, "old": old, "current": cur,
                 "beta": beta, "beta_class": bh.get("class", "") if beta else "", "beta_summary": bh.get("summary", "") if beta else "",
+                "beta_ready": ready, "beta_now": beta_now,
                 "watch": bool(dl.get("watch")),
                 "to": t.get("target", "") or main, "from": t.get("from", "") or old,
                 "installed": _sh(["modinfo", "-F", "version", "nvidia"], 5)[1],
@@ -3339,6 +3348,13 @@ class Plugin:
         _spawn_root_job("driver-trial", [TRIAL, "start"])
         return {"ok": True, "message": "Switching to driver 620: Safe Detach, then the build (10-20 minutes), then the eGPU is attached with it. If it does not come up, your current driver comes back by itself. You can close this menu."}
 
+    async def start_beta_driver(self):
+        """The Driver Lab's beta (the newest NVIDIA release our patches carried over to, built here): the same switch."""
+        why = _trial_block()
+        if why: return {"ok": False, "message": why}
+        _spawn_root_job("driver-trial", [TRIAL, "start-beta"])
+        return {"ok": True, "message": "Trying the beta driver: Safe Detach, then the build (10-20 minutes), then the eGPU is attached with it. If it does not come up, your current driver comes back by itself. You can close this menu."}
+
     async def driver_lab_trial(self, start: bool):
         """Driver Lab (Advanced Tinkering): the driver in use rebuilt with any lab patches, tested with the same Safe Detach /
         attach / health check / automatic return as a driver switch (start), or back to its normal build (not start).
@@ -3359,7 +3375,8 @@ class Plugin:
         _spawn_root_job("driver-trial", [TRIAL, "revert"])
         t = _trial()   # from 620: the driver the switch came from (egpu-driver-trial revert), 615 when not recorded
         back = ("610" if t.get("newdir") == "nvidia-open-egpu-620" and t.get("olddir") == "nvidia-open-egpu" else "615") \
-            if _read("/etc/nv-egpu-buddy/driver-dir").strip() == "nvidia-open-egpu-620" else "610"
+            if _read("/etc/nv-egpu-buddy/driver-dir").strip() == "nvidia-open-egpu-620" else (t.get("from") or "620") \
+            if _read("/etc/nv-egpu-buddy/driver-dir").startswith("/") else "610"   # a beta: back to the driver it came from
         return {"ok": True, "message": f"Returning to driver {back}: Safe Detach, the driver is put back, then the eGPU is attached again."}
 
     async def set_power_limit(self, watts: int):

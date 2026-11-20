@@ -237,7 +237,9 @@ if [ "$GPU_VENDOR" != amd ] && [ "$IS_BAZZITE" != 1 ] && [ ! -e /etc/nv-egpu-bud
   sudo mkdir -p /etc/nv-egpu-buddy && echo nvidia-open-egpu-620 | sudo tee /etc/nv-egpu-buddy/driver-dir >/dev/null && say "== new install: the NVIDIA driver 620 (the main driver)"
 fi
 # the kept driver's tool: the 610 one re-linked the 610 image on exit, so a kept 615 trial fell back to 610 after every update
-SYSEXT_TOOL="$ROOT/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu)/install-steamos-sysext.sh"; [ -f "$SYSEXT_TOOL" ] || SYSEXT_TOOL="$ROOT/packaging/nvidia-open-egpu/install-steamos-sysext.sh"
+# the chosen driver: a name under packaging/, or a Driver Lab beta's own folder (/var/lib/nvegpu/driver-beta/...)
+drvdir(){ local d; d=$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu); case "$d" in /*) echo "$d" ;; *) echo "$ROOT/packaging/$d" ;; esac; }
+SYSEXT_TOOL="$(drvdir)/install-steamos-sysext.sh"; [ -f "$SYSEXT_TOOL" ] || SYSEXT_TOOL="$ROOT/packaging/nvidia-open-egpu/install-steamos-sysext.sh"
 # SteamOS keeps the system partition read-only. The Decky plugin disables that around the install,
 # but running this script directly (from the .run, or by hand) did not — it unmerged the driver
 # extension, started writing, and failed at the first file with "Read-only file system", leaving a
@@ -620,7 +622,7 @@ fi
 
 # ---- patched NVIDIA driver (optional, Arch-based) ------------------------------------------------
 # the driver this machine runs: /etc/nv-egpu-buddy/driver-dir (620 on a new install, or the one a driver switch kept); absent = 610
-DRVDIR="$ROOT/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu)"; [ -f "$DRVDIR/PKGBUILD" ] || DRVDIR="$ROOT/packaging/nvidia-open-egpu"
+DRVDIR="$(drvdir)"; [ -f "$DRVDIR/PKGBUILD" ] || DRVDIR="$ROOT/packaging/nvidia-open-egpu"
 if want driver; then
   PKGV="$(sed -n 's/^pkgver=//p' "$DRVDIR/PKGBUILD")-$(sed -n 's/^pkgrel=//p' "$DRVDIR/PKGBUILD")"
   if [ "$IS_BAZZITE" = 1 ]; then
@@ -690,7 +692,7 @@ fi
 if [ "$GPU_VENDOR" != amd ] && [ "$IS_BAZZITE" != 1 ] && [ "${DRIVER_FAILED:-0}" != 1 ] \
    && { [ -d /home/.egpu-buddy/sysext ] || pacman -Q nvidia-open-egpu-dkms >/dev/null 2>&1; } && [ -f "$ROOT/packaging/nvidia-open-egpu-620/PKGBUILD" ]; then
   sudo rm -f /var/lib/nvegpu/driver-switch-615   # the 0.7.220 offer (615) is replaced by this one
-  if grep -qx nvidia-open-egpu-620 /etc/nv-egpu-buddy/driver-dir 2>/dev/null; then sudo rm -f /var/lib/nvegpu/driver-switch-620
+  if grep -qxE 'nvidia-open-egpu-620|/.*' /etc/nv-egpu-buddy/driver-dir 2>/dev/null; then sudo rm -f /var/lib/nvegpu/driver-switch-620   # on 620 or a beta
   elif [ ! -e /var/lib/nvegpu/driver-switch-620-done ]; then sudo mkdir -p /var/lib/nvegpu && sudo touch /var/lib/nvegpu/driver-switch-620 && say "== driver 620 is now the main driver: the plugin offers the switch in Game Mode (eGPU on, no game running)"; fi
 fi
 
