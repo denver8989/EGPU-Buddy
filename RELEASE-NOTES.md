@@ -1,3 +1,7 @@
+0.7.307 — Fix: Game Mode not starting (0.7.306).
+
+- Fixed: with 0.7.306, Game Mode did not start on CachyOS / Arch NVIDIA installs (black screen after a restart or a switch to the TV). Update and Game Mode starts again.
+
 0.7.306 — NVIDIA 620.73.04 as a beta driver; one driver build at a time.
 
 - New: **Beta driver** (Setup & updates > NVIDIA driver, NVIDIA installs): when NVIDIA releases a new driver and the Driver Lab carries all of EGPU Buddy's patches over to it, Setup offers "Try beta driver". Same safe switch as a driver change: Safe Detach, build, attach, health check, and your current driver comes back by itself if it fails. "Switch to driver 620" returns to the main driver. First beta: NVIDIA 620.73.04.

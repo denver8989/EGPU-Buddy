@@ -87,7 +87,7 @@ log() {
 # The built-in AMD GPU's Vulkan driver files as they are on disk: SteamOS and Bazzite ship radeon_icd.x86_64.json +
 # radeon_icd.i686.json (no radeon_icd.json), Arch / CachyOS radeon_icd.json. A pin to a missing file leaves Steam with no
 # Vulkan driver: after a Safe Detach in Game Mode no game started (Legion Go S, SteamOS 3.11, report 67QADW). 64-bit first.
-RADEON_ICDS=$(for _f in /usr/share/vulkan/icd.d/radeon_icd.x86_64.json /usr/share/vulkan/icd.d/radeon_icd.json /usr/share/vulkan/icd.d/radeon_icd.i686.json; do [ -e "$_f" ] && printf '%s:' "$_f"; done)
+RADEON_ICDS=$(for _f in /usr/share/vulkan/icd.d/radeon_icd.x86_64.json /usr/share/vulkan/icd.d/radeon_icd.json /usr/share/vulkan/icd.d/radeon_icd.i686.json; do [ -e "$_f" ] && printf '%s:' "$_f"; done; true)
 RADEON_ICDS=${RADEON_ICDS%:}; RADEON_ICDS=${RADEON_ICDS:-/usr/share/vulkan/icd.d/radeon_icd.json}
 
 # A Game Mode reload is the moment to finish an update that was staged because the eGPU was in use:
