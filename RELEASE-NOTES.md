@@ -1,3 +1,7 @@
+0.7.308 — Fix: garbled TV picture through a DisplayPort-to-HDMI adapter.
+
+- Fixed: a TV or HDMI monitor connected through a DisplayPort-to-HDMI adapter (for example a CEC adapter) no longer shows a scrambled picture in Game Mode. Modes the adapter can only pass compressed (4K above 60 Hz) are no longer picked automatically; a resolution picked in Setup > Screen settings still applies. (NVIDIA eGPU installs; screens on DisplayPort or the eGPU's own HDMI port unchanged.)
+
 0.7.307 — Fix: Game Mode not starting (0.7.306).
 
 - Fixed: with 0.7.306, Game Mode did not start on CachyOS / Arch NVIDIA installs (black screen after a restart or a switch to the TV). Update and Game Mode starts again.

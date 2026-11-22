@@ -1,3 +1,8 @@
+## 2026-11-22 — EGPU-TVDSC: LG TV behind DP-to-HDMI CEC adapter garbled in Game Mode at 4K>60 | 0.7.308 RELEASED
+- Owner: TV (DP-8, LG 2023 via CEC adapter) scrambled columns in Game Mode. Tested one at a time: driver 620.70.06 vs 620.73.04 (both garbled), HDR off, cecd off, nvidia_drm dp_cec=0 (all garbled), 4K@60 clean, 4K@100 garbled -> any mode needing DSC through the adapter. Ultrawide 5120x1440@144 (1306 MHz, native DP DSC) clean.
+- Fix: nv-egpu-gamescope-session dp_to_hdmi() (DP connector + EDID HDMI VSDB 03 0c 00) -> automatic pick capped at 864 MHz pixel clock; per-screen pick still wins. sysfs edid reports size 0: no -s test.
+- Also today: 0.7.307 hotfix (0.7.306 RADEON_ICDS line ended the session under set -e on CachyOS). Owner on 620.70.06 again (beta reverted mid-diagnosis; owner said not to switch drivers - do not switch without asking). Desktop KWin has TV at 2560x1440@120.
+
 
 ## 2026-11-20 — EGPU-LABBETA: Driver Lab beta installable from Setup ("Try beta driver") | on master + deployed on owner LG2 (not released, real switch NOT run) | Claude on-device session 8fc08078 | NVIDIA installs (opt-out watch; beta switch only on user action)
 - egpu-driver-lab: grade A + built -> make_recipe(): copy of the newest recipe (620) with the ported patches (one per port commit; API-drift "post" changes fail closed), pkgver, sha256 of patches, NVIDIA's published .sha256sum for the kernel-module source (checked against the lab's copy) and the .run (sha256 arrays next to Arch's sha512, SKIP for the rest), SteamOS image folder /home/.egpu-buddy-<ver>. Written to ~/.local/state/egpu-buddy/driver-recipes/nvidia-open-egpu-<ver> (+ LAB-RECIPE.json); only the newest kept.

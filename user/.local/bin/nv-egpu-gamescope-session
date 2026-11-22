@@ -423,10 +423,25 @@ best_sysfs_mode() {
   return 1
 }
 
+# A DisplayPort output whose screen is an HDMI TV / monitor (its EDID has the HDMI block): it goes through a DP-to-HDMI
+# adapter. Modes above what DisplayPort carries uncompressed need DSC through that adapter, and an HDMI TV that cannot
+# decode it shows the picture cut into scrambled columns (owner LG2: LG TV behind a CEC adapter, 4K@100/120 garbled,
+# 4K@60 clean; driver, HDR and CEC all ruled out). The automatic pick stays at or under 864 MHz (HBR3, 10-bit,
+# uncompressed); the plugin's per-screen pick (saved_screen_mode) still sets any mode.
+dp_to_hdmi() {
+  local n
+  case "$1" in DP-*) ;; *) return 1 ;; esac
+  for n in /sys/class/drm/card*-"$1"/edid; do
+    LC_ALL=C grep -qaP '\x03\x0c\x00' "$n" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 best_egpu_drm_mode() {
-  local output=$1 sel=${2:--M nvidia-drm}   # sel: which card modetest reads (-D pci:<bdf> for the handheld's GPU)
+  local output=$1 sel=${2:--M nvidia-drm} max_clock=0   # sel: which card modetest reads (-D pci:<bdf> for the handheld's GPU)
   command -v modetest >/dev/null 2>&1 || return 1
-  modetest $sel -c 2>/dev/null | awk -v output="$output" -v max_refresh="$EGPU_GAMESCOPE_MAX_REFRESH" '
+  dp_to_hdmi "$output" && max_clock=864000
+  modetest $sel -c 2>/dev/null | awk -v output="$output" -v max_refresh="$EGPU_GAMESCOPE_MAX_REFRESH" -v max_clock="$max_clock" '
     $0 ~ "connected[[:space:]]+" output "[[:space:]]" {
       in_connector = 1
       next
@@ -439,6 +454,9 @@ best_egpu_drm_mode() {
       width = $4 + 0
       height = $8 + 0
       if (max_refresh != "" && (max_refresh + 0) > 0 && refresh > (max_refresh + 0.5)) {
+        next
+      }
+      if ((max_clock + 0) > 0 && ($12 + 0) > (max_clock + 0)) {
         next
       }
       rank = (width == 4096 && height == 2160) ? 3839 : width   # cinema DCI 4K ranks under a TV panel 3840x2160
