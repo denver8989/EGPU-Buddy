@@ -4,7 +4,7 @@ Read this first, then `agent-context/ACTIVE_TASK.md`, `AGENTS.md`, and `CLAUDE.m
 
 ## Checkpoint — 2026-11-23 (Claude remote session_01VL2HtjLTr9tZCDReBmPqeS)
 
-- EGPU-ALREADYINSTALLED: the .run front end and get-egpu-buddy.sh detect an existing install (owner request: a user ran all 3 install methods). On master as 0.7.309, NOT released; the one-liner part is live from master. install.sh, plugin, selfheal, updater untouched. Stand-in tested only. Details + one pre-existing bug found (front end VERSION overwritten by /etc/os-release on Bazzite, not fixed) in the ledger.
+- EGPU-ALREADYINSTALLED: the .run front end and get-egpu-buddy.sh detect an existing install (owner request: a user ran all 3 install methods). RELEASED as 0.7.309 on 2026-11-23 through the Actions workflow (owner asked: LG2 offline; 34 s run). install.sh, plugin, selfheal, updater untouched. Stand-in tested only. Details + one pre-existing bug found (front end VERSION overwritten by /etc/os-release on Bazzite, not fixed) in the ledger.
 - Nothing broke; no live machine touched (remote session). No ownership retained. Other sessions' open tasks (EGPU-TVDSC stopped by owner, etc.) untouched.
 
 ## Checkpoint — 2026-11-18 evening (Claude on-device session 8fc08078)
