@@ -148,6 +148,9 @@ beta, testing in progress on an AMD RX 6800 XT, RX 6750 XT, RX 9070 and RX 9070 
 **Keep the eGPU unplugged while installing and for the reboot after.** The protections it needs only take effect
 after a reboot.
 
+**Pick one of the three methods below.** They all install the same thing (the system integration, the Game Mode plugin
+and the desktop app), so one is enough; the installers tell you when EGPU Buddy is already installed.
+
 1. **From Game Mode (recommended):** with [Decky Loader](https://decky.xyz) installed, go to Decky settings →
    Developer → **Install plugin from URL**, and paste the `EGPU-Buddy-Decky-<version>.zip` link from
    [Releases](https://github.com/denver8989/EGPU-Buddy/releases). Open **EGPU Buddy** in the Quick Access

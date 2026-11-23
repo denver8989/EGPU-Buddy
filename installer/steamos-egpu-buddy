@@ -69,6 +69,55 @@ Remove SteamOS EGPU Buddy and restore the backed-up originals?" || exit 0
   exit 0
 fi
 
+# ---------------------------------------------------------------- already installed? (any route: this installer, the
+# one-line command, or the Game Mode plugin's "Install system integration": they all install the same files)
+# A user ran all three install methods one after the other, each from scratch (owner, 2026-11-23). The recorded fact is
+# /etc/nv-egpu-buddy/version, which install.sh writes and the uninstaller removes; "complete" is the Game Mode plugin's own
+# test (the privileged helper, and Safe Detach on an eGPU install). Nothing is changed here: it only asks first, and every
+# answer that continues runs the same install as before. EGPU_REINSTALL_OK=1 (the one-line command already asked) skips it.
+INST=$(cat /etc/nv-egpu-buddy/version 2>/dev/null | head -1)
+# this installer's own version, read again: $THISVER above is replaced by the OS's VERSION where /etc/os-release has one
+THISVER=$(cat "$ROOT/VERSION" 2>/dev/null || echo dev)
+if [ -n "$INST" ] && [ "${EGPU_REINSTALL_OK:-0}" != 1 ]; then
+  _complete=1; [ -x /usr/local/sbin/nv-egpu-buddy-privileged ] || _complete=0
+  [ "$(cat /etc/nv-egpu-buddy/track 2>/dev/null)" = nv-gpu-buddy ] || [ -x /usr/local/sbin/egpu-gamemode-detach ] || _complete=0
+  _pv=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$HOME/homebrew/plugins/EGPU-Buddy/plugin.json" 2>/dev/null | head -1)
+  _parts="Installed now:
+  - System integration: $INST$([ $_complete = 1 ] || echo ' (files are missing)')
+  - Game Mode plugin: $([ -n "$_pv" ] && echo "$_pv" || { [ $HAS_DECKY = 1 ] && echo 'not installed' || echo 'not installed (Decky Loader is missing)'; })
+  - Desktop app: $([ -e "$HOME/.local/share/egpu-buddy/egpu-buddy" ] && echo installed || echo 'not installed')"
+  _newest=$(printf '%s\n%s\n' "$INST" "$THISVER" | sort -V | tail -1)
+  if [ "$INST" = "$THISVER" ] && [ $_complete = 1 ]; then
+    ask "EGPU BUDDY $INST IS ALREADY INSTALLED
+
+$_parts
+
+You do not need to install it again. The three install methods (Game Mode plugin, this installer, the one-line command) all put the same files in the same places, so one of them is enough. Updates are offered in the Game Mode plugin and the desktop app.
+
+Install it again anyway (repair)?" || { msg "Nothing was changed."; exit 0; }
+  elif [ "$INST" = "$THISVER" ]; then
+    ask "EGPU BUDDY $INST IS ALREADY INSTALLED, BUT FILES ARE MISSING
+
+$_parts
+
+A system update can remove them. Repair it now? Your settings and the GPU type are kept." || { msg "Nothing was changed."; exit 0; }
+  elif [ "$_newest" = "$THISVER" ]; then
+    ask "EGPU BUDDY $INST IS ALREADY INSTALLED
+
+$_parts
+
+This installer is the newer version $THISVER. Update now? Your settings and the GPU type are kept." || { msg "Nothing was changed."; exit 0; }
+  else
+    ask "A NEWER EGPU BUDDY ($INST) IS ALREADY INSTALLED
+
+$_parts
+
+This installer is the OLDER version $THISVER. Installing it goes back to $THISVER.
+
+Go back to $THISVER?" || { msg "Nothing was changed."; exit 0; }
+  fi
+fi
+
 # ---------------------------------------------------------------- an unsupported Linux distribution: explicit go-ahead first
 if [ "$ACTION" != uninstall ] && [ $SUPPORTED = 0 ]; then
   ask "THIS LINUX DISTRIBUTION IS NOT SUPPORTED ($DISTRO${LIKE:+, like $LIKE})

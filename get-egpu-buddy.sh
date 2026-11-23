@@ -18,6 +18,19 @@ say "== EGPU Buddy: looking up the latest release"
 TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
 [ -n "$TAG" ] || { echo "could not determine the latest release"; exit 1; }
 VER=${TAG#v}; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# Already installed (by this command, the .run, or the Game Mode plugin: they all install the same files)? Then say so
+# before anything is downloaded. Same version and complete: nothing to do unless a repair is wanted. Any other installed
+# version: the installer below asks whether to update (or go back). Nothing is changed by this check.
+INST=$(head -1 /etc/nv-egpu-buddy/version 2>/dev/null || true)
+if [ -n "$INST" ] && [ "$INST" = "$VER" ] && [ -x /usr/local/sbin/nv-egpu-buddy-privileged ]; then
+  say "== EGPU Buddy $INST is already installed, and it is the latest release"
+  echo "   You do not need to install it again: the Game Mode plugin, the .run installer and this command all install"
+  echo "   the same files, so one of them is enough. Updates are offered in the Game Mode plugin and the desktop app."
+  ask "Install it again anyway (repair)?" || { echo "Nothing was changed."; exit 0; }
+  export EGPU_REINSTALL_OK=1   # asked here: the installer does not ask the same question again
+elif [ -n "$INST" ]; then
+  say "== EGPU Buddy $INST is installed; the latest release is $VER (the installer asks before it changes anything)"
+fi
 curl -fsSL -o "$T/SHA256SUMS" "https://github.com/$REPO/releases/download/$TAG/SHA256SUMS"
 NAME="EGPU-Buddy-$VER.run"; grep -q " $NAME$" "$T/SHA256SUMS" || NAME="SteamOS-EGPU-Buddy-$VER.run"   # before the rename
 say "== downloading $NAME"

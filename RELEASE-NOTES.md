@@ -1,3 +1,8 @@
+0.7.309 — The installers tell you when EGPU Buddy is already installed.
+
+- New: the .run installer and the one-line command now check first whether EGPU Buddy is already on the machine (installed by any method: Game Mode plugin, .run or the one-line command; they all install the same files). Same version and complete: they say so and change nothing unless you ask for a repair. An older version: they offer the update. A newer version: they warn before going back. Files missing after a system update: they offer the repair. The one-line command says it before downloading anything. (Every install; the Game Mode plugin already did this, and updates, the boot self-repair and the plugin's install are unchanged.)
+- The install instructions now say to pick one of the three methods: one is enough.
+
 0.7.308 — Fix: garbled TV picture through a DisplayPort-to-HDMI adapter.
 
 - Fixed: a TV or HDMI monitor connected through a DisplayPort-to-HDMI adapter (for example a CEC adapter) no longer shows a scrambled picture in Game Mode. Modes the adapter can only pass compressed (4K above 60 Hz) are no longer picked automatically; a resolution picked in Setup > Screen settings still applies. (NVIDIA eGPU installs; screens on DisplayPort or the eGPU's own HDMI port unchanged.)
