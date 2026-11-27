@@ -210,7 +210,7 @@ elif [ -e "/sys/bus/pci/devices/$gpu/resource1_resize" ]; then
     [ -L "/sys/bus/pci/devices/$gpu/driver" ] || return 0
     systemctl stop nvidia-persistenced.service >/dev/null 2>&1 || true
     for _ in 1 2 3 4 5; do gpu_in_use || break; sleep 1; done
-    gpu_in_use && { log "the driver claimed the card and programs use it already ($(fuser /dev/nvidia[0-9]* /dev/nvidiactl 2>/dev/null | tr -s ' \n' ' ')): left bound (unbinding a GPU in use reset this machine); BAR stays as the firmware set it"; return 1; }
+    gpu_in_use && { _gpu_busy=1; log "the driver claimed the card and programs use it already ($(fuser /dev/nvidia[0-9]* /dev/nvidiactl 2>/dev/null | tr -s ' \n' ' ')): left bound (unbinding a GPU in use reset this machine); BAR stays as the firmware set it"; return 1; }
     log "the driver claimed the card — unbinding it before the BAR work"
     "$PRIV" unbind-nvidia >/dev/null 2>&1 || true
     for _ in $(seq 1 10); do [ -L "/sys/bus/pci/devices/$gpu/driver" ] || break; sleep 1; done
@@ -218,6 +218,8 @@ elif [ -e "/sys/bus/pci/devices/$gpu/resource1_resize" ]; then
     return 0
   }
   take_card_back || true
+  # the tunnel re-enumeration below removes the device: never with a bound driver that programs use
+  if [ "${_gpu_busy:-0}" = 1 ]; then log "BAR work skipped: the GPU is in use"; else
   # 16GiB or nothing. A PARTIAL resize is worse than none: on a real machine 4GiB was accepted and
   # then the driver would not create a DRM card at all, so a boot that used to work at 256MiB
   # ended with no eGPU. The sizes in between buy little and cost that risk.
@@ -287,6 +289,7 @@ elif [ -e "/sys/bus/pci/devices/$gpu/resource1_resize" ]; then
     log "BAR1 ended at ${_mib}MiB — neither full nor stock, and that size wedges driver init: backing it down"
     "$PRIV" resize 8 >/dev/null 2>&1 || true
   fi
+  fi   # GPU not in use
 fi
 
 echo "${_autoprobe_was:-1}" > /sys/bus/pci/drivers_autoprobe 2>/dev/null || true
