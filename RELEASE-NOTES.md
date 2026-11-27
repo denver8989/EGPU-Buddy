@@ -1,3 +1,9 @@
+0.7.310 — Fix: SteamOS asked for the driver again after every restart; restart with the eGPU connected.
+
+- Fixed: on SteamOS installs made since 0.7.306 (NVIDIA driver 620), the driver was gone after every restart and EGPU Buddy asked to install it again; the eGPU also only came up after a dock power cycle. The boot self-repair looked for the driver in the old place and never put the 620 driver back; it does now, on the first boot after this update. The same mistake kept EGPU Buddy's Game Mode (gamescope) fix from being built on those installs. (SteamOS only; CachyOS / Arch and Bazzite unchanged.)
+- Fixed: restarting with the eGPU connected could reset the machine during boot (CachyOS / Arch): the driver had already taken the card and the NVIDIA persistence daemon was using it when EGPU Buddy pulled it away for the memory-window resize. The card is now left alone while a program uses it; the window stays at the firmware size for that boot.
+- Uninstall now removes the driver image of every driver version (620 and 615 were left on /home).
+
 0.7.309 — The installers tell you when EGPU Buddy is already installed.
 
 - New: the .run installer and the one-line command now check first whether EGPU Buddy is already on the machine (installed by any method: Game Mode plugin, .run or the one-line command; they all install the same files). Same version and complete: they say so and change nothing unless you ask for a repair. An older version: they offer the update. A newer version: they warn before going back. Files missing after a system update: they offer the repair. The one-line command says it before downloading anything. (Every install; the Game Mode plugin already did this, and updates, the boot self-repair and the plugin's install are unchanged.)

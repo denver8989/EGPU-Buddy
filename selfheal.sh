@@ -42,7 +42,7 @@ fi
 # when the OS update brought a new kernel, rebuild the modules for it in the background (needs the network, minutes).
 DRVDIR="$HERE/packaging/$(cat /etc/nv-egpu-buddy/driver-dir 2>/dev/null || echo nvidia-open-egpu)"; [ -f "$DRVDIR/PKGBUILD" ] || DRVDIR="$HERE/packaging/nvidia-open-egpu"   # 610 unless a beta trial was kept
 SX="$DRVDIR/install-steamos-sysext.sh"
-if [ -n "$ro" ] && [ -x "$SX" ] && [ -d /home/.egpu-buddy ]; then
+if [ -n "$ro" ] && [ -x "$SX" ] && compgen -G "/home/.egpu-buddy*" >/dev/null; then   # 610 /home/.egpu-buddy, 615/620 /home/.egpu-buddy-NNN
   if bash "$SX" --activate >>$SLOG 2>&1; then log "driver extension active"
     # same kernel, different OS: the NVIDIA userspace in the image may not fit the new OS any more. Re-pack it in the
     # background (offline, about a minute: the modules are already built). The current image stays active meanwhile.

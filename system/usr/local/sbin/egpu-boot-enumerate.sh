@@ -19,6 +19,7 @@ LOG=/var/log/egpu-boot-enumerate.log
 # bus-poking recovery below so it can never run on someone's plain dock.
 SEEN=/var/lib/nvegpu/egpu-seen
 log(){ printf '%s %s\n' "$(date '+%F %T' 2>/dev/null)" "$*" >>"$LOG" 2>&1; sync -d "$LOG" 2>/dev/null || true; }
+gpu_in_use() { fuser -s /dev/nvidia[0-9]* /dev/nvidiactl 2>/dev/null; }   # a program has the device open (nvidia-persistenced, nvidia-smi, a compositor)
 # AMD / Intel eGPU (the AMD / Intel install, or such a card on the bus): never this NVIDIA path. It looks for an NVIDIA
 # card only and, not finding one, re-authorized the dock: that dropped a working RX 6800 XT off the bus mid-attach and hung
 # the handheld (Legion Go 1, 2026-10-24). /usr/local/sbin/egpu-generic handles AMD / Intel eGPUs.
@@ -199,8 +200,17 @@ elif [ -e "/sys/bus/pci/devices/$gpu/resource1_resize" ]; then
   # udev binds the driver DURING them, so the re-enumeration that follows was refused every time
   # while the log showed a clean card at the start. Take the card back immediately before each step
   # that needs it.
+  # Never take it back from programs that already use it. At boot the driver binds before this runs and
+  # nvidia-persistenced (ConditionPathExists=/sys/module/nvidia) opens the device at once; unbinding then prints
+  # "NVRM: Attempting to remove device ... with non-zero usage count" and the platform reset itself seconds later
+  # (owner's Legion Go 2, RTX 5060 Ti: 2026-11-11, 11-13 and 11-27, every boot with the eGPU connected).
+  # The persistence daemon is stopped first: it only ever starts when the driver is already loaded at boot, so the
+  # usual hot-plug attach runs without it anyway. Anything else holding the device wins: the BAR stays as the firmware set it.
   take_card_back() {
     [ -L "/sys/bus/pci/devices/$gpu/driver" ] || return 0
+    systemctl stop nvidia-persistenced.service >/dev/null 2>&1 || true
+    for _ in 1 2 3 4 5; do gpu_in_use || break; sleep 1; done
+    gpu_in_use && { log "the driver claimed the card and programs use it already ($(fuser /dev/nvidia[0-9]* /dev/nvidiactl 2>/dev/null | tr -s ' \n' ' ')): left bound (unbinding a GPU in use reset this machine); BAR stays as the firmware set it"; return 1; }
     log "the driver claimed the card — unbinding it before the BAR work"
     "$PRIV" unbind-nvidia >/dev/null 2>&1 || true
     for _ in $(seq 1 10); do [ -L "/sys/bus/pci/devices/$gpu/driver" ] || break; sleep 1; done
@@ -294,7 +304,10 @@ for _ in $(seq 1 15); do compgen -G "/sys/bus/pci/devices/$gpu/drm/card*" >/dev/
 if ! compgen -G "/sys/bus/pci/devices/$gpu/drm/card*" >/dev/null 2>&1 &&
    [ "$(bar1_mib "$gpu")" -gt 256 ]; then
   log "driver did not create a DRM card with the resized BAR — backing BAR1 down and retrying"
-  "$PRIV" unbind-nvidia >/dev/null 2>&1 || true
+  systemctl stop nvidia-persistenced.service >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5; do gpu_in_use || break; sleep 1; done
+  gpu_in_use && log "programs use the GPU ($(fuser /dev/nvidia[0-9]* /dev/nvidiactl 2>/dev/null | tr -s ' \n' ' ')): not unbinding it"
+  gpu_in_use || "$PRIV" unbind-nvidia >/dev/null 2>&1 || true
   # stock size only: 4GiB is one of the sizes that wedges init, so falling back to it is no fallback
   "$PRIV" resize 8 >/dev/null 2>&1 || true
   # the failed init leaves residue behind; without clearing it the reload fails the same way, which

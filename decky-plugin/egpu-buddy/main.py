@@ -929,7 +929,7 @@ def _expect():
         return "several minutes"
     if _driver_ready():
         return "about a minute (the driver is already built)"
-    if os.path.exists("/home/.egpu-buddy/buildroot/usr/bin/makepkg"):
+    if glob.glob("/home/.egpu-buddy*/buildroot/usr/bin/makepkg"):   # 610 or 620/615 build root
         return "about 5-10 minutes (the build tools are already downloaded)"
     return "10-20 minutes the first time, mostly downloads (about 2 GB)"
 

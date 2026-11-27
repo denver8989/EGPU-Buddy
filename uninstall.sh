@@ -79,7 +79,7 @@ if [ "${1:-}" = "--verify" ]; then
     [ -e "$f" ] && { echo "LEFT  $f"; left=1; }
   done
   for d in $(runtime_leftovers) /etc/sudoers.d/zz-steamos-egpu-buddy /etc/sudoers.d/steamos-egpu-buddy \
-           /etc/extensions/egpu-nvidia.raw /etc/extensions/egpu-nvidia /home/.egpu-buddy \
+           /etc/extensions/egpu-nvidia.raw /etc/extensions/egpu-nvidia /home/.egpu-buddy /home/.egpu-buddy-* \
            /etc/plasmalogin.conf.d/zz-egpu-buddy-session.conf /etc/sddm.conf.d/zz-egpu-buddy-session.conf; do
     [ -e "$d" ] && { echo "LEFT  $d"; left=1; }
   done
@@ -146,10 +146,11 @@ if [ -e /etc/systemd/system/egpu-buddy-jobs.path ]; then   # Bazzite: the plugin
 fi
 [ -d /usr/local/lib/egpu-buddy ] && sudo rm -rf /usr/local/lib/egpu-buddy
 # SteamOS: the driver extension and build root on /home, the OS-update keep-list, the GRUB drop-in (+ regenerate GRUB)
-if [ -d /home/.egpu-buddy ] || [ -L /etc/extensions/egpu-nvidia ] || [ -L /etc/extensions/egpu-nvidia.raw ]; then
+if compgen -G "/home/.egpu-buddy*" >/dev/null || [ -L /etc/extensions/egpu-nvidia ] || [ -L /etc/extensions/egpu-nvidia.raw ]; then
   echo "removing the NVIDIA driver extension (SteamOS)"
-  if [ -x "$ROOT/packaging/nvidia-open-egpu/install-steamos-sysext.sh" ]; then sudo bash "$ROOT/packaging/nvidia-open-egpu/install-steamos-sysext.sh" --remove
-  else sudo rm -f /etc/extensions/egpu-nvidia /etc/extensions/egpu-nvidia.raw; sudo systemd-sysext refresh >/dev/null 2>&1 || true; sudo ldconfig 2>/dev/null || true; sudo rm -rf /home/.egpu-buddy; fi
+  # every driver has its own base (/home/.egpu-buddy, -615, -620): each tool removes its own, then whatever is left
+  for t in "$ROOT"/packaging/nvidia-open-egpu*/install-steamos-sysext.sh; do [ -x "$t" ] && sudo bash "$t" --remove; done
+  sudo rm -f /etc/extensions/egpu-nvidia /etc/extensions/egpu-nvidia.raw; sudo systemd-sysext refresh >/dev/null 2>&1 || true; sudo ldconfig 2>/dev/null || true; sudo rm -rf /home/.egpu-buddy /home/.egpu-buddy-*
 fi
 # beta driver trial: its own image + build root (SteamOS, /home/.egpu-buddy-615) and its records
 sudo rm -rf /home/.egpu-buddy-615 /home/.egpu-buddy-620 /home/.egpu-buddy-[0-9]*.[0-9]* /var/lib/nvegpu/driver-trial /etc/nv-egpu-buddy/driver-dir /var/lib/nvegpu/driver-switch-615 /var/lib/nvegpu/driver-switch-615-done /var/lib/nvegpu/driver-switch-620 /var/lib/nvegpu/driver-switch-620-done

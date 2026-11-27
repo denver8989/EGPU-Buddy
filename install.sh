@@ -297,7 +297,7 @@ if [ "$GPU_VENDOR" = amd ] && [ "$MODE" = install ]; then
     echo "note: the NVIDIA driver is loaded right now (an NVIDIA eGPU attached?): it is left in place; run this install again with it unplugged to remove it"
   else
     # SteamOS: the driver is an extension on /home; taking it out returns /usr to Valve's image exactly
-    if [ -d /home/.egpu-buddy ] && [ -f "$SYSEXT_TOOL" ]; then
+    if compgen -G "/home/.egpu-buddy*" >/dev/null && [ -f "$SYSEXT_TOOL" ]; then
       say "== AMD / Intel install: removing the NVIDIA driver extension"; sudo bash "$SYSEXT_TOOL" --remove 2>&1 | tail -1
     fi
     # Bazzite: the link goes (the extension is unmerged at the next boot); its files are deleted only once nothing has them
@@ -702,7 +702,7 @@ if [ "${NEED_GAMESCOPE_BUILD:-0}" = 1 ]; then
     # the self-heal runs this at BOOT, before the login screen: a 10-15 minute build there is a 10-15 minute black screen.
     # It hands the build to egpu-gamescope-repair instead, which runs in the background and reloads Game Mode when done.
     say "== the GBM-scanout gamescope build is left to the background repair (not built during boot)"
-  elif [ -x /home/.egpu-buddy/buildroot/usr/bin/makepkg ]; then
+  elif compgen -G "/home/.egpu-buddy*/buildroot/usr/bin/makepkg" >/dev/null; then   # 610 or 620/615 build root
     say "== building the GBM-scanout gamescope on this device (10-15 minutes, one time)"
     sudo bash "$ROOT/packaging/gamescope-gbm/build-steamos.sh" "$USER_NAME" || echo "warning: gamescope build failed; Game Mode on the eGPU will use the distro gamescope (picture corruption on NVIDIA above ~2560 px wide)"
   else echo "warning: no gamescope build for this system and no build environment; the distro gamescope is used (picture corruption on NVIDIA above ~2560 px wide)"; fi

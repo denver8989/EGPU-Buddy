@@ -18,7 +18,9 @@ flock -n 9 || { echo "== waiting for another EGPU Buddy build to finish"; flock 
 pgrep -x systemd-nspawn >/dev/null || rm -rf /run/systemd/nspawn/buildroot
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 U=${1:?login user}; UH=$(getent passwd "$U" | cut -d: -f6); HERE=$(cd "$(dirname "$0")" && pwd); VER=${2:-}; PFX=${3:-}
-BASE=${EGPU_SYSEXT_BASE:-/home/.egpu-buddy}; BR=$BASE/buildroot; CACHE=$BASE/pkgcache
+# the build root of the installed driver: /home/.egpu-buddy (610) or /home/.egpu-buddy-620 / -615 (new installs are 620)
+BASE=${EGPU_SYSEXT_BASE:-$(for b in "/home/.egpu-buddy-$(sed 's/.*-//' /etc/nv-egpu-buddy/driver-dir 2>/dev/null)" /home/.egpu-buddy-620 /home/.egpu-buddy /home/.egpu-buddy-*; do [ -x "$b/buildroot/usr/bin/makepkg" ] && { echo "$b"; break; }; done)}; BASE=${BASE:-/home/.egpu-buddy}
+BR=$BASE/buildroot; CACHE=$BASE/pkgcache
 [ -x "$BR/usr/bin/makepkg" ] || { echo "no SteamOS build root at $BR (the driver step creates it)"; exit 2; }
 P(){ pacman --root "$BR" --dbpath "$BR/var/lib/pacman" --cachedir "$CACHE" --gpgdir /etc/pacman.d/gnupg --config "$BASE/pacman.conf" --noconfirm "$@"; }
 echo "== gamescope build dependencies into the build root"

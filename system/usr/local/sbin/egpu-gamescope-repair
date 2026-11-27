@@ -14,7 +14,9 @@ DONE=/var/lib/nvegpu/gamescope-rebuilt-for
 BZTRIES=/var/lib/nvegpu/gamescope-bazzite-tries   # Bazzite only: line 1 the OS build, line 2 the builds tried for it
 bz_tries(){ if [ "$(sed -n 1p "$BZTRIES" 2>/dev/null)" = "$OS" ]; then sed -n 2p "$BZTRIES"; else echo 0; fi; }
 BUILD=$UH/.local/share/steamos-egpu-buddy/packaging/gamescope-gbm/build-steamos.sh
-BR=/home/.egpu-buddy/buildroot
+# the SteamOS build root lives beside the installed driver: /home/.egpu-buddy (610) or /home/.egpu-buddy-620 / -615
+BR=$(for b in "/home/.egpu-buddy-$(sed 's/.*-//' /etc/nv-egpu-buddy/driver-dir 2>/dev/null)" /home/.egpu-buddy-620 /home/.egpu-buddy /home/.egpu-buddy-*; do [ -x "$b/buildroot/usr/bin/makepkg" ] && { echo "$b/buildroot"; break; }; done); BR=${BR:-/home/.egpu-buddy/buildroot}
+export EGPU_SYSEXT_BASE=${BR%/buildroot}   # build-steamos.sh builds in the same root
 log(){ printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; echo "$*"; }
 os_id(){ ( . /etc/os-release 2>/dev/null; printf '%s' "${BUILD_ID:-${VERSION_ID:-}}" ); printf -- '-%s' "$(uname -r)"; }
 # Bazzite: the build lives in /usr/local (system-wide, user-independent) and is rebuilt in a Fedora container matching

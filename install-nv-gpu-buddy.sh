@@ -123,7 +123,7 @@ selfheal(){
   local need=0
   [ -x /usr/local/sbin/nv-egpu-buddy-privileged ] && [ "$(cat /etc/nv-egpu-buddy/version 2>/dev/null)" = "$VER" ] || need=1
   if [ "$need" = 1 ]; then echo "integration missing or outdated: installing $VER"; EGPU_TARGET_USER=$USER_NAME bash "$0" || echo "repair reported errors"; fi
-  if [ -n "$RO" ] && [ -x "$SX" ] && [ -d /home/.egpu-buddy ]; then
+  if [ -n "$RO" ] && [ -x "$SX" ] && compgen -G "/home/.egpu-buddy*" >/dev/null; then
     bash "$SX" --activate || {
       echo "driver extension has no modules for $(uname -r): rebuilding in the background"
       systemd-run --quiet --collect --unit=egpu-buddy-driver-build --property=TimeoutStartSec=5400 /bin/bash -c \
